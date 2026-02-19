@@ -1,9 +1,8 @@
 """Tests for Message and KafkaMessage classes."""
 
-import pytest
 from unittest.mock import MagicMock
 
-from shared.message import Message, KafkaMessage
+from shared.message import KafkaMessage
 
 
 class TestKafkaMessageSerialization:

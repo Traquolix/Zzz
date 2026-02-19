@@ -3,20 +3,21 @@
 Tests standalone functions (no mocking) and ModelRegistry (with mocking).
 """
 
-import pytest
 import sys
 import threading
 from unittest.mock import MagicMock, patch
+
 import numpy as np
+import pytest
 
 # Import standalone functions directly - no mocking needed
 from ai_engine.message_utils import (
     ProcessingContext,
-    extract_channel_metadata,
-    validate_sampling_rate,
-    messages_to_arrays,
-    create_speed_messages,
     create_count_messages,
+    create_speed_messages,
+    extract_channel_metadata,
+    messages_to_arrays,
+    validate_sampling_rate,
 )
 
 # Mock only for ModelRegistry tests
@@ -25,10 +26,6 @@ sys.modules['matplotlib'] = MagicMock()
 sys.modules['matplotlib.pyplot'] = MagicMock()
 
 # Import calibration before mocking to avoid import pollution
-from ai_engine.model_vehicle.calibration import (
-    CalibrationData,
-    CalibrationManager,
-)
 
 mock_model_vehicle = MagicMock()
 mock_model_vehicle.Args_NN_model_all_channels = MagicMock
@@ -39,7 +36,7 @@ mock_model_vehicle.calibration = sys.modules['services.ai_engine.model_vehicle.c
 sys.modules['services.ai_engine.model_vehicle'] = mock_model_vehicle
 sys.modules['services.ai_engine.model_vehicle.DTAN'] = MagicMock()
 
-from ai_engine.main import ModelRegistry
+from ai_engine.main import ModelRegistry  # noqa: E402
 
 
 class TestModelRegistry:

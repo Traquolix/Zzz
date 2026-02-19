@@ -12,7 +12,6 @@ Usage:
 
 import json
 import sys
-from pathlib import Path
 from typing import List, Tuple, Optional
 
 def escape_sql_string(value: str) -> str:
@@ -159,7 +158,7 @@ def main():
         print(f"Loading landmarks from: {landmarks_file}", file=sys.stderr)
         landmark_labels = load_landmarks(landmarks_file, len(coordinates))
         if landmark_labels:
-            landmark_count = sum(1 for l in landmark_labels if l)
+            landmark_count = sum(1 for label in landmark_labels if label)
             print(f"  Landmarks: {landmark_count} defined", file=sys.stderr)
     else:
         # Fall back to landmark_labels in fiber JSON (for backward compatibility)
@@ -176,7 +175,7 @@ def main():
                     landmark_labels = landmark_labels[:len(coordinates)]
 
             # Count non-null landmarks
-            landmark_count = sum(1 for l in landmark_labels if l)
+            landmark_count = sum(1 for label in landmark_labels if label)
             print(f"  Landmarks: {landmark_count} defined (from fiber JSON)", file=sys.stderr)
         else:
             print("  Landmarks: None (will use NULL array)", file=sys.stderr)

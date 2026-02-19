@@ -1,7 +1,8 @@
 """Tests for ProcessingChain and step registry."""
 
+from unittest.mock import AsyncMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock
 
 from processor.processing_tools import (
     ProcessingChain,

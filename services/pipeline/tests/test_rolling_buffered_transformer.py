@@ -12,8 +12,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Optional pytest import for advanced tests
 try:
-    import pytest
     from unittest.mock import AsyncMock
+
+    import pytest
     PYTEST_AVAILABLE = True
 except ImportError:
     PYTEST_AVAILABLE = False
@@ -81,13 +82,11 @@ class TestRollingBuffer:
 
         # Window 1: T0-T299, trimmed output T25-T274
         window1_start = 0
-        window1_output_start = window1_start + edge_trim  # 25
         window1_output_end = window1_start + window_size - edge_trim - 1  # 274
 
         # Window 2: T250-T549, trimmed output T275-T524
         window2_start = step_size  # 250
         window2_output_start = window2_start + edge_trim  # 275
-        window2_output_end = window2_start + window_size - edge_trim - 1  # 524
 
         # Verify adjacent
         gap = window2_output_start - window1_output_end
@@ -96,6 +95,7 @@ class TestRollingBuffer:
     def test_continuous_output(self):
         """Test that rolling buffer produces continuous output."""
         from collections import deque
+
         import numpy as np
 
         window_size = 300
@@ -131,7 +131,6 @@ class TestRollingBuffer:
         from collections import deque
 
         window_size = 10
-        step_size = 8
 
         buffers = {}
 

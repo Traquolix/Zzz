@@ -9,9 +9,9 @@ These tests verify that:
 All test resources are automatically cleaned up after each test.
 """
 
-import pytest
 import json
 import time
+
 from tests.integration.conftest import wait_for_message
 
 

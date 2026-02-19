@@ -1,16 +1,16 @@
 """Tests for service configuration loader."""
 
-import pytest
 import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from config.service_loader import (
-    load_service_config,
     _build_outputs,
     _get_input_config,
     get_service_name,
+    load_service_config,
 )
-from shared.service_config import OutputConfig
 
 
 class TestBuildOutputs:

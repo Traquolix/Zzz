@@ -25,10 +25,11 @@ between consecutive channels on a specific fiber.
 
 from __future__ import annotations
 
+from typing import Optional
+
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
-from typing import Optional
 
 
 def compute_cpa_covariance(cpab_basis: np.ndarray, length_scale: float = 0.1,

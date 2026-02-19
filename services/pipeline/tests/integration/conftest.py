@@ -5,12 +5,13 @@ after each test to avoid polluting production data.
 """
 
 import os
-import pytest
-import uuid
 import time
-from typing import Generator, List
+import uuid
 from dataclasses import dataclass
-from confluent_kafka import Producer, Consumer, KafkaError
+from typing import Generator, List
+
+import pytest
+from confluent_kafka import Consumer, KafkaError, Producer
 from confluent_kafka.admin import AdminClient, NewTopic
 
 # Test topic prefix - easy to identify and clean up

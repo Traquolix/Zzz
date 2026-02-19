@@ -4,15 +4,16 @@ These tests verify the actual BufferedTransformer implementation, not a mock.
 We mock only the infrastructure (Kafka, schemas) but test real buffering logic.
 """
 
-import pytest
 import asyncio
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
 from typing import List
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from shared.transformer import BufferedTransformer
+import pytest
+
 from shared.message import Message
-from shared.service_config import ServiceConfig, OutputConfig
+from shared.service_config import ServiceConfig
+from shared.transformer import BufferedTransformer
 
 
 class ConcreteBufferedTransformer(BufferedTransformer):

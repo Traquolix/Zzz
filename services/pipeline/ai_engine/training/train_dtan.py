@@ -38,16 +38,16 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import numpy as np
 
 PIPELINE_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PIPELINE_ROOT))
 
-import torch
-import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
+import torch  # noqa: E402
+import torch.nn as nn  # noqa: E402
+from torch.utils.data import DataLoader, Dataset  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -301,7 +301,7 @@ def generate_before_after_plots(
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, f"before_after_{fiber_id}.png"), dpi=150)
     plt.close()
-    logger.info(f"Saved before/after visualization")
+    logger.info("Saved before/after visualization")
 
 
 def plot_training_curves(history: List[dict], output_dir: str, fiber_id: str):
@@ -464,7 +464,7 @@ def main():
     cpab_basis = model.T.get_basis()  # Get CPAB transformation basis
     criterion.set_cpa_covariance_from_basis(cpab_basis)
     criterion = criterion.to(device)
-    logger.info(f"Initialized CPA covariance matrix from CPAB basis (thesis-compliant Mahalanobis norm)")
+    logger.info("Initialized CPA covariance matrix from CPAB basis (thesis-compliant Mahalanobis norm)")
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
@@ -539,7 +539,7 @@ def main():
     plot_training_curves(history, str(output_dir), args.fiber_id)
     generate_before_after_plots(model, full_dataset, device, str(output_dir), args.fiber_id)
 
-    logger.info(f"\nTraining complete!")
+    logger.info("\nTraining complete!")
     logger.info(f"  Best val loss: {best_val_loss:.6f}")
     logger.info(f"  Model saved to: {output_dir}")
     logger.info(f"  Best weights: {output_dir / 'best.pt'}")

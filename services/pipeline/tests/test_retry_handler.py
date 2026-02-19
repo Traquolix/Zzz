@@ -1,8 +1,9 @@
 """Tests for RetryHandler backoff logic."""
 
-import pytest
 import asyncio
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
+
+import pytest
 
 from shared.retry_handler import RetryHandler
 from shared.service_config import ServiceConfig

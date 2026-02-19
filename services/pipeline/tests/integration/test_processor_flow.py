@@ -9,11 +9,8 @@ These tests verify the processor's Kafka integration:
 All test resources are automatically cleaned up after each test.
 """
 
-import pytest
 import json
-import time
-import os
-from unittest.mock import patch, MagicMock
+
 from tests.integration.conftest import wait_for_message
 
 

@@ -31,11 +31,10 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Tuple
 
 import numpy as np
 
@@ -360,11 +359,11 @@ def main():
     plt.tight_layout()
     plt.savefig(str(output_dir / f"calibration_{args.fiber_id}_{args.section}.png"), dpi=150)
     plt.close()
-    logger.info(f"Saved calibration diagnostic plot")
+    logger.info("Saved calibration diagnostic plot")
 
     logger.info(f"\nCalibration complete for {args.fiber_id}/{args.section}")
     logger.info(f"  Files saved to: {output_dir}")
-    logger.info(f"  To use in pipeline: set use_calibration: true in fibers.yaml")
+    logger.info("  To use in pipeline: set use_calibration: true in fibers.yaml")
     logger.info(f"  and ensure calibration files are in /app/calibration/{args.fiber_id}/")
 
 

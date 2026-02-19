@@ -7,16 +7,17 @@ This test simulates the new rolling FIFO buffer approach where:
 - Natural 50-sample overlap between consecutive windows
 """
 
-import numpy as np
 import sys
 from collections import deque
 from pathlib import Path
 
+import numpy as np
+
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from ai_engine.model_vehicle.constants import GLRT_DEFAULT_WINDOW, GLRT_EDGE_SAFETY_SAMPLES
 from ai_engine.model_vehicle.vehicle_speed import compute_edge_trim
-from ai_engine.model_vehicle.constants import GLRT_EDGE_SAFETY_SAMPLES, GLRT_DEFAULT_WINDOW
 
 
 def test_rolling_fifo_buffer():
@@ -35,7 +36,7 @@ def test_rolling_fifo_buffer():
     step_size = window_size - 2 * edge_trim  # 250 = valid output per window
     num_messages = 3000  # Total messages to process
 
-    print(f"Configuration:")
+    print("Configuration:")
     print(f"  Window size: {window_size}")
     print(f"  Edge trim: {edge_trim}")
     print(f"  Step size: {step_size}")
@@ -102,7 +103,7 @@ def test_rolling_fifo_buffer():
         print(f"✗ WARNING: Found {duplicates} duplicate timestamps!")
         return False
     else:
-        print(f"✓ No duplicate timestamps")
+        print("✓ No duplicate timestamps")
 
     # Verify expected output length
     # First window starts at T299 (after filling buffer)

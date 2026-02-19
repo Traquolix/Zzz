@@ -1,8 +1,8 @@
 """Tests for CircuitBreaker state machine."""
 
-import pytest
 import asyncio
-from unittest.mock import patch
+
+import pytest
 
 from shared.circuit_breaker import CircuitBreaker, CircuitBreakerState
 

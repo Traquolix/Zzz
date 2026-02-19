@@ -1,18 +1,16 @@
 """Tests for FiberConfigManager and config loading."""
 
-import pytest
-import tempfile
 import os
+import tempfile
 from pathlib import Path
 
+import pytest
 import yaml
 
 from config.fiber_config import (
     FiberConfigManager,
-    FiberConfig,
-    SectionConfig,
     ModelSpec,
-    PipelineStepConfig,
+    SectionConfig,
 )
 
 

@@ -1,8 +1,9 @@
 """Shared test fixtures."""
 
-import pytest
 import tempfile
 from pathlib import Path
+
+import pytest
 
 from shared.service_config import ServiceConfig
 

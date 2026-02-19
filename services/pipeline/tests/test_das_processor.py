@@ -3,14 +3,14 @@
 These tests verify the real DASProcessor logic with mocked infrastructure.
 """
 
-import pytest
 import time
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
+import pytest
+
+from config import FiberConfig, PipelineStepConfig, SectionConfig
 from processor.main import DASProcessor
-from processor.processing_tools import ProcessingChain
-from config import FiberConfig, SectionConfig, PipelineStepConfig
-from shared.message import Message, KafkaMessage
+from shared.message import KafkaMessage, Message
 from shared.service_config import ServiceConfig
 
 

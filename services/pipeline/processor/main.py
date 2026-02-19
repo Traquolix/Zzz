@@ -15,11 +15,11 @@ from config import (
     get_service_name,
     load_service_config,
 )
-from shared import MultiTransformer
 from processor.processing_tools import (
     ProcessingChain,
     build_pipeline_from_config,
 )
+from shared import MultiTransformer
 from shared.message import Message
 from shared.otel_setup import get_correlation_id, setup_otel
 

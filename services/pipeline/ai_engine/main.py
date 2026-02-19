@@ -14,14 +14,6 @@ from typing import Dict, List, Optional
 import numpy as np
 from opentelemetry import trace
 
-# Unified config loader
-from config import (
-    get_default_model_name,
-    get_model_spec,
-    get_service_name,
-    load_service_config,
-)
-
 # Import standalone functions from separate module (no PyTorch dependency)
 from ai_engine.message_utils import (
     ProcessingContext,
@@ -37,6 +29,14 @@ from ai_engine.model_vehicle import (
     VehicleSpeedEstimator,
 )
 from ai_engine.model_vehicle.calibration import CalibrationManager
+
+# Unified config loader
+from config import (
+    get_default_model_name,
+    get_model_spec,
+    get_service_name,
+    load_service_config,
+)
 from shared import RollingBufferedTransformer
 from shared.ai_metrics import AIMetrics
 from shared.message import Message

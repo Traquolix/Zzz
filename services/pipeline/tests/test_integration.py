@@ -3,16 +3,13 @@
 Tests the full pipeline flow from message ingestion through processing to output.
 """
 
-import pytest
 import asyncio
-from unittest.mock import MagicMock, AsyncMock, patch
-from typing import List
+
+import pytest
 
 from processor.processing_tools import ProcessingChain, build_pipeline_from_config
-from processor.processing_tools.processing_steps.temporal_decimation import TemporalDecimation
 from processor.processing_tools.processing_steps.spatial_decimation import SpatialDecimation
-from config import PipelineStepConfig, SectionConfig
-from shared.message import Message
+from processor.processing_tools.processing_steps.temporal_decimation import TemporalDecimation
 
 
 class TestProcessingPipelineIntegration:

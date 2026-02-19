@@ -1,17 +1,15 @@
 """Tests for time utility functions."""
 
-import pytest
 import time
 from datetime import datetime, timezone
 
 from shared.time_utils import (
     NANOSECONDS_PER_SECOND,
-    NANOSECONDS_PER_MILLISECOND,
+    current_time_nanoseconds,
     datetime_to_nanoseconds,
     nanoseconds_to_datetime,
     nanoseconds_to_milliseconds,
     sample_duration_nanoseconds,
-    current_time_nanoseconds,
 )
 
 
