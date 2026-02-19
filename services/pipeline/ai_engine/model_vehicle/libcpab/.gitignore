@@ -1,0 +1,7 @@
+.spyproject
+__pycache__
+basis_files/
+ana_small.pkl
+*.so
+*.o
+*.pyc

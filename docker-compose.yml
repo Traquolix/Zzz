@@ -1,0 +1,391 @@
+services:
+
+  # Single-broker Kafka in KRaft mode. Suitable for development and small deployments.
+  # For production HA, scale to 3+ brokers with replication-factor > 1.
+  kafka:
+    image: confluentinc/cp-kafka:7.8.4
+    container_name: kafka
+    restart: unless-stopped
+    ports:
+      - "9092:9092"      # External access for DAS interrogators
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: "2.0"
+        reservations:
+          memory: 2G
+          cpus: "0.5"
+    environment:
+      # KRaft mode (no Zookeeper needed)
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT_EXTERNAL://0.0.0.0:9092,PLAINTEXT_INTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093
+      # External listener advertises server IP for DAS access; Internal for Docker services
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT_EXTERNAL://${KAFKA_EXTERNAL_HOST:-localhost}:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT_EXTERNAL:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      CLUSTER_ID: sequoia-cluster
+      # Retention: 24 hours OR 1GB per partition (whichever comes first)
+      KAFKA_LOG_RETENTION_HOURS: 24
+      KAFKA_LOG_RETENTION_BYTES: 1073741824
+      KAFKA_LOG_SEGMENT_BYTES: 536870912
+      KAFKA_LOG_CLEANUP_POLICY: delete
+      KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 60000
+      KAFKA_MESSAGE_MAX_BYTES: 2097152  # 2MB
+      KAFKA_REPLICA_FETCH_MAX_BYTES: 2097152  # 2MB
+      KAFKA_SOCKET_REQUEST_MAX_BYTES: 2097152  # 2MB
+    volumes:
+      # Production: bind mount to persistent volume
+      # This prevents data loss on container restart
+      - ${KAFKA_DATA_PATH:-kafka_data}:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks: [ internal ]
+
+  kafka-setup:
+    image: confluentinc/cp-kafka:7.8.4
+    container_name: kafka-setup
+    depends_on:
+      kafka:
+        condition: service_healthy
+    command: >
+      bash -c "
+        echo 'Waiting for Kafka to be ready...' &&
+        cub kafka-ready -b kafka:29092 1 30 &&
+        echo 'Creating Kafka topics (20 partitions each for scalability)...' &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.raw.carros --partitions 20 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=1073741824 --config compression.type=lz4 --config max.message.bytes=2097152 &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.raw.mathis --partitions 20 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=1073741824 --config compression.type=lz4 --config max.message.bytes=2097152 &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.raw.promenade --partitions 20 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=1073741824 --config compression.type=lz4 --config max.message.bytes=2097152 &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.processed --partitions 20 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=1073741824 --config compression.type=lz4 --config max.message.bytes=2097152 &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.speeds --partitions 20 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=1073741824 --config compression.type=lz4 --config max.message.bytes=2097152 &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.counts --partitions 20 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=1073741824 --config compression.type=lz4 --config max.message.bytes=2097152 &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.dlq --partitions 3 --replication-factor 1 --config retention.ms=604800000 --config retention.bytes=1073741824 --config compression.type=lz4 --config max.message.bytes=2097152 &&
+        echo 'All Kafka topics created successfully'
+      "
+    networks:
+      - internal
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.8.4
+    hostname: schema-registry
+    container_name: schema-registry
+    depends_on:
+      kafka:
+        condition: service_healthy
+      kafka-setup:
+        condition: service_completed_successfully
+    # No ports exposed — accessible only on internal network
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'kafka:29092'
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+      SCHEMA_REGISTRY_KAFKASTORE_TOPIC: _schemas
+      SCHEMA_REGISTRY_SCHEMA_REGISTRY_INTER_INSTANCE_PROTOCOL: "http"
+      SCHEMA_REGISTRY_LOG4J_ROOT_LOGLEVEL: INFO
+      SCHEMA_REGISTRY_KAFKASTORE_TOPIC_REPLICATION_FACTOR: 1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/subjects"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - internal
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka_ui
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:8080"    # Admin UI — localhost only
+    environment:
+      DYNAMIC_CONFIG_ENABLED: "true"
+      KAFKA_CLUSTERS_0_NAME: sequoia-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
+    networks: [ internal ]
+
+  processor:
+    build:
+      context: services/pipeline
+      dockerfile: processor/Dockerfile
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+    container_name: processor
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+    env_file: .env
+    networks: [ internal ]
+
+
+  ai-engine:
+    build:
+      context: services/pipeline
+      dockerfile: ai_engine/Dockerfile
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+    container_name: ai-engine
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+      processor:
+        condition: service_started
+    # GPU access for CUDA-accelerated inference
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: '2.0'
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    env_file: .env
+    environment:
+      # AI-specific settings that need Docker paths
+      AI_MODEL_BASE_PATH: /app/ai_engine/model_vehicle/models_parameters
+      CALIBRATION_PATH: /app/calibration
+      VISUALIZATION_OUTPUT: /app/visualizations
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+    volumes:
+      # Mount calibration data as read-only
+      - ${CALIBRATION_DATA_PATH:-./data/calibration}:/app/calibration:ro
+      # Mount visualization output directory as read-write
+      - ${VISUALIZATION_OUTPUT_PATH:-./data/visualizations}:/app/visualizations:rw
+    networks: [ internal ]
+
+  # PostgreSQL for Django (multi-tenant user/org/fiber data)
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+        reservations:
+          memory: 256M
+          cpus: "0.25"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sequoia}
+      POSTGRES_USER: ${POSTGRES_USER:-sequoia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ${POSTGRES_DATA_PATH:-postgres_data}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sequoia} -d ${POSTGRES_DB:-sequoia}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    networks: [ internal ]
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+        reservations:
+          memory: 128M
+          cpus: "0.1"
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --appendonly no
+      --requirepass ${REDIS_PASSWORD:-changeme}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks: [ internal ]
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8-alpine
+    container_name: clickhouse
+    restart: unless-stopped
+    # Ports exposed for local development only.
+    # In production, remove these and access ClickHouse only via the internal network.
+    ports:
+      - "127.0.0.1:8123:8123"    # HTTP interface (localhost only)
+      - "127.0.0.1:9000:9000"    # Native TCP interface (localhost only)
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+          cpus: "2.0"
+        reservations:
+          memory: 2G
+          cpus: "0.5"
+    environment:
+      CLICKHOUSE_DB: sequoia
+      CLICKHOUSE_USER: sequoia
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - ${CLICKHOUSE_DATA_PATH:-clickhouse_data}:/var/lib/clickhouse
+      - ./infrastructure/clickhouse/init:/docker-entrypoint-initdb.d:ro
+      - ./infrastructure/clickhouse/cables:/opt/fiber_cables:ro
+      - ./infrastructure/clickhouse/config/logging.xml:/etc/clickhouse-server/config.d/z_logging.xml:ro
+    healthcheck:
+      test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks: [ internal ]
+
+  otel-lgtm:
+    image: grafana/otel-lgtm:latest
+    container_name: otel-lgtm
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3002:3000"    # Grafana — localhost only
+      # Telemetry receivers: no external ports needed, accessed via internal network
+    deploy:
+      resources:
+        limits:
+          memory: 3G
+          cpus: "1.0"
+        reservations:
+          memory: 512M
+          cpus: "0.25"
+    environment:
+      - ENABLE_LOGS_GRAFANA=true
+      - ENABLE_METRICS_GRAFANA=true
+      - ENABLE_TRACES_GRAFANA=true
+      - GF_INSTALL_PLUGINS=grafana-clickhouse-datasource
+      - HTTP_PROXY=${HTTP_PROXY:-}
+      - HTTPS_PROXY=${HTTPS_PROXY:-}
+      - NO_PROXY=localhost,127.0.0.1,kafka,clickhouse,redis,schema-registry,platform-backend,otel-lgtm
+    volumes:
+      - otel_data:/data
+      - ./infrastructure/tempo/tempo-config.yaml:/otel-lgtm/tempo-config.yaml:ro
+      - ./infrastructure/grafana/provisioning/dashboards:/otel-lgtm/grafana/conf/provisioning/dashboards:ro
+      - ./infrastructure/grafana/provisioning/datasources:/otel-lgtm/grafana/conf/provisioning/datasources:ro
+      - ./infrastructure/grafana/dashboards:/otel-lgtm/grafana/dashboards:ro
+    networks: [ internal ]
+
+  # Platform Services
+  platform-backend:
+    build:
+      context: services/platform/backend
+      dockerfile: Dockerfile
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+    container_name: platform-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8001:8001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    environment:
+      DJANGO_SETTINGS_MODULE: sequoia.settings.prod
+      SECRET_KEY: ${DJANGO_SECRET_KEY}
+      # PostgreSQL
+      POSTGRES_DB: ${POSTGRES_DB:-sequoia}
+      POSTGRES_USER: ${POSTGRES_USER:-sequoia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      # ClickHouse
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_HTTP_PORT: 8123
+      CLICKHOUSE_DATABASE: sequoia
+      CLICKHOUSE_USER: sequoia
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      # Kafka
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      # Redis / Channels
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme}
+      # Frontend URL (for CORS)
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+    networks:
+      - internal
+      - default
+
+  platform-frontend:
+    build:
+      context: services/platform/frontend
+      dockerfile: Dockerfile
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8001}
+        VITE_MAPBOX_TOKEN: ${VITE_MAPBOX_TOKEN}
+    container_name: platform-frontend
+    restart: unless-stopped
+    depends_on:
+      platform-backend:
+        condition: service_healthy
+    ports:
+      - "3000:8080"
+    networks:
+      - default  # Frontend only needs default network since it's served to browser
+
+networks:
+  internal:
+    name: internal
+
+volumes:
+  kafka_data:
+  clickhouse_data:
+  redis_data:
+  postgres_data:
+  otel_data:

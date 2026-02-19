@@ -1,0 +1,124 @@
+"""Unified service configuration loader from fibers.yaml + environment variables."""
+
+from __future__ import annotations
+
+import logging
+import os
+from typing import Dict, Optional, Tuple
+
+from config.fiber_config import FiberConfigManager
+from shared.service_config import OutputConfig, ServiceConfig
+
+logger = logging.getLogger(__name__)
+
+
+def load_service_config(service_type: str) -> ServiceConfig:
+    """Load ServiceConfig for a service type from fibers.yaml + env vars."""
+    manager = FiberConfigManager()
+    raw = manager.get_raw_config()
+
+    defaults = raw.get("service_defaults", {})
+    service_cfg = raw.get("services", {}).get(service_type, {})
+    topics = defaults.get("topics", {})
+    schemas = defaults.get("schemas", {}).get(service_type, {})
+    producer_cfg = defaults.get("producer", {})
+
+    kafka_servers = os.getenv(
+        "KAFKA_BOOTSTRAP_SERVERS", defaults.get("kafka_bootstrap_servers", "kafka:29092")
+    )
+    schema_registry = os.getenv(
+        "SCHEMA_REGISTRY_URL", defaults.get("schema_registry_url", "http://schema-registry:8081")
+    )
+
+    outputs = _build_outputs(service_type, topics, schemas)
+    input_topic, input_pattern = _get_input_config(service_type, topics)
+
+    max_concurrent = service_cfg.get(
+        "max_concurrent_messages", defaults.get("max_concurrent_messages", 50)
+    )
+    message_timeout = service_cfg.get(
+        "message_timeout_seconds", defaults.get("message_timeout_seconds", 30.0)
+    )
+    buffer_timeout = service_cfg.get("buffer_timeout_seconds", 60.0)
+    max_active_buffers = service_cfg.get("max_active_buffers", 10)
+
+    config = ServiceConfig(
+        input_topic=input_topic,
+        input_topic_pattern=input_pattern,
+        outputs=outputs,
+        kafka_bootstrap_servers=kafka_servers,
+        schema_registry_url=schema_registry,
+        max_concurrent_messages=max_concurrent,
+        message_timeout=message_timeout,
+        buffer_timeout=buffer_timeout,
+        max_active_buffers=max_active_buffers,
+        producer_flush_threshold=producer_cfg.get("flush_threshold", 10),
+        producer_flush_interval=producer_cfg.get("flush_interval", 1.0),
+        producer_linger_ms=producer_cfg.get("linger_ms", 100),
+        producer_batch_size=producer_cfg.get("batch_size", 131072),
+        producer_compression_type=producer_cfg.get("compression_type", "lz4"),
+        producer_acks=producer_cfg.get("acks", "all"),
+        producer_retries=producer_cfg.get("retries", 3),
+        producer_enable_idempotence=producer_cfg.get("enable_idempotence", True),
+        dlq_topic=topics.get("dlq", "das.dlq"),
+    )
+
+    logger.info(
+        f"Loaded config for {service_type}: "
+        f"input={input_topic or input_pattern}, "
+        f"outputs={list(outputs.keys())}, "
+        f"kafka={kafka_servers}"
+    )
+
+    return config
+
+
+def _build_outputs(service_type: str, topics: dict, schemas: dict) -> Dict[str, OutputConfig]:
+    """Build output configuration based on service type."""
+    if service_type == "processor":
+        return {
+            "default": OutputConfig(
+                topic=topics.get("processed", "das.processed"),
+                key_schema_file=schemas.get("output_key"),
+                value_schema_file=schemas.get("output_value"),
+            )
+        }
+    elif service_type == "ai_engine":
+        return {
+            "speed": OutputConfig(
+                topic=topics.get("speeds", "das.speeds"),
+                key_schema_file=schemas.get("speed_key"),
+                value_schema_file=schemas.get("speed_value"),
+            ),
+            "counting": OutputConfig(
+                topic=topics.get("counts", "das.counts"),
+                key_schema_file=schemas.get("count_key"),
+                value_schema_file=schemas.get("count_value"),
+            ),
+        }
+    else:
+        raise ValueError(f"Unknown service type: {service_type}")
+
+
+def _get_input_config(service_type: str, topics: dict) -> Tuple[Optional[str], Optional[str]]:
+    """Get input topic or pattern for service type."""
+    if service_type == "processor":
+        return None, topics.get("raw_pattern", "^das\\.raw\\..+$")
+    elif service_type == "ai_engine":
+        return topics.get("processed", "das.processed"), None
+    else:
+        raise ValueError(f"Unknown service type: {service_type}")
+
+
+def get_service_name(service_type: str) -> str:
+    """Get service name from config."""
+    manager = FiberConfigManager()
+    raw = manager.get_raw_config()
+    service_cfg = raw.get("services", {}).get(service_type, {})
+
+    defaults = {
+        "processor": "das-processor",
+        "ai_engine": "ai-engine",
+    }
+
+    return service_cfg.get("name", defaults.get(service_type, service_type))

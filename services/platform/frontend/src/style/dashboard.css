@@ -1,0 +1,45 @@
+.grid-card {
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    overflow: hidden;
+    height: 100%;
+}
+
+.grid-card.editable {
+    cursor: grab;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 1px #3b82f6;
+}
+
+.grid-card.editable:active {
+    cursor: grabbing;
+}
+
+.react-resizable-handle {
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    bottom: 0;
+    right: 0;
+    cursor: se-resize;
+    z-index: 20;
+}
+
+.react-resizable-handle::after {
+    content: '';
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    width: 6px;
+    height: 6px;
+    border-right: 2px solid #3b82f6;
+    border-bottom: 2px solid #3b82f6;
+}
+
+.react-grid-placeholder {
+    background: rgba(59, 130, 246, 0.1) !important;
+    border-radius: 8px;
+    border: 1px dashed #3b82f6;
+}

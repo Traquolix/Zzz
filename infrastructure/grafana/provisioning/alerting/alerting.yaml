@@ -1,0 +1,224 @@
+# Grafana Alerting Rules Provisioning
+# See: https://grafana.com/docs/grafana/latest/alerting/set-up/provision-alerting-resources/file-provisioning/
+apiVersion: 1
+
+# Contact points for notifications (configure as needed)
+contactPoints:
+  - orgId: 1
+    name: default-email
+    receivers:
+      - uid: default-email-receiver
+        type: email
+        settings:
+          addresses: admin@example.com
+        disableResolveMessage: false
+
+# Notification policies
+policies:
+  - orgId: 1
+    receiver: default-email
+    group_by: ['alertname', 'service_name']
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h
+
+# Alert rules organized by folder/group
+groups:
+  - orgId: 1
+    name: DAS Pipeline Health
+    folder: DAS Pipeline
+    interval: 1m
+    rules:
+      - uid: das-service-down
+        title: Service Down
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: absent(up{job=~"das-processor|ai-engine"}) or up{job=~"das-processor|ai-engine"} == 0
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+        noDataState: Alerting
+        execErrState: Alerting
+        for: 1m
+        annotations:
+          summary: Service {{ $labels.job }} is down
+          description: The service has been unreachable for more than 1 minute.
+        labels:
+          severity: critical
+
+      - uid: das-high-error-rate
+        title: High Error Rate
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: rate(errors_total{service_name=~"das-processor|ai-engine"}[5m]) > 0.1
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+        noDataState: OK
+        execErrState: Error
+        for: 2m
+        annotations:
+          summary: High error rate in {{ $labels.service_name }}
+          description: Error rate is {{ printf "%.2f" $value }} errors/sec
+        labels:
+          severity: warning
+
+      - uid: das-circuit-breaker-open
+        title: Circuit Breaker Open
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 60
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: circuit_breaker_state{service_name=~"das-processor|ai-engine"} == 2
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+        noDataState: OK
+        execErrState: Error
+        for: 30s
+        annotations:
+          summary: Circuit breaker OPEN in {{ $labels.service_name }}
+          description: "{{ $labels.breaker_name }} is OPEN. Service degraded."
+        labels:
+          severity: critical
+
+  - orgId: 1
+    name: DAS Pipeline Performance
+    folder: DAS Pipeline
+    interval: 1m
+    rules:
+      - uid: das-high-consumer-lag
+        title: High Consumer Lag
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: kafka_consumer_lag_messages{service_name=~"das-processor|ai-engine"} > 10000
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: High consumer lag in {{ $labels.service_name }}
+          description: "Lag of {{ $value }} messages on {{ $labels.topic }}"
+        labels:
+          severity: warning
+
+      - uid: das-high-ai-latency
+        title: High AI Inference Latency
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: histogram_quantile(0.95, rate(ai_inference_duration_seconds_bucket{service_name="ai-engine"}[5m])) > 5
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: High AI inference latency
+          description: "p95 DTAN inference is {{ printf \"%.1f\" $value }}s"
+        labels:
+          severity: warning
+
+      - uid: das-dlq-depth
+        title: DLQ Depth High
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: dlq_depth_messages{service_name=~"das-processor|ai-engine"} > 50
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+        noDataState: OK
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: High DLQ depth in {{ $labels.service_name }}
+          description: "DLQ has {{ $value }} messages"
+        labels:
+          severity: warning
+
+  - orgId: 1
+    name: DAS Data Flow
+    folder: DAS Pipeline
+    interval: 2m
+    rules:
+      - uid: das-no-data-flow
+        title: No Data Flow
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: rate(messages_processed_total{service_name="das-processor"}[10m]) == 0
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+        noDataState: Alerting
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: No data flowing through pipeline
+          description: "Processor has not processed messages in 10 minutes"
+        labels:
+          severity: critical
+
+      - uid: das-no-ai-output
+        title: No AI Engine Output
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: rate(ai_windows_processed_total{service_name="ai-engine"}[10m]) == 0
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+        noDataState: Alerting
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: No output from AI engine
+          description: "AI engine has not processed windows in 10 minutes"
+        labels:
+          severity: critical

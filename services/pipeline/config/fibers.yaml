@@ -1,0 +1,344 @@
+# Central fiber/section/model configuration
+# Adding a new fiber: add entry here + fiber_cables table + configure DAS hardware
+# Config auto-reloads on file change (no restart needed)
+#
+# Naming conventions:
+#   - fiber: A physical fiber optic cable installation
+#   - section: A contiguous range of channels processed together (with its own model)
+#   - temporal_decimation: Reduce sampling rate (e.g., 50Hz -> 10Hz)
+#   - spatial_decimation: Reduce channel count (e.g., keep every Nth channel)
+
+# =============================================================================
+# Service Infrastructure Defaults
+# =============================================================================
+# Infrastructure settings for all services. Can be overridden per-service below.
+# Environment variables always take precedence: KAFKA_BOOTSTRAP_SERVERS, SCHEMA_REGISTRY_URL
+
+service_defaults:
+  # Kafka infrastructure (overridden by env vars in production)
+  kafka_bootstrap_servers: kafka:29092
+  schema_registry_url: http://schema-registry:8081
+
+  # Topic naming
+  topics:
+    raw_pattern: "^das\\.raw\\.[^.]+$"    # Input pattern for processor (excludes .params)
+    processed: das.processed           # Output from processor, input to ai_engine
+    speeds: das.speeds                 # Speed analysis output
+    counts: das.counts                 # Vehicle counting output
+    dlq: das.dlq                       # Dead letter queue
+
+  # Schema paths (relative to pipeline root / PYTHONPATH).
+  schemas:
+    processor:
+      output_key: schema/string_key.avsc
+      output_value: processor/schema/das_processed_measurement.avsc
+    ai_engine:
+      speed_key: schema/string_key.avsc
+      speed_value: ai_engine/schema/das_speed_analysis.avsc
+      count_key: schema/string_key.avsc
+      count_value: ai_engine/schema/das_vehicle_count.avsc
+
+  # Producer settings (shared across services)
+  producer:
+    batch_size: 131072
+    linger_ms: 100
+    compression_type: lz4
+    acks: all
+    retries: 3
+    enable_idempotence: true
+    flush_threshold: 10
+    flush_interval: 1.0
+
+# =============================================================================
+# Service-Specific Settings
+# =============================================================================
+# Override service_defaults for specific services
+
+services:
+  processor:
+    name: das-processor
+    max_concurrent_messages: 50
+    message_timeout_seconds: 30.0
+
+  ai_engine:
+    name: ai-engine
+    max_concurrent_messages: 10
+    message_timeout_seconds: 120.0
+    buffer_timeout_seconds: 60.0
+    max_active_buffers: 10
+
+# =============================================================================
+# Fibers Configuration
+# =============================================================================
+
+fibers:
+  carros:
+    input_topic: das.raw.carros
+    total_channels: 2829
+    sampling_rate_hz: 50.0
+
+    sections:
+      - name: default
+        channels: [1000, 2700]  # Updated 2026-02-18: Extended to cover more vehicle activity
+        model: dtan_carros
+
+        # Processing pipeline - steps executed in order
+        # Each step maps to a ProcessingStep class via the registry
+        pipeline:
+          - step: common_mode_removal
+            params:
+              warmup_seconds: 5.0
+              method: median
+
+          - step: bandpass_filter
+            params:
+              low_freq_hz: 0.1
+              high_freq_hz: 2.0
+              order: 4
+              warmup_seconds: 5.0
+
+          - step: spatial_decimation
+            params:
+              factor: 2  # Keep every 2nd channel (1300 -> 650 channels)
+
+          - step: temporal_decimation
+            params:
+              factor: 5  # 50Hz -> 10Hz
+
+  mathis:
+    input_topic: das.raw.mathis
+    total_channels: 5427  # Full ROI: raw channels 19892-47027, /5 ROI decimation = 5427
+    sampling_rate_hz: 50.0
+
+    sections:
+      # Section 1: Channels 0-1700 of Mathis ROI (covers active vehicle zone)
+      - name: section1
+        channels: [0, 1700]  # Updated 2026-02-18: Extended to cover actual activity
+        model: dtan_mathis
+
+        pipeline:
+          - step: common_mode_removal
+            params:
+              warmup_seconds: 5.0
+              method: median
+
+          - step: bandpass_filter
+            params:
+              low_freq_hz: 0.1
+              high_freq_hz: 2.0
+              order: 4
+              warmup_seconds: 5.0
+
+          - step: spatial_decimation
+            params:
+              factor: 2  # Keep every 2nd channel (600 → 300 channels)
+
+          - step: temporal_decimation
+            params:
+              factor: 5  # 50Hz → 10Hz
+
+      # Section 2: Channels 2500-3000 of Mathis ROI (second active vehicle zone)
+      - name: section2
+        channels: [2500, 3000]  # Updated 2026-02-18: Moved to actual activity zone
+        model: dtan_mathis
+
+        pipeline:
+          - step: common_mode_removal
+            params:
+              warmup_seconds: 5.0
+              method: median
+
+          - step: bandpass_filter
+            params:
+              low_freq_hz: 0.1
+              high_freq_hz: 2.0
+              order: 4
+              warmup_seconds: 5.0
+
+          - step: spatial_decimation
+            params:
+              factor: 2  # Keep every 2nd channel (400 → 200 channels)
+
+          - step: temporal_decimation
+            params:
+              factor: 5  # 50Hz → 10Hz
+
+  promenade:
+    input_topic: das.raw.promenade
+    total_channels: 7694  # Full ROI: raw channels 47848-86319, /5 ROI decimation = 7694
+    sampling_rate_hz: 50.0
+
+    sections:
+      - name: default
+        channels: [0, 4100]  # Updated 2026-02-18: Extended to cover actual activity
+        model: dtan_promenade
+
+        # Processing pipeline - steps executed in order
+        pipeline:
+          - step: common_mode_removal
+            params:
+              warmup_seconds: 5.0
+              method: median
+
+          - step: bandpass_filter
+            params:
+              low_freq_hz: 0.1
+              high_freq_hz: 2.0
+              order: 4
+              warmup_seconds: 5.0
+
+          - step: spatial_decimation
+            params:
+              factor: 2  # Keep every 2nd channel (2300 → 1150 channels)
+
+          - step: temporal_decimation
+            params:
+              factor: 5  # 50Hz → 10Hz
+
+# =============================================================================
+# Model Definitions
+# =============================================================================
+# Models are loaded lazily on first use
+
+models:
+  dtan_carros:
+    fiber_id: carros  # Used for calibration lookup
+    path: ai_engine/model_vehicle/models_parameters
+    exp_name: dtan_carros_48h_full
+    version: best
+    type: dtan
+
+    # Inference parameters
+    inference:
+      sampling_rate_hz: 10.0      # Expected input rate (after temporal decimation)
+      window_seconds: 30          # Buffer duration for inference
+      channels_per_section: 9     # Channels processed together
+      gauge_meters: 10            # Fiber gauge length
+
+    # Speed detection parameters
+    speed_detection:
+      min_speed_kmh: 20.0
+      max_speed_kmh: 120.0
+      correlation_threshold: 130.0  # Fallback if calibration fails or disabled
+      use_calibration: true         # Enable variable threshold + coupling correction
+      # Window overlap and edge trimming for seamless output:
+      # - Edge trim = safety(15) + glrt_window//2(10) = 25 samples per edge
+      # - Overlap must be >= 2 * edge_trim (50 samples) for seamless handoff
+      # - With 0.1667 ratio: 300 * 0.1667 = 50 samples overlap ✓
+      time_overlap_ratio: 0.1667    # 50 samples = 2 * 25 (edge trim)
+      glrt_window: 20               # Used in edge trim calculation
+
+    # Vehicle counting (optional)
+    counting:
+      enabled: true
+      window_seconds: 30
+      step_samples: 250
+      # TEMPORARY: Use simple speed-based counting while NN is being recalibrated
+      # Set to false to use neural network counting (currently broken due to normalization mismatch)
+      use_simple_counting_TEMPORARY: true
+
+    # Visualization generation (optional)
+    visualization:
+      enabled: true
+      interval_seconds: 600       # Generate plot every 10 minutes
+      output_dir: /app/visualizations
+
+  dtan_mathis:
+    fiber_id: mathis  # Used for calibration lookup (no calibration files yet)
+    path: ai_engine/model_vehicle/models_parameters  # Reusing carros model files
+    exp_name: dtan_carros_48h_full  # Same model as carros
+    version: best
+    type: dtan
+
+    # Inference parameters
+    inference:
+      sampling_rate_hz: 10.0      # Expected input rate (after temporal decimation)
+      window_seconds: 30          # Buffer duration for inference
+      channels_per_section: 9     # Channels processed together
+      gauge_meters: 10            # Fiber gauge length
+
+    # Speed detection parameters
+    speed_detection:
+      min_speed_kmh: 20.0
+      max_speed_kmh: 120.0
+      correlation_threshold: 130.0  # Static threshold (no calibration)
+      use_calibration: false        # Disabled - no promenade calibration files yet
+      time_overlap_ratio: 0.1667    # 50 samples = 2 * 25 (edge trim)
+      glrt_window: 20               # Used in edge trim calculation
+
+    # Vehicle counting (optional)
+    counting:
+      enabled: true
+      window_seconds: 30
+      step_samples: 250
+      # TEMPORARY: Use simple speed-based counting
+      use_simple_counting_TEMPORARY: true
+
+    # Visualization generation (optional)
+    visualization:
+      enabled: true
+      interval_seconds: 600       # Generate plot every 10 minutes
+      output_dir: /app/visualizations
+
+  dtan_promenade:
+    fiber_id: promenade  # Used for calibration lookup (no calibration files yet)
+    path: ai_engine/model_vehicle/models_parameters  # Reusing carros model files
+    exp_name: dtan_carros_48h_full  # Same model as carros
+    version: best
+    type: dtan
+
+    # Inference parameters
+    inference:
+      sampling_rate_hz: 10.0      # Expected input rate (after temporal decimation)
+      window_seconds: 30          # Buffer duration for inference
+      channels_per_section: 9     # Channels processed together
+      gauge_meters: 10            # Fiber gauge length
+
+    # Speed detection parameters
+    speed_detection:
+      min_speed_kmh: 20.0
+      max_speed_kmh: 120.0
+      correlation_threshold: 130.0  # Static threshold (no calibration)
+      use_calibration: false        # Disabled - no promenade calibration files yet
+      time_overlap_ratio: 0.1667    # 50 samples = 2 * 25 (edge trim)
+      glrt_window: 20               # Used in edge trim calculation
+
+    # Vehicle counting (optional)
+    counting:
+      enabled: true
+      window_seconds: 30
+      step_samples: 250
+      # TEMPORARY: Use simple speed-based counting
+      use_simple_counting_TEMPORARY: true
+
+    # Visualization generation (optional)
+    visualization:
+      enabled: true
+      interval_seconds: 600       # Generate plot every 10 minutes
+      output_dir: /app/visualizations
+
+# =============================================================================
+# Defaults
+# =============================================================================
+# Applied when not specified per-section
+
+defaults:
+  pipeline:
+    - step: common_mode_removal
+      params:
+        warmup_seconds: 5.0
+        method: median
+    - step: bandpass_filter
+      params:
+        low_freq_hz: 0.1
+        high_freq_hz: 2.0
+        order: 4
+        warmup_seconds: 5.0
+    - step: spatial_decimation
+      params:
+        factor: 2
+    - step: temporal_decimation
+      params:
+        factor: 5
+
+  model: dtan_carros

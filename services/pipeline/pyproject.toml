@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "das-pipeline"
+version = "1.0.0"
+description = "DAS Pipeline for vehicle detection and speed estimation"
+requires-python = ">=3.9"
+dependencies = [
+    "confluent-kafka[avro]",
+    "aiohttp>=3.9.0",
+    "opentelemetry-api>=1.24.0",
+    "opentelemetry-sdk>=1.24.0",
+    "opentelemetry-exporter-otlp>=1.24.0",
+    "opentelemetry-instrumentation-logging>=0.45b0",
+    "opentelemetry-propagator-b3>=1.24.0",
+    "numpy>=1.21.0",
+    "scipy>=1.7.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+ai = [
+    "torch>=2.0.0",
+    "matplotlib>=3.5.0",
+    "pandas",
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black",
+    "ruff",
+    "tqdm",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["shared*", "config*", "processor*", "ai_engine*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.yaml", "*.yml", "*.avsc", "*.json"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+exclude = ["ai_engine/model_vehicle"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]  # Line too long - handled by formatter
+
+[tool.black]
+line-length = 100
+target-version = ["py39"]
+exclude = "ai_engine/model_vehicle"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

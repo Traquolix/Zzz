@@ -1,0 +1,72 @@
+{
+  "type": "record",
+  "name": "DASSpeedPoint",
+  "namespace": "com.sequoia.das",
+  "doc": "Individual speed measurement point from AI engine - sparse array format (non-zero speeds only)",
+  "fields": [
+    {
+      "name": "fiber_id",
+      "type": "string",
+      "doc": "Unique identifier for the fiber optic cable"
+    },
+    {
+      "name": "timestamp_ns",
+      "type": "long",
+      "doc": "Timestamp of this measurement point in nanoseconds since Unix epoch"
+    },
+    {
+      "name": "speeds",
+      "type": {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "ChannelSpeed",
+          "fields": [
+            {
+              "name": "channel_number",
+              "type": "int",
+              "doc": "DAS channel number"
+            },
+            {
+              "name": "speed",
+              "type": "float",
+              "doc": "Speed in km/h (only non-zero values included)"
+            }
+          ]
+        }
+      },
+      "doc": "Sparse array of non-zero speed measurements. Only channels with speed > 0 are included."
+    },
+    {
+      "name": "channel_start",
+      "type": "int",
+      "default": 0,
+      "doc": "Starting channel number for this fiber section"
+    },
+    {
+      "name": "ai_metadata",
+      "type": {
+        "type": "record",
+        "name": "AIMetadata",
+        "fields": [
+          {
+            "name": "engine_version",
+            "type": "string",
+            "doc": "AI engine version"
+          },
+          {
+            "name": "spatial_points",
+            "type": "int",
+            "doc": "Total number of spatial measurement points"
+          },
+          {
+            "name": "time_index",
+            "type": "int",
+            "doc": "Time point index within batch"
+          }
+        ]
+      },
+      "doc": "AI engine metadata"
+    }
+  ]
+}

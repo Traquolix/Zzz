@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+<clickhouse>
+    <logger>
+        <!-- Set log level to warning to reduce CPU overhead from excessive logging -->
+        <level>warning</level>
+    </logger>
+
+    <!-- Disable expensive system log tables using remove attribute -->
+    <!-- This file is mounted as z_logging.xml to ensure it loads last -->
+    <text_log remove="1"/>
+    <trace_log remove="1"/>
+    <processors_profile_log remove="1"/>
+
+    <!-- Query log with 1-day retention -->
+    <query_log>
+        <database>system</database>
+        <table>query_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <ttl>event_date + INTERVAL 1 DAY</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </query_log>
+
+    <!-- Query views log with 1-day retention -->
+    <query_views_log>
+        <database>system</database>
+        <table>query_views_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <ttl>event_date + INTERVAL 1 DAY</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </query_views_log>
+
+    <!-- Reduce metric logging frequency with 1-day retention -->
+    <metric_log>
+        <database>system</database>
+        <table>metric_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <ttl>event_date + INTERVAL 1 DAY</ttl>
+        <flush_interval_milliseconds>60000</flush_interval_milliseconds>
+        <collect_interval_milliseconds>30000</collect_interval_milliseconds>
+    </metric_log>
+
+    <!-- Async metric log with 1-day retention -->
+    <asynchronous_metric_log>
+        <database>system</database>
+        <table>asynchronous_metric_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <ttl>event_date + INTERVAL 1 DAY</ttl>
+        <flush_interval_milliseconds>60000</flush_interval_milliseconds>
+    </asynchronous_metric_log>
+
+    <!-- Part log with 1-day retention -->
+    <part_log>
+        <database>system</database>
+        <table>part_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <ttl>event_date + INTERVAL 1 DAY</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </part_log>
+</clickhouse>

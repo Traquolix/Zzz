@@ -1,0 +1,122 @@
+# Deployment
+airgap-export*
+
+# Research/development artifacts
+scripts/
+training_data/
+experiments/
+diagnostic_output/
+docs/research/
+
+# Training environment (large, reproducible)
+training_env/
+
+# Root-level generated outputs
+/*.png
+
+
+# Script outputs (keep scripts, ignore generated images)
+scripts/**/*.png
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# PyCharm
+.idea/
+
+# VS Code
+.vscode/
+
+# Claude Code
+.claude
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+coverage.xml
+*.cover
+.hypothesis/
+.benchmarks/
+tests/test_env/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Docker
+.dockerignore
+
+# Logs
+*.log
+logs/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# Data files (adjust as needed)
+*.csv
+*.parquet
+
+# SQLite databases
+db.sqlite3
+*.sqlite3
+
+# Config files with secrets
+config.yml
+config.yaml
+secrets.yml
+secrets.yaml
+
+# Platform
+dist
+node_modules
+# Large data archives
+*.tar.gz
+*.zip

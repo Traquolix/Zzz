@@ -1,0 +1,340 @@
+{
+    "nav": {
+        "monitoring": "Dashboard",
+        "incidents": "Incidents",
+        "shm": "Structural Health",
+        "reports": "Reports",
+        "apiData": "API & Data",
+        "settings": "Settings"
+    },
+    "auth": {
+        "login": "Sign in",
+        "logout": "Logout",
+        "username": "Username",
+        "password": "Password",
+        "loginButton": "Sign In",
+        "loginFailed": "Invalid username or password",
+        "signingIn": "Signing in...",
+        "welcomeBack": "Welcome back, {{username}}",
+        "tooManyAttempts": "Too many attempts. Try again later.",
+        "connectionFailed": "Connection failed"
+    },
+    "incidents": {
+        "title": "Incident History",
+        "noIncidents": "No incidents recorded",
+        "new": "NEW",
+        "types": {
+            "slowdown": "Slowdown",
+            "congestion": "Congestion",
+            "accident": "Accident",
+            "anomaly": "Anomaly"
+        },
+        "severity": {
+            "low": "Low",
+            "medium": "Medium",
+            "high": "High",
+            "critical": "Critical"
+        },
+        "resolved": "Resolved",
+        "ongoing": "Ongoing",
+        "export": "Export CSV",
+        "quickNav": "Quick Nav",
+        "fiberLine": "Fiber Line",
+        "loadingSnapshot": "Loading snapshot...",
+        "closeDetail": "Close detail panel",
+        "csvHeaders": {
+            "id": "ID",
+            "type": "Type",
+            "severity": "Severity",
+            "fiber": "Fiber",
+            "channel": "Channel",
+            "detectedAt": "Detected At",
+            "status": "Status",
+            "duration": "Duration (ms)"
+        },
+        "activeIncidents": "Active Incidents",
+        "loadingIncidents": "Loading incidents...",
+        "noActiveIncidents": "No active incidents",
+        "noDetectionData": "No detection data captured",
+        "critical_one": "{{count}} critical",
+        "critical_other": "{{count}} critical",
+        "ofTotal": "{{count}} of {{total}}",
+        "total": "{{count}} total",
+        "hideDetails": "Hide details",
+        "showDetails": "Show details",
+        "filters": {
+            "allTypes": "All types",
+            "allSeverities": "All severities"
+        },
+        "sort": {
+            "severity": "Sort: Severity",
+            "recent": "Sort: Most Recent",
+            "oldest": "Sort: Oldest First",
+            "type": "Sort: Type"
+        },
+        "snapshot": {
+            "avgSpeed": "Avg Speed",
+            "minSpeed": "Min Speed",
+            "slowdown": "Slowdown",
+            "window": "30s window",
+            "positions": "{{count}} positions",
+            "legendNormal": "Normal",
+            "legendSlowing": "Slowing",
+            "legendSlow": "Slow",
+            "incident": "Incident"
+        },
+        "time": {
+            "justNow": "Just now",
+            "minutesAgo": "{{count}}m ago",
+            "hoursAgo": "{{count}}h ago"
+        }
+    },
+    "connection": {
+        "reconnecting": "Reconnecting to real-time data...",
+        "disconnected": "Disconnected from real-time data"
+    },
+    "common": {
+        "loading": "Loading...",
+        "error": "An error occurred",
+        "cancel": "Cancel",
+        "confirm": "Confirm",
+        "close": "Close",
+        "save": "Save",
+        "delete": "Delete",
+        "fiber": "Fiber",
+        "channel": "Channel",
+        "position": "Position",
+        "severity": "Severity",
+        "duration": "Duration",
+        "location": "Location",
+        "trafficSnapshot": "Traffic Snapshot",
+        "noSnapshot": "No snapshot available",
+        "vehicles": "vehicles",
+        "beta": "BETA",
+        "appName": "Sequoia",
+        "appTagline": "Traffic Monitoring Platform",
+        "appTitle": "Sequoia Analytics",
+        "name": "Name",
+        "all": "All",
+        "clickToConfirm": "Click again to confirm",
+        "clickToEdit": "Click to edit",
+        "noData": "No data",
+        "tryAgain": "Try again",
+        "somethingWentWrong": "Something went wrong",
+        "unexpectedError": "An unexpected error occurred"
+    },
+    "chart": {
+        "scatter": "Scatter",
+        "occupancy": "Occupancy"
+    },
+    "reports": {
+        "title": "Reports",
+        "generate": "Generate Report",
+        "generateTitle": "Generate Report",
+        "noReports": "No reports generated yet",
+        "titleLabel": "Title",
+        "titlePlaceholder": "e.g. Weekly Traffic Summary",
+        "dateRange": "Date Range",
+        "status": "Status",
+        "createdAt": "Created",
+        "actions": "Actions",
+        "startTime": "Start",
+        "endTime": "End",
+        "fibers": "Fibers",
+        "sections": "Sections",
+        "recipients": "Recipients (comma-separated)",
+        "recipientsPlaceholder": "email@example.com, other@example.com",
+        "sectionLabels": {
+            "incidents": "Incidents",
+            "speed": "Speed Stats",
+            "volume": "Traffic Volume"
+        },
+        "view": "View",
+        "send": "Send",
+        "preview": "Report Preview",
+        "noContent": "Report content not available",
+        "generated": "Report generated successfully",
+        "sent": "Report sent successfully",
+        "statuses": {
+            "pending": "Pending",
+            "generating": "Generating",
+            "completed": "Completed",
+            "failed": "Failed"
+        }
+    },
+    "settings": {
+        "title": "Settings",
+        "speedLimits": "Speed Limits",
+        "speed": {
+            "loadingFibers": "Loading fibers...",
+            "noFibers": "No fibers available",
+            "selectFiber": "Select Fiber",
+            "channels": "channels",
+            "zones": "Speed Limit Zones",
+            "channelRange": "Channels: 0 - {{max}}",
+            "startChannel": "Start Channel",
+            "endChannel": "End Channel",
+            "speedLimit": "Speed Limit",
+            "noZones": "No speed limit zones defined for this fiber.",
+            "noZonesHint": "Areas without zones use absolute speed thresholds.",
+            "addZone": "Add Zone",
+            "deleteZone": "Delete zone",
+            "preview": "Preview",
+            "noLimitDefined": "No limit defined (absolute thresholds)",
+            "coloringInfo": "Speed coloring is based on percentage of the speed limit:",
+            "startPlaceholder": "Start",
+            "endPlaceholder": "End",
+            "limitPlaceholder": "Limit"
+        }
+    },
+    "notFound": {
+        "title": "Page not found",
+        "description": "The page you're looking for doesn't exist or has been moved.",
+        "backLink": "Back to Dashboard"
+    },
+    "dashboard": {
+        "addWidget": "Add Widget",
+        "editing": "Editing",
+        "locked": "Locked",
+        "widgets": {
+            "map": "Map",
+            "traffic_monitor": "Traffic Monitor",
+            "incidents": "Incidents",
+            "shm": "Structural Health"
+        }
+    },
+    "map": {
+        "direction": "Direction:",
+        "layers": "Map layers",
+        "controls": {
+            "baseLayers": "Base Layers",
+            "labels": "Labels",
+            "overlays": "Overlays",
+            "cables": "Cables",
+            "fiberLines": "Fiber Lines",
+            "vehicles": "Vehicles",
+            "speedHeatmap": "Speed Heatmap",
+            "landmarks": "Landmarks",
+            "sections": "Sections",
+            "infrastructure": "Infrastructure",
+            "detections": "Detections",
+            "incidents": "Incidents",
+            "newSection": "+ New Section",
+            "clickFiberToStart": "Click fiber to start..."
+        },
+        "vehicle": {
+            "title": "Vehicle Info",
+            "detectionSpeed": "Detection speed:",
+            "sensor": "(sensor)",
+            "visualSpeed": "Visual speed:",
+            "interpolated": "(interpolated)",
+            "direction": "Direction:",
+            "forward": "Forward",
+            "backward": "Backward"
+        },
+        "landmark": {
+            "selectedTitle": "Selected Landmark",
+            "deleteLabel": "Delete label",
+            "enterName": "Enter name...",
+            "clickToName": "Click to name",
+            "clickToRename": "Click to rename",
+            "namePlaceholder": "Enter landmark name...",
+            "waitingForDetections": "Waiting for detections...",
+            "avgSpeed": "Avg Speed",
+            "range": "Range",
+            "vehicles": "Vehicles",
+            "goToLocation": "Go to location"
+        },
+        "section": {
+            "selectedTitle": "Selected Section",
+            "deleteSection": "Delete section",
+            "nameDialogTitle": "Name This Section",
+            "namePlaceholder": "Section name...",
+            "channels": "Channels:",
+            "sensors": "sensors",
+            "resizeHint": "Drag the green handles on the map to resize this section"
+        },
+        "incident": {
+            "closePanel": "Close incident panel"
+        }
+    },
+    "apiHub": {
+        "title": "API & Data Hub",
+        "description": "Access your organization's real-time and historical data through the Sequoia REST API.",
+        "endpoints": "Available Endpoints",
+        "authentication": "Authentication",
+        "authDescription": "All requests require a Bearer token. Obtain one via the login endpoint.",
+        "baseUrl": "Base URL",
+        "endpointList": {
+            "detections": "Real-time vehicle detections",
+            "incidents": "Incident history and active alerts",
+            "fibers": "Fiber line metadata and geometry",
+            "speedStats": "Speed statistics by section",
+            "reports": "Generated traffic reports"
+        },
+        "rateLimits": "Rate Limits",
+        "rateLimitsDescription": "API requests are rate-limited per organization. Contact support if you need higher limits.",
+        "requestsPerMinute": "{{count}} requests/minute",
+        "docsLink": "Full API Documentation",
+        "docsDescription": "See the complete API reference with request/response examples.",
+        "comingSoon": "Interactive API explorer coming soon."
+    },
+    "shm": {
+        "title": "Structural Health Monitoring",
+        "noInfrastructure": "No infrastructure configured",
+        "noInfrastructureDesc": "Bridges and tunnels will appear here",
+        "noData": "No data",
+        "currentReading": "Current Reading",
+        "frequency": "Frequency",
+        "amplitude": "Amplitude",
+        "waitingForData": "Waiting for data...",
+        "timeRange": "Time range",
+        "frequencyHistory": "Frequency History",
+        "noHistoryData": "No historical data available",
+        "fiber": "Fiber",
+        "channels": "Channels",
+        "spectralView": "Spectral",
+        "infrastructureView": "Infrastructure",
+        "loadingSpectral": "Loading spectral data...",
+        "spectralLoadError": "Failed to load spectral data",
+        "spectralErrorDesc": "Sample data may not be available",
+        "noSpectralData": "No spectral data available",
+        "spectralHeatmap": "Spectral Heatmap",
+        "heatmapDesc": "Power spectrum over time (log scale)",
+        "peakFrequencies": "Peak Frequencies",
+        "peakDesc": "Dominant frequency at each time sample",
+        "dataInfo": "Data Information",
+        "startTime": "Start time",
+        "duration": "Duration",
+        "freqRange": "Frequency range",
+        "samples": "Samples",
+        "status": {
+            "nominal": "Nominal",
+            "warning": "Warning",
+            "critical": "Critical",
+            "nominalDesc": "Vibration patterns are within expected bounds.",
+            "warningDesc": "Minor deviations detected. Monitoring closely.",
+            "criticalDesc": "Significant anomaly detected. Review recommended.",
+            "peakFreq": "Peak frequency",
+            "expected": "Expected",
+            "deviation": "Deviation"
+        }
+    },
+    "errors": {
+        "accountLocked": "Account temporarily locked. Try again later.",
+        "invalidCredentials": "Invalid credentials.",
+        "refreshMissing": "Session expired. Please log in again.",
+        "invalidToken": "Session expired. Please log in again.",
+        "clickhouseUnavailable": "Analytics service temporarily unavailable.",
+        "incidentNotFound": "Incident not found.",
+        "fiberAccessDenied": "One or more fiber IDs are not accessible.",
+        "orgUnknown": "Cannot determine organization for these fibers.",
+        "reportNotFound": "Report not found.",
+        "reportNotReady": "Report is not ready to send.",
+        "noRecipients": "No recipients specified.",
+        "emailFailed": "Email sending failed.",
+        "payloadTooLarge": "Payload is too large.",
+        "analyticsUnavailable": "Analytics service temporarily unavailable.",
+        "internalError": "Internal server error."
+    }
+}

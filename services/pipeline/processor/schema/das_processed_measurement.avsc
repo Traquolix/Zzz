@@ -1,0 +1,142 @@
+{
+  "type": "record",
+  "name": "DASProcessedMeasurement",
+  "namespace": "com.sequoia.das",
+  "doc": "Processed DAS measurement data after filtering, slicing, and decimation",
+  "fields": [
+    {
+      "name": "fiber_id",
+      "type": "string",
+      "doc": "Unique identifier for the fiber optic cable"
+    },
+    {
+      "name": "timestamp_ns",
+      "type": "long",
+      "doc": "Measurement timestamp in nanoseconds since Unix epoch"
+    },
+    {
+      "name": "sampling_rate_hz",
+      "type": "float",
+      "doc": "Effective sampling rate in Hz after processing"
+    },
+    {
+      "name": "channel_start",
+      "type": "int",
+      "doc": "Starting channel number for processed channels"
+    },
+    {
+      "name": "channel_count",
+      "type": "int",
+      "doc": "Number of channels in processed measurement"
+    },
+    {
+      "name": "section",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Section identifier for routing (e.g., urban, highway, default)"
+    },
+    {
+      "name": "model_hint",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Model hint for AI engine routing (e.g., dtan_carros, urban_v2)"
+    },
+    {
+      "name": "values",
+      "type": {
+        "type": "array",
+        "items": "float"
+      },
+      "doc": "Processed channel measurement values, one per channel"
+    },
+    {
+      "name": "processing_metadata",
+      "type": {
+        "type": "record",
+        "name": "ProcessingMetadata",
+        "fields": [
+          {
+            "name": "original_sampling_rate_hz",
+            "type": "float",
+            "doc": "Original sampling rate before processing"
+          },
+          {
+            "name": "original_channel_count",
+            "type": "int",
+            "doc": "Original number of channels before processing"
+          },
+          {
+            "name": "bandpass_applied",
+            "type": ["null", {
+              "type": "record",
+              "name": "BandpassInfo",
+              "fields": [
+                {"name": "low_freq", "type": "float"},
+                {"name": "high_freq", "type": "float"},
+                {"name": "filter_order", "type": "int", "default": 4}
+              ]
+            }],
+            "default": null,
+            "doc": "Bandpass filter settings if applied"
+          },
+          {
+            "name": "channel_selection",
+            "type": ["null", {
+              "type": "record",
+              "name": "ChannelSelection",
+              "fields": [
+                {"name": "start", "type": ["null", "int"], "default": null},
+                {"name": "stop", "type": ["null", "int"], "default": null},
+                {"name": "step", "type": ["null", "int"], "default": null}
+              ]
+            }],
+            "default": null,
+            "doc": "Channel selection parameters if applied"
+          },
+          {
+            "name": "decimation_factor",
+            "type": ["null", "int"],
+            "default": null,
+            "doc": "Temporal decimation factor if applied"
+          },
+          {
+            "name": "processing_timestamp_ns",
+            "type": "long",
+            "doc": "When the processing was completed"
+          },
+          {
+            "name": "correlation_id",
+            "type": "string",
+            "doc": "Unique identifier for tracking this processing instance"
+          },
+          {
+            "name": "processing_duration_ms",
+            "type": "float",
+            "doc": "Time taken to process this message in milliseconds"
+          },
+          {
+            "name": "original_timestamp",
+            "type": ["null", "long"],
+            "default": null,
+            "doc": "Original timestamp of the raw measurement"
+          }
+        ]
+      },
+      "doc": "Metadata about processing steps applied"
+    },
+    {
+      "name": "signal_stats",
+      "type": {
+        "type": "record",
+        "name": "SignalStats",
+        "fields": [
+          {"name": "min_value", "type": "float"},
+          {"name": "max_value", "type": "float"},
+          {"name": "mean_value", "type": "float"},
+          {"name": "rms_value", "type": "float"}
+        ]
+      },
+      "doc": "Statistical summary of the processed signal"
+    }
+  ]
+}

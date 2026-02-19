@@ -1,0 +1,65 @@
+{
+  "namespace": "com.das.dlq",
+  "type": "record",
+  "name": "DLQMessage",
+  "doc": "Dead Letter Queue message schema for failed pipeline messages",
+  "fields": [
+    {
+      "name": "original_topic",
+      "type": "string",
+      "doc": "Topic where the failed message originated"
+    },
+    {
+      "name": "original_partition",
+      "type": "int",
+      "doc": "Partition where the failed message originated"
+    },
+    {
+      "name": "original_offset",
+      "type": "long",
+      "doc": "Offset of the failed message"
+    },
+    {
+      "name": "service_name",
+      "type": "string",
+      "doc": "Service that failed to process the message"
+    },
+    {
+      "name": "error_type",
+      "type": "string",
+      "doc": "Type/class of error that occurred"
+    },
+    {
+      "name": "error_message",
+      "type": "string",
+      "doc": "Error message (truncated to 1000 chars)"
+    },
+    {
+      "name": "stack_trace",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Stack trace if available"
+    },
+    {
+      "name": "timestamp_ns",
+      "type": "long",
+      "doc": "Timestamp when error occurred (nanoseconds)"
+    },
+    {
+      "name": "retry_count",
+      "type": "int",
+      "doc": "Number of retry attempts before DLQ"
+    },
+    {
+      "name": "correlation_id",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Correlation ID for tracing"
+    },
+    {
+      "name": "original_message_payload",
+      "type": "bytes",
+      "doc": "Original message payload (serialized as JSON)"
+    }
+  ]
+}
