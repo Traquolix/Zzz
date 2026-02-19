@@ -83,13 +83,13 @@ def compute_glrt_from_aligned(
 
     for s in range(n_sections):
         for t in range(n_windows):
-            window = aligned_data[s, :, t:t + window_size]  # [n_channels, window_size]
+            window = aligned_data[s, :, t : t + window_size]  # [n_channels, window_size]
             # Cross-correlation between adjacent channels
             corr_sum = 0.0
             for ch in range(n_channels - 1):
                 corr = np.corrcoef(window[ch], window[ch + 1])[0, 1]
                 if not np.isnan(corr):
-                    corr_sum += corr ** 2
+                    corr_sum += corr**2
             glrt[s, t + window_size // 2] = corr_sum
 
     return glrt.squeeze()
@@ -124,15 +124,15 @@ def compute_glrt_simple(
     glrt = np.zeros((n_output_sections, n_samples))
 
     for i, sec_start in enumerate(section_indices):
-        sec_data = processed_data[:, sec_start:sec_start + n_ch_per_section].T  # [9, n_samples]
+        sec_data = processed_data[:, sec_start : sec_start + n_ch_per_section].T  # [9, n_samples]
 
         for t in range(window_size, n_samples - window_size):
-            window = sec_data[:, t - window_size // 2:t + window_size // 2]
+            window = sec_data[:, t - window_size // 2 : t + window_size // 2]
             corr_sum = 0.0
             for ch in range(n_ch_per_section - 1):
                 c = np.corrcoef(window[ch], window[ch + 1])[0, 1]
                 if not np.isnan(c):
-                    corr_sum += c ** 2
+                    corr_sum += c**2
             glrt[i, t] = corr_sum
 
     return glrt
@@ -205,11 +205,12 @@ def generate_coupling_corrections(
         Tuple of (correction_factors [n_sections], median_glrt scalar)
     """
     # Compute median GLRT per section
-    section_medians = np.array([
-        np.median(glrt_values[s][glrt_values[s] > 0])
-        if np.any(glrt_values[s] > 0) else 1.0
-        for s in range(glrt_values.shape[0])
-    ])
+    section_medians = np.array(
+        [
+            np.median(glrt_values[s][glrt_values[s] > 0]) if np.any(glrt_values[s] > 0) else 1.0
+            for s in range(glrt_values.shape[0])
+        ]
+    )
 
     # Global median as reference
     median_glrt = float(np.median(section_medians[section_medians > 0]))
@@ -227,28 +228,42 @@ def generate_coupling_corrections(
 # ---------------------------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser(description="Generate Calibration Files")
-    parser.add_argument("--data-dir", type=str, required=True,
-                        help="Directory with preprocessed nighttime .npy files")
-    parser.add_argument("--output-dir", type=str, required=True,
-                        help="Output directory for calibration files")
+    parser.add_argument(
+        "--data-dir",
+        type=str,
+        required=True,
+        help="Directory with preprocessed nighttime .npy files",
+    )
+    parser.add_argument(
+        "--output-dir", type=str, required=True, help="Output directory for calibration files"
+    )
     parser.add_argument("--fiber-id", type=str, required=True, help="Fiber identifier")
-    parser.add_argument("--section", type=str, default="default",
-                        help="Section name (from fibers.yaml)")
+    parser.add_argument(
+        "--section", type=str, default="default", help="Section name (from fibers.yaml)"
+    )
 
     # Threshold parameters
-    parser.add_argument("--threshold-method", type=str, default="MAD",
-                        choices=["MAD", "percentile"],
-                        help="Threshold method (default: MAD)")
-    parser.add_argument("--threshold-multiplier", type=float, default=5.0,
-                        help="Threshold = baseline + multiplier * noise (default: 5.0)")
+    parser.add_argument(
+        "--threshold-method",
+        type=str,
+        default="MAD",
+        choices=["MAD", "percentile"],
+        help="Threshold method (default: MAD)",
+    )
+    parser.add_argument(
+        "--threshold-multiplier",
+        type=float,
+        default=5.0,
+        help="Threshold = baseline + multiplier * noise (default: 5.0)",
+    )
 
     # GLRT parameters
-    parser.add_argument("--glrt-window", type=int, default=20,
-                        help="GLRT sliding window size")
+    parser.add_argument("--glrt-window", type=int, default=20, help="GLRT sliding window size")
 
     # Optional: use DTAN model for aligned GLRT
-    parser.add_argument("--model-path", type=str, default=None,
-                        help="Path to DTAN model .pt file (if available)")
+    parser.add_argument(
+        "--model-path", type=str, default=None, help="Path to DTAN model .pt file (if available)"
+    )
 
     args = parser.parse_args()
 
@@ -272,7 +287,9 @@ def main():
     logger.info(f"GLRT shape: {glrt.shape}")
 
     # Generate thresholds
-    logger.info(f"Generating thresholds (method={args.threshold_method}, multiplier={args.threshold_multiplier})")
+    logger.info(
+        f"Generating thresholds (method={args.threshold_method}, multiplier={args.threshold_multiplier})"
+    )
     threshold_curve, baseline, noise_estimate = generate_threshold_curve(
         glrt, method=args.threshold_method, multiplier=args.threshold_multiplier
     )
@@ -318,6 +335,7 @@ def main():
 
     # Generate diagnostic plot
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
@@ -327,9 +345,13 @@ def main():
     ax = axes[0]
     ax.plot(baseline, label="Baseline (median)", linewidth=1)
     ax.plot(threshold_curve, label="Threshold", linewidth=1, linestyle="--")
-    ax.fill_between(range(len(baseline)),
-                    baseline - noise_estimate, baseline + noise_estimate,
-                    alpha=0.2, label="Noise estimate (MAD)")
+    ax.fill_between(
+        range(len(baseline)),
+        baseline - noise_estimate,
+        baseline + noise_estimate,
+        alpha=0.2,
+        label="Noise estimate (MAD)",
+    )
     ax.set_title(f"Per-Section GLRT Noise Floor — {args.fiber_id}/{args.section}")
     ax.set_xlabel("Section index")
     ax.set_ylabel("GLRT value")

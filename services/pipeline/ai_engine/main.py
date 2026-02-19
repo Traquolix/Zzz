@@ -419,14 +419,16 @@ class AIEngineService(RollingBufferedTransformer):
                     speed_processor.set_section(section)
 
                 try:
-                    filtered_speeds, count_results, window_timestamps_ns = await self._run_ai_inference(
-                        data_array,
-                        timestamps,
-                        timestamps_ns,
-                        buffer_key,
-                        ctx,
-                        speed_processor=speed_processor,
-                        count_processor=count_processor,
+                    filtered_speeds, count_results, window_timestamps_ns = (
+                        await self._run_ai_inference(
+                            data_array,
+                            timestamps,
+                            timestamps_ns,
+                            buffer_key,
+                            ctx,
+                            speed_processor=speed_processor,
+                            count_processor=count_processor,
+                        )
                     )
                 except RuntimeError as e:
                     # Catch PyTorch dimension mismatches (e.g., "input.size(-1) must be equal to input_size")
@@ -606,7 +608,11 @@ class AIEngineService(RollingBufferedTransformer):
 
                     if use_simple:
                         speed_intervals = speed_processor.intervals
-                        window_timestamps_ns = date_window_ns.tolist() if date_window_ns is not None else ctx.timestamps_ns
+                        window_timestamps_ns = (
+                            date_window_ns.tolist()
+                            if date_window_ns is not None
+                            else ctx.timestamps_ns
+                        )
                         count_results = count_processor.count_from_intervals(
                             filtered_speed=filtered_speed,
                             intervals_list=speed_intervals,
@@ -633,8 +639,12 @@ class AIEngineService(RollingBufferedTransformer):
         else:
             # Multiple windows: concatenate along time axis
             combined_speeds = np.concatenate(all_speeds, axis=-1)
-            combined_timestamps_ns = np.concatenate(all_timestamps_ns) if all_timestamps_ns else None
-            self.logger.info(f"Processed {len(all_speeds)} windows in single batch for {buffer_key}")
+            combined_timestamps_ns = (
+                np.concatenate(all_timestamps_ns) if all_timestamps_ns else None
+            )
+            self.logger.info(
+                f"Processed {len(all_speeds)} windows in single batch for {buffer_key}"
+            )
 
         # For counting, use the last result (or could aggregate)
         combined_count_results = all_count_results[-1] if all_count_results else None

@@ -100,9 +100,7 @@ class TestGetServiceName:
         """Should return name from config if specified."""
         mock_manager = MagicMock()
         mock_manager.get_raw_config.return_value = {
-            "services": {
-                "processor": {"name": "custom-processor-name"}
-            }
+            "services": {"processor": {"name": "custom-processor-name"}}
         }
         mock_manager_class.return_value = mock_manager
 

@@ -223,7 +223,12 @@ class TestMessageFlowTracking:
         steps = [SpatialDecimation(factor=2)]
         chain = ProcessingChain(steps)
 
-        message = {"fiber_id": "test", "channel_start": 0, "sampling_rate_hz": 50.0, "values": [1.0] * 10}
+        message = {
+            "fiber_id": "test",
+            "channel_start": 0,
+            "sampling_rate_hz": 50.0,
+            "values": [1.0] * 10,
+        }
 
         # Process some messages
         for _ in range(5):
@@ -323,7 +328,12 @@ class TestConcurrentProcessing:
         chain = ProcessingChain(steps)
 
         messages = [
-            {"fiber_id": f"fiber_{i}", "channel_start": 0, "sampling_rate_hz": 50.0, "values": list(range(100))}
+            {
+                "fiber_id": f"fiber_{i}",
+                "channel_start": 0,
+                "sampling_rate_hz": 50.0,
+                "values": list(range(100)),
+            }
             for i in range(10)
         ]
 

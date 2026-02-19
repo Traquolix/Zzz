@@ -95,7 +95,7 @@ class TestBackoffCalculation:
 
         # Check exponential increase (accounting for jitter).
         for i, delay in enumerate(delays):
-            expected_base = 0.01 * (2.0 ** i)
+            expected_base = 0.01 * (2.0**i)
             max_jitter = expected_base * 0.1
             assert delay >= expected_base
             assert delay <= expected_base + max_jitter

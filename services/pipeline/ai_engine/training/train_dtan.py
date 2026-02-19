@@ -131,8 +131,8 @@ class DASWindowDataset(Dataset):
         for t_start in range(0, n_samples - self.signal_len + 1, self.stride_time):
             for ch_start in range(0, n_total_ch - self.n_channels + 1, self.stride_channels):
                 window = self.data[
-                    t_start:t_start + self.signal_len,
-                    ch_start:ch_start + self.n_channels,
+                    t_start : t_start + self.signal_len,
+                    ch_start : ch_start + self.n_channels,
                 ].T  # [Nch, signal_len]
 
                 # Z-score normalize
@@ -256,6 +256,7 @@ def generate_before_after_plots(
         n_examples: Number of examples to plot
     """
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
@@ -313,6 +314,7 @@ def plot_training_curves(history: List[dict], output_dir: str, fiber_id: str):
         fiber_id: Fiber identifier
     """
     import matplotlib
+
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
@@ -344,46 +346,75 @@ def plot_training_curves(history: List[dict], output_dir: str, fiber_id: str):
 # ---------------------------------------------------------------------------
 def main():
     parser = argparse.ArgumentParser(description="Self-Supervised DTAN Training")
-    parser.add_argument("--data-dir", type=str, required=True,
-                        help="Directory with preprocessed .npy files (from preprocess_hdf5.py)")
-    parser.add_argument("--output-dir", type=str, required=True,
-                        help="Output directory for trained model and visualizations")
-    parser.add_argument("--fiber-id", type=str, required=True,
-                        help="Fiber identifier (for naming)")
-    parser.add_argument("--section", type=str, default="default",
-                        help="Section name to train on (default: 'default')")
+    parser.add_argument(
+        "--data-dir",
+        type=str,
+        required=True,
+        help="Directory with preprocessed .npy files (from preprocess_hdf5.py)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        required=True,
+        help="Output directory for trained model and visualizations",
+    )
+    parser.add_argument("--fiber-id", type=str, required=True, help="Fiber identifier (for naming)")
+    parser.add_argument(
+        "--section",
+        type=str,
+        default="default",
+        help="Section name to train on (default: 'default')",
+    )
 
     # Model hyperparameters (from thesis)
-    parser.add_argument("--signal-len", type=int, default=300,
-                        help="Signal length per window (default: 300 = 30s at 10Hz)")
-    parser.add_argument("--n-channels", type=int, default=9,
-                        help="Channels per window (default: 9)")
-    parser.add_argument("--tess-size", type=int, default=20,
-                        help="CPAB tessellation size (thesis: 20)")
+    parser.add_argument(
+        "--signal-len",
+        type=int,
+        default=300,
+        help="Signal length per window (default: 300 = 30s at 10Hz)",
+    )
+    parser.add_argument(
+        "--n-channels", type=int, default=9, help="Channels per window (default: 9)"
+    )
+    parser.add_argument(
+        "--tess-size", type=int, default=20, help="CPAB tessellation size (thesis: 20)"
+    )
 
     # Training hyperparameters
     parser.add_argument("--epochs", type=int, default=120, help="Number of epochs (thesis: 120)")
     parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate (thesis: 1e-4)")
     parser.add_argument("--batch-size", type=int, default=32, help="Batch size")
     parser.add_argument("--lambda-inner", type=float, default=1.0, help="Inner regularizer weight")
-    parser.add_argument("--lambda-inter", type=float, default=1.0, help="Inter-channel regularizer weight")
-    parser.add_argument("--val-ratio", type=float, default=0.3, help="Validation ratio (thesis: 0.3)")
+    parser.add_argument(
+        "--lambda-inter", type=float, default=1.0, help="Inter-channel regularizer weight"
+    )
+    parser.add_argument(
+        "--val-ratio", type=float, default=0.3, help="Validation ratio (thesis: 0.3)"
+    )
 
     # Data parameters
-    parser.add_argument("--stride-channels", type=int, default=1,
-                        help="Channel stride for window extraction")
-    parser.add_argument("--stride-time", type=int, default=None,
-                        help="Time stride in samples (default: signal_len)")
-    parser.add_argument("--max-windows", type=int, default=None,
-                        help="Maximum windows to extract (for testing)")
+    parser.add_argument(
+        "--stride-channels", type=int, default=1, help="Channel stride for window extraction"
+    )
+    parser.add_argument(
+        "--stride-time", type=int, default=None, help="Time stride in samples (default: signal_len)"
+    )
+    parser.add_argument(
+        "--max-windows", type=int, default=None, help="Maximum windows to extract (for testing)"
+    )
 
     # Device
-    parser.add_argument("--device", type=str, default="auto",
-                        help="Device: 'cuda', 'cpu', or 'auto'")
+    parser.add_argument(
+        "--device", type=str, default="auto", help="Device: 'cuda', 'cpu', or 'auto'"
+    )
 
     # Pretrained weights
-    parser.add_argument("--pretrained", type=str, default=None,
-                        help="Path to pretrained model weights (for fine-tuning)")
+    parser.add_argument(
+        "--pretrained",
+        type=str,
+        default=None,
+        help="Path to pretrained model weights (for fine-tuning)",
+    )
 
     args = parser.parse_args()
 
@@ -415,11 +446,14 @@ def main():
     n_train = n_total - n_val
 
     train_dataset, val_dataset = torch.utils.data.random_split(
-        full_dataset, [n_train, n_val],
+        full_dataset,
+        [n_train, n_val],
         generator=torch.Generator().manual_seed(42),
     )
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0)
+    train_loader = DataLoader(
+        train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0
+    )
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
 
     logger.info(f"Dataset: {n_train} train, {n_val} val windows")
@@ -464,7 +498,9 @@ def main():
     cpab_basis = model.T.get_basis()  # Get CPAB transformation basis
     criterion.set_cpa_covariance_from_basis(cpab_basis)
     criterion = criterion.to(device)
-    logger.info("Initialized CPA covariance matrix from CPAB basis (thesis-compliant Mahalanobis norm)")
+    logger.info(
+        "Initialized CPA covariance matrix from CPAB basis (thesis-compliant Mahalanobis norm)"
+    )
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 

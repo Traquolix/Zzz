@@ -66,11 +66,13 @@ class TestDASProcessorMessageAdaptation:
 
     def test_adapts_floatdata_format(self, mock_service_config, mock_fiber_config):
         """Should convert floatData format to internal format."""
-        with patch('services.processor.main.load_service_config', return_value=mock_service_config), \
-             patch('services.processor.main.get_service_name', return_value='das-processor'), \
-             patch('services.processor.main.get_fiber_config', return_value=mock_fiber_config), \
-             patch('services.patterns.service_base.ServiceBase._load_schema', return_value=None), \
-             patch('services.processor.main.setup_otel'):
+        with (
+            patch("processor.main.load_service_config", return_value=mock_service_config),
+            patch("processor.main.get_service_name", return_value="das-processor"),
+            patch("processor.main.get_fiber_config", return_value=mock_fiber_config),
+            patch("shared.service_base.ServiceBase._load_schema", return_value=None),
+            patch("processor.main.setup_otel"),
+        ):
 
             processor = DASProcessor()
             processor.logger = MagicMock()
@@ -90,11 +92,13 @@ class TestDASProcessorMessageAdaptation:
 
     def test_adapts_longdata_format(self, mock_service_config, mock_fiber_config):
         """Should convert longData format to internal format."""
-        with patch('services.processor.main.load_service_config', return_value=mock_service_config), \
-             patch('services.processor.main.get_service_name', return_value='das-processor'), \
-             patch('services.processor.main.get_fiber_config', return_value=mock_fiber_config), \
-             patch('services.patterns.service_base.ServiceBase._load_schema', return_value=None), \
-             patch('services.processor.main.setup_otel'):
+        with (
+            patch("processor.main.load_service_config", return_value=mock_service_config),
+            patch("processor.main.get_service_name", return_value="das-processor"),
+            patch("processor.main.get_fiber_config", return_value=mock_fiber_config),
+            patch("shared.service_base.ServiceBase._load_schema", return_value=None),
+            patch("processor.main.setup_otel"),
+        ):
 
             processor = DASProcessor()
             processor.logger = MagicMock()
@@ -111,11 +115,13 @@ class TestDASProcessorMessageAdaptation:
 
     def test_passes_internal_format_unchanged(self, mock_service_config, mock_fiber_config):
         """Already-internal format should just get fiber_id updated."""
-        with patch('services.processor.main.load_service_config', return_value=mock_service_config), \
-             patch('services.processor.main.get_service_name', return_value='das-processor'), \
-             patch('services.processor.main.get_fiber_config', return_value=mock_fiber_config), \
-             patch('services.patterns.service_base.ServiceBase._load_schema', return_value=None), \
-             patch('services.processor.main.setup_otel'):
+        with (
+            patch("processor.main.load_service_config", return_value=mock_service_config),
+            patch("processor.main.get_service_name", return_value="das-processor"),
+            patch("processor.main.get_fiber_config", return_value=mock_fiber_config),
+            patch("shared.service_base.ServiceBase._load_schema", return_value=None),
+            patch("processor.main.setup_otel"),
+        ):
 
             processor = DASProcessor()
             processor.logger = MagicMock()
@@ -139,11 +145,13 @@ class TestDASProcessorFiberIdExtraction:
 
     def test_extracts_fiber_id_from_topic(self, mock_service_config, mock_fiber_config):
         """Should extract last segment of topic as fiber_id."""
-        with patch('services.processor.main.load_service_config', return_value=mock_service_config), \
-             patch('services.processor.main.get_service_name', return_value='das-processor'), \
-             patch('services.processor.main.get_fiber_config', return_value=mock_fiber_config), \
-             patch('services.patterns.service_base.ServiceBase._load_schema', return_value=None), \
-             patch('services.processor.main.setup_otel'):
+        with (
+            patch("processor.main.load_service_config", return_value=mock_service_config),
+            patch("processor.main.get_service_name", return_value="das-processor"),
+            patch("processor.main.get_fiber_config", return_value=mock_fiber_config),
+            patch("shared.service_base.ServiceBase._load_schema", return_value=None),
+            patch("processor.main.setup_otel"),
+        ):
 
             processor = DASProcessor()
 
@@ -156,18 +164,24 @@ class TestDASProcessorTransform:
     """Test transform() method - the core processing logic."""
 
     @pytest.mark.asyncio
-    async def test_transform_processes_matching_sections(self, mock_service_config, mock_fiber_config):
+    async def test_transform_processes_matching_sections(
+        self, mock_service_config, mock_fiber_config
+    ):
         """Should process message through matching section pipelines."""
-        with patch('services.processor.main.load_service_config', return_value=mock_service_config), \
-             patch('services.processor.main.get_service_name', return_value='das-processor'), \
-             patch('services.processor.main.get_fiber_config', return_value=mock_fiber_config), \
-             patch('services.patterns.service_base.ServiceBase._load_schema', return_value=None), \
-             patch('services.processor.main.setup_otel'):
+        with (
+            patch("processor.main.load_service_config", return_value=mock_service_config),
+            patch("processor.main.get_service_name", return_value="das-processor"),
+            patch("processor.main.get_fiber_config", return_value=mock_fiber_config),
+            patch("shared.service_base.ServiceBase._load_schema", return_value=None),
+            patch("processor.main.setup_otel"),
+        ):
 
             processor = DASProcessor()
             processor.logger = MagicMock()
             processor.tracer = MagicMock()
-            processor.tracer.start_as_current_span = MagicMock(return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock()))
+            processor.tracer.start_as_current_span = MagicMock(
+                return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock())
+            )
 
             # Message overlaps section1 (channels 0-100)
             message = Message(
@@ -199,18 +213,24 @@ class TestDASProcessorTransform:
             assert output.headers["model_hint"] == "test_model"
 
     @pytest.mark.asyncio
-    async def test_transform_skips_non_overlapping_sections(self, mock_service_config, mock_fiber_config):
+    async def test_transform_skips_non_overlapping_sections(
+        self, mock_service_config, mock_fiber_config
+    ):
         """Should skip sections that don't overlap with message channels."""
-        with patch('services.processor.main.load_service_config', return_value=mock_service_config), \
-             patch('services.processor.main.get_service_name', return_value='das-processor'), \
-             patch('services.processor.main.get_fiber_config', return_value=mock_fiber_config), \
-             patch('services.patterns.service_base.ServiceBase._load_schema', return_value=None), \
-             patch('services.processor.main.setup_otel'):
+        with (
+            patch("processor.main.load_service_config", return_value=mock_service_config),
+            patch("processor.main.get_service_name", return_value="das-processor"),
+            patch("processor.main.get_fiber_config", return_value=mock_fiber_config),
+            patch("shared.service_base.ServiceBase._load_schema", return_value=None),
+            patch("processor.main.setup_otel"),
+        ):
 
             processor = DASProcessor()
             processor.logger = MagicMock()
             processor.tracer = MagicMock()
-            processor.tracer.start_as_current_span = MagicMock(return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock()))
+            processor.tracer.start_as_current_span = MagicMock(
+                return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock())
+            )
 
             # Message channels 500-600 don't overlap any section (section1: 0-100, section2: 100-200)
             message = Message(
@@ -236,11 +256,13 @@ class TestDASProcessorTransform:
     @pytest.mark.asyncio
     async def test_transform_raises_for_unknown_fiber(self, mock_service_config):
         """Should raise ValueError for unknown fiber_id."""
-        with patch('services.processor.main.load_service_config', return_value=mock_service_config), \
-             patch('services.processor.main.get_service_name', return_value='das-processor'), \
-             patch('services.processor.main.get_fiber_config', side_effect=KeyError("unknown_fiber")), \
-             patch('services.patterns.service_base.ServiceBase._load_schema', return_value=None), \
-             patch('services.processor.main.setup_otel'):
+        with (
+            patch("processor.main.load_service_config", return_value=mock_service_config),
+            patch("processor.main.get_service_name", return_value="das-processor"),
+            patch("processor.main.get_fiber_config", side_effect=KeyError("unknown_fiber")),
+            patch("shared.service_base.ServiceBase._load_schema", return_value=None),
+            patch("processor.main.setup_otel"),
+        ):
 
             processor = DASProcessor()
             processor.logger = MagicMock()
@@ -250,7 +272,7 @@ class TestDASProcessorTransform:
             processor.tracer.start_as_current_span = MagicMock(
                 return_value=MagicMock(
                     __enter__=MagicMock(return_value=span_mock),
-                    __exit__=MagicMock(return_value=False)
+                    __exit__=MagicMock(return_value=False),
                 )
             )
 
@@ -263,18 +285,24 @@ class TestDASProcessorTransform:
                 await processor.transform(message)
 
     @pytest.mark.asyncio
-    async def test_transform_extracts_fiber_id_from_kafka_topic(self, mock_service_config, mock_fiber_config):
+    async def test_transform_extracts_fiber_id_from_kafka_topic(
+        self, mock_service_config, mock_fiber_config
+    ):
         """Should extract fiber_id from Kafka message topic."""
-        with patch('services.processor.main.load_service_config', return_value=mock_service_config), \
-             patch('services.processor.main.get_service_name', return_value='das-processor'), \
-             patch('services.processor.main.get_fiber_config', return_value=mock_fiber_config), \
-             patch('services.patterns.service_base.ServiceBase._load_schema', return_value=None), \
-             patch('services.processor.main.setup_otel'):
+        with (
+            patch("processor.main.load_service_config", return_value=mock_service_config),
+            patch("processor.main.get_service_name", return_value="das-processor"),
+            patch("processor.main.get_fiber_config", return_value=mock_fiber_config),
+            patch("shared.service_base.ServiceBase._load_schema", return_value=None),
+            patch("processor.main.setup_otel"),
+        ):
 
             processor = DASProcessor()
             processor.logger = MagicMock()
             processor.tracer = MagicMock()
-            processor.tracer.start_as_current_span = MagicMock(return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock()))
+            processor.tracer.start_as_current_span = MagicMock(
+                return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock())
+            )
 
             # Create a KafkaMessage with a mock Kafka message
             kafka_msg = MagicMock()
@@ -306,11 +334,13 @@ class TestDASProcessorBuildOutput:
 
     def test_builds_output_with_correct_structure(self, mock_service_config, mock_fiber_config):
         """Should build output with all required fields."""
-        with patch('services.processor.main.load_service_config', return_value=mock_service_config), \
-             patch('services.processor.main.get_service_name', return_value='das-processor'), \
-             patch('services.processor.main.get_fiber_config', return_value=mock_fiber_config), \
-             patch('services.patterns.service_base.ServiceBase._load_schema', return_value=None), \
-             patch('services.processor.main.setup_otel'):
+        with (
+            patch("processor.main.load_service_config", return_value=mock_service_config),
+            patch("processor.main.get_service_name", return_value="das-processor"),
+            patch("processor.main.get_fiber_config", return_value=mock_fiber_config),
+            patch("shared.service_base.ServiceBase._load_schema", return_value=None),
+            patch("processor.main.setup_otel"),
+        ):
 
             processor = DASProcessor()
             processor.logger = MagicMock()
@@ -330,8 +360,12 @@ class TestDASProcessorBuildOutput:
             }
 
             output = processor._build_output(
-                original, processed, "corr-123", time.time(),
-                mock_fiber_config, mock_fiber_config.sections[0]
+                original,
+                processed,
+                "corr-123",
+                time.time(),
+                mock_fiber_config,
+                mock_fiber_config.sections[0],
             )
 
             assert output["fiber_id"] == "test_fiber"
@@ -347,11 +381,13 @@ class TestDASProcessorBuildOutput:
 
     def test_handles_empty_values(self, mock_service_config, mock_fiber_config):
         """Should handle empty values array."""
-        with patch('services.processor.main.load_service_config', return_value=mock_service_config), \
-             patch('services.processor.main.get_service_name', return_value='das-processor'), \
-             patch('services.processor.main.get_fiber_config', return_value=mock_fiber_config), \
-             patch('services.patterns.service_base.ServiceBase._load_schema', return_value=None), \
-             patch('services.processor.main.setup_otel'):
+        with (
+            patch("processor.main.load_service_config", return_value=mock_service_config),
+            patch("processor.main.get_service_name", return_value="das-processor"),
+            patch("processor.main.get_fiber_config", return_value=mock_fiber_config),
+            patch("shared.service_base.ServiceBase._load_schema", return_value=None),
+            patch("processor.main.setup_otel"),
+        ):
 
             processor = DASProcessor()
             processor.logger = MagicMock()
@@ -364,8 +400,12 @@ class TestDASProcessorBuildOutput:
             }
 
             output = processor._build_output(
-                original, processed, "corr-123", time.time(),
-                mock_fiber_config, mock_fiber_config.sections[0]
+                original,
+                processed,
+                "corr-123",
+                time.time(),
+                mock_fiber_config,
+                mock_fiber_config.sections[0],
             )
 
             assert output["channel_count"] == 0
@@ -378,11 +418,13 @@ class TestDASProcessorPipelineCaching:
 
     def test_caches_pipelines_per_fiber(self, mock_service_config, mock_fiber_config):
         """Should cache pipelines and reuse them."""
-        with patch('services.processor.main.load_service_config', return_value=mock_service_config), \
-             patch('services.processor.main.get_service_name', return_value='das-processor'), \
-             patch('services.processor.main.get_fiber_config', return_value=mock_fiber_config), \
-             patch('services.patterns.service_base.ServiceBase._load_schema', return_value=None), \
-             patch('services.processor.main.setup_otel'):
+        with (
+            patch("processor.main.load_service_config", return_value=mock_service_config),
+            patch("processor.main.get_service_name", return_value="das-processor"),
+            patch("processor.main.get_fiber_config", return_value=mock_fiber_config),
+            patch("shared.service_base.ServiceBase._load_schema", return_value=None),
+            patch("processor.main.setup_otel"),
+        ):
 
             processor = DASProcessor()
             processor.logger = MagicMock()
@@ -397,11 +439,13 @@ class TestDASProcessorPipelineCaching:
 
     def test_rebuilds_pipelines_on_config_change(self, mock_service_config, mock_fiber_config):
         """Should rebuild pipelines when config changes."""
-        with patch('services.processor.main.load_service_config', return_value=mock_service_config), \
-             patch('services.processor.main.get_service_name', return_value='das-processor'), \
-             patch('services.processor.main.get_fiber_config', return_value=mock_fiber_config), \
-             patch('services.patterns.service_base.ServiceBase._load_schema', return_value=None), \
-             patch('services.processor.main.setup_otel'):
+        with (
+            patch("processor.main.load_service_config", return_value=mock_service_config),
+            patch("processor.main.get_service_name", return_value="das-processor"),
+            patch("processor.main.get_fiber_config", return_value=mock_fiber_config),
+            patch("shared.service_base.ServiceBase._load_schema", return_value=None),
+            patch("processor.main.setup_otel"),
+        ):
 
             processor = DASProcessor()
             processor.logger = MagicMock()
@@ -427,7 +471,7 @@ class TestDASProcessorPipelineCaching:
             )
 
             # Update the mock to return new config
-            with patch('services.processor.main.get_fiber_config', return_value=new_fiber_config):
+            with patch("processor.main.get_fiber_config", return_value=new_fiber_config):
                 pipelines2 = processor._get_fiber_pipelines("test_fiber")
 
             # Should have different pipelines (rebuilt)
@@ -436,11 +480,13 @@ class TestDASProcessorPipelineCaching:
 
     def test_returns_empty_for_unknown_fiber(self, mock_service_config):
         """Should return empty dict for unknown fiber."""
-        with patch('services.processor.main.load_service_config', return_value=mock_service_config), \
-             patch('services.processor.main.get_service_name', return_value='das-processor'), \
-             patch('services.processor.main.get_fiber_config', side_effect=KeyError("unknown")), \
-             patch('services.patterns.service_base.ServiceBase._load_schema', return_value=None), \
-             patch('services.processor.main.setup_otel'):
+        with (
+            patch("processor.main.load_service_config", return_value=mock_service_config),
+            patch("processor.main.get_service_name", return_value="das-processor"),
+            patch("processor.main.get_fiber_config", side_effect=KeyError("unknown")),
+            patch("shared.service_base.ServiceBase._load_schema", return_value=None),
+            patch("processor.main.setup_otel"),
+        ):
 
             processor = DASProcessor()
             processor.logger = MagicMock()

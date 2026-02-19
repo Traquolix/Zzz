@@ -34,7 +34,9 @@ class TestCalibrationData:
     def test_apply_coupling_correction(self, sample_calibration):
         """Test coupling correction application."""
         # GLRT: 3 sections × 5 samples
-        glrt = np.array([[100, 200, 150, 180, 120], [50, 100, 75, 90, 60], [200, 300, 250, 280, 220]])
+        glrt = np.array(
+            [[100, 200, 150, 180, 120], [50, 100, 75, 90, 60], [200, 300, 250, 280, 220]]
+        )
 
         corrected = sample_calibration.apply_coupling_correction(glrt)
 
@@ -303,7 +305,9 @@ class TestCalibrationManager:
             import shutil
 
             shutil.copytree(temp_calibration_dir / "test_fiber", tmpdir / "test_fiber")
-            shutil.copytree(temp_threshold_only_dir / "threshold_only_fiber", tmpdir / "threshold_only_fiber")
+            shutil.copytree(
+                temp_threshold_only_dir / "threshold_only_fiber", tmpdir / "threshold_only_fiber"
+            )
 
             manager = CalibrationManager(str(tmpdir))
 

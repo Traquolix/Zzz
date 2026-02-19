@@ -21,20 +21,21 @@ from ai_engine.message_utils import (
 )
 
 # Mock only for ModelRegistry tests
-sys.modules['torch'] = MagicMock()
-sys.modules['matplotlib'] = MagicMock()
-sys.modules['matplotlib.pyplot'] = MagicMock()
+sys.modules["torch"] = MagicMock()
+sys.modules["matplotlib"] = MagicMock()
+sys.modules["matplotlib.pyplot"] = MagicMock()
 
 # Import calibration before mocking to avoid import pollution
+from ai_engine.model_vehicle import calibration as calibration_module  # noqa: E402
 
 mock_model_vehicle = MagicMock()
 mock_model_vehicle.Args_NN_model_all_channels = MagicMock
 mock_model_vehicle.VehicleCounter = MagicMock
 mock_model_vehicle.VehicleSpeedEstimator = MagicMock
 # Keep calibration classes accessible even after mocking parent module
-mock_model_vehicle.calibration = sys.modules['services.ai_engine.model_vehicle.calibration']
-sys.modules['services.ai_engine.model_vehicle'] = mock_model_vehicle
-sys.modules['services.ai_engine.model_vehicle.DTAN'] = MagicMock()
+mock_model_vehicle.calibration = calibration_module
+sys.modules["ai_engine.model_vehicle"] = mock_model_vehicle
+sys.modules["ai_engine.model_vehicle.DTAN"] = MagicMock()
 
 from ai_engine.main import ModelRegistry  # noqa: E402
 
@@ -63,7 +64,7 @@ class TestModelRegistry:
         result = registry.get_speed_estimator("default")
         assert result is mock_speed_estimator
 
-    @patch('services.ai_engine.main.get_model_spec')
+    @patch("ai_engine.main.get_model_spec")
     def test_caches_model_on_second_access(self, mock_get_spec, registry):
         """Second access should return cached model, not reload."""
         mock_spec = MagicMock()
@@ -95,19 +96,20 @@ class TestModelRegistry:
             max_models=5,
         )
 
+        # Pre-populate models in order: a, b, c
         registry._loaded_models["a"] = MagicMock()
-        registry._access_order.append("a")
         registry._loaded_models["b"] = MagicMock()
-        registry._access_order.append("b")
         registry._loaded_models["c"] = MagicMock()
-        registry._access_order.append("c")
 
+        # Access "a" - should move it to end
         registry.get_speed_estimator("a")
 
-        assert registry._access_order[-1] == "a"
-        assert registry._access_order[0] == "b"
+        # Order should now be: b, c, a
+        order = list(registry._loaded_models.keys())
+        assert order[-1] == "a"
+        assert order[0] == "b"
 
-    @patch('services.ai_engine.main.get_model_spec')
+    @patch("ai_engine.main.get_model_spec")
     def test_lru_eviction_when_max_reached(self, mock_get_spec, mock_speed_estimator, mock_counter):
         """Should evict oldest model when max_models reached."""
         registry = ModelRegistry(
@@ -147,9 +149,9 @@ class TestModelRegistry:
             max_models=10,
         )
 
+        # Pre-populate models
         for i in range(5):
             registry._loaded_models[f"model_{i}"] = MagicMock()
-            registry._access_order.append(f"model_{i}")
 
         errors = []
         results = []
@@ -178,12 +180,7 @@ class TestExtractChannelMetadata:
 
     def test_extracts_from_nested_processing_metadata(self):
         """Should extract channel_step from nested processing_metadata."""
-        payload = {
-            "channel_start": 500,
-            "processing_metadata": {
-                "channel_selection": {"step": 2}
-            }
-        }
+        payload = {"channel_start": 500, "processing_metadata": {"channel_selection": {"step": 2}}}
 
         result = extract_channel_metadata(payload)
 
@@ -229,8 +226,12 @@ class TestMessagesToArrays:
         """Should extract values and convert to numpy array."""
         ctx = ProcessingContext()
         messages = [
-            MagicMock(payload={"values": [1.0, 2.0, 3.0], "channel_start": 0, "timestamp_ns": 1000}),
-            MagicMock(payload={"values": [4.0, 5.0, 6.0], "channel_start": 0, "timestamp_ns": 2000}),
+            MagicMock(
+                payload={"values": [1.0, 2.0, 3.0], "channel_start": 0, "timestamp_ns": 1000}
+            ),
+            MagicMock(
+                payload={"values": [4.0, 5.0, 6.0], "channel_start": 0, "timestamp_ns": 2000}
+            ),
         ]
 
         data, timestamps, timestamps_ns = messages_to_arrays(messages, ctx, 10.0)
@@ -243,7 +244,9 @@ class TestMessagesToArrays:
         """Should raise ValueError when channel counts differ."""
         ctx = ProcessingContext()
         messages = [
-            MagicMock(payload={"values": [1.0, 2.0, 3.0], "channel_start": 0, "timestamp_ns": 1000}),
+            MagicMock(
+                payload={"values": [1.0, 2.0, 3.0], "channel_start": 0, "timestamp_ns": 1000}
+            ),
             MagicMock(payload={"values": [1.0, 2.0], "channel_start": 0, "timestamp_ns": 2000}),
         ]
 
@@ -268,9 +271,11 @@ class TestCreateSpeedMessages:
     def test_filters_speeds_by_range(self):
         """Should filter out speeds outside min/max range."""
         ctx = ProcessingContext(channel_start=0, channel_step=1)
-        speeds = np.array([
-            [15.0, 50.0, 150.0],  # 15 too slow, 50 valid, 150 too fast
-        ])
+        speeds = np.array(
+            [
+                [15.0, 50.0, 150.0],  # 15 too slow, 50 valid, 150 too fast
+            ]
+        )
         timestamps_ns = [1000000000000, 2000000000000, 3000000000000]
 
         messages = create_speed_messages(
@@ -281,7 +286,7 @@ class TestCreateSpeedMessages:
             min_speed_kmh=20.0,
             max_speed_kmh=120.0,
             sampling_rate_hz=10.0,
-            service_name="test"
+            service_name="test",
         )
 
         assert len(messages) == 1
@@ -290,11 +295,13 @@ class TestCreateSpeedMessages:
     def test_maps_channels_with_step(self):
         """Should map channel indices using channel_step."""
         ctx = ProcessingContext(channel_start=100, channel_step=2)
-        speeds = np.array([
-            [50.0],
-            [60.0],
-            [70.0],
-        ])
+        speeds = np.array(
+            [
+                [50.0],
+                [60.0],
+                [70.0],
+            ]
+        )
         timestamps_ns = [1000000000000]
 
         messages = create_speed_messages(
@@ -305,7 +312,7 @@ class TestCreateSpeedMessages:
             min_speed_kmh=20.0,
             max_speed_kmh=120.0,
             sampling_rate_hz=10.0,
-            service_name="test"
+            service_name="test",
         )
 
         speeds_data = messages[0].payload["speeds"]
@@ -327,7 +334,7 @@ class TestCreateSpeedMessages:
             min_speed_kmh=20.0,
             max_speed_kmh=120.0,
             sampling_rate_hz=10.0,
-            service_name="test"
+            service_name="test",
         )
 
         # Should preserve negative sign to indicate direction
@@ -336,7 +343,7 @@ class TestCreateSpeedMessages:
     def test_handles_nan_speeds(self):
         """Should filter out NaN speeds."""
         ctx = ProcessingContext(channel_start=0, channel_step=1)
-        speeds = np.array([[50.0, float('nan'), 70.0]])
+        speeds = np.array([[50.0, float("nan"), 70.0]])
         timestamps_ns = [1000000000000, 2000000000000, 3000000000000]
 
         messages = create_speed_messages(
@@ -347,7 +354,7 @@ class TestCreateSpeedMessages:
             min_speed_kmh=20.0,
             max_speed_kmh=120.0,
             sampling_rate_hz=10.0,
-            service_name="test"
+            service_name="test",
         )
 
         assert len(messages) == 2
@@ -355,10 +362,12 @@ class TestCreateSpeedMessages:
     def test_handles_3d_array(self):
         """Should handle 3D speed array (sections x channels x time)."""
         ctx = ProcessingContext(channel_start=0, channel_step=1)
-        speeds = np.array([
-            [[50.0, 60.0]],
-            [[70.0, 80.0]],
-        ])
+        speeds = np.array(
+            [
+                [[50.0, 60.0]],
+                [[70.0, 80.0]],
+            ]
+        )
         timestamps_ns = [1000000000000, 2000000000000]
 
         messages = create_speed_messages(
@@ -369,7 +378,7 @@ class TestCreateSpeedMessages:
             min_speed_kmh=20.0,
             max_speed_kmh=120.0,
             sampling_rate_hz=10.0,
-            service_name="test"
+            service_name="test",
         )
 
         assert len(messages) == 2
@@ -389,7 +398,7 @@ class TestCreateSpeedMessages:
             min_speed_kmh=20.0,
             max_speed_kmh=120.0,
             sampling_rate_hz=10.0,
-            service_name="test"
+            service_name="test",
         )
 
         assert len(messages) == 2
@@ -415,7 +424,7 @@ class TestCreateCountMessages:
             channels_per_section=9,
             counting_samples=300,
             step_samples=100,
-            service_name="test_engine"
+            service_name="test_engine",
         )
 
         assert len(messages) == 1
@@ -438,7 +447,7 @@ class TestCreateCountMessages:
             channels_per_section=9,
             counting_samples=300,
             step_samples=100,
-            service_name="test"
+            service_name="test",
         )
 
         assert len(messages) == 0
@@ -460,7 +469,7 @@ class TestCreateCountMessages:
             channels_per_section=9,
             counting_samples=300,
             step_samples=100,
-            service_name="test"
+            service_name="test",
         )
 
         assert messages[0].payload["channel_start"] == 100
@@ -483,7 +492,7 @@ class TestCreateCountMessages:
             channels_per_section=9,
             counting_samples=300,
             step_samples=100,
-            service_name="test"
+            service_name="test",
         )
 
         assert messages[0].payload["count_timestamp_ns"] % 1_000_000_000 == 0
@@ -505,7 +514,7 @@ class TestCreateCountMessages:
             channels_per_section=9,
             counting_samples=300,
             step_samples=100,
-            service_name="test"
+            service_name="test",
         )
 
         assert len(messages) == 0

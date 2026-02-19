@@ -124,11 +124,14 @@ class TestProcessorKafkaIntegration:
 
         # Consume with headers
         from confluent_kafka import Consumer
-        consumer = Consumer({
-            "bootstrap.servers": kafka_context.bootstrap_servers,
-            "group.id": f"test-headers-{kafka_context.test_id}",
-            "auto.offset.reset": "earliest",
-        })
+
+        consumer = Consumer(
+            {
+                "bootstrap.servers": kafka_context.bootstrap_servers,
+                "group.id": f"test-headers-{kafka_context.test_id}",
+                "auto.offset.reset": "earliest",
+            }
+        )
         consumer.subscribe([topic])
 
         msg = None
@@ -155,12 +158,14 @@ class TestErrorHandling:
         delivery_results = []
 
         def on_delivery(err, msg):
-            delivery_results.append({
-                "error": err,
-                "topic": msg.topic(),
-                "partition": msg.partition(),
-                "offset": msg.offset(),
-            })
+            delivery_results.append(
+                {
+                    "error": err,
+                    "topic": msg.topic(),
+                    "partition": msg.partition(),
+                    "offset": msg.offset(),
+                }
+            )
 
         producer = kafka_context.create_producer()
         producer.produce(

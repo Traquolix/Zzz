@@ -104,6 +104,7 @@ class InferenceConfig:
             GLRT_DEFAULT_WINDOW,
             GLRT_EDGE_SAFETY_SAMPLES,
         )
+
         edge_trim = GLRT_EDGE_SAFETY_SAMPLES + GLRT_DEFAULT_WINDOW // 2
         return self.samples_per_window - 2 * edge_trim
 

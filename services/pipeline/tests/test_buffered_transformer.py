@@ -37,10 +37,12 @@ class ConcreteBufferedTransformer(BufferedTransformer):
 
     async def process_buffer(self, messages: List[Message]) -> List[Message]:
         """Test implementation: records what was processed."""
-        self._processed_buffers.append({
-            "count": len(messages),
-            "keys": [m.payload.get(self._test_buffer_key_field) for m in messages],
-        })
+        self._processed_buffers.append(
+            {
+                "count": len(messages),
+                "keys": [m.payload.get(self._test_buffer_key_field) for m in messages],
+            }
+        )
         # Return a single output message
         return [Message(id="output", payload={"processed": len(messages)})]
 
@@ -73,7 +75,7 @@ async def async_passthrough(fn, *args):
 @pytest.fixture
 def transformer(test_config):
     """Create transformer with mocked infrastructure."""
-    with patch.object(BufferedTransformer, '_load_schema', return_value=None):
+    with patch.object(BufferedTransformer, "_load_schema", return_value=None):
         t = ConcreteBufferedTransformer(test_config, buffer_size=3)
         # Mock infrastructure with proper async handling
         t._internal_send = AsyncMock()
@@ -169,7 +171,7 @@ class TestBufferedTransformerLRU:
         """Should evict least recently used buffer when limit exceeded."""
         test_config.max_active_buffers = 2
 
-        with patch.object(BufferedTransformer, '_load_schema', return_value=None):
+        with patch.object(BufferedTransformer, "_load_schema", return_value=None):
             transformer = ConcreteBufferedTransformer(test_config, buffer_size=10)
             transformer._internal_send = AsyncMock()
             transformer.consumer_circuit_breaker = MagicMock()
@@ -184,19 +186,13 @@ class TestBufferedTransformerLRU:
             transformer._semaphore = asyncio.Semaphore(10)
 
         # Fill two buffers
-        await transformer._handle_buffered_message(
-            Message(id="1", payload={"fiber_id": "first"})
-        )
-        await transformer._handle_buffered_message(
-            Message(id="2", payload={"fiber_id": "second"})
-        )
+        await transformer._handle_buffered_message(Message(id="1", payload={"fiber_id": "first"}))
+        await transformer._handle_buffered_message(Message(id="2", payload={"fiber_id": "second"}))
 
         assert len(transformer._buffers) == 2
 
         # Adding third key should evict "first" (LRU)
-        await transformer._handle_buffered_message(
-            Message(id="3", payload={"fiber_id": "third"})
-        )
+        await transformer._handle_buffered_message(Message(id="3", payload={"fiber_id": "third"}))
 
         assert len(transformer._buffers) == 2
         assert "first" not in transformer._buffers
@@ -208,7 +204,7 @@ class TestBufferedTransformerLRU:
         """Evicted buffer should be processed with its messages."""
         test_config.max_active_buffers = 1
 
-        with patch.object(BufferedTransformer, '_load_schema', return_value=None):
+        with patch.object(BufferedTransformer, "_load_schema", return_value=None):
             transformer = ConcreteBufferedTransformer(test_config, buffer_size=10)
             transformer._internal_send = AsyncMock()
             transformer.consumer_circuit_breaker = MagicMock()
@@ -223,17 +219,11 @@ class TestBufferedTransformerLRU:
             transformer._semaphore = asyncio.Semaphore(10)
 
         # Add 2 messages to first buffer
-        await transformer._handle_buffered_message(
-            Message(id="1", payload={"fiber_id": "first"})
-        )
-        await transformer._handle_buffered_message(
-            Message(id="2", payload={"fiber_id": "first"})
-        )
+        await transformer._handle_buffered_message(Message(id="1", payload={"fiber_id": "first"}))
+        await transformer._handle_buffered_message(Message(id="2", payload={"fiber_id": "first"}))
 
         # Adding new key evicts first
-        await transformer._handle_buffered_message(
-            Message(id="3", payload={"fiber_id": "second"})
-        )
+        await transformer._handle_buffered_message(Message(id="3", payload={"fiber_id": "second"}))
 
         # First buffer was processed with 2 messages
         assert len(transformer._processed_buffers) == 1
@@ -244,7 +234,7 @@ class TestBufferedTransformerLRU:
         """Accessing a buffer should make it most recently used."""
         test_config.max_active_buffers = 2
 
-        with patch.object(BufferedTransformer, '_load_schema', return_value=None):
+        with patch.object(BufferedTransformer, "_load_schema", return_value=None):
             transformer = ConcreteBufferedTransformer(test_config, buffer_size=10)
             transformer._internal_send = AsyncMock()
             transformer.consumer_circuit_breaker = MagicMock()
@@ -259,22 +249,14 @@ class TestBufferedTransformerLRU:
             transformer._semaphore = asyncio.Semaphore(10)
 
         # Create two buffers
-        await transformer._handle_buffered_message(
-            Message(id="1", payload={"fiber_id": "first"})
-        )
-        await transformer._handle_buffered_message(
-            Message(id="2", payload={"fiber_id": "second"})
-        )
+        await transformer._handle_buffered_message(Message(id="1", payload={"fiber_id": "first"}))
+        await transformer._handle_buffered_message(Message(id="2", payload={"fiber_id": "second"}))
 
         # Access first again (makes it most recent)
-        await transformer._handle_buffered_message(
-            Message(id="3", payload={"fiber_id": "first"})
-        )
+        await transformer._handle_buffered_message(Message(id="3", payload={"fiber_id": "first"}))
 
         # Now adding third should evict "second" (now LRU)
-        await transformer._handle_buffered_message(
-            Message(id="4", payload={"fiber_id": "third"})
-        )
+        await transformer._handle_buffered_message(Message(id="4", payload={"fiber_id": "third"}))
 
         assert "first" in transformer._buffers
         assert "second" not in transformer._buffers
@@ -287,7 +269,7 @@ class TestBufferedTransformerTimeout:
     @pytest.mark.asyncio
     async def test_timeout_processes_partial_buffer(self, test_config):
         """Timed out buffer should be processed."""
-        with patch.object(BufferedTransformer, '_load_schema', return_value=None):
+        with patch.object(BufferedTransformer, "_load_schema", return_value=None):
             transformer = ConcreteBufferedTransformer(
                 test_config, buffer_size=10, buffer_timeout=1.0
             )
@@ -330,7 +312,7 @@ class TestBufferedTransformerTimeout:
     @pytest.mark.asyncio
     async def test_fresh_buffers_not_timed_out(self, test_config):
         """Buffers within timeout should not be processed."""
-        with patch.object(BufferedTransformer, '_load_schema', return_value=None):
+        with patch.object(BufferedTransformer, "_load_schema", return_value=None):
             transformer = ConcreteBufferedTransformer(
                 test_config, buffer_size=10, buffer_timeout=60.0
             )
@@ -363,7 +345,7 @@ class TestBufferedTransformerEdgeCases:
     @pytest.mark.asyncio
     async def test_buffer_size_1_processes_immediately(self, test_config):
         """Buffer size of 1 should process each message immediately."""
-        with patch.object(BufferedTransformer, '_load_schema', return_value=None):
+        with patch.object(BufferedTransformer, "_load_schema", return_value=None):
             transformer = ConcreteBufferedTransformer(test_config, buffer_size=1)
             transformer._internal_send = AsyncMock()
             transformer.consumer_circuit_breaker = MagicMock()
@@ -377,9 +359,7 @@ class TestBufferedTransformerEdgeCases:
             transformer._buffer_timeout = transformer.get_buffer_timeout_seconds()
             transformer._semaphore = asyncio.Semaphore(10)
 
-        await transformer._handle_buffered_message(
-            Message(id="1", payload={"fiber_id": "test"})
-        )
+        await transformer._handle_buffered_message(Message(id="1", payload={"fiber_id": "test"}))
 
         assert len(transformer._processed_buffers) == 1
         assert transformer._processed_buffers[0]["count"] == 1
@@ -387,6 +367,7 @@ class TestBufferedTransformerEdgeCases:
     @pytest.mark.asyncio
     async def test_exception_in_handle_message_propagates(self, transformer):
         """Exceptions in _handle_buffered_message should propagate."""
+
         # Make get_buffer_key raise
         def raise_error(msg):
             raise ValueError("test error")
@@ -401,7 +382,7 @@ class TestBufferedTransformerEdgeCases:
     @pytest.mark.asyncio
     async def test_process_complete_buffer_handles_timeout(self, test_config):
         """Timeout during buffer processing should be handled."""
-        with patch.object(BufferedTransformer, '_load_schema', return_value=None):
+        with patch.object(BufferedTransformer, "_load_schema", return_value=None):
             transformer = ConcreteBufferedTransformer(test_config, buffer_size=3)
             transformer._internal_send = AsyncMock()
             transformer.metrics = MagicMock()

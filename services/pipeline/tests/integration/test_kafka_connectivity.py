@@ -24,6 +24,7 @@ class TestKafkaConnectivity:
 
         # Wait for metadata to propagate
         import time
+
         time.sleep(1)
 
         # Verify topic exists

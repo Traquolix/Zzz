@@ -68,9 +68,7 @@ def sample_config_yaml():
 @pytest.fixture
 def temp_config_file(sample_config_yaml):
     """Create a temporary config file."""
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".yaml", delete=False
-    ) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
         yaml.dump(sample_config_yaml, f)
         temp_path = f.name
 
@@ -156,6 +154,9 @@ class TestConfigHotReload:
 
         os.utime(temp_config_file, None)
 
+        # Reset the rate limiter to force a reload check
+        manager._last_mtime_check = 0
+
         fiber2 = manager.get_fiber("test_fiber")
         assert fiber2.total_channels == 2000
 
@@ -196,6 +197,7 @@ class TestSectionConfig:
 
         assert section.model == "default_model"
         assert len(section.pipeline) == 1
+
 
 class TestFiberConfigHelpers:
     """Test FiberConfig helper methods."""
@@ -256,4 +258,3 @@ class TestModelSpec:
         assert model.inference.samples_per_window == 300
         assert model.speed_detection.min_speed_kmh == 20.0
         assert model.counting.enabled is True
-

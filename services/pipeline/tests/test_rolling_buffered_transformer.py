@@ -15,15 +15,18 @@ try:
     from unittest.mock import AsyncMock
 
     import pytest
+
     PYTEST_AVAILABLE = True
 except ImportError:
     PYTEST_AVAILABLE = False
     AsyncMock = MagicMock  # Fallback
+
     # Create a dummy decorator
     class pytest:
         @staticmethod
         def fixture(fn):
             return fn
+
         class mark:
             @staticmethod
             def asyncio(fn):
@@ -32,14 +35,17 @@ except ImportError:
 
 class MockConfig:
     """Mock service config for testing."""
+
     consumer_idle_delay = 0.01
     error_backoff_delay = 0.01
     message_timeout = 10.0
     max_active_buffers = 5
+    enable_dlq = False
 
 
 class MockMessage:
     """Mock message for testing."""
+
     def __init__(self, buffer_key: str, timestamp: int):
         self.buffer_key = buffer_key
         self.timestamp = timestamp
@@ -113,7 +119,7 @@ class TestRollingBuffer:
 
             if len(buffer) >= window_size and new_count >= step_size:
                 window = list(buffer)
-                trimmed = window[edge_trim:window_size - edge_trim]
+                trimmed = window[edge_trim : window_size - edge_trim]
                 all_outputs.extend(trimmed)
                 new_count = 0
 
@@ -168,15 +174,33 @@ class TestRollingBufferedTransformerClass:
                 self._running = True
                 self._semaphore = asyncio.Semaphore(10)
                 self.consumer_circuit_breaker = MagicMock()
-                self.consumer_circuit_breaker.call = AsyncMock(side_effect=lambda retry, fn, *args: fn(*args))
+
+                async def mock_circuit_breaker_call(retry_fn, fn, *args):
+                    # Call the retry function which in turn calls fn
+                    result = retry_fn(fn, *args)
+                    # retry_fn may return a coroutine if it's async
+                    if asyncio.iscoroutine(result):
+                        return await result
+                    return result
+
+                self.consumer_circuit_breaker.call = mock_circuit_breaker_call
                 self.retry_handler = MagicMock()
-                self.retry_handler.retry_with_backoff = lambda fn, *args: fn(*args)
+
+                # The retry handler needs to properly await async functions
+                async def mock_retry(fn, *args):
+                    result = fn(*args)
+                    if asyncio.iscoroutine(result):
+                        return await result
+                    return result
+
+                self.retry_handler.retry_with_backoff = mock_retry
                 self.config = MockConfig()
                 self.metrics = MagicMock()
                 self.logger = MagicMock()
 
                 # Initialize parent state
                 from collections import OrderedDict
+
                 self._rolling_buffers = OrderedDict()
                 self._window_size = 10
                 self._step_size = 8
@@ -298,8 +322,10 @@ async def run_async_tests():
 
             # Mock circuit breaker to just call the function
             self.consumer_circuit_breaker = MagicMock()
+
             async def mock_call(retry_fn, fn, *args):
                 return fn(*args)
+
             self.consumer_circuit_breaker.call = mock_call
 
             self.retry_handler = MagicMock()
@@ -339,9 +365,15 @@ async def run_async_tests():
         msg = MockMessage("test:buffer", i)
         await transformer._handle_rolling_message(msg)
 
-    assert len(transformer.processed_windows) == 2, f"Expected 2 windows, got {len(transformer.processed_windows)}"
-    assert transformer.processed_windows[0] == list(range(10)), f"First window wrong: {transformer.processed_windows[0]}"
-    assert transformer.processed_windows[1] == list(range(8, 18)), f"Second window wrong: {transformer.processed_windows[1]}"
+    assert (
+        len(transformer.processed_windows) == 2
+    ), f"Expected 2 windows, got {len(transformer.processed_windows)}"
+    assert transformer.processed_windows[0] == list(
+        range(10)
+    ), f"First window wrong: {transformer.processed_windows[0]}"
+    assert transformer.processed_windows[1] == list(
+        range(8, 18)
+    ), f"Second window wrong: {transformer.processed_windows[1]}"
     print("✓ test_handles_rolling_message")
 
     # Test 2: Buffer key isolation
@@ -367,8 +399,12 @@ async def run_async_tests():
             msg = MockMessage(f"key{key_idx}", msg_idx)
             await transformer3._handle_rolling_message(msg)
 
-    assert transformer3._buffers_evicted >= 1, f"Expected evictions, got {transformer3._buffers_evicted}"
-    assert len(transformer3._rolling_buffers) <= 3, f"Too many buffers: {len(transformer3._rolling_buffers)}"
+    assert (
+        transformer3._buffers_evicted >= 1
+    ), f"Expected evictions, got {transformer3._buffers_evicted}"
+    assert (
+        len(transformer3._rolling_buffers) <= 3
+    ), f"Too many buffers: {len(transformer3._rolling_buffers)}"
     print("✓ test_lru_eviction")
 
     print("\nAll async tests passed!")

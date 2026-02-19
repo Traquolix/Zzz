@@ -21,6 +21,7 @@ TEST_TOPIC_PREFIX = "_test_integration_"
 @dataclass
 class KafkaTestContext:
     """Context for Kafka integration tests."""
+
     bootstrap_servers: str
     admin: AdminClient
     created_topics: List[str]
@@ -129,10 +130,7 @@ def cleanup_stale_test_topics(kafka_context: KafkaTestContext):
     Run this fixture once before test session to clean up orphaned topics.
     """
     metadata = kafka_context.admin.list_topics(timeout=10)
-    stale_topics = [
-        t for t in metadata.topics.keys()
-        if t.startswith(TEST_TOPIC_PREFIX)
-    ]
+    stale_topics = [t for t in metadata.topics.keys() if t.startswith(TEST_TOPIC_PREFIX)]
 
     if stale_topics:
         futures = kafka_context.admin.delete_topics(stale_topics, operation_timeout=30)

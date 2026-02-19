@@ -448,7 +448,10 @@ class RollingBufferedTransformer(ServiceBase, Generic[T, U]):
             buffer_key = self.get_buffer_key(message)
 
             # Evict LRU buffer if at capacity
-            if buffer_key not in self._rolling_buffers and len(self._rolling_buffers) >= self._max_active_buffers:
+            if (
+                buffer_key not in self._rolling_buffers
+                and len(self._rolling_buffers) >= self._max_active_buffers
+            ):
                 lru_key, lru_buffer = self._rolling_buffers.popitem(last=False)
                 self._buffers_evicted += 1
                 self.metrics.record_buffer_eviction(lru_key)

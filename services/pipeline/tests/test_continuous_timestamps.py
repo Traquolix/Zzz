@@ -64,12 +64,14 @@ def test_rolling_fifo_buffer():
             assert len(window_ts) == window_size, f"Window size mismatch: {len(window_ts)}"
 
             # Trim edges (simulating process_file behavior)
-            trimmed_ts = window_ts[edge_trim:window_size - edge_trim]
+            trimmed_ts = window_ts[edge_trim : window_size - edge_trim]
             all_output_timestamps.extend(trimmed_ts.tolist())
 
             windows_processed += 1
             if windows_processed <= 5 or windows_processed % 10 == 0:
-                print(f"Window {windows_processed}: input T{window_ts[0]}-T{window_ts[-1]} → output T{trimmed_ts[0]}-T{trimmed_ts[-1]}")
+                print(
+                    f"Window {windows_processed}: input T{window_ts[0]}-T{window_ts[-1]} → output T{trimmed_ts[0]}-T{trimmed_ts[-1]}"
+                )
 
             # Reset counter (buffer keeps its data for overlap)
             new_count = 0
@@ -93,7 +95,9 @@ def test_rolling_fifo_buffer():
     else:
         print(f"✗ FAILURE: Found {len(gaps)} gaps!")
         for gap_idx in gaps[:10]:
-            print(f"  Gap at index {gap_idx}: T{output_ts[gap_idx]} -> T{output_ts[gap_idx+1]} (diff={diffs[gap_idx]})")
+            print(
+                f"  Gap at index {gap_idx}: T{output_ts[gap_idx]} -> T{output_ts[gap_idx+1]} (diff={diffs[gap_idx]})"
+            )
         return False
 
     # Check for duplicates
@@ -137,8 +141,8 @@ def test_overlap_correctness():
     window2 = np.arange(step_size, step_size + window_size)  # T250 - T549
 
     # Trim edges
-    trimmed1 = window1[edge_trim:window_size - edge_trim]  # T25 - T274
-    trimmed2 = window2[edge_trim:window_size - edge_trim]  # T275 - T524
+    trimmed1 = window1[edge_trim : window_size - edge_trim]  # T25 - T274
+    trimmed2 = window2[edge_trim : window_size - edge_trim]  # T275 - T524
 
     print(f"Window 1: T{window1[0]}-T{window1[-1]} → trimmed T{trimmed1[0]}-T{trimmed1[-1]}")
     print(f"Window 2: T{window2[0]}-T{window2[-1]} → trimmed T{trimmed2[0]}-T{trimmed2[-1]}")

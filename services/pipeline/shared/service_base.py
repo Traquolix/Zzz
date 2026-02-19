@@ -293,7 +293,9 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
                 "asyncio signal handlers not supported on this platform, "
                 "falling back to signal.signal for SIGINT"
             )
-            signal.signal(signal.SIGINT, lambda s, f: loop.call_soon_threadsafe(self._shutdown_event.set))
+            signal.signal(
+                signal.SIGINT, lambda s, f: loop.call_soon_threadsafe(self._shutdown_event.set)
+            )
 
     async def start(self) -> None:
         """Start the service and wait for shutdown signal."""

@@ -114,11 +114,7 @@ class TestStepRegistry:
 
     def test_create_known_step(self):
         """Should create registered step with params."""
-        step = create_step(
-            "temporal_decimation",
-            {"factor": 10},
-            fiber_sampling_rate_hz=50.0
-        )
+        step = create_step("temporal_decimation", {"factor": 10}, fiber_sampling_rate_hz=50.0)
 
         assert step is not None
         assert step.name == "temporal_decimation"
@@ -159,10 +155,7 @@ class TestBuildPipelineFromConfig:
             {"step": "temporal_decimation", "params": {"factor": 5}},
         ]
 
-        chain = build_pipeline_from_config(
-            config,
-            fiber_sampling_rate_hz=50.0
-        )
+        chain = build_pipeline_from_config(config, fiber_sampling_rate_hz=50.0)
 
         assert len(chain.steps) == 2
         assert chain.steps[0].name == "bandpass_filter"
@@ -179,10 +172,7 @@ class TestBuildPipelineFromConfig:
         """Should inject channel bounds for spatial decimation."""
         config = [{"step": "spatial_decimation", "params": {"factor": 2}}]
 
-        chain = build_pipeline_from_config(
-            config,
-            section_channels=(100, 200)
-        )
+        chain = build_pipeline_from_config(config, section_channels=(100, 200))
 
         assert len(chain.steps) == 1
 
@@ -196,7 +186,7 @@ class TestCustomStepRegistration:
             name="test_custom_step",
             step_class=MockStep,
             param_map={"mult": "multiplier"},
-            defaults={"multiplier": 1.0}
+            defaults={"multiplier": 1.0},
         )
 
         assert "test_custom_step" in get_available_steps()

@@ -32,8 +32,9 @@ import torch
 import torch.nn as nn
 
 
-def compute_cpa_covariance(cpab_basis: np.ndarray, length_scale: float = 0.1,
-                           output_variance: float = 1.0) -> np.ndarray:
+def compute_cpa_covariance(
+    cpab_basis: np.ndarray, length_scale: float = 0.1, output_variance: float = 1.0
+) -> np.ndarray:
     """Compute the CPA covariance matrix in theta-space.
 
     This follows the thesis methodology: covariance between CPAB parameters
@@ -69,7 +70,7 @@ def compute_cpa_covariance(cpab_basis: np.ndarray, length_scale: float = 0.1,
     for i in range(n_cells):
         for j in range(n_cells):
             # Squared exponential kernel
-            cov_val = output_variance**2 * np.exp(-(dist[i, j]**2) / (2 * length_scale**2))
+            cov_val = output_variance**2 * np.exp(-(dist[i, j] ** 2) / (2 * length_scale**2))
             # Fill 2x2 block for this cell pair
             for pi in range(params_per_cell):
                 for pj in range(params_per_cell):
@@ -117,7 +118,7 @@ class DTANLoss(nn.Module):
 
         # Register inverse covariance as buffer (not a parameter)
         # Always register as buffer (even if None) to avoid attribute conflicts
-        self.register_buffer('cpa_cov_inv', cpa_cov_inv)
+        self.register_buffer("cpa_cov_inv", cpa_cov_inv)
 
     def set_cpa_covariance_from_basis(self, cpab_basis: np.ndarray):
         """Compute and set the CPA covariance from the CPAB basis matrix.
@@ -125,11 +126,7 @@ class DTANLoss(nn.Module):
         Args:
             cpab_basis: [D, d] numpy array, the CPAB transformation basis
         """
-        cov = compute_cpa_covariance(
-            cpab_basis,
-            self.length_scale,
-            self.output_variance
-        )
+        cov = compute_cpa_covariance(cpab_basis, self.length_scale, self.output_variance)
         # Compute inverse
         cov_inv = np.linalg.inv(cov)
         cov_inv_tensor = torch.from_numpy(cov_inv.astype(np.float32))
@@ -181,26 +178,26 @@ class DTANLoss(nn.Module):
 
             # Compute θ^T * Σ⁻¹ * θ for each theta vector
             # result[i] = thetas_flat[i] @ cpa_cov_inv @ thetas_flat[i]
-            mahal = torch.sum(thetas_flat @ self.cpa_cov_inv * thetas_flat, dim=1)  # [batch*(Nch-1)]
+            mahal = torch.sum(
+                thetas_flat @ self.cpa_cov_inv * thetas_flat, dim=1
+            )  # [batch*(Nch-1)]
             inner_loss = torch.mean(mahal)
         else:
             # Fallback to simple L2 norm if no covariance provided
-            inner_loss = torch.mean(thetas ** 2)
+            inner_loss = torch.mean(thetas**2)
 
         # ---------------------------------------------------------------
         # L_inter: 1/(Nc-2) * Σ ||θ_{n-1} - θ_n||² (L2 smoothness)
         # ---------------------------------------------------------------
         if thetas.shape[1] > 1:
             theta_diff = thetas[:, 1:, :] - thetas[:, :-1, :]  # [batch, Nch-2, d]
-            inter_loss = torch.mean(theta_diff ** 2)
+            inter_loss = torch.mean(theta_diff**2)
         else:
             inter_loss = torch.tensor(0.0, device=thetas.device)
 
         # Total loss (Thesis Eq. 2.21)
         total_loss = (
-            reconstruction_loss
-            + self.lambda_inner * inner_loss
-            + self.lambda_inter * inter_loss
+            reconstruction_loss + self.lambda_inner * inner_loss + self.lambda_inter * inter_loss
         )
 
         return {
@@ -245,7 +242,8 @@ class DTANLossWeighted(DTANLoss):
 
         # Channel weights: higher weight for channels closer to reference
         weights = torch.exp(
-            self.channel_weight_decay * torch.arange(n_ch_out, device=x_aligned.device, dtype=torch.float32)
+            self.channel_weight_decay
+            * torch.arange(n_ch_out, device=x_aligned.device, dtype=torch.float32)
         )
         weights = weights / weights.sum()  # normalize
 
@@ -260,19 +258,17 @@ class DTANLossWeighted(DTANLoss):
             mahal = torch.sum(thetas_flat @ self.cpa_cov_inv * thetas_flat, dim=1)
             inner_loss = torch.mean(mahal)
         else:
-            inner_loss = torch.mean(thetas ** 2)
+            inner_loss = torch.mean(thetas**2)
 
         # Inter-channel smoothness
         if thetas.shape[1] > 1:
             theta_diff = thetas[:, 1:, :] - thetas[:, :-1, :]
-            inter_loss = torch.mean(theta_diff ** 2)
+            inter_loss = torch.mean(theta_diff**2)
         else:
             inter_loss = torch.tensor(0.0, device=thetas.device)
 
         total_loss = (
-            reconstruction_loss
-            + self.lambda_inner * inner_loss
-            + self.lambda_inter * inter_loss
+            reconstruction_loss + self.lambda_inner * inner_loss + self.lambda_inter * inter_loss
         )
 
         return {
