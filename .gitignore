@@ -114,9 +114,24 @@ config.yaml
 secrets.yml
 secrets.yaml
 
-# Platform
-dist
-node_modules
+# Frontend (Node.js)
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# Backend (Django)
+staticfiles/
+media/
+.mypy_cache/
+
+# libcpab build artifacts
+basis_files/
+*.o
+
 # Large data archives
 *.tar.gz
 *.zip
+
+# Addons
+/services/platform/backend/data/

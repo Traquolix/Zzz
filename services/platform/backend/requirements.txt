@@ -1,0 +1,41 @@
+# Django
+Django==5.2.10
+djangorestframework==3.16.1
+djangorestframework-simplejwt==5.5.1
+django-cors-headers==4.9.0
+drf-spectacular==0.29.0
+
+# Database
+psycopg2-binary==2.9.11
+
+# Cryptography (required for RS256 JWT)
+cryptography==46.0.4
+
+# ClickHouse
+clickhouse-connect==0.8.14
+
+# Channels (WebSocket)
+channels==4.2.0
+channels-redis==4.2.1
+daphne==4.1.2
+uvicorn[standard]==0.34.0
+
+# Kafka with Avro support (required for run_realtime --source kafka)
+confluent-kafka[avro]==2.8.0
+
+# Redis
+redis==5.2.1
+
+# Environment
+python-dotenv==1.2.1
+
+# HDF5 and signal processing (for SHM spectral data)
+h5py==3.13.0
+numpy==2.2.3
+scipy>=1.11.0
+
+# Structured logging (production JSON output)
+python-json-logger==3.2.1
+
+# Error monitoring
+sentry-sdk[django]==2.51.0
