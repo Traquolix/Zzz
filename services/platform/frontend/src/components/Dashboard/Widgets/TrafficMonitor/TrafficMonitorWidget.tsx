@@ -116,12 +116,11 @@ export function TrafficMonitorWidget() {
                     const next = new Map(prev)
 
                     trackedLandmarks.forEach(landmark => {
-                        // Detection fiberLine is parent (e.g., "mathis"), landmark.fiberId is directional (e.g., "mathis:0")
-                        const relevant = detections.filter(d => {
-                            const directionalId = `${d.fiberLine}:${d.direction}`
-                            return directionalId === landmark.fiberId &&
-                                Math.abs(d.channel - landmark.channel) <= CHANNEL_TOLERANCE
-                        })
+                        // fiberLine is now directional from backend (e.g., "mathis:0")
+                        const relevant = detections.filter(d =>
+                            d.fiberLine === landmark.fiberId &&
+                            Math.abs(d.channel - landmark.channel) <= CHANNEL_TOLERANCE
+                        )
 
                         if (relevant.length > 0) {
                             const existing = next.get(landmark.key) || {
@@ -161,13 +160,12 @@ export function TrafficMonitorWidget() {
                     const next = new Map(prev)
 
                     sectionsArray.forEach(section => {
-                        // Detection fiberLine is parent (e.g., "mathis"), section.fiberId is directional (e.g., "mathis:0")
-                        const sectionDetections = detections.filter(d => {
-                            const directionalId = `${d.fiberLine}:${d.direction}`
-                            return directionalId === section.fiberId &&
-                                d.channel >= section.startChannel &&
-                                d.channel <= section.endChannel
-                        })
+                        // fiberLine is now directional from backend (e.g., "mathis:0")
+                        const sectionDetections = detections.filter(d =>
+                            d.fiberLine === section.fiberId &&
+                            d.channel >= section.startChannel &&
+                            d.channel <= section.endChannel
+                        )
 
                         let speed0Sum = 0, count0 = 0
                         let speed1Sum = 0, count1 = 0

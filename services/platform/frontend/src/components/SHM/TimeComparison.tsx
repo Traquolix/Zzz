@@ -223,12 +223,6 @@ export function TimeComparison({ dataSummary, selectedDay }: Props) {
     const [mode, setMode] = useState<ComparisonMode>('day')
     const [focus, setFocus] = useState<FocusMode>('equal')
 
-    // Custom date state (only used when mode === 'custom')
-    // TODO: Add date picker UI for custom mode
-    const [customA, _setCustomA] = useState<TimeRange | null>(null)
-    const [customB, _setCustomB] = useState<TimeRange | null>(null)
-    void _setCustomA; void _setCustomB // Will be used when custom date picker is added
-
     // Reference date for comparisons: use selectedDay if provided, otherwise latest available
     const dataEndTimestamp = dataSummary?.endTime ?? null
     const selectedDayTimestamp = selectedDay?.getTime() ?? null

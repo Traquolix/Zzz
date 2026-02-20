@@ -122,13 +122,14 @@ def transform_speed_message(data: dict) -> list[dict]:
 
         avg_ch = sum(g[0] for g in group) / len(group)
         avg_spd = sum(g[1] for g in group) / len(group)
+        direction = 0 if avg_spd >= 0 else 1
 
         detections.append({
-            'fiberLine': fiber_id,
+            'fiberLine': f'{fiber_id}:{direction}',  # Directional ID matches frontend fiber.id
             'channel': round(avg_ch),
             'speed': round(abs(avg_spd), 1),
             'count': len(group),
-            'direction': 0 if avg_spd >= 0 else 1,
+            'direction': direction,
             'timestamp': timestamp_ms,
         })
 

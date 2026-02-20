@@ -133,13 +133,12 @@ export function useSectionStats(sections: Map<string, FiberSection>) {
                 const distance = Math.abs(section.endChannel - section.startChannel) * METERS_PER_CHANNEL
 
                 // Filter detections to this section
-                // Detection fiberLine is parent (e.g., "mathis"), section.fiberId is directional (e.g., "mathis:0")
-                const sectionDetections = detections.filter(d => {
-                    const directionalId = `${d.fiberLine}:${d.direction}`
-                    return directionalId === section.fiberId &&
-                        d.channel >= section.startChannel &&
-                        d.channel <= section.endChannel
-                })
+                // fiberLine is now directional from backend (e.g., "mathis:0")
+                const sectionDetections = detections.filter(d =>
+                    d.fiberLine === section.fiberId &&
+                    d.channel >= section.startChannel &&
+                    d.channel <= section.endChannel
+                )
 
                 const direction0 = computeDirectionStats(sectionDetections, distance, 0)
                 const direction1 = computeDirectionStats(sectionDetections, distance, 1)

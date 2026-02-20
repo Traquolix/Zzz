@@ -125,41 +125,28 @@ export function VehicleLayer3D() {
             // Debug: log first batch to verify matching
             if (!loggedOnce) {
                 const engineKeys = Array.from(enginesRef.current.keys())
-                const sampleDetection = detections[0]
-                const sampleDirectionalId = `${sampleDetection.fiberLine}:${sampleDetection.direction}`
+                const sample = detections[0]
                 console.log('[VehicleLayer3d] First detection batch:', {
-                    detectionsCount: detections.length,
-                    sampleFiberLine: sampleDetection.fiberLine,
-                    sampleDirection: sampleDetection.direction,
-                    constructedId: sampleDirectionalId,
+                    count: detections.length,
+                    sampleFiberLine: sample.fiberLine,
                     engineKeys: engineKeys.slice(0, 6),
-                    willMatch: enginesRef.current.has(sampleDirectionalId)
+                    willMatch: enginesRef.current.has(sample.fiberLine)
                 })
                 loggedOnce = true
             }
 
             const now = performance.now()
-            let matched = 0, unmatched = 0
             for (const d of detections) {
-                // Construct directional fiber ID: parent:direction (e.g., "mathis:0")
-                const directionalId = `${d.fiberLine}:${d.direction}`
-                const fe = enginesRef.current.get(directionalId)
+                // fiberLine is now directional from backend (e.g., "mathis:0")
+                const fe = enginesRef.current.get(d.fiberLine)
                 if (fe) {
-                    matched++
                     fe.engine.onSensorEvent({
                         channel: d.channel,
                         speed: d.speed,
                         count: d.count,
                         direction: d.direction
                     }, now)
-                } else {
-                    unmatched++
                 }
-            }
-
-            // Warn if detections aren't matching (throttled)
-            if (unmatched > 0 && Math.random() < 0.01) {
-                console.warn(`[VehicleLayer3d] ${unmatched}/${detections.length} detections unmatched`)
             }
         })
     }, [subscribe])

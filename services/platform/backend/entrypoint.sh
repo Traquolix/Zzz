@@ -10,5 +10,7 @@ if [ "${DJANGO_SETTINGS_MODULE}" = "sequoia.settings.dev" ]; then
     python manage.py seed_users || true
 fi
 
-echo "Starting Daphne ASGI server on 0.0.0.0:8001..."
-exec daphne -b 0.0.0.0 -p 8001 sequoia.asgi:application
+# run_realtime handles: ASGI server + Kafka bridge (or simulation fallback)
+# Auto-detects data source based on REALTIME_SOURCE env var or Kafka availability
+echo "Starting SequoIA backend (ASGI + realtime data)..."
+exec python manage.py run_realtime --host 0.0.0.0 --port 8001
