@@ -20,6 +20,21 @@ export type SectionStats = {
 
 const METERS_PER_CHANNEL = 5
 
+/**
+ * Extract parent fiber ID from directional ID.
+ * "mathis:0" -> "mathis", "carros:1" -> "carros"
+ */
+function getParentFiberId(directionalId: string): string {
+    const colonIndex = directionalId.lastIndexOf(':')
+    if (colonIndex === -1) return directionalId
+    const suffix = directionalId.slice(colonIndex + 1)
+    // Only strip if suffix is "0" or "1" (direction)
+    if (suffix === '0' || suffix === '1') {
+        return directionalId.slice(0, colonIndex)
+    }
+    return directionalId
+}
+
 function computeDirectionStats(
     detections: Detection[],
     distance: number,
@@ -59,8 +74,11 @@ function findMatchingCount(
     let bestMatch: VehicleCount | null = null
     let bestOverlap = 0
 
+    // section.fiberId is directional (e.g., "mathis:0"), count.fiberLine is parent (e.g., "mathis")
+    const sectionParentId = getParentFiberId(section.fiberId)
+
     for (const count of counts.values()) {
-        if (count.fiberLine !== section.fiberId) continue
+        if (count.fiberLine !== sectionParentId) continue
 
         // Check overlap between section [startChannel, endChannel] and count [channelStart, channelEnd]
         const overlapStart = Math.max(section.startChannel, count.channelStart)
@@ -115,11 +133,13 @@ export function useSectionStats(sections: Map<string, FiberSection>) {
                 const distance = Math.abs(section.endChannel - section.startChannel) * METERS_PER_CHANNEL
 
                 // Filter detections to this section
-                const sectionDetections = detections.filter(d =>
-                    d.fiberLine === section.fiberId &&
-                    d.channel >= section.startChannel &&
-                    d.channel <= section.endChannel
-                )
+                // Detection fiberLine is parent (e.g., "mathis"), section.fiberId is directional (e.g., "mathis:0")
+                const sectionDetections = detections.filter(d => {
+                    const directionalId = `${d.fiberLine}:${d.direction}`
+                    return directionalId === section.fiberId &&
+                        d.channel >= section.startChannel &&
+                        d.channel <= section.endChannel
+                })
 
                 const direction0 = computeDirectionStats(sectionDetections, distance, 0)
                 const direction1 = computeDirectionStats(sectionDetections, distance, 1)

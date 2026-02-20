@@ -54,10 +54,12 @@ export function SpeedHeatmapLayer() {
             const speedData = speedDataRef.current
 
             for (const d of detections) {
-                let fiberData = speedData.get(d.fiberLine)
+                // Use directional fiber ID to match fiber.id format (e.g., "mathis:0")
+                const directionalId = `${d.fiberLine}:${d.direction}`
+                let fiberData = speedData.get(directionalId)
                 if (!fiberData) {
                     fiberData = new Map()
-                    speedData.set(d.fiberLine, fiberData)
+                    speedData.set(directionalId, fiberData)
                 }
 
                 // Adaptive segmentation: ~50m segments (10 channels at 5m each)
