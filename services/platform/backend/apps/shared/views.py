@@ -13,6 +13,7 @@ class HealthCheckView(APIView):
     """Basic health check — returns 200 if the server is running."""
     permission_classes = [AllowAny]
     authentication_classes = []
+    throttle_classes = []  # Exempt from rate limiting (used by Docker healthcheck)
 
     @extend_schema(
         responses={200: inline_serializer('HealthResponse', fields={
@@ -28,6 +29,7 @@ class ReadinessCheckView(APIView):
     """Readiness check — verifies database connectivity."""
     permission_classes = [AllowAny]
     authentication_classes = []
+    throttle_classes = []  # Exempt from rate limiting
 
     @extend_schema(
         responses={200: inline_serializer('ReadinessResponse', fields={
