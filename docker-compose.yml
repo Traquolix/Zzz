@@ -86,7 +86,8 @@ services:
         condition: service_healthy
       kafka-setup:
         condition: service_completed_successfully
-    # No ports exposed — accessible only on internal network
+    ports:
+      - "8081:8081"  # Exposed for external DAS hardware
     environment:
       SCHEMA_REGISTRY_HOST_NAME: schema-registry
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'kafka:29092'
