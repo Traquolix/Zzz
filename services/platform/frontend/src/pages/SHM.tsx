@@ -9,11 +9,6 @@ import type { Infrastructure, SelectedInfrastructure, SpectralTimeSeries, PeakFr
 
 type ViewMode = 'map' | 'list'
 
-const TYPE_COLORS: Record<string, string> = {
-    bridge: '#f59e0b',
-    tunnel: '#6366f1'
-}
-
 const TYPE_ICONS: Record<string, typeof Building2> = {
     bridge: Building2,
     tunnel: MapPin
@@ -229,7 +224,6 @@ function SHMContent() {
             ) : (
                 infrastructures.map(infra => {
                     const isSelected = selectedInfrastructure?.id === infra.id
-                    const color = TYPE_COLORS[infra.type] || '#6b7280'
                     const Icon = TYPE_ICONS[infra.type] || Building2
 
                     return (
