@@ -4,7 +4,7 @@ import { Loader2, ChevronDown } from 'lucide-react'
 import { fetchPeakFrequencies } from '@/api/infrastructure'
 import type { PeakFrequencyData, SpectralSummary } from '@/types/infrastructure'
 
-type ComparisonMode = 'day' | 'week' | 'custom'
+type ComparisonMode = 'day' | 'week'
 type FocusMode = 'A' | 'equal' | 'B'
 
 type TimeRange = { from: Date; to: Date }
@@ -39,7 +39,7 @@ function getComparisonRanges(mode: ComparisonMode, dataEnd: Date): { a: TimeRang
             b: { from: lastWeekStart, to: lastWeekEnd },
         }
     }
-    // Custom - default to day over day
+    // Fallback (shouldn't happen with exhaustive mode type)
     return {
         a: { from: latestDay, to: endOfDay(latestDay) },
         b: { from: subDays(latestDay, 1), to: endOfDay(subDays(latestDay, 1)) },
@@ -52,7 +52,6 @@ function ModeSelector({ mode, onChange }: { mode: ComparisonMode; onChange: (m: 
     const labels: Record<ComparisonMode, string> = {
         day: 'Day over day',
         week: 'Week over week',
-        custom: 'Custom',
     }
 
     return (
@@ -68,7 +67,7 @@ function ModeSelector({ mode, onChange }: { mode: ComparisonMode; onChange: (m: 
                 <>
                     <div className="fixed inset-0 z-10" onClick={() => setIsOpen(false)} />
                     <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-md shadow-lg py-1 z-20 min-w-[140px]">
-                        {(['day', 'week', 'custom'] as ComparisonMode[]).map((m) => (
+                        {(['day', 'week'] as ComparisonMode[]).map((m) => (
                             <button
                                 key={m}
                                 onClick={() => { onChange(m); setIsOpen(false) }}
@@ -237,14 +236,6 @@ export function TimeComparison({ dataSummary, selectedDay }: Props) {
 
     // Get ranges based on mode - memoize with stable dependencies
     const { rangeA, rangeB, labelA, labelB } = useMemo(() => {
-        if (mode === 'custom' && customA && customB) {
-            return {
-                rangeA: customA,
-                rangeB: customB,
-                labelA: formatDateRange(customA),
-                labelB: formatDateRange(customB),
-            }
-        }
         const ranges = getComparisonRanges(mode, referenceDate)
         return {
             rangeA: ranges.a,
@@ -252,7 +243,7 @@ export function TimeComparison({ dataSummary, selectedDay }: Props) {
             labelA: formatDateRange(ranges.a),
             labelB: formatDateRange(ranges.b),
         }
-    }, [mode, referenceDate, customA, customB])
+    }, [mode, referenceDate])
 
     // Use stringified range as stable dependency for effects
     const rangeAKey = `${rangeA.from.getTime()}-${rangeA.to.getTime()}`
