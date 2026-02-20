@@ -31,7 +31,8 @@ RUN pip install --no-cache-dir \
     scipy>=1.7.0 \
     matplotlib>=3.5.0 \
     pandas \
-    pyyaml
+    pyyaml \
+    tqdm
 
 # Set Python path and suppress NNPACK warning (CPU-only optimization not available)
 ENV PYTHONPATH=/app
