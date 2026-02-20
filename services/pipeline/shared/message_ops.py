@@ -100,7 +100,9 @@ class MessageOpsMixin:
             return None
 
         if hasattr(self, "key_deserializer"):
-            ctx = SerializationContext(self.config.input_topic, MessageField.KEY)
+            # Use actual message topic (not config.input_topic which may be None for patterns)
+            topic = raw_message.topic() or self.config.input_topic
+            ctx = SerializationContext(topic, MessageField.KEY)
             loop = asyncio.get_event_loop()
             return await loop.run_in_executor(
                 self._serialization_executor, lambda: self.key_deserializer(raw_message.key(), ctx)
@@ -113,7 +115,9 @@ class MessageOpsMixin:
             return None
 
         if hasattr(self, "value_deserializer"):
-            ctx = SerializationContext(self.config.input_topic, MessageField.VALUE)
+            # Use actual message topic (not config.input_topic which may be None for patterns)
+            topic = raw_message.topic() or self.config.input_topic
+            ctx = SerializationContext(topic, MessageField.VALUE)
             loop = asyncio.get_event_loop()
             return await loop.run_in_executor(
                 self._serialization_executor,

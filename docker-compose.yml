@@ -334,7 +334,7 @@ services:
       start_period: 30s
     environment:
       DJANGO_SETTINGS_MODULE: sequoia.settings.prod
-      SECRET_KEY: ${DJANGO_SECRET_KEY}
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
       # PostgreSQL
       POSTGRES_DB: ${POSTGRES_DB:-sequoia}
       POSTGRES_USER: ${POSTGRES_USER:-sequoia}
@@ -355,6 +355,20 @@ services:
       # Frontend URL (for CORS)
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       ENVIRONMENT: ${ENVIRONMENT:-development}
+      # JWT keys (file-based for Docker Secrets compatibility)
+      JWT_SIGNING_KEY_FILE: ${JWT_SIGNING_KEY_FILE:-}
+      JWT_VERIFYING_KEY_FILE: ${JWT_VERIFYING_KEY_FILE:-}
+      # CORS
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost}
+      # SSL settings
+      SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-true}
+      # Data directory for fiber cables, infrastructure config
+      SEQUOIA_DATA_DIR: /infrastructure
+      # Schema Registry for Kafka Avro deserialization
+      SCHEMA_REGISTRY_URL: http://schema-registry:8081
+    volumes:
+      - ./infrastructure:/infrastructure:ro
     networks:
       - internal
       - default

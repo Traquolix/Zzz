@@ -82,10 +82,17 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
         """Auto-detect pattern type from inheritance."""
         from .consumer import Consumer
         from .producer import Producer
-        from .transformer import BufferedTransformer, MultiTransformer, Transformer
+        from .transformer import (
+            BufferedTransformer,
+            MultiTransformer,
+            RollingBufferedTransformer,
+            Transformer,
+        )
 
         if isinstance(self, Producer):
             return ServiceType.PRODUCER
+        elif isinstance(self, RollingBufferedTransformer):
+            return ServiceType.BUFFERED_TRANSFORMER
         elif isinstance(self, BufferedTransformer):
             return ServiceType.BUFFERED_TRANSFORMER
         elif isinstance(self, MultiTransformer):
