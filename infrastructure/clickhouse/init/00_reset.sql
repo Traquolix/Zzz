@@ -13,12 +13,16 @@ DROP VIEW IF EXISTS sequoia.fiber_speed_data_1s_carros_mv;
 DROP TABLE IF EXISTS sequoia.fiber_speed_data_1s_carros;
 DROP VIEW IF EXISTS sequoia.fiber_speed_data_1s_mathis_raw_mv;
 DROP TABLE IF EXISTS sequoia.fiber_speed_data_1s_mathis_raw;
+DROP VIEW IF EXISTS sequoia.fiber_speed_data_1s_mathis_mv;
+DROP TABLE IF EXISTS sequoia.fiber_speed_data_1s_mathis;
 DROP VIEW IF EXISTS sequoia.fiber_speed_data_100ms_promenade_mv;
 DROP TABLE IF EXISTS sequoia.fiber_speed_data_100ms_promenade;
 DROP VIEW IF EXISTS sequoia.fiber_speed_data_100ms_carros_mv;
 DROP TABLE IF EXISTS sequoia.fiber_speed_data_100ms_carros;
 DROP VIEW IF EXISTS sequoia.fiber_speed_data_100ms_mathis_raw_mv;
 DROP TABLE IF EXISTS sequoia.fiber_speed_data_100ms_mathis_raw;
+DROP VIEW IF EXISTS sequoia.fiber_speed_data_100ms_mathis_mv;
+DROP TABLE IF EXISTS sequoia.fiber_speed_data_100ms_mathis;
 
 -- Drop old combined speed tables
 DROP VIEW IF EXISTS sequoia.fiber_speed_data_1h_mv;
@@ -32,6 +36,7 @@ DROP TABLE IF EXISTS sequoia.fiber_speed_data_1m;
 DROP VIEW IF EXISTS sequoia.fiber_speed_data_30s_promenade_mv;
 DROP VIEW IF EXISTS sequoia.fiber_speed_data_30s_carros_mv;
 DROP VIEW IF EXISTS sequoia.fiber_speed_data_30s_mathis_raw_mv;
+DROP VIEW IF EXISTS sequoia.fiber_speed_data_30s_mathis_mv;
 DROP TABLE IF EXISTS sequoia.fiber_speed_data_30s;
 DROP VIEW IF EXISTS sequoia.fiber_speed_data_1s_mv;
 DROP TABLE IF EXISTS sequoia.fiber_speed_data_1s;
@@ -47,12 +52,16 @@ DROP VIEW IF EXISTS sequoia.fiber_count_data_1s_carros_mv;
 DROP TABLE IF EXISTS sequoia.fiber_count_data_1s_carros;
 DROP VIEW IF EXISTS sequoia.fiber_count_data_1s_mathis_raw_mv;
 DROP TABLE IF EXISTS sequoia.fiber_count_data_1s_mathis_raw;
+DROP VIEW IF EXISTS sequoia.fiber_count_data_1s_mathis_mv;
+DROP TABLE IF EXISTS sequoia.fiber_count_data_1s_mathis;
 DROP VIEW IF EXISTS sequoia.fiber_count_data_100ms_promenade_mv;
 DROP TABLE IF EXISTS sequoia.fiber_count_data_100ms_promenade;
 DROP VIEW IF EXISTS sequoia.fiber_count_data_100ms_carros_mv;
 DROP TABLE IF EXISTS sequoia.fiber_count_data_100ms_carros;
 DROP VIEW IF EXISTS sequoia.fiber_count_data_100ms_mathis_raw_mv;
 DROP TABLE IF EXISTS sequoia.fiber_count_data_100ms_mathis_raw;
+DROP VIEW IF EXISTS sequoia.fiber_count_data_100ms_mathis_mv;
+DROP TABLE IF EXISTS sequoia.fiber_count_data_100ms_mathis;
 
 -- Drop old combined count tables
 DROP VIEW IF EXISTS sequoia.fiber_vehicle_counts_1h_mv;
@@ -66,6 +75,7 @@ DROP TABLE IF EXISTS sequoia.fiber_vehicle_counts_1m;
 DROP VIEW IF EXISTS sequoia.fiber_count_data_30s_promenade_mv;
 DROP VIEW IF EXISTS sequoia.fiber_count_data_30s_carros_mv;
 DROP VIEW IF EXISTS sequoia.fiber_count_data_30s_mathis_raw_mv;
+DROP VIEW IF EXISTS sequoia.fiber_count_data_30s_mathis_mv;
 DROP TABLE IF EXISTS sequoia.fiber_count_data_30s;
 
 -- Drop old raw count table

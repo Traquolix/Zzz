@@ -14,7 +14,7 @@ from apps.fibers.models import FiberAssignment
 from apps.shared.constants import ALL_WIDGETS, ALL_LAYERS, VIEWER_WIDGETS, VIEWER_LAYERS
 
 # All fiber IDs from fibers.yaml
-ALL_FIBER_IDS = ['carros', 'mathis_raw', 'promenade']
+ALL_FIBER_IDS = ['carros', 'mathis', 'promenade']
 
 # Traffic-only widgets and layers for the restricted demo org
 TRAFFIC_WIDGETS = ['map', 'traffic_monitor', 'incidents']

@@ -44,7 +44,7 @@ class Command(BaseCommand):
         fiber_files = [
             ('carros.json', {'lanes': 6, 'speed_limit': 110, 'traffic_density': 'high'}),
             ('promenade.json', {'lanes': 4, 'speed_limit': 50, 'traffic_density': 'medium'}),
-            ('mathis_raw.json', {'lanes': 4, 'speed_limit': 90, 'traffic_density': 'low'}),
+            ('mathis.json', {'lanes': 4, 'speed_limit': 90, 'traffic_density': 'low'}),
         ]
 
         fibers = []
