@@ -114,7 +114,7 @@ fibers:
       # Section 1: Channels 0-1700 of Mathis ROI (covers active vehicle zone)
       - name: section1
         channels: [0, 1700]  # Updated 2026-02-18: Extended to cover actual activity
-        model: dtan_mathis
+        model: dtan_mathis_section1
 
         pipeline:
           - step: common_mode_removal
@@ -140,7 +140,7 @@ fibers:
       # Section 2: Channels 2500-3000 of Mathis ROI (second active vehicle zone)
       - name: section2
         channels: [2500, 3000]  # Updated 2026-02-18: Moved to actual activity zone
-        model: dtan_mathis
+        model: dtan_mathis_section2
 
         pipeline:
           - step: common_mode_removal
@@ -202,9 +202,9 @@ fibers:
 
 models:
   dtan_carros:
-    fiber_id: carros  # Used for calibration lookup
+    fiber_id: carros
     path: ai_engine/model_vehicle/models_parameters
-    exp_name: dtan_carros_48h_full
+    exp_name: dtan_carros_default  # Trained on carros data
     version: best
     type: dtan
 
@@ -221,10 +221,6 @@ models:
       max_speed_kmh: 120.0
       correlation_threshold: 130.0  # Fallback if calibration fails or disabled
       use_calibration: true         # Enable variable threshold + coupling correction
-      # Window overlap and edge trimming for seamless output:
-      # - Edge trim = safety(15) + glrt_window//2(10) = 25 samples per edge
-      # - Overlap must be >= 2 * edge_trim (50 samples) for seamless handoff
-      # - With 0.1667 ratio: 300 * 0.1667 = 50 samples overlap ✓
       time_overlap_ratio: 0.1667    # 50 samples = 2 * 25 (edge trim)
       glrt_window: 20               # Used in edge trim calculation
 
@@ -233,88 +229,141 @@ models:
       enabled: true
       window_seconds: 30
       step_samples: 250
-      # TEMPORARY: Use simple speed-based counting while NN is being recalibrated
-      # Set to false to use neural network counting (currently broken due to normalization mismatch)
       use_simple_counting_TEMPORARY: true
 
     # Visualization generation (optional)
     visualization:
       enabled: true
-      interval_seconds: 600       # Generate plot every 10 minutes
+      interval_seconds: 600
       output_dir: /app/visualizations
 
-  dtan_mathis:
-    fiber_id: mathis  # Used for calibration lookup (no calibration files yet)
-    path: ai_engine/model_vehicle/models_parameters  # Reusing carros model files
-    exp_name: dtan_carros_48h_full  # Same model as carros
+  dtan_mathis_section1:
+    fiber_id: mathis
+    path: ai_engine/model_vehicle/models_parameters
+    exp_name: dtan_mathis_section1  # Trained on mathis section1 data
     version: best
     type: dtan
 
-    # Inference parameters
     inference:
-      sampling_rate_hz: 10.0      # Expected input rate (after temporal decimation)
-      window_seconds: 30          # Buffer duration for inference
-      channels_per_section: 9     # Channels processed together
-      gauge_meters: 10            # Fiber gauge length
+      sampling_rate_hz: 10.0
+      window_seconds: 30
+      channels_per_section: 9
+      gauge_meters: 10
 
-    # Speed detection parameters
     speed_detection:
       min_speed_kmh: 20.0
       max_speed_kmh: 120.0
-      correlation_threshold: 130.0  # Static threshold (no calibration)
-      use_calibration: false        # Disabled - no promenade calibration files yet
-      time_overlap_ratio: 0.1667    # 50 samples = 2 * 25 (edge trim)
-      glrt_window: 20               # Used in edge trim calculation
+      correlation_threshold: 130.0
+      use_calibration: false  # No calibration files yet
+      time_overlap_ratio: 0.1667
+      glrt_window: 20
 
-    # Vehicle counting (optional)
     counting:
       enabled: true
       window_seconds: 30
       step_samples: 250
-      # TEMPORARY: Use simple speed-based counting
       use_simple_counting_TEMPORARY: true
 
-    # Visualization generation (optional)
     visualization:
       enabled: true
-      interval_seconds: 600       # Generate plot every 10 minutes
+      interval_seconds: 600
+      output_dir: /app/visualizations
+
+  dtan_mathis_section2:
+    fiber_id: mathis
+    path: ai_engine/model_vehicle/models_parameters
+    exp_name: dtan_mathis_section2  # Trained on mathis section2 data
+    version: best
+    type: dtan
+
+    inference:
+      sampling_rate_hz: 10.0
+      window_seconds: 30
+      channels_per_section: 9
+      gauge_meters: 10
+
+    speed_detection:
+      min_speed_kmh: 20.0
+      max_speed_kmh: 120.0
+      correlation_threshold: 130.0
+      use_calibration: false  # No calibration files yet
+      time_overlap_ratio: 0.1667
+      glrt_window: 20
+
+    counting:
+      enabled: true
+      window_seconds: 30
+      step_samples: 250
+      use_simple_counting_TEMPORARY: true
+
+    visualization:
+      enabled: true
+      interval_seconds: 600
       output_dir: /app/visualizations
 
   dtan_promenade:
-    fiber_id: promenade  # Used for calibration lookup (no calibration files yet)
-    path: ai_engine/model_vehicle/models_parameters  # Reusing carros model files
-    exp_name: dtan_carros_48h_full  # Same model as carros
+    fiber_id: promenade
+    path: ai_engine/model_vehicle/models_parameters
+    exp_name: dtan_promenade_default  # Trained on promenade data
     version: best
     type: dtan
 
-    # Inference parameters
     inference:
-      sampling_rate_hz: 10.0      # Expected input rate (after temporal decimation)
-      window_seconds: 30          # Buffer duration for inference
-      channels_per_section: 9     # Channels processed together
-      gauge_meters: 10            # Fiber gauge length
+      sampling_rate_hz: 10.0
+      window_seconds: 30
+      channels_per_section: 9
+      gauge_meters: 10
 
-    # Speed detection parameters
     speed_detection:
       min_speed_kmh: 20.0
       max_speed_kmh: 120.0
-      correlation_threshold: 130.0  # Static threshold (no calibration)
-      use_calibration: false        # Disabled - no promenade calibration files yet
-      time_overlap_ratio: 0.1667    # 50 samples = 2 * 25 (edge trim)
-      glrt_window: 20               # Used in edge trim calculation
+      correlation_threshold: 130.0
+      use_calibration: false  # No calibration files yet
+      time_overlap_ratio: 0.1667
+      glrt_window: 20
 
-    # Vehicle counting (optional)
     counting:
       enabled: true
       window_seconds: 30
       step_samples: 250
-      # TEMPORARY: Use simple speed-based counting
       use_simple_counting_TEMPORARY: true
 
-    # Visualization generation (optional)
     visualization:
       enabled: true
-      interval_seconds: 600       # Generate plot every 10 minutes
+      interval_seconds: 600
+      output_dir: /app/visualizations
+
+  # Legacy model - kept for backwards compatibility
+  dtan_mathis:
+    fiber_id: mathis
+    path: ai_engine/model_vehicle/models_parameters
+    exp_name: dtan_mathis_section1  # Default to section1 model
+    version: best
+    type: dtan
+
+    inference:
+      sampling_rate_hz: 10.0
+      window_seconds: 30
+      channels_per_section: 9
+      gauge_meters: 10
+
+    speed_detection:
+      min_speed_kmh: 20.0
+      max_speed_kmh: 120.0
+      correlation_threshold: 130.0
+      use_calibration: false
+      time_overlap_ratio: 0.1667
+      glrt_window: 20
+
+    counting:
+      enabled: true
+      window_seconds: 30
+      step_samples: 250
+      use_simple_counting_TEMPORARY: true
+
+    visualization:
+      enabled: true
+      interval_seconds: 600
       output_dir: /app/visualizations
 
 # =============================================================================
