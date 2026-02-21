@@ -302,6 +302,7 @@ class AIEngineService(RollingBufferedTransformer):
             fs=spec.inference.sampling_rate_hz,
             exp_name=spec.exp_name,
             version=spec.version,
+            bidirectional_rnn=spec.inference.bidirectional_rnn,
         )
 
         # Load calibration for default model if enabled
