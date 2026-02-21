@@ -214,6 +214,7 @@ models:
       window_seconds: 30          # Buffer duration for inference
       channels_per_section: 9     # Channels processed together
       gauge_meters: 10            # Fiber gauge length
+      bidirectional_rnn: false    # Current models are unidirectional
 
     # Speed detection parameters
     speed_detection:
@@ -249,6 +250,7 @@ models:
       window_seconds: 30
       channels_per_section: 9
       gauge_meters: 10
+      bidirectional_rnn: false
 
     speed_detection:
       min_speed_kmh: 20.0
@@ -281,6 +283,7 @@ models:
       window_seconds: 30
       channels_per_section: 9
       gauge_meters: 10
+      bidirectional_rnn: false
 
     speed_detection:
       min_speed_kmh: 20.0
@@ -313,6 +316,7 @@ models:
       window_seconds: 30
       channels_per_section: 9
       gauge_meters: 10
+      bidirectional_rnn: false
 
     speed_detection:
       min_speed_kmh: 20.0
@@ -346,6 +350,7 @@ models:
       window_seconds: 30
       channels_per_section: 9
       gauge_meters: 10
+      bidirectional_rnn: false
 
     speed_detection:
       min_speed_kmh: 20.0

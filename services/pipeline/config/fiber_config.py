@@ -74,6 +74,7 @@ class InferenceConfig:
     window_seconds: int = 30
     channels_per_section: int = 9
     gauge_meters: int = 10
+    bidirectional_rnn: bool = True  # False for newer unidirectional models
 
     @classmethod
     def from_dict(cls, data: dict) -> InferenceConfig:
@@ -82,6 +83,7 @@ class InferenceConfig:
             window_seconds=data.get("window_seconds", 30),
             channels_per_section=data.get("channels_per_section", 9),
             gauge_meters=data.get("gauge_meters", 10),
+            bidirectional_rnn=data.get("bidirectional_rnn", True),
         )
 
     @property

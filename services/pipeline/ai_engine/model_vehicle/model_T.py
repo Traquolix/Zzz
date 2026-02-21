@@ -48,6 +48,7 @@ class Args_NN_model_all_channels:
         exp_name: str,
         version: str,
         models_path: str = "models_parameters",
+        bidirectional_rnn: bool = True,
     ):
         self.exp_name = exp_name
         self.version = version
@@ -59,7 +60,7 @@ class Args_NN_model_all_channels:
         self.N_channels = N_channels
 
         self.tess_size = 20
-        self.bidirectional_RNN = True
+        self.bidirectional_RNN = bidirectional_rnn
         self.zero_boundary = True
 
         if TORCH_AVAILABLE and torch.backends.mps.is_available():
