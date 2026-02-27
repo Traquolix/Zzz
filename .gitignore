@@ -8,12 +8,15 @@ experiments/
 diagnostic_output/
 docs/research/
 
+
+secrets/
 # Training environment (large, reproducible)
 training_env/
 
 # Root-level generated outputs
 /*.png
 
+data/
 
 # Script outputs (keep scripts, ignore generated images)
 scripts/**/*.png
