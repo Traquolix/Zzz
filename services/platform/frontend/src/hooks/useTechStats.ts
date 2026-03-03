@@ -40,13 +40,17 @@ export function useTechStats(): TechStats {
 
     // Fetch server stats periodically
     useEffect(() => {
+        let mounted = true
+
         const loadStats = async () => {
             try {
                 const data = await fetchStats()
-                setServerStats({
-                    vehicleCount: data.activeVehicles,
-                    activeIncidents: data.activeIncidents,
-                })
+                if (mounted) {
+                    setServerStats({
+                        vehicleCount: data.activeVehicles,
+                        activeIncidents: data.activeIncidents,
+                    })
+                }
             } catch {
                 // Silently fail - stats are optional
             }
@@ -54,7 +58,10 @@ export function useTechStats(): TechStats {
 
         loadStats()
         const interval = setInterval(loadStats, 5000)
-        return () => clearInterval(interval)
+        return () => {
+            mounted = false
+            clearInterval(interval)
+        }
     }, [])
 
     // Subscribe to detections and count them

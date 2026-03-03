@@ -120,6 +120,10 @@ GROUP BY src.fiber_id, toStartOfHour(src.ts), src.ch;
 -- ============================================================================
 
 -- Tier 1: High-resolution count data
+-- NOTE: ORDER BY includes ch_end because the AI engine can produce records with
+-- the same (fiber_id, ts, ch_start) but different ch_end values (overlapping
+-- detection zones of different lengths). Without ch_end, ReplacingMergeTree
+-- would silently deduplicate them on merge, losing vehicle counts.
 CREATE TABLE IF NOT EXISTS sequoia.count_hires
 (
     fiber_id LowCardinality(String) CODEC(ZSTD(1)),
@@ -130,7 +134,7 @@ CREATE TABLE IF NOT EXISTS sequoia.count_hires
 )
 ENGINE = ReplacingMergeTree()
 PARTITION BY (fiber_id, toYYYYMMDD(ts))
-ORDER BY (fiber_id, ts, ch_start)
+ORDER BY (fiber_id, ts, ch_start, ch_end)
 TTL toDateTime(ts) + INTERVAL 48 HOUR
 COMMENT 'High-resolution vehicle count data. TTL: 48 hours';
 
@@ -156,7 +160,7 @@ CREATE TABLE IF NOT EXISTS sequoia.count_1m
 )
 ENGINE = AggregatingMergeTree()
 PARTITION BY toYYYYMM(ts)
-ORDER BY (fiber_id, ts, ch_start)
+ORDER BY (fiber_id, ts, ch_start, ch_end)
 TTL ts + INTERVAL 90 DAY
 COMMENT '1-minute aggregated vehicle count data (AggregatingMergeTree). TTL: 90 days';
 
@@ -173,7 +177,7 @@ CREATE TABLE IF NOT EXISTS sequoia.count_1h
 )
 ENGINE = AggregatingMergeTree()
 PARTITION BY toYYYYMM(ts)
-ORDER BY (fiber_id, ts, ch_start)
+ORDER BY (fiber_id, ts, ch_start, ch_end)
 COMMENT '1-hour aggregated vehicle count data (AggregatingMergeTree). Permanent storage';
 
 -- MV: count_hires → count_1m

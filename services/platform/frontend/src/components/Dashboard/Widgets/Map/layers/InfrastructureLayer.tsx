@@ -4,6 +4,7 @@ import { useMap } from '../MapContext'
 import { useFibers } from '@/hooks/useFibers'
 import { useInfrastructure } from '@/hooks/useInfrastructure'
 import { useSection } from '@/hooks/useSection'
+import { logger } from '@/lib/logger'
 
 const HIGHLIGHT_SOURCE_ID = 'infrastructure-highlight-source'
 const HIGHLIGHT_LAYER_ID = 'infrastructure-highlight-layer'
@@ -121,7 +122,9 @@ export function InfrastructureLayer() {
         try {
             if (map.getLayer(HIGHLIGHT_LAYER_ID)) map.removeLayer(HIGHLIGHT_LAYER_ID)
             if (map.getSource(HIGHLIGHT_SOURCE_ID)) map.removeSource(HIGHLIGHT_SOURCE_ID)
-        } catch { /* ignore */ }
+        } catch (error) {
+            logger.debug('Map cleanup (highlight):', error)
+        }
 
         const hoveredId = hoveredIdRef.current
         if (!hoveredId) return
@@ -129,7 +132,7 @@ export function InfrastructureLayer() {
         const infra = infrastructures.find(i => i.id === hoveredId)
         if (!infra) return
 
-        const fiber = fibers.find(f => f.id === infra.fiberId)
+        const fiber = fibers.find(f => f.parentFiberId === infra.fiberId)
         if (!fiber) return
 
         const coords = fiber.coordinates.slice(infra.startChannel, infra.endChannel + 1)
@@ -156,7 +159,9 @@ export function InfrastructureLayer() {
                     'line-opacity': 0.5
                 }
             })
-        } catch { /* ignore */ }
+        } catch (error) {
+            logger.debug('Map cleanup (add highlight):', error)
+        }
     }
 
     // Render selected infrastructure highlight
@@ -167,14 +172,16 @@ export function InfrastructureLayer() {
         try {
             if (map.getLayer(SELECTED_LAYER_ID)) map.removeLayer(SELECTED_LAYER_ID)
             if (map.getSource(SELECTED_SOURCE_ID)) map.removeSource(SELECTED_SOURCE_ID)
-        } catch { /* ignore */ }
+        } catch (error) {
+            logger.debug('Map cleanup (selected):', error)
+        }
 
         if (!selectedInfrastructure) return
 
         const infra = infrastructures.find(i => i.id === selectedInfrastructure.id)
         if (!infra) return
 
-        const fiber = fibers.find(f => f.id === infra.fiberId)
+        const fiber = fibers.find(f => f.parentFiberId === infra.fiberId)
         if (!fiber) return
 
         const coords = fiber.coordinates.slice(infra.startChannel, infra.endChannel + 1)
@@ -207,7 +214,9 @@ export function InfrastructureLayer() {
             try {
                 if (map.getLayer(SELECTED_LAYER_ID)) map.removeLayer(SELECTED_LAYER_ID)
                 if (map.getSource(SELECTED_SOURCE_ID)) map.removeSource(SELECTED_SOURCE_ID)
-            } catch { /* ignore */ }
+            } catch (error) {
+                logger.debug('Map cleanup (selected unmount):', error)
+            }
         }
     }, [map, selectedInfrastructure, infrastructures, fibers])
 
@@ -226,7 +235,9 @@ export function InfrastructureLayer() {
                 if (map?.getSource(HIGHLIGHT_SOURCE_ID)) map.removeSource(HIGHLIGHT_SOURCE_ID)
                 if (map?.getLayer(SELECTED_LAYER_ID)) map.removeLayer(SELECTED_LAYER_ID)
                 if (map?.getSource(SELECTED_SOURCE_ID)) map.removeSource(SELECTED_SOURCE_ID)
-            } catch { /* ignore */ }
+            } catch (error) {
+                logger.debug('Map cleanup (full unmount):', error)
+            }
         }
     }, [map])
 

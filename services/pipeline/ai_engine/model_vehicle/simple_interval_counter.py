@@ -1,71 +1,128 @@
-"""
-=============================================================================
-TEMPORARY SIMPLE INTERVAL-BASED VEHICLE COUNTING
-=============================================================================
+"""Peak-based vehicle counting with car/truck classification.
 
-This is a TEMPORARY counting solution that counts vehicles directly from
-speed detection intervals, ensuring perfect correlation with speed visualizations.
+Counts vehicles by finding peaks in the summed GLRT signal within each
+detection interval, matching the approach from notebook experiment 12.
 
-Each speed detection interval = 1 vehicle.
-
-This replaces the 6-minute sliding window approach and provides immediate,
-interpretable counts that align with what's visible in the visualizations.
-
-TODO: Recalibrate the neural network once proper feature statistics are collected.
-
-=============================================================================
+Each interval may contain multiple vehicles (peaks). Peak height
+determines car vs truck classification.
 """
 
 from __future__ import annotations
 
 import logging
-import numpy as np
 from typing import List, Tuple
+
+import numpy as np
+from scipy.signal import find_peaks
 
 logger = logging.getLogger(__name__)
 
 
-class SimpleIntervalCounter:
-    """TEMPORARY: Counts vehicles directly from speed detection intervals.
+def count_peaks_in_segment(
+    glrt_segment: np.ndarray,
+    threshold: float,
+    fs: float,
+    classify_threshold: float,
+    min_peak_distance_s: float = 0.25,
+) -> Tuple[int, int, int]:
+    """Count vehicle peaks within a GLRT segment.
 
-    This provides immediate correlation between counts and speed detections
-    by counting the same intervals used for speed analysis.
+    Args:
+        glrt_segment: 1D array of GLRT values
+        threshold: Detection threshold (summed across pairs)
+        fs: Sample rate (Hz)
+        classify_threshold: Threshold for truck classification
+        min_peak_distance_s: Min seconds between peaks
+
+    Returns:
+        (n_vehicles, n_cars, n_trucks)
+    """
+    if len(glrt_segment) == 0:
+        return 0, 0, 0
+
+    min_peak_distance = max(1, int(min_peak_distance_s * fs))
+    min_prominence = max(1.0, 0.1 * threshold)
+
+    peaks, props = find_peaks(
+        glrt_segment,
+        height=threshold,
+        distance=min_peak_distance,
+        prominence=min_prominence,
+    )
+
+    if len(peaks) == 0:
+        # No distinct peaks - check if signal exceeds threshold at all
+        if len(glrt_segment) > 0 and np.nanmax(glrt_segment) >= threshold:
+            if np.nanmax(glrt_segment) >= classify_threshold:
+                return 1, 0, 1  # 1 truck
+            else:
+                return 1, 1, 0  # 1 car
+        return 0, 0, 0
+
+    n_vehicles = len(peaks)
+    peak_heights = props.get("peak_heights", np.array([]))
+    n_trucks = int(np.sum(peak_heights >= classify_threshold))
+    n_cars = n_vehicles - n_trucks
+
+    return n_vehicles, n_cars, n_trucks
+
+
+class SimpleIntervalCounter:
+    """Counts vehicles using peak detection in GLRT signal.
+
+    For each detection interval, finds peaks in the summed GLRT and
+    classifies them as car or truck based on peak height.
 
     Args:
         fiber_id: Fiber identifier for logging
+        sampling_rate_hz: Sampling rate (Hz)
+        correlation_threshold: Per-pair GLRT threshold
+        channels_per_section: Number of channels per section (Nch)
+        classify_threshold_factor: Peak height > threshold * factor = truck
+        min_peak_distance_s: Min seconds between peaks
     """
 
-    def __init__(self, fiber_id: str = "unknown"):
+    def __init__(
+        self,
+        fiber_id: str = "unknown",
+        sampling_rate_hz: float = 10.0,
+        correlation_threshold: float = 500.0,
+        channels_per_section: int = 9,
+        classify_threshold_factor: float = 10.0,
+        min_peak_distance_s: float = 0.25,
+    ):
         self.fiber_id = fiber_id
-        self._first_run = True
+        self.fs = sampling_rate_hz
+        self.n_pairs = channels_per_section - 1
+        self.summed_threshold = correlation_threshold * self.n_pairs
+        self.classify_threshold = self.summed_threshold * classify_threshold_factor
+        self.min_peak_distance_s = min_peak_distance_s
 
-        if self._first_run:
-            logger.warning(
-                "=" * 80 + "\n"
-                "TEMPORARY SIMPLE INTERVAL COUNTING ACTIVE\n"
-                f"Fiber: {fiber_id}\n"
-                "Counting vehicles directly from speed detection intervals.\n"
-                "Each valid speed interval = 1 vehicle.\n"
-                "Perfect correlation with speed visualizations.\n"
-                "TODO: Recalibrate neural network normalization.\n"
-                + "=" * 80
-            )
+        logger.info(
+            f"Peak counter initialized for '{fiber_id}': "
+            f"threshold={self.summed_threshold:.0f}, "
+            f"classify={self.classify_threshold:.0f}, "
+            f"min_peak_dist={min_peak_distance_s}s"
+        )
 
     def count_from_intervals(
         self,
         filtered_speed: np.ndarray,
+        glrt_summed: np.ndarray,
         intervals_list: List[Tuple[List[int], List[int]]],
         timestamps_ns: List[int],
     ) -> Tuple[List, List, List]:
-        """Count vehicles from speed detection intervals.
+        """Count vehicles from detection intervals using peak detection.
 
         Args:
             filtered_speed: Speed array (sections, channels, time) - already filtered
+            glrt_summed: Summed GLRT array (sections, time)
             intervals_list: Detection intervals [(starts, ends), ...] per section
             timestamps_ns: Timestamps for the window
 
         Returns:
-            Tuple of (counts, intervals, timestamps) matching the format expected downstream
+            Tuple of (counts, intervals, timestamps) matching the format expected downstream.
+            Each count entry is a tuple (n_vehicles, n_cars, n_trucks).
         """
         counts = []
 
@@ -73,29 +130,16 @@ class SimpleIntervalCounter:
             section_counts = []
 
             for start, end in zip(starts, ends):
-                # Get speed data for this interval
-                speed_slice = filtered_speed[section_idx, :, start:end]
-                median_speed = np.nanmedian(speed_slice)
+                glrt_segment = glrt_summed[section_idx, start:end]
+                n_vehicles, n_cars, n_trucks = count_peaks_in_segment(
+                    glrt_segment,
+                    self.summed_threshold,
+                    self.fs,
+                    self.classify_threshold,
+                    self.min_peak_distance_s,
+                )
+                section_counts.append((n_vehicles, n_cars, n_trucks))
 
-                # Count as 1 vehicle if valid speed exists
-                if not np.isnan(median_speed) and median_speed != 0:
-                    section_counts.append(1.0)
-                else:
-                    section_counts.append(0.0)
+            counts.append(section_counts)
 
-            counts.append(np.array(section_counts))
-
-        if self._first_run:
-            total = sum(np.sum(c) for c in counts)
-            non_zero = sum(np.count_nonzero(c) for c in counts)
-            logger.info(
-                f"[TEMPORARY INTERVAL COUNTING] First run: {len(counts)} sections, "
-                f"{non_zero} vehicles (from {sum(len(starts) for starts, _ in intervals_list)} intervals)"
-            )
-            self._first_run = False
-
-        # Return in format expected by counting pipeline
-        # counts: list of arrays per section
-        # intervals: same as input (already in correct format)
-        # timestamps: window timestamps
         return counts, intervals_list, timestamps_ns

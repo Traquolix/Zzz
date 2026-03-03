@@ -1,5 +1,6 @@
 import { Component, type ReactNode } from 'react'
 import i18next from 'i18next'
+import { logger } from '@/lib/logger'
 
 type ErrorBoundaryProps = {
     children: ReactNode
@@ -27,7 +28,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     }
 
     componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-        console.error('ErrorBoundary caught an error:', error, errorInfo)
+        logger.error('ErrorBoundary caught an error:', error, errorInfo)
         this.props.onError?.(error, errorInfo)
     }
 
@@ -50,7 +51,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                     </div>
                     <h3 className="text-lg font-semibold text-slate-700 mb-1">{i18next.t('common.somethingWentWrong')}</h3>
                     <p className="text-sm text-slate-500 mb-4 text-center max-w-xs">
-                        {this.state.error?.message || i18next.t('common.unexpectedError')}
+                        {i18next.t('common.unexpectedError')}
                     </p>
                     <button
                         onClick={this.handleRetry}

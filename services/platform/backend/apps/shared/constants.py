@@ -2,6 +2,9 @@
 Shared constants and enums for the SequoIA platform.
 """
 
+# Realtime simulation and Kafka bridge
+MAP_REFRESH_INTERVAL = 300  # 5 minutes
+
 # Infrastructure types
 INFRASTRUCTURE_TYPES = [
     ('bridge', 'Bridge'),
@@ -16,7 +19,7 @@ USER_ROLES = [
 ]
 
 # Default widget and layer sets
-ALL_WIDGETS = ['map', 'traffic_monitor', 'incidents', 'shm']
+ALL_WIDGETS = ['map', 'traffic_monitor', 'incidents', 'shm', 'admin']
 ALL_LAYERS = [
     'cables', 'fibers', 'vehicles', 'heatmap', 'landmarks',
     'sections', 'detections', 'incidents', 'infrastructure',

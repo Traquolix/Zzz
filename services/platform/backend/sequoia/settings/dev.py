@@ -12,13 +12,22 @@ from .base import *  # noqa: F401, F403
 # Load .env.dev from backend root if it exists
 _env_dev = _Path(__file__).resolve().parent.parent.parent / '.env.dev'
 if _env_dev.exists():
-    load_dotenv(_env_dev)
+    load_dotenv(_env_dev, override=True)
+
+# Re-read ClickHouse settings from env AFTER load_dotenv.
+# base.py reads them at import time (before load_dotenv runs), so the
+# star-import captures stale values.  Re-evaluate here.
+CLICKHOUSE_HOST = os.environ.get('CLICKHOUSE_HOST', 'localhost')
+CLICKHOUSE_HTTP_PORT = int(os.environ.get('CLICKHOUSE_HTTP_PORT', 8123))
+CLICKHOUSE_DATABASE = os.environ.get('CLICKHOUSE_DATABASE', 'sequoia')
+CLICKHOUSE_USER = os.environ.get('CLICKHOUSE_USER', 'sequoia')
+CLICKHOUSE_PASSWORD = os.environ.get('CLICKHOUSE_PASSWORD', '')
 
 SECRET_KEY = 'django-insecure-sequoia-dev-key-change-in-production'
 
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '192.168.1.100']
 
 # Database — SQLite for development
 DATABASES = {

@@ -1,10 +1,4 @@
-import { useContext } from 'react'
 import { MapSelectionContext } from '@/context/MapSelectionContext'
+import { createContextHook } from './createContextHook'
 
-export function useMapSelection() {
-    const context = useContext(MapSelectionContext)
-    if (!context) {
-        throw new Error('useMapSelection must be used within a MapSelectionProvider')
-    }
-    return context
-}
+export const useMapSelection = createContextHook(MapSelectionContext, 'useMapSelection', 'MapSelectionProvider')

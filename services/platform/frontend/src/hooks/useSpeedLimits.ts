@@ -1,10 +1,4 @@
-import { useContext } from 'react'
 import { SpeedLimitContext } from '@/context/SpeedLimitContext'
+import { createContextHook } from './createContextHook'
 
-export function useSpeedLimits() {
-    const context = useContext(SpeedLimitContext)
-    if (!context) {
-        throw new Error('useSpeedLimits must be used within SpeedLimitProvider')
-    }
-    return context
-}
+export const useSpeedLimits = createContextHook(SpeedLimitContext, 'useSpeedLimits', 'SpeedLimitProvider')

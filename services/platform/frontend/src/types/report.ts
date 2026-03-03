@@ -23,3 +23,23 @@ export type GenerateReportRequest = {
     sections: string[]
     recipients: string[]
 }
+
+export type ReportSchedule = {
+    id: string
+    title: string
+    frequency: 'daily' | 'weekly' | 'monthly'
+    fiberIds: string[]
+    sections: string[]
+    recipients: string[]
+    isActive: boolean
+    lastRunAt: string | null
+    createdAt: string
+}
+
+export type CreateScheduleRequest = {
+    title?: string
+    frequency: 'daily' | 'weekly' | 'monthly'
+    fiberIds: string[]
+    sections: string[]
+    recipients: string[]
+}

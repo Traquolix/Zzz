@@ -18,16 +18,29 @@ from rest_framework.views import APIView
 from django.conf import settings
 
 from apps.fibers.utils import get_org_fiber_ids
-from apps.monitoring.models import Infrastructure
+from apps.monitoring.models import Infrastructure, IncidentAction
 from apps.monitoring.serializers import (
     IncidentSerializer,
     IncidentSnapshotSerializer,
+    IncidentActionSerializer,
+    IncidentActionInputSerializer,
     InfrastructureSerializer,
     StatsSerializer,
 )
+from apps.monitoring.incident_service import (
+    query_recent as incident_query_recent,
+    query_by_id as incident_query_by_id,
+    _ensure_directional_fiber_id,
+    strip_directional_suffix,
+)
+from apps.monitoring.workflow import (
+    validate_transition,
+    get_current_status,
+    InvalidTransitionError,
+)
 from apps.shared.clickhouse import query, query_scalar
 from apps.shared.exceptions import ClickHouseUnavailableError
-from apps.shared.permissions import IsActiveUser
+from apps.shared.permissions import IsActiveUser, IsNotViewer
 
 logger = logging.getLogger('sequoia')
 
@@ -68,71 +81,52 @@ class IncidentListView(APIView):
         tags=['incidents'],
     )
     def get(self, request):
-        cache_key = _incidents_cache_key(request.user)
+        try:
+            limit = min(int(request.query_params.get('limit', 100)), 500)
+        except (ValueError, TypeError):
+            limit = 100
+
+        cache_key = f'{_incidents_cache_key(request.user)}:{limit}'
         cached = django_cache.get(cache_key)
         if cached is not None:
             return Response(cached)
 
         fiber_ids = _get_fiber_ids_or_none(request.user)
         if fiber_ids is not None and not fiber_ids:
-            django_cache.set(cache_key, [], INCIDENTS_CACHE_TTL)
-            return Response([])
+            result = {'results': [], 'hasMore': False, 'limit': limit}
+            django_cache.set(cache_key, result, INCIDENTS_CACHE_TTL)
+            return Response(result)
 
         try:
-            if fiber_ids is not None:
-                rows = query(
-                    """
-                    SELECT
-                        incident_id, incident_type, severity,
-                        fiber_id, channel_start, timestamp,
-                        status, duration_seconds
-                    FROM sequoia.fiber_incidents
-                    WHERE timestamp >= now() - INTERVAL 24 HOUR
-                      AND fiber_id IN {fids:Array(String)}
-                    ORDER BY timestamp DESC
-                    LIMIT 500
-                    """,
-                    parameters={'fids': fiber_ids},
-                )
-            else:
-                rows = query("""
-                    SELECT
-                        incident_id, incident_type, severity,
-                        fiber_id, channel_start, timestamp,
-                        status, duration_seconds
-                    FROM sequoia.fiber_incidents
-                    WHERE timestamp >= now() - INTERVAL 24 HOUR
-                    ORDER BY timestamp DESC
-                    LIMIT 500
-                """)
+            # Fetch one extra to detect if there's a next page
+            incidents = incident_query_recent(fiber_ids=fiber_ids, hours=24, limit=limit + 1)
         except ClickHouseUnavailableError:
-            # Fallback to simulation incidents if available
-            try:
-                from apps.realtime.simulation import get_simulation_incidents
-                sim_incidents = get_simulation_incidents()
-                if sim_incidents:
-                    django_cache.set(cache_key, sim_incidents, FALLBACK_CACHE_TTL)
-                    return Response(sim_incidents)
-            except ImportError:
-                pass
-            django_cache.set(cache_key, [], FALLBACK_CACHE_TTL)
-            return Response([])
+            # In simulation mode, fall back to simulation cache
+            from apps.realtime.simulation_manager import SimulationManager
+            if SimulationManager.instance().is_running:
+                try:
+                    from apps.realtime.simulation import get_simulation_incidents
+                    sim_incidents = get_simulation_incidents()
+                    if sim_incidents:
+                        result = {'results': sim_incidents, 'hasMore': False, 'limit': len(sim_incidents)}
+                        django_cache.set(cache_key, result, FALLBACK_CACHE_TTL)
+                        return Response(result)
+                except ImportError:
+                    pass
+            return Response(
+                {'detail': 'ClickHouse unavailable', 'code': 'clickhouse_unavailable'},
+                status=503,
+            )
 
-        incidents = []
-        for row in rows:
-            incidents.append({
-                'id': row['incident_id'],
-                'type': row['incident_type'],
-                'severity': row['severity'],
-                'fiberLine': row['fiber_id'],
-                'channel': row['channel_start'],
-                'detectedAt': row['timestamp'].isoformat() if hasattr(row['timestamp'], 'isoformat') else str(row['timestamp']),
-                'status': row['status'],
-                'duration': row['duration_seconds'] * 1000 if row['duration_seconds'] else None,
-            })
-
-        django_cache.set(cache_key, incidents, INCIDENTS_CACHE_TTL)
-        return Response(incidents)
+        has_more = len(incidents) > limit
+        page = incidents[:limit]
+        result = {
+            'results': page,
+            'hasMore': has_more,
+            'limit': limit,
+        }
+        django_cache.set(cache_key, result, INCIDENTS_CACHE_TTL)
+        return Response(result)
 
 
 class IncidentSnapshotView(APIView):
@@ -157,6 +151,7 @@ class IncidentSnapshotView(APIView):
                 """
                 SELECT fiber_id, channel_start, channel_end, timestamp_ns
                 FROM sequoia.fiber_incidents
+                FINAL
                 WHERE incident_id = {id:String}
                 LIMIT 1
                 """,
@@ -172,9 +167,13 @@ class IncidentSnapshotView(APIView):
         fiber_id = incident['fiber_id']
 
         # Org-scoping: verify the incident's fiber belongs to user's org
+        # fiber_id from ClickHouse may be directional ("carros:0") while
+        # fiber_ids from FiberAssignment are plain ("carros") — strip suffix
         fiber_ids = _get_fiber_ids_or_none(request.user)
-        if fiber_ids is not None and fiber_id not in fiber_ids:
-            return Response({'detail': 'Incident not found', 'code': 'incident_not_found'}, status=404)
+        if fiber_ids is not None:
+            plain_fiber_id = strip_directional_suffix(fiber_id)
+            if plain_fiber_id not in fiber_ids:
+                return Response({'detail': 'Incident not found', 'code': 'incident_not_found'}, status=404)
 
         center_ch = (incident['channel_start'] + incident['channel_end']) // 2
         ts_ns = incident['timestamp_ns']
@@ -190,7 +189,7 @@ class IncidentSnapshotView(APIView):
                   AND ts BETWEEN fromUnixTimestamp64Nano({ts_start:UInt64})
                               AND fromUnixTimestamp64Nano({ts_end:UInt64})
                 ORDER BY ts
-                LIMIT 10000
+                LIMIT 50000
                 """,
                 parameters={
                     'fid': fiber_id,
@@ -207,7 +206,7 @@ class IncidentSnapshotView(APIView):
         for row in speed_rows:
             speed = row['speed']
             detections.append({
-                'fiberLine': row['fiber_id'],
+                'fiberLine': _ensure_directional_fiber_id(row['fiber_id']),
                 'channel': row['ch'],
                 'speed': abs(speed),
                 'count': 1,
@@ -217,11 +216,133 @@ class IncidentSnapshotView(APIView):
 
         return Response({
             'incidentId': incident_id,
-            'fiberLine': fiber_id,
+            'fiberLine': _ensure_directional_fiber_id(fiber_id),
             'centerChannel': center_ch,
             'capturedAt': int(time.time() * 1000),
             'detections': detections,
         })
+
+
+class IncidentActionView(APIView):
+    """
+    GET  /api/incidents/<id>/actions — action history for an incident.
+    POST /api/incidents/<id>/actions — record a workflow transition.
+
+    Org-scoped: verifies the incident's fiber belongs to the user's org.
+    POST requires non-viewer role (API keys are viewer-only).
+    """
+
+    def get_permissions(self):
+        perms = [IsActiveUser()]
+        if self.request.method == 'POST':
+            perms.append(IsNotViewer())
+        return perms
+
+    def _get_incident_or_404(self, incident_id, request):
+        """Fetch incident from ClickHouse and verify org access."""
+        try:
+            incident = incident_query_by_id(incident_id)
+        except ClickHouseUnavailableError:
+            return None, Response(
+                {'detail': 'ClickHouse unavailable', 'code': 'clickhouse_unavailable'},
+                status=503,
+            )
+
+        if not incident:
+            return None, Response(
+                {'detail': 'Incident not found', 'code': 'incident_not_found'},
+                status=404,
+            )
+
+        # Org-scoping
+        fiber_ids = _get_fiber_ids_or_none(request.user)
+        if fiber_ids is not None:
+            plain_fiber_id = strip_directional_suffix(incident['fiber_id'])
+            if plain_fiber_id not in fiber_ids:
+                return None, Response(
+                    {'detail': 'Incident not found', 'code': 'incident_not_found'},
+                    status=404,
+                )
+
+        return incident, None
+
+    @extend_schema(
+        responses={200: IncidentActionSerializer(many=True)},
+        tags=['incidents'],
+    )
+    def get(self, request, incident_id):
+        incident, error_resp = self._get_incident_or_404(incident_id, request)
+        if error_resp:
+            return error_resp
+
+        actions = IncidentAction.objects.filter(
+            incident_id=incident_id
+        ).select_related('performed_by')
+
+        current_status = get_current_status(incident_id)
+
+        return Response({
+            'currentStatus': current_status,
+            'actions': IncidentActionSerializer(actions, many=True).data,
+        })
+
+    @extend_schema(
+        request=IncidentActionInputSerializer,
+        responses={201: IncidentActionSerializer},
+        tags=['incidents'],
+    )
+    def post(self, request, incident_id):
+        from django.db import transaction
+
+        input_serializer = IncidentActionInputSerializer(data=request.data)
+        if not input_serializer.is_valid():
+            return Response(
+                {'detail': 'Invalid input', 'code': 'validation_error', 'errors': input_serializer.errors},
+                status=400,
+            )
+
+        incident, error_resp = self._get_incident_or_404(incident_id, request)
+        if error_resp:
+            return error_resp
+
+        target_status = input_serializer.validated_data['action']
+
+        # Atomic block prevents TOCTOU race: lock the latest action row
+        # so concurrent transitions are serialized.
+        with transaction.atomic():
+            latest = (
+                IncidentAction.objects
+                .select_for_update()
+                .filter(incident_id=incident_id)
+                .order_by('-performed_at')
+                .first()
+            )
+            current_status = latest.to_status if latest else 'active'
+
+            try:
+                validate_transition(current_status, target_status)
+            except InvalidTransitionError:
+                return Response(
+                    {
+                        'detail': f'Cannot transition from {current_status!r} to {target_status!r}',
+                        'code': 'invalid_transition',
+                        'currentStatus': current_status,
+                    },
+                    status=409,
+                )
+
+            action = IncidentAction.objects.create(
+                incident_id=incident_id,
+                from_status=current_status,
+                to_status=target_status,
+                performed_by=request.user,
+                note=input_serializer.validated_data.get('note', ''),
+            )
+
+        return Response(
+            IncidentActionSerializer(action).data,
+            status=201,
+        )
 
 
 class InfrastructureListView(APIView):
@@ -229,6 +350,7 @@ class InfrastructureListView(APIView):
     GET /api/infrastructure — returns infrastructure items from PostgreSQL.
 
     Already org-scoped via Organization FK.
+    No query parameters are accepted, so the pattern is safe.
     """
     permission_classes = [IsActiveUser]
 
@@ -237,9 +359,13 @@ class InfrastructureListView(APIView):
         tags=['infrastructure'],
     )
     def get(self, request):
-        qs = Infrastructure.objects.all()
-        if hasattr(request.user, 'organization') and request.user.organization:
-            qs = qs.filter(organization=request.user.organization)
+        if request.user.is_superuser:
+            qs = Infrastructure.objects.all()
+        elif hasattr(request.user, 'organization') and request.user.organization:
+            qs = Infrastructure.objects.filter(organization=request.user.organization)
+        else:
+            # Non-superuser without org — no access
+            return Response({'results': [], 'hasMore': False, 'limit': 0})
 
         data = []
         for item in qs:
@@ -255,7 +381,7 @@ class InfrastructureListView(APIView):
                 'endChannel': item.end_channel,
                 'imageUrl': image_url,
             })
-        return Response(data)
+        return Response({'results': data, 'hasMore': False, 'limit': len(data)})
 
 
 class StatsView(APIView):
@@ -299,7 +425,7 @@ class StatsView(APIView):
                     ) or 0
 
                     active_incidents = query_scalar(
-                        "SELECT count() FROM sequoia.fiber_incidents WHERE status = 'active' AND fiber_id IN {fids:Array(String)}",
+                        "SELECT count() FROM sequoia.fiber_incidents FINAL WHERE status = 'active' AND fiber_id IN {fids:Array(String)}",
                         parameters={'fids': fiber_ids},
                     ) or 0
 
@@ -332,7 +458,7 @@ class StatsView(APIView):
                 ) or 0
 
                 active_incidents = query_scalar(
-                    "SELECT count() FROM sequoia.fiber_incidents WHERE status = 'active'"
+                    "SELECT count() FROM sequoia.fiber_incidents FINAL WHERE status = 'active'"
                 ) or 0
 
                 recent_rows = query_scalar("""
@@ -348,15 +474,13 @@ class StatsView(APIView):
                 """) or 0
 
         except ClickHouseUnavailableError:
-            fiber_count = 0
-            total_channels = 0
-            active_incidents = 0
-            recent_rows = 0
-            active_vehicles = 0
-
-        # Use longer cache when ClickHouse is unavailable to reduce retry spam
-        is_fallback = (fiber_count == 0 and total_channels == 0)
-        cache_ttl = FALLBACK_CACHE_TTL if is_fallback else STATS_CACHE_TTL
+            return Response(
+                {
+                    'detail': 'ClickHouse unavailable',
+                    'code': 'clickhouse_unavailable',
+                },
+                status=503,
+            )
 
         data = {
             'fiberCount': fiber_count,
@@ -366,7 +490,7 @@ class StatsView(APIView):
             'activeIncidents': active_incidents,
             'systemUptime': int(time.time() - _PROCESS_START_TIME),
         }
-        django_cache.set(cache_key, data, cache_ttl)
+        django_cache.set(cache_key, data, STATS_CACHE_TTL)
         return Response(data)
 
 
@@ -400,15 +524,29 @@ class SpectralDataView(APIView):
         ],
         tags=['shm'],
     )
+    def _validate_infrastructure_access(self, request):
+        """If infrastructureId is provided, validate org access. Returns error Response or None."""
+        infrastructure_id = request.query_params.get('infrastructureId')
+        if infrastructure_id and not request.user.is_superuser:
+            if not Infrastructure.objects.filter(
+                id=infrastructure_id,
+                organization=request.user.organization,
+            ).exists():
+                return Response(
+                    {'detail': 'Infrastructure not found', 'code': 'not_found'},
+                    status=404,
+                )
+        return None
+
     def get(self, request):
         from datetime import datetime
         import numpy as np
         from apps.monitoring.hdf5_reader import load_spectral_data, sample_file_exists
 
-        # TODO: In production, use infrastructureId to fetch real-time data
-        # infrastructure_id = request.query_params.get('infrastructureId')
-        # if infrastructure_id:
-        #     return self._get_realtime_data(infrastructure_id, request)
+        # Org-scoping: validate infrastructure access if specified
+        error_resp = self._validate_infrastructure_access(request)
+        if error_resp:
+            return error_resp
 
         # Demo mode: return sample data from HDF5 file
         if not sample_file_exists():
@@ -457,9 +595,9 @@ class SpectralDataView(APIView):
                 end = int(end_idx) if end_idx else data.num_time_samples
                 data = data.slice_time(start, end)
 
-        # Apply downsampling
-        max_time = int(request.query_params.get('maxTimeSamples', 500))
-        max_freq = int(request.query_params.get('maxFreqBins', 200))
+        # Apply downsampling (clamped to prevent unbounded allocation)
+        max_time = min(int(request.query_params.get('maxTimeSamples', 500)), 5000)
+        max_freq = min(int(request.query_params.get('maxFreqBins', 200)), 2000)
 
         data = data.downsample_time(max_time)
         data = data.downsample_freq(max_freq)
@@ -496,10 +634,17 @@ class SpectralPeaksView(APIView):
         import numpy as np
         from apps.monitoring.hdf5_reader import load_spectral_data, sample_file_exists
 
-        # TODO: In production, use infrastructureId to fetch real-time data
-        # infrastructure_id = request.query_params.get('infrastructureId')
-        # if infrastructure_id:
-        #     return self._get_realtime_peaks(infrastructure_id, request)
+        # Org-scoping: validate infrastructure access if specified
+        infrastructure_id = request.query_params.get('infrastructureId')
+        if infrastructure_id and not request.user.is_superuser:
+            if not Infrastructure.objects.filter(
+                id=infrastructure_id,
+                organization=request.user.organization,
+            ).exists():
+                return Response(
+                    {'detail': 'Infrastructure not found', 'code': 'not_found'},
+                    status=404,
+                )
 
         # Demo mode: return sample data from HDF5 file
         if not sample_file_exists():
@@ -540,7 +685,10 @@ class SpectralPeaksView(APIView):
                 end_idx = int(indices[-1]) + 1
                 data = data.slice_time(start_idx, end_idx)
 
-        max_samples = int(request.query_params.get('maxSamples', 1000))
+        try:
+            max_samples = min(int(request.query_params.get('maxSamples', 1000)), 5000)
+        except (ValueError, TypeError):
+            max_samples = 1000
         data = data.downsample_time(max_samples)
 
         peak_freqs, peak_powers = data.get_peak_frequencies()
@@ -582,3 +730,68 @@ class SpectralSummaryView(APIView):
             )
 
         return Response(summary)
+
+
+class SHMStatusView(APIView):
+    """
+    GET /api/monitoring/shm/status/<infrastructure_id> — compute live SHM status.
+
+    Uses the SHM intelligence module to detect frequency shifts and classify
+    deviation severity. For demo, generates plausible frequency data.
+    """
+    permission_classes = [IsActiveUser]
+
+    @extend_schema(
+        responses={200: dict},
+        tags=['shm'],
+    )
+    def get(self, request, infrastructure_id):
+        from apps.monitoring.shm_intelligence import compute_baseline, detect_frequency_shift, classify_deviation
+        import random
+        import numpy as np
+
+        # Org-scoping: verify infrastructure belongs to user's org
+        if not request.user.is_superuser:
+            if not Infrastructure.objects.filter(
+                id=infrastructure_id,
+                organization=request.user.organization,
+            ).exists():
+                return Response(
+                    {'detail': 'Infrastructure not found', 'code': 'not_found'},
+                    status=404,
+                )
+
+        # Seed RNG with infrastructure_id for deterministic demo responses
+        rng = random.Random(infrastructure_id)
+
+        # Simulate baseline frequencies (would come from ClickHouse in production)
+        baseline_freqs = np.array([1.10 + rng.gauss(0, 0.02) for _ in range(20)])
+        baseline = compute_baseline(baseline_freqs)
+
+        if baseline is None:
+            return Response(
+                {'detail': 'Insufficient baseline data', 'code': 'insufficient_data'},
+                status=400,
+            )
+
+        # Simulate current frequencies
+        current_freqs = np.array([1.12 + rng.gauss(0, 0.03) for _ in range(10)])
+
+        shift = detect_frequency_shift(baseline, current_freqs)
+
+        # Map SHM classification to frontend status
+        status_map = {
+            'normal': 'nominal',
+            'warning': 'warning',
+            'alert': 'warning',
+            'critical': 'critical',
+        }
+
+        return Response({
+            'status': status_map.get(shift.severity, 'nominal'),
+            'currentMean': round(shift.current_mean, 4),
+            'baselineMean': round(shift.baseline_mean, 4),
+            'deviationSigma': round(shift.deviation_sigma, 2),
+            'direction': shift.direction,
+            'severity': shift.severity,
+        })

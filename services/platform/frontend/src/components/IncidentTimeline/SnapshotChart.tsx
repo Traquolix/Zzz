@@ -1,6 +1,7 @@
 import { useMemo, useRef, useEffect } from 'react'
 import type { IncidentSnapshot } from '@/types/incident'
 import { getSpeedHexColor } from '@/lib/speedColors'
+import { COLORS } from '@/lib/theme'
 
 type ChannelSpeedData = {
     channel: number
@@ -88,10 +89,10 @@ export function SnapshotChart({ snapshot, height = 128 }: Props) {
         const maxSpeed = stats.normalSpeed * 1.15
 
         // Grid lines
-        ctx.strokeStyle = '#e2e8f0'
+        ctx.strokeStyle = COLORS.canvas.grid
         ctx.lineWidth = 1
         ctx.font = '10px system-ui, sans-serif'
-        ctx.fillStyle = '#94a3b8'
+        ctx.fillStyle = COLORS.canvas.label
         ctx.textAlign = 'right'
 
         const gridSpeeds = [0, Math.round(maxSpeed / 2), Math.round(maxSpeed)]
@@ -156,7 +157,7 @@ export function SnapshotChart({ snapshot, height = 128 }: Props) {
         }
 
         // Incident marker line
-        ctx.strokeStyle = '#dc2626'
+        ctx.strokeStyle = COLORS.severity.critical
         ctx.lineWidth = 2
         ctx.setLineDash([])
         ctx.beginPath()
@@ -165,7 +166,7 @@ export function SnapshotChart({ snapshot, height = 128 }: Props) {
         ctx.stroke()
 
         // Incident marker triangle
-        ctx.fillStyle = '#dc2626'
+        ctx.fillStyle = COLORS.severity.critical
         ctx.beginPath()
         ctx.moveTo(incidentX, padding.top)
         ctx.lineTo(incidentX - 6, padding.top - 8)
@@ -176,7 +177,7 @@ export function SnapshotChart({ snapshot, height = 128 }: Props) {
         // X-axis labels
         ctx.textAlign = 'center'
         ctx.font = '10px system-ui, sans-serif'
-        ctx.fillStyle = '#64748b'
+        ctx.fillStyle = COLORS.canvas.axis
 
         const distances = [-200, 0, 200]
         distances.forEach(dist => {

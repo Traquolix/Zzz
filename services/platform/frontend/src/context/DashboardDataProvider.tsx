@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { MapInstanceProvider } from './MapInstanceProvider'
 import { MapSelectionProvider } from './MapSelectionProvider'
 import { SectionDataProvider } from './SectionProvider'
+import { SectionUIProvider } from './SectionUIProvider'
 import { LandmarkDataProvider } from './LandmarkSelectionProvider'
 import { VehicleDataProvider } from './VehicleSelectionProvider'
 import { InfrastructureDataProvider } from './InfrastructureProvider'
@@ -23,6 +24,7 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
         <MapInstanceProvider>
             <MapSelectionProvider>
                 <SectionDataProvider>
+                <SectionUIProvider>
                     <LandmarkDataProvider>
                         <VehicleDataProvider>
                             <InfrastructureDataProvider>
@@ -30,6 +32,7 @@ export function DashboardDataProvider({ children }: { children: ReactNode }) {
                             </InfrastructureDataProvider>
                         </VehicleDataProvider>
                     </LandmarkDataProvider>
+                </SectionUIProvider>
                 </SectionDataProvider>
             </MapSelectionProvider>
         </MapInstanceProvider>

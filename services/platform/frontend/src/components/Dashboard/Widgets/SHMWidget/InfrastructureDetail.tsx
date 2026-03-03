@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { SelectedInfrastructure, FrequencyReading } from '@/types/infrastructure'
 import type { FrequencyDataPoint, TimeRange } from './SHMWidget'
+import { COLORS } from '@/lib/theme'
 import {
     setupCanvas,
     getChartDimensions,
@@ -37,6 +39,7 @@ export function InfrastructureDetail({
     showComparison,
     now
 }: Props) {
+    const { t } = useTranslation()
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
     const [hoveredPoint, setHoveredPoint] = useState<HoveredPoint>(null)
@@ -143,17 +146,17 @@ export function InfrastructureDetail({
 
         // Draw title
         ctx.font = '11px system-ui, -apple-system, sans-serif'
-        ctx.fillStyle = '#64748b'
+        ctx.fillStyle = COLORS.canvas.axis
         ctx.textAlign = 'left'
-        ctx.fillText('Frequency (Hz)', dims.padding.left, 14)
+        ctx.fillText(t('shm.frequencyHz'), dims.padding.left, 14)
 
         // If no data, show message
         if (historyData.length === 0) {
             ctx.font = '13px system-ui, -apple-system, sans-serif'
-            ctx.fillStyle = '#94a3b8'
+            ctx.fillStyle = COLORS.canvas.label
             ctx.textAlign = 'center'
             ctx.textBaseline = 'middle'
-            ctx.fillText('Waiting for data...', width / 2, height / 2)
+            ctx.fillText(t('shm.waitingForData'), width / 2, height / 2)
             chartStateRef.current.dims = null
             return
         }
@@ -178,7 +181,7 @@ export function InfrastructureDetail({
 
         // Draw Y-axis labels
         ctx.font = '10px system-ui, -apple-system, sans-serif'
-        ctx.fillStyle = '#94a3b8'
+        ctx.fillStyle = COLORS.canvas.label
         ctx.textAlign = 'right'
         ctx.textBaseline = 'middle'
 
@@ -189,7 +192,7 @@ export function InfrastructureDetail({
             ctx.fillText(freq.toFixed(1), dims.padding.left - 6, y)
 
             // Draw grid line
-            ctx.strokeStyle = '#e2e8f0'
+            ctx.strokeStyle = COLORS.canvas.grid
             ctx.lineWidth = 1
             ctx.beginPath()
             ctx.moveTo(dims.padding.left, y)
@@ -257,7 +260,7 @@ export function InfrastructureDetail({
             for (let i = 1; i < comparisonData.length; i++) {
                 ctx.lineTo(timeToX(comparisonData[i].timestamp), freqToY(comparisonData[i].frequency))
             }
-            ctx.strokeStyle = '#94a3b8'
+            ctx.strokeStyle = COLORS.canvas.label
             ctx.lineWidth = 1.5
             ctx.setLineDash([4, 4])
             ctx.stroke()
@@ -267,7 +270,7 @@ export function InfrastructureDetail({
             for (const point of comparisonData) {
                 ctx.beginPath()
                 ctx.arc(timeToX(point.timestamp), freqToY(point.frequency), 3, 0, Math.PI * 2)
-                ctx.fillStyle = '#94a3b8'
+                ctx.fillStyle = COLORS.canvas.label
                 ctx.fill()
             }
         }
@@ -328,7 +331,7 @@ export function InfrastructureDetail({
         }
 
         ctx.restore()
-    }, [historyData, comparisonData, showComparison, timeWindowMs, now, hoveredPoint])
+    }, [historyData, comparisonData, showComparison, timeWindowMs, now, hoveredPoint, t])
 
     // Format timestamp for tooltip
     const formatTime = (timestamp: number) => {
@@ -345,13 +348,13 @@ export function InfrastructureDetail({
                     {latestReading && (
                         <div className="flex items-center gap-4">
                             <div className="text-right">
-                                <div className="text-xs text-slate-400">Current Freq</div>
+                                <div className="text-xs text-slate-400">{t('shm.detail.currentFreq')}</div>
                                 <div className="text-lg font-mono font-semibold text-amber-600">
                                     {latestReading.frequency.toFixed(2)} Hz
                                 </div>
                             </div>
                             <div className="text-right">
-                                <div className="text-xs text-slate-400">Amplitude</div>
+                                <div className="text-xs text-slate-400">{t('shm.detail.amplitude')}</div>
                                 <div className="text-lg font-mono font-semibold text-slate-700">
                                     {(latestReading.amplitude * 100).toFixed(0)}%
                                 </div>
@@ -380,20 +383,20 @@ export function InfrastructureDetail({
                         }}
                     >
                         <div className="font-medium text-slate-700 mb-1">
-                            {hoveredPoint.isComparison ? 'Yesterday' : 'Today'}
+                            {hoveredPoint.isComparison ? t('shm.detail.yesterday') : t('shm.detail.today')}
                         </div>
                         <div className="flex items-center gap-2 text-slate-600">
-                            <span className="text-slate-400">Time:</span>
+                            <span className="text-slate-400">{t('shm.detail.time')}:</span>
                             <span className="font-mono">{formatTime(hoveredPoint.point.timestamp)}</span>
                         </div>
                         <div className="flex items-center gap-2 text-slate-600">
-                            <span className="text-slate-400">Freq:</span>
+                            <span className="text-slate-400">{t('shm.detail.freq')}:</span>
                             <span className={`font-mono font-semibold ${hoveredPoint.isComparison ? 'text-slate-600' : 'text-amber-600'}`}>
                                 {hoveredPoint.point.frequency.toFixed(2)} Hz
                             </span>
                         </div>
                         <div className="flex items-center gap-2 text-slate-600">
-                            <span className="text-slate-400">Amp:</span>
+                            <span className="text-slate-400">{t('shm.detail.amp')}:</span>
                             <span className="font-mono">{(hoveredPoint.point.amplitude * 100).toFixed(0)}%</span>
                         </div>
                     </div>
@@ -404,11 +407,11 @@ export function InfrastructureDetail({
                     <div className="absolute top-4 right-4 flex flex-col gap-1 text-xs">
                         <div className="flex items-center gap-2">
                             <div className="w-3 h-0.5 bg-amber-500" />
-                            <span className="text-slate-600">Today</span>
+                            <span className="text-slate-600">{t('shm.detail.today')}</span>
                         </div>
                         <div className="flex items-center gap-2">
                             <div className="w-3 h-0.5 bg-slate-400 border-dashed border-t border-slate-400" style={{ borderStyle: 'dashed' }} />
-                            <span className="text-slate-500">Yesterday</span>
+                            <span className="text-slate-500">{t('shm.detail.yesterday')}</span>
                         </div>
                     </div>
                 )}
@@ -419,19 +422,19 @@ export function InfrastructureDetail({
                 <div className="flex-shrink-0 px-4 py-2 bg-slate-50 border-t border-slate-100">
                     <div className="grid grid-cols-3 gap-4 text-center">
                         <div>
-                            <div className="text-[10px] text-slate-400 uppercase tracking-wide">Min</div>
+                            <div className="text-[10px] text-slate-400 uppercase tracking-wide">{t('common.min')}</div>
                             <div className="text-sm font-mono font-medium text-slate-600">
                                 {Math.min(...historyData.map(p => p.frequency)).toFixed(2)} Hz
                             </div>
                         </div>
                         <div>
-                            <div className="text-[10px] text-slate-400 uppercase tracking-wide">Avg</div>
+                            <div className="text-[10px] text-slate-400 uppercase tracking-wide">{t('common.avg')}</div>
                             <div className="text-sm font-mono font-medium text-slate-600">
                                 {(historyData.reduce((sum, p) => sum + p.frequency, 0) / historyData.length).toFixed(2)} Hz
                             </div>
                         </div>
                         <div>
-                            <div className="text-[10px] text-slate-400 uppercase tracking-wide">Max</div>
+                            <div className="text-[10px] text-slate-400 uppercase tracking-wide">{t('common.max')}</div>
                             <div className="text-sm font-mono font-medium text-slate-600">
                                 {Math.max(...historyData.map(p => p.frequency)).toFixed(2)} Hz
                             </div>

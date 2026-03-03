@@ -13,89 +13,105 @@ function LayersIcon() {
     )
 }
 
-function ChevronIcon({ expanded }: { expanded: boolean }) {
-    return (
-        <svg
-            className={`w-3 h-3 transition-transform ${expanded ? 'rotate-90' : ''}`}
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            aria-hidden="true"
-        >
-            <path d="M9 6l6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-    )
-}
+/* ── Reusable row: colored dot + label + on/off ── */
 
-type ToggleRowProps = {
+type LayerRowProps = {
     label: string
     checked: boolean
     onChange: () => void
     color: string
-    indent?: boolean
 }
 
-function ToggleRow({ label, checked, onChange, color, indent = false }: ToggleRowProps) {
+function LayerRow({ label, checked, onChange, color }: LayerRowProps) {
     return (
         <button
             type="button"
             onClick={onChange}
-            className={`w-full flex items-center gap-3 px-3 py-1.5 hover:bg-slate-50 cursor-pointer transition-colors ${indent ? 'pl-7' : ''}`}
+            className="w-full flex items-center gap-2.5 px-3 py-1.5 min-h-[36px] md:min-h-0 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors"
         >
-            <div
-                className="w-4 h-4 rounded border-2 flex items-center justify-center transition-colors"
-                style={checked
-                    ? { backgroundColor: color, borderColor: color }
-                    : { borderColor: '#cbd5e1' }
-                }
+            {/* Colored dot indicator */}
+            <span
+                className="w-2.5 h-2.5 rounded-full flex-shrink-0 transition-opacity"
+                style={{ backgroundColor: color, opacity: checked ? 1 : 0.25 }}
+            />
+            <span className={`text-sm flex-1 text-left transition-colors ${checked ? 'text-slate-700 dark:text-slate-200' : 'text-slate-400 dark:text-slate-500'}`}>
+                {label}
+            </span>
+            {/* Mini toggle pill */}
+            <span
+                className={`
+                    w-7 h-4 rounded-full flex-shrink-0 relative transition-colors
+                    ${checked ? 'bg-slate-600 dark:bg-slate-300' : 'bg-slate-200 dark:bg-slate-700'}
+                `}
             >
-                {checked && (
-                    <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} aria-hidden="true">
-                        <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                )}
-            </div>
-            <span className="text-sm text-slate-700">{label}</span>
+                <span
+                    className={`
+                        absolute top-0.5 w-3 h-3 rounded-full bg-white dark:bg-slate-900 shadow-sm transition-[left]
+                        ${checked ? 'left-3.5' : 'left-0.5'}
+                    `}
+                />
+            </span>
         </button>
     )
 }
 
-type FolderProps = {
-    label: string
-    expanded: boolean
-    onToggle: () => void
-    children: React.ReactNode
-}
+/* ── Section header ── */
 
-function Folder({ label, expanded, onToggle, children }: FolderProps) {
+function SectionLabel({ label }: { label: string }) {
     return (
-        <div>
-            <button
-                type="button"
-                onClick={onToggle}
-                className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 cursor-pointer transition-colors"
-            >
-                <ChevronIcon expanded={expanded} />
-                <span className="text-sm font-medium text-slate-600">{label}</span>
-            </button>
-            {expanded && (
-                <div className="pb-1">
-                    {children}
-                </div>
-            )}
+        <div className="px-3 pt-2 pb-1">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                {label}
+            </span>
         </div>
     )
 }
 
+/* ── Segmented toggle for detection mode ── */
+
+type SegmentedToggleProps = {
+    value: string
+    options: { key: string; label: string }[]
+    onChange: (key: string) => void
+}
+
+function SegmentedToggle({ value, options, onChange }: SegmentedToggleProps) {
+    return (
+        <div className="px-3 py-1.5">
+            <div className="flex gap-px p-0.5 rounded-lg bg-slate-100 dark:bg-slate-800">
+                {options.map(opt => {
+                    const active = value === opt.key
+                    return (
+                        <button
+                            type="button"
+                            key={opt.key}
+                            onClick={() => onChange(opt.key)}
+                            className={`
+                                flex-1 px-2 py-1 text-xs font-medium rounded-md transition-all cursor-pointer whitespace-nowrap
+                                ${active
+                                    ? 'bg-white dark:bg-slate-600 text-slate-800 dark:text-slate-100 shadow-sm'
+                                    : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'
+                                }
+                            `}
+                        >
+                            {opt.label}
+                        </button>
+                    )
+                })}
+            </div>
+        </div>
+    )
+}
+
+function Divider() {
+    return <div className="my-1 mx-3 border-t border-slate-100 dark:border-slate-800" />
+}
+
+/* ── Main component ── */
+
 export function MapControls() {
     const { t } = useTranslation()
     const [open, setOpen] = useState(false)
-    const [expandedFolders, setExpandedFolders] = useState({
-        baseLayers: true,
-        labels: false,
-        overlays: true
-    })
     const containerRef = useRef<HTMLDivElement>(null)
     const { layerVisibility, setLayerVisibility, sectionCreationMode, setSectionCreationMode, pendingPoint } = useSection()
     const { hasLayer } = usePermissions()
@@ -110,14 +126,21 @@ export function MapControls() {
         return () => document.removeEventListener('mousedown', handleClickOutside)
     }, [])
 
-    const toggleFolder = (folder: keyof typeof expandedFolders) => {
-        setExpandedFolders(prev => ({ ...prev, [folder]: !prev[folder] }))
+    const toggle = (layer: keyof typeof layerVisibility) => {
+        setLayerVisibility({ ...layerVisibility, [layer]: !layerVisibility[layer] })
     }
 
-    const toggleLayer = (layer: keyof typeof layerVisibility) => {
+    // Detection mode: vehicles / dots / off
+    const detectionMode =
+        layerVisibility.vehicles ? 'vehicles'
+        : layerVisibility.detections ? 'detections'
+        : 'off'
+
+    const setDetectionMode = (mode: string) => {
         setLayerVisibility({
             ...layerVisibility,
-            [layer]: !layerVisibility[layer]
+            vehicles: mode === 'vehicles',
+            detections: mode === 'detections',
         })
     }
 
@@ -128,17 +151,20 @@ export function MapControls() {
 
     const isCreatingSection = sectionCreationMode || pendingPoint !== null
 
-    const hasBaseLayers = hasLayer('cables') || hasLayer('fibers') || hasLayer('vehicles') || hasLayer('heatmap')
-    const hasLabels = hasLayer('landmarks') || hasLayer('sections') || hasLayer('infrastructure')
-    const hasOverlays = hasLayer('detections') || hasLayer('incidents')
+    // Any layers at all?
+    const hasAnyLayer = hasLayer('cables') || hasLayer('fibers') || hasLayer('vehicles')
+        || hasLayer('detections') || hasLayer('heatmap') || hasLayer('landmarks')
+        || hasLayer('sections') || hasLayer('infrastructure') || hasLayer('incidents')
+
+    if (!hasAnyLayer) return null
 
     return (
         <div ref={containerRef} className="absolute top-3 left-3 z-[1000] pointer-events-auto">
             <button
                 onClick={() => setOpen(!open)}
                 className={`
-                    w-[29px] h-[29px] flex items-center justify-center rounded shadow-md cursor-pointer transition-colors
-                    ${open ? 'bg-slate-100 text-slate-700' : 'bg-white text-slate-500 hover:bg-slate-50'}
+                    w-11 h-11 md:w-[29px] md:h-[29px] flex items-center justify-center rounded shadow-md cursor-pointer transition-colors touch-none
+                    ${open ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300' : 'bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}
                 `}
                 title={t('map.layers')}
             >
@@ -146,138 +172,84 @@ export function MapControls() {
             </button>
 
             {open && (
-                <div className="absolute top-[calc(100%+4px)] left-0 bg-white rounded-lg shadow-lg border border-slate-200 py-1 min-w-[180px] select-none">
-                    {hasBaseLayers && (
+                <div className="absolute top-[calc(100%+4px)] left-0 bg-white dark:bg-slate-900 rounded-lg shadow-lg border border-slate-200 dark:border-slate-700 py-1.5 min-w-[200px] select-none">
+
+                    {/* ── Fiber layers ── */}
+                    {(hasLayer('cables') || hasLayer('fibers')) && (
                         <>
-                            <Folder
-                                label={t('map.controls.baseLayers')}
-                                expanded={expandedFolders.baseLayers}
-                                onToggle={() => toggleFolder('baseLayers')}
-                            >
-                                {hasLayer('cables') && (
-                                    <ToggleRow
-                                        label={t('map.controls.cables')}
-                                        checked={layerVisibility.cables}
-                                        onChange={() => toggleLayer('cables')}
-                                        color="#64748b"
-                                        indent
-                                    />
-                                )}
-                                {hasLayer('fibers') && (
-                                    <ToggleRow
-                                        label={t('map.controls.fiberLines')}
-                                        checked={layerVisibility.fibers}
-                                        onChange={() => toggleLayer('fibers')}
-                                        color="#6366f1"
-                                        indent
-                                    />
-                                )}
-                                {hasLayer('vehicles') && (
-                                    <ToggleRow
-                                        label={t('map.controls.vehicles')}
-                                        checked={layerVisibility.vehicles}
-                                        onChange={() => toggleLayer('vehicles')}
-                                        color="#14b8a6"
-                                        indent
-                                    />
-                                )}
-                                {hasLayer('heatmap') && (
-                                    <ToggleRow
-                                        label={t('map.controls.speedHeatmap')}
-                                        checked={layerVisibility.heatmap}
-                                        onChange={() => toggleLayer('heatmap')}
-                                        color="#f43f5e"
-                                        indent
-                                    />
-                                )}
-                            </Folder>
-                            <div className="my-1 border-t border-slate-100" />
+                            <SectionLabel label={t('map.controls.baseLayers')} />
+                            {hasLayer('cables') && (
+                                <LayerRow label={t('map.controls.cables')} checked={layerVisibility.cables} onChange={() => toggle('cables')} color="#f97316" />
+                            )}
+                            {hasLayer('fibers') && (
+                                <LayerRow label={t('map.controls.fiberLines')} checked={layerVisibility.fibers} onChange={() => toggle('fibers')} color="#9ca3af" />
+                            )}
                         </>
                     )}
 
-                    {hasLabels && (
+                    {/* ── Detection visualization ── */}
+                    {(hasLayer('vehicles') || hasLayer('detections')) && (
                         <>
-                            <Folder
-                                label={t('map.controls.labels')}
-                                expanded={expandedFolders.labels}
-                                onToggle={() => toggleFolder('labels')}
-                            >
-                                {hasLayer('landmarks') && (
-                                    <ToggleRow
-                                        label={t('map.controls.landmarks')}
-                                        checked={layerVisibility.landmarks}
-                                        onChange={() => toggleLayer('landmarks')}
-                                        color="#3b82f6"
-                                        indent
-                                    />
-                                )}
-                                {hasLayer('sections') && (
-                                    <ToggleRow
-                                        label={t('map.controls.sections')}
-                                        checked={layerVisibility.sections}
-                                        onChange={() => toggleLayer('sections')}
-                                        color="#22c55e"
-                                        indent
-                                    />
-                                )}
-                                {hasLayer('infrastructure') && (
-                                    <ToggleRow
-                                        label={t('map.controls.infrastructure')}
-                                        checked={layerVisibility.infrastructure}
-                                        onChange={() => toggleLayer('infrastructure')}
-                                        color="#f59e0b"
-                                        indent
-                                    />
-                                )}
-                            </Folder>
-                            <div className="my-1 border-t border-slate-100" />
+                            <Divider />
+                            <SectionLabel label={t('map.controls.detectionMode')} />
+                            <SegmentedToggle
+                                value={detectionMode}
+                                onChange={setDetectionMode}
+                                options={[
+                                    { key: 'vehicles', label: t('map.controls.vehicles') },
+                                    { key: 'off', label: 'Off' },
+                                    { key: 'detections', label: t('map.controls.detections') },
+                                ]}
+                            />
                         </>
                     )}
 
-                    {hasOverlays && (
+                    {/* ── Heatmap ── */}
+                    {hasLayer('heatmap') && (
                         <>
-                            <Folder
-                                label={t('map.controls.overlays')}
-                                expanded={expandedFolders.overlays}
-                                onToggle={() => toggleFolder('overlays')}
-                            >
-                                {hasLayer('detections') && (
-                                    <ToggleRow
-                                        label={t('map.controls.detections')}
-                                        checked={layerVisibility.detections}
-                                        onChange={() => toggleLayer('detections')}
-                                        color="#a855f7"
-                                        indent
-                                    />
-                                )}
-                                {hasLayer('incidents') && (
-                                    <ToggleRow
-                                        label={t('map.controls.incidents')}
-                                        checked={layerVisibility.incidents}
-                                        onChange={() => toggleLayer('incidents')}
-                                        color="#f97316"
-                                        indent
-                                    />
-                                )}
-                            </Folder>
-                            <div className="my-1 border-t border-slate-100" />
+                            <Divider />
+                            <LayerRow label={t('map.controls.speedHeatmap')} checked={layerVisibility.heatmap} onChange={() => toggle('heatmap')} color="#f43f5e" />
                         </>
                     )}
 
+                    {/* ── Annotations ── */}
+                    {(hasLayer('landmarks') || hasLayer('sections') || hasLayer('infrastructure') || hasLayer('incidents')) && (
+                        <>
+                            <Divider />
+                            <SectionLabel label={t('map.controls.labels')} />
+                            {hasLayer('landmarks') && (
+                                <LayerRow label={t('map.controls.landmarks')} checked={layerVisibility.landmarks} onChange={() => toggle('landmarks')} color="#3b82f6" />
+                            )}
+                            {hasLayer('sections') && (
+                                <LayerRow label={t('map.controls.sections')} checked={layerVisibility.sections} onChange={() => toggle('sections')} color="#22c55e" />
+                            )}
+                            {hasLayer('infrastructure') && (
+                                <LayerRow label={t('map.controls.infrastructure')} checked={layerVisibility.infrastructure} onChange={() => toggle('infrastructure')} color="#f59e0b" />
+                            )}
+                            {hasLayer('incidents') && (
+                                <LayerRow label={t('map.controls.incidents')} checked={layerVisibility.incidents} onChange={() => toggle('incidents')} color="#ef4444" />
+                            )}
+                        </>
+                    )}
+
+                    {/* ── Actions ── */}
                     {hasLayer('sections') && (
-                        <button
-                            onClick={startSectionCreation}
-                            disabled={isCreatingSection}
-                            className={`
-                                w-full px-3 py-2 text-left text-sm transition-colors
-                                ${isCreatingSection
-                                    ? 'text-amber-600 bg-amber-50 cursor-default'
-                                    : 'text-slate-700 hover:bg-slate-50 cursor-pointer'
-                                }
-                            `}
-                        >
-                            {isCreatingSection ? t('map.controls.clickFiberToStart') : t('map.controls.newSection')}
-                        </button>
+                        <>
+                            <Divider />
+                            <button
+                                onClick={startSectionCreation}
+                                disabled={isCreatingSection}
+                                className={`
+                                    w-full px-3 py-1.5 text-left text-sm min-h-[36px] md:min-h-0 transition-colors
+                                    ${isCreatingSection
+                                        ? 'text-amber-600 dark:text-amber-500 bg-amber-50 dark:bg-amber-950 cursor-default'
+                                        : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer'
+                                    }
+                                `}
+                            >
+                                {isCreatingSection ? t('map.controls.clickFiberToStart') : t('map.controls.newSection')}
+                            </button>
+                        </>
                     )}
                 </div>
             )}

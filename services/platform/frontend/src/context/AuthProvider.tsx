@@ -8,20 +8,11 @@ const WIDGETS_KEY = 'sequoia_auth_widgets'
 const LAYERS_KEY = 'sequoia_auth_layers'
 const ORG_ID_KEY = 'sequoia_auth_org_id'
 const ORG_NAME_KEY = 'sequoia_auth_org_name'
+const ROLE_KEY = 'sequoia_auth_role'
+const IS_SUPERUSER_KEY = 'sequoia_auth_is_superuser'
 
 type AuthProviderProps = {
     children: ReactNode
-}
-
-function loadCachedArray(key: string, fallback: string[]): string[] {
-    const cached = localStorage.getItem(key)
-    if (cached) {
-        try {
-            const parsed = JSON.parse(cached)
-            if (Array.isArray(parsed) && parsed.length > 0) return parsed
-        } catch { /* ignore */ }
-    }
-    return fallback
 }
 
 function cacheAuthData(
@@ -30,12 +21,16 @@ function cacheAuthData(
     allowedLayers: string[],
     organizationId: string | null,
     organizationName: string | null,
+    role: string | null,
+    isSuperuser: boolean,
 ) {
     localStorage.setItem(USERNAME_KEY, username)
     localStorage.setItem(WIDGETS_KEY, JSON.stringify(allowedWidgets))
     localStorage.setItem(LAYERS_KEY, JSON.stringify(allowedLayers))
     if (organizationId) localStorage.setItem(ORG_ID_KEY, organizationId)
     if (organizationName) localStorage.setItem(ORG_NAME_KEY, organizationName)
+    if (role) localStorage.setItem(ROLE_KEY, role)
+    localStorage.setItem(IS_SUPERUSER_KEY, JSON.stringify(isSuperuser))
 }
 
 function clearCachedAuthData() {
@@ -44,6 +39,8 @@ function clearCachedAuthData() {
     localStorage.removeItem(LAYERS_KEY)
     localStorage.removeItem(ORG_ID_KEY)
     localStorage.removeItem(ORG_NAME_KEY)
+    localStorage.removeItem(ROLE_KEY)
+    localStorage.removeItem(IS_SUPERUSER_KEY)
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
@@ -56,12 +53,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const [organizationName, setOrganizationName] = useState<string | null>(() =>
         localStorage.getItem(ORG_NAME_KEY)
     )
-    const [allowedWidgets, setAllowedWidgets] = useState<string[]>(() =>
-        loadCachedArray(WIDGETS_KEY, ['map', 'traffic_monitor', 'incidents'])
-    )
-    const [allowedLayers, setAllowedLayers] = useState<string[]>(() =>
-        loadCachedArray(LAYERS_KEY, ['landmarks', 'sections', 'detections', 'incidents'])
-    )
+    // Don't trust cached permissions on initial load — start empty and wait for verifyToken()
+    // This prevents using stale permissions from a previous session
+    const [allowedWidgets, setAllowedWidgets] = useState<string[]>([])
+    const [allowedLayers, setAllowedLayers] = useState<string[]>([])
+    const [role, setRole] = useState<string | null>(null)
+    const [isSuperuser, setIsSuperuser] = useState(false)
 
     // On mount: try to restore session via httpOnly refresh cookie
     // (since the access token is in-memory, it's lost on page reload)
@@ -77,12 +74,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
                 setOrganizationName(result.data.organizationName ?? null)
                 setAllowedWidgets(result.data.allowedWidgets)
                 setAllowedLayers(result.data.allowedLayers)
+                setRole(result.data.role ?? null)
+                setIsSuperuser(result.data.isSuperuser ?? false)
                 cacheAuthData(
                     result.data.username,
                     result.data.allowedWidgets,
                     result.data.allowedLayers,
                     result.data.organizationId ?? null,
                     result.data.organizationName ?? null,
+                    result.data.role ?? null,
+                    result.data.isSuperuser ?? false,
                 )
             } else {
                 // No valid session, clear cached display data
@@ -106,6 +107,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
                 clearCachedAuthData()
                 setIsAuthenticated(false)
                 setUsername(null)
+                setRole(null)
+                setIsSuperuser(false)
             }
         }, 12 * 60 * 1000) // 12min — refresh before 15min access token expires
 
@@ -122,12 +125,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
             setOrganizationName(data.organizationName ?? null)
             setAllowedWidgets(data.allowedWidgets ?? [])
             setAllowedLayers(data.allowedLayers ?? [])
+            setRole(data.role ?? null)
+            setIsSuperuser(data.isSuperuser ?? false)
             cacheAuthData(
                 data.username,
                 data.allowedWidgets ?? [],
                 data.allowedLayers ?? [],
                 data.organizationId ?? null,
                 data.organizationName ?? null,
+                data.role ?? null,
+                data.isSuperuser ?? false,
             )
 
             return { success: true }
@@ -152,10 +159,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setOrganizationName(null)
         setAllowedWidgets([])
         setAllowedLayers([])
+        setRole(null)
+        setIsSuperuser(false)
     }, [])
 
     return (
-        <AuthContext.Provider value={{ isAuthenticated, isLoading, username, organizationId, organizationName, allowedWidgets, allowedLayers, login, logout }}>
+        <AuthContext.Provider value={{ isAuthenticated, isLoading, username, organizationId, organizationName, allowedWidgets, allowedLayers, role, isSuperuser, login, logout }}>
             {children}
         </AuthContext.Provider>
     )

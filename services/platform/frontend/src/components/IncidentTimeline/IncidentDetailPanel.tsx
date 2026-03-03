@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import mapboxgl from 'mapbox-gl'
-import type { Incident } from '@/types/incident'
+import type { Incident, IncidentStatus } from '@/types/incident'
 import { useIncidentSnapshot } from '@/hooks/useIncidentSnapshot'
 import { useFibers } from '@/hooks/useFibers'
 import { SnapshotChart } from './SnapshotChart'
+import { IncidentActionBar } from './IncidentActionBar'
 import { AlertTriangle, TrendingDown, TrafficCone, HelpCircle, X, CheckCircle, Loader2 } from 'lucide-react'
 import { SEVERITY_DETAIL } from '@/constants/incidents'
+import { formatDurationMs, formatDateTime } from '@/lib/formatters'
 
 type Props = {
     incident: Incident
     onClose: () => void
+    onStatusChange: (incidentId: string, newStatus: IncidentStatus) => void
 }
 
 // Delay rendering of size-sensitive components until after slide animation
@@ -25,26 +28,7 @@ const TYPE_ICONS = {
 
 const SEVERITY_COLORS = SEVERITY_DETAIL
 
-function formatDateTime(dateStr: string): string {
-    const date = new Date(dateStr)
-    return date.toLocaleString([], {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    })
-}
-
-function formatDuration(ms: number): string {
-    const minutes = Math.floor(ms / 60000)
-    const hours = Math.floor(minutes / 60)
-    if (hours > 0) {
-        return `${hours}h ${minutes % 60}m`
-    }
-    return `${minutes}m`
-}
-
-export function IncidentDetailPanel({ incident, onClose }: Props) {
+export function IncidentDetailPanel({ incident, onClose, onStatusChange }: Props) {
     const { t } = useTranslation()
     const mapContainerRef = useRef<HTMLDivElement>(null)
     const mapRef = useRef<mapboxgl.Map | null>(null)
@@ -215,7 +199,7 @@ export function IncidentDetailPanel({ incident, onClose }: Props) {
                         <div>
                             <div className="text-[10px] uppercase tracking-wide text-slate-400 mb-1">{t('common.duration')}</div>
                             <div className="text-sm font-medium text-slate-700">
-                                {incident.duration ? formatDuration(incident.duration) : t('incidents.ongoing')}
+                                {incident.duration ? formatDurationMs(incident.duration) : t('incidents.ongoing')}
                             </div>
                         </div>
                         <div>
@@ -227,6 +211,12 @@ export function IncidentDetailPanel({ incident, onClose }: Props) {
                             <div className="text-sm font-medium text-slate-700">{incident.channel}</div>
                         </div>
                     </div>
+
+                    {/* Action bar */}
+                    <IncidentActionBar
+                        incident={incident}
+                        onStatusChange={onStatusChange}
+                    />
                 </div>
 
                 {/* Map */}

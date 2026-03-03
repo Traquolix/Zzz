@@ -5,12 +5,12 @@ import i18n from '@/i18n'
 let _token: string | null = null
 
 type RequestOptions = {
-    method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
+    method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
     body?: unknown
+    headers?: Record<string, string>
     requiresAuth?: boolean
 }
 
-let isRefreshing = false
 let refreshPromise: Promise<boolean> | null = null
 
 const REQUEST_TIMEOUT_MS = 10_000
@@ -21,11 +21,10 @@ const REQUEST_TIMEOUT_MS = 10_000
  * Exported so auth.ts can use the same logic with deduplication.
  */
 export async function attemptTokenRefresh(): Promise<boolean> {
-    if (isRefreshing && refreshPromise) {
+    if (refreshPromise) {
         return refreshPromise
     }
 
-    isRefreshing = true
     refreshPromise = (async () => {
         try {
             const controller = new AbortController()
@@ -47,7 +46,6 @@ export async function attemptTokenRefresh(): Promise<boolean> {
         } catch {
             return false
         } finally {
-            isRefreshing = false
             refreshPromise = null
         }
     })()
@@ -119,23 +117,29 @@ export async function apiRequest<T>(
 
             if (!retryResponse.ok) {
                 const error = await retryResponse.json().catch(() => ({ detail: 'Request failed' }))
-                throw new ApiError(retryResponse.status, error.detail || error.message || 'Request failed', error.code)
+                throw new ApiError(retryResponse.status, error.detail || error.message || 'Request failed', error.code, error.errors)
             }
 
             const text = await retryResponse.text()
-            if (!text) return null as T
+            if (!text) {
+                if (method === 'DELETE' || method === 'PUT') return undefined as T
+                throw new ApiError(0, 'Empty response body')
+            }
             return JSON.parse(text)
         }
     }
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({ detail: 'Request failed' }))
-        throw new ApiError(response.status, error.detail || error.message || 'Request failed', error.code)
+        throw new ApiError(response.status, error.detail || error.message || 'Request failed', error.code, error.errors)
     }
 
     // Handle empty responses
     const text = await response.text()
-    if (!text) return null as T
+    if (!text) {
+        if (method === 'DELETE' || method === 'PUT') return undefined as T
+        throw new ApiError(0, 'Empty response body')
+    }
 
     return JSON.parse(text)
 }
@@ -143,13 +147,41 @@ export async function apiRequest<T>(
 export class ApiError extends Error {
     status: number
     code?: string
+    errors?: string[]
 
-    constructor(status: number, message: string, code?: string) {
+    constructor(status: number, message: string, code?: string, errors?: string[]) {
         super(message)
         this.name = 'ApiError'
         this.status = status
         this.code = code
+        this.errors = errors
     }
+}
+
+/**
+ * Standard paginated response envelope from all list endpoints.
+ */
+export type PaginatedResponse<T> = {
+    results: T[]
+    hasMore: boolean
+    limit: number
+    offset: number
+    total: number
+}
+
+/**
+ * Fetch a paginated list endpoint and return the results array.
+ * Throws if the response doesn't match the expected envelope shape.
+ */
+export async function apiPaginatedRequest<T>(
+    endpoint: string,
+    options: RequestOptions = {},
+): Promise<PaginatedResponse<T>> {
+    const raw = await apiRequest<unknown>(endpoint, options)
+    if (!raw || typeof raw !== 'object' || !('results' in (raw as object))) {
+        throw new ApiError(0, 'Invalid paginated response shape')
+    }
+    return raw as PaginatedResponse<T>
 }
 
 /**

@@ -22,6 +22,9 @@ from typing import Optional
 
 from channels.layers import get_channel_layer
 
+from apps.alerting.integration import check_alerts_for_detections, check_alerts_for_incident
+from apps.shared.constants import MAP_REFRESH_INTERVAL
+
 logger = logging.getLogger('sequoia.simulation')
 
 # Global cache for simulation incidents (used by REST API fallback)
@@ -37,19 +40,11 @@ def get_simulation_incidents() -> list:
 
 def _update_simulation_incidents_cache(incidents: list):
     """Update the global incidents cache from simulation engine."""
+    from apps.monitoring.incident_service import transform_simulation_incident
     global _simulation_incidents_cache
     with _simulation_incidents_lock:
         _simulation_incidents_cache = [
-            {
-                'id': i.id,
-                'type': i.type,
-                'severity': i.severity,
-                'fiberLine': f'{i.fiber_line}:0',
-                'channel': i.channel,
-                'detectedAt': i.detected_at,
-                'status': i.status,
-                'duration': i.duration,
-            }
+            transform_simulation_incident(i)
             for i in incidents
         ]
 
@@ -614,7 +609,6 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
     fiber_org_map = await _load_fiber_org_map()
     infra_org_map = _load_infra_org_map(infrastructure)
     last_map_refresh = time.time()
-    MAP_REFRESH_INTERVAL = 300  # 5 minutes
 
     logger.info(
         'Simulation started: %d fibers, %d infrastructure, hour=%.1f, %d org mappings',
@@ -622,15 +616,8 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
     )
 
     # Broadcast initial incidents (to all orgs) and update cache for REST API
-    initial_incidents = [
-        {
-            'id': i.id, 'type': i.type, 'severity': i.severity,
-            'fiberLine': i.fiber_line, 'channel': i.channel,
-            'detectedAt': i.detected_at, 'status': i.status,
-            'duration': i.duration,
-        }
-        for i in engine.incidents
-    ]
+    from apps.monitoring.incident_service import transform_simulation_incident
+    initial_incidents = [transform_simulation_incident(i) for i in engine.incidents]
     await _broadcast_per_org(
         channel_layer, 'incidents', initial_incidents, fiber_org_map,
     )
@@ -680,6 +667,15 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
             await _broadcast_per_org(
                 channel_layer, 'detections', detection_dicts, fiber_org_map,
             )
+            # Check alerts for detections (per-org)
+            org_detections: dict[str, list[dict]] = {}
+            for det in detection_dicts:
+                fid = det.get('fiberLine', '')
+                parent_fid = fid.rsplit(':', 1)[0] if ':' in fid else fid
+                for org_id in fiber_org_map.get(parent_fid, []):
+                    org_detections.setdefault(org_id, []).append(det)
+            for org_id, org_dets in org_detections.items():
+                await check_alerts_for_detections(org_dets, org_id)
 
         # Broadcast SHM every 20 ticks (1 Hz) — per-org via infrastructure ownership
         if shm_counter >= 20:
@@ -720,18 +716,14 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
             # Update cache for REST API fallback
             _update_simulation_incidents_cache(engine.incidents)
             for inc in new_incidents + resolved_incidents:
-                # Assign incidents to direction 0 by convention
-                directional_fid = f'{inc.fiber_line}:0'
-                inc_data = {
-                    'id': inc.id, 'type': inc.type, 'severity': inc.severity,
-                    'fiberLine': directional_fid, 'channel': inc.channel,
-                    'detectedAt': inc.detected_at, 'status': inc.status,
-                    'duration': inc.duration,
-                }
+                inc_data = transform_simulation_incident(inc)
+                directional_fid = inc_data['fiberLine']
                 await _broadcast_to_orgs(
                     channel_layer, 'incidents', inc_data, fiber_org_map,
                     fiber_ids={directional_fid},
                 )
+                # Check alerts for incident
+                await check_alerts_for_incident(inc_data, fiber_org_map)
 
         # Broadcast vehicle counts every 100 ticks (5 seconds) — per-org
         if count_counter >= 100:

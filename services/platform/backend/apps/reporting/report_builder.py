@@ -126,7 +126,7 @@ def _query_volume(report):
             SELECT
                 fiber_id,
                 toStartOfHour(ts) AS hour,
-                sum(vehicle_count) AS total_vehicles
+                sum(count) AS total_vehicles
             FROM sequoia.count_hires
             WHERE fiber_id IN {fids:Array(String)}
               AND ts BETWEEN {start:DateTime64(3)} AND {end:DateTime64(3)}

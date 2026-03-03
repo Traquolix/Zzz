@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRealtime } from '@/hooks/useRealtime'
 import { useVehicleCounts } from '@/hooks/useVehicleCounts'
 import type { FiberSection } from '@/types/section'
@@ -19,6 +19,8 @@ export type SectionStats = {
 }
 
 const METERS_PER_CHANNEL = 5
+const FLUSH_INTERVAL_MS = 500 // ~2Hz state updates
+const MAX_PENDING_DETECTIONS = 5000 // Safety cap on batch buffer between flushes
 
 /**
  * Extract parent fiber ID from directional ID.
@@ -28,7 +30,6 @@ function getParentFiberId(directionalId: string): string {
     const colonIndex = directionalId.lastIndexOf(':')
     if (colonIndex === -1) return directionalId
     const suffix = directionalId.slice(colonIndex + 1)
-    // Only strip if suffix is "0" or "1" (direction)
     if (suffix === '0' || suffix === '1') {
         return directionalId.slice(0, colonIndex)
     }
@@ -74,13 +75,11 @@ function findMatchingCount(
     let bestMatch: VehicleCount | null = null
     let bestOverlap = 0
 
-    // section.fiberId is directional (e.g., "mathis:0"), count.fiberLine is parent (e.g., "mathis")
     const sectionParentId = getParentFiberId(section.fiberId)
 
     for (const count of counts.values()) {
         if (count.fiberLine !== sectionParentId) continue
 
-        // Check overlap between section [startChannel, endChannel] and count [channelStart, channelEnd]
         const overlapStart = Math.max(section.startChannel, count.channelStart)
         const overlapEnd = Math.min(section.endChannel, count.channelEnd)
         const overlap = overlapEnd - overlapStart
@@ -96,18 +95,15 @@ function findMatchingCount(
 
 /**
  * Hook to compute real-time statistics for fiber sections.
- * Subscribes to raw detection events and computes instantaneous stats per section.
- * Each detection batch updates the stats immediately with current snapshot.
- * Stats are computed separately for each direction and combined.
  *
- * When AI-derived vehicle counts are available, they override the detection-based
- * vehicle count (which is just grouped channel hits, not calibrated flow).
+ * Performance: Batches incoming 10Hz detections in a ref and flushes to React
+ * state at ~2Hz (500ms intervals). Only recomputes sections that received new
+ * detections in the batch. Reads aiCounts via ref to avoid effect re-subscribe.
  */
 export function useSectionStats(sections: Map<string, FiberSection>) {
     const { subscribe } = useRealtime()
     const { counts: aiCounts } = useVehicleCounts()
     const [stats, setStats] = useState<Map<string, SectionStats>>(() => {
-        // Initialize with empty stats for all sections
         const initial = new Map<string, SectionStats>()
         for (const [sectionId, section] of sections) {
             const distance = Math.abs(section.endChannel - section.startChannel) * METERS_PER_CHANNEL
@@ -121,43 +117,96 @@ export function useSectionStats(sections: Map<string, FiberSection>) {
         return initial
     })
 
-    // Subscribe to detections and compute instantaneous stats
-    useEffect(() => {
-        const unsubscribe = subscribe('detections', (data: unknown) => {
-            const detections = parseDetections(data)
-            if (detections.length === 0) return
+    // Refs for batching — avoids effect dep on mutable data
+    const pendingRef = useRef<Detection[]>([])
+    const timerRef = useRef<number | null>(null)
+    const aiCountsRef = useRef(aiCounts)
+    const sectionsRef = useRef(sections)
 
-            const result = new Map<string, SectionStats>()
+    // Keep refs current without triggering re-subscribe
+    useEffect(() => { aiCountsRef.current = aiCounts }, [aiCounts])
+    useEffect(() => { sectionsRef.current = sections }, [sections])
 
-            for (const [sectionId, section] of sections) {
+    // Flush: recompute only sections that have new detections
+    const flush = useCallback(() => {
+        timerRef.current = null
+        const batch = pendingRef.current
+        pendingRef.current = []
+        if (batch.length === 0) return
+
+        // Index by fiberLine for O(1) lookup per section
+        const byFiber = new Map<string, Detection[]>()
+        for (const d of batch) {
+            let arr = byFiber.get(d.fiberLine)
+            if (!arr) {
+                arr = []
+                byFiber.set(d.fiberLine, arr)
+            }
+            arr.push(d)
+        }
+
+        const currentSections = sectionsRef.current
+        const currentAiCounts = aiCountsRef.current
+
+        setStats(prev => {
+            const result = new Map(prev) // shallow copy — unaffected sections keep identity
+            for (const [sectionId, section] of currentSections) {
+                const fiberDetections = byFiber.get(section.fiberId)
+                if (!fiberDetections) continue // skip unaffected sections
+
                 const distance = Math.abs(section.endChannel - section.startChannel) * METERS_PER_CHANNEL
 
-                // Filter detections to this section
-                // fiberLine is now directional from backend (e.g., "mathis:0")
-                const sectionDetections = detections.filter(d =>
-                    d.fiberLine === section.fiberId &&
+                // Filter to channels within this section
+                const sectionDetections = fiberDetections.filter(d =>
                     d.channel >= section.startChannel &&
                     d.channel <= section.endChannel
                 )
+
+                if (sectionDetections.length === 0) continue
 
                 const direction0 = computeDirectionStats(sectionDetections, distance, 0)
                 const direction1 = computeDirectionStats(sectionDetections, distance, 1)
                 const combined = computeDirectionStats(sectionDetections, distance, 'all')
 
-                // Override vehicleCount with AI-derived count if available
-                const aiCount = findMatchingCount(section, aiCounts)
+                const aiCount = findMatchingCount(section, currentAiCounts)
                 if (aiCount) {
                     combined.vehicleCount = Math.round(aiCount.vehicleCount)
                 }
 
                 result.set(sectionId, { distance, direction0, direction1, combined })
             }
+            return result
+        })
+    }, [])
 
-            setStats(result)
+    // Subscribe to detections — push to buffer, schedule flush at 500ms
+    // Deps: [subscribe] only — no aiCounts or sections causing re-subscribe
+    useEffect(() => {
+        const unsubscribe = subscribe('detections', (data: unknown) => {
+            const detections = parseDetections(data)
+            if (detections.length === 0) return
+
+            pendingRef.current.push(...detections)
+
+            // Hard cap: if flush is delayed, drop oldest to prevent memory spike
+            if (pendingRef.current.length > MAX_PENDING_DETECTIONS) {
+                pendingRef.current = pendingRef.current.slice(-MAX_PENDING_DETECTIONS)
+            }
+
+            if (timerRef.current === null) {
+                timerRef.current = window.setTimeout(flush, FLUSH_INTERVAL_MS)
+            }
         })
 
-        return unsubscribe
-    }, [subscribe, sections, aiCounts])
+        return () => {
+            unsubscribe()
+            if (timerRef.current !== null) {
+                clearTimeout(timerRef.current)
+                timerRef.current = null
+            }
+            pendingRef.current = []
+        }
+    }, [subscribe, flush])
 
     // Update distances when sections change
     useEffect(() => {

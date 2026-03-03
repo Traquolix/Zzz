@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useRef, useId } from 'react'
+import { useTranslation } from 'react-i18next'
 import { subDays, subWeeks, startOfDay, endOfDay, startOfWeek, endOfWeek, format } from 'date-fns'
 import { Loader2, ChevronDown } from 'lucide-react'
+import { logger } from '@/lib/logger'
 import { fetchPeakFrequencies } from '@/api/infrastructure'
 import type { PeakFrequencyData, SpectralSummary } from '@/types/infrastructure'
 
@@ -47,11 +49,12 @@ function getComparisonRanges(mode: ComparisonMode, dataEnd: Date): { a: TimeRang
 }
 
 function ModeSelector({ mode, onChange }: { mode: ComparisonMode; onChange: (m: ComparisonMode) => void }) {
+    const { t } = useTranslation()
     const [isOpen, setIsOpen] = useState(false)
 
     const labels: Record<ComparisonMode, string> = {
-        day: 'Day over day',
-        week: 'Week over week',
+        day: t('shm.comparison.dayOverDay'),
+        week: t('shm.comparison.weekOverWeek'),
     }
 
     return (
@@ -127,6 +130,7 @@ function OverlayScatter({
     focus: FocusMode
     width: number
 }) {
+    const { t } = useTranslation()
     const rawId = useId()
     const clipId = `overlay-scatter-clip-${rawId.replace(/:/g, '')}`
     const height = 160
@@ -187,13 +191,13 @@ function OverlayScatter({
                 </g>
             ))}
             <text x={12} y={height / 2} textAnchor="middle" dominantBaseline="middle" transform={`rotate(-90, 12, ${height / 2})`} className="text-[10px] fill-slate-500">
-                Hz
+                {t('shm.hzUnit')}
             </text>
 
             {/* X-axis */}
             <line x1={padding.left} y1={height - padding.bottom} x2={width - padding.right} y2={height - padding.bottom} stroke="#e2e8f0" strokeWidth={1} />
-            <text x={padding.left} y={height - 6} textAnchor="start" className="text-[9px] fill-slate-400">Start</text>
-            <text x={width - padding.right} y={height - 6} textAnchor="end" className="text-[9px] fill-slate-400">End</text>
+            <text x={padding.left} y={height - 6} textAnchor="start" className="text-[9px] fill-slate-400">{t('shm.comparison.start')}</text>
+            <text x={width - padding.right} y={height - 6} textAnchor="end" className="text-[9px] fill-slate-400">{t('shm.comparison.end')}</text>
 
             {/* Data points - B behind, A in front when A focused, vice versa */}
             <g clipPath={`url(#${clipId})`}>
@@ -217,6 +221,7 @@ type Props = {
 }
 
 export function TimeComparison({ dataSummary, selectedDay }: Props) {
+    const { t } = useTranslation()
     const containerRef = useRef<HTMLDivElement>(null)
     const [chartWidth, setChartWidth] = useState(400)
     const [mode, setMode] = useState<ComparisonMode>('day')
@@ -278,7 +283,7 @@ export function TimeComparison({ dataSummary, selectedDay }: Props) {
                 })
                 setWindowA(prev => ({ ...prev, data, loading: false }))
             } catch (err) {
-                console.error('Failed to load window A data:', err)
+                logger.error('Failed to load window A data:', err)
                 setWindowA(prev => ({ ...prev, data: null, loading: false }))
             }
         }
@@ -298,7 +303,7 @@ export function TimeComparison({ dataSummary, selectedDay }: Props) {
                 })
                 setWindowB(prev => ({ ...prev, data, loading: false }))
             } catch (err) {
-                console.error('Failed to load window B data:', err)
+                logger.error('Failed to load window B data:', err)
                 setWindowB(prev => ({ ...prev, data: null, loading: false }))
             }
         }
@@ -338,7 +343,7 @@ export function TimeComparison({ dataSummary, selectedDay }: Props) {
             {/* Header with mode selector */}
             <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                    <h3 className="text-base font-medium text-slate-900">Compare</h3>
+                    <h3 className="text-base font-medium text-slate-900">{t('shm.comparison.title')}</h3>
                     <ModeSelector mode={mode} onChange={setMode} />
                 </div>
                 <FocusToggle value={focus} onChange={setFocus} />
@@ -350,7 +355,7 @@ export function TimeComparison({ dataSummary, selectedDay }: Props) {
                     <span className="w-3 h-3 rounded-full bg-blue-500" />
                     <span className="text-slate-600">A: {labelA}</span>
                 </div>
-                <span className="text-slate-300">vs</span>
+                <span className="text-slate-300">{t('shm.comparison.vs')}</span>
                 <div className="flex items-center gap-2">
                     <span className="w-3 h-3 rounded-full bg-amber-500" />
                     <span className="text-slate-600">B: {labelB}</span>
@@ -378,7 +383,7 @@ export function TimeComparison({ dataSummary, selectedDay }: Props) {
                 <div className="mt-4 space-y-2">
                     {/* Frequency shift - prominent */}
                     <div className="flex items-center justify-center gap-2 py-2 bg-slate-50 rounded-lg">
-                        <span className="text-sm text-slate-600">Frequency shift:</span>
+                        <span className="text-sm text-slate-600">{t('shm.comparison.frequencyShift')}</span>
                         <span className={`text-lg font-semibold ${
                             stats.diff > 0 ? 'text-green-600' : stats.diff < 0 ? 'text-red-600' : 'text-slate-600'
                         }`}>
@@ -395,14 +400,14 @@ export function TimeComparison({ dataSummary, selectedDay }: Props) {
                     <div className="grid grid-cols-2 gap-4 text-xs">
                         <div className="flex items-center gap-2">
                             <span className="w-2 h-2 rounded-full bg-blue-500" />
-                            <span className="text-slate-500">Mean:</span>
-                            <span className="font-medium text-slate-700">{stats.a.mean.toFixed(4)} Hz</span>
+                            <span className="text-slate-500">{t('shm.comparison.mean')}</span>
+                            <span className="font-medium text-slate-700">{stats.a.mean.toFixed(4)} {t('shm.hzUnit')}</span>
                             <span className="text-slate-400">(σ={stats.a.std.toFixed(4)})</span>
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="w-2 h-2 rounded-full bg-amber-500" />
-                            <span className="text-slate-500">Mean:</span>
-                            <span className="font-medium text-slate-700">{stats.b.mean.toFixed(4)} Hz</span>
+                            <span className="text-slate-500">{t('shm.comparison.mean')}</span>
+                            <span className="font-medium text-slate-700">{stats.b.mean.toFixed(4)} {t('shm.hzUnit')}</span>
                             <span className="text-slate-400">(σ={stats.b.std.toFixed(4)})</span>
                         </div>
                     </div>

@@ -4,6 +4,7 @@ import 'mapbox-gl/dist/mapbox-gl.css'
 import type { FiberLine } from '@/types/fiber'
 import type { SpeedLimitZone } from '@/types/speedLimit'
 import { MAPBOX_TOKEN } from '@/config/mapbox'
+import { COLORS, getLimitZoneColor } from '@/lib/theme'
 
 mapboxgl.accessToken = MAPBOX_TOKEN
 
@@ -99,7 +100,7 @@ function updateLayers(map: mapboxgl.Map, fiber: FiberLine, zones: SpeedLimitZone
         type: 'line',
         source: 'fiber-preview-base-source',
         paint: {
-            'line-color': '#cbd5e1', // slate-300
+            'line-color': COLORS.ui.borderHover, // slate-300
             'line-width': 4
         }
     })
@@ -111,7 +112,7 @@ function updateLayers(map: mapboxgl.Map, fiber: FiberLine, zones: SpeedLimitZone
             type: 'Feature' as const,
             properties: {
                 limit: zone.limit,
-                color: getLimitColor(zone.limit)
+                color: getLimitZoneColor(zone.limit)
             },
             geometry: {
                 type: 'LineString' as const,
@@ -139,9 +140,4 @@ function updateLayers(map: mapboxgl.Map, fiber: FiberLine, zones: SpeedLimitZone
     })
 }
 
-function getLimitColor(limit: number): string {
-    if (limit >= 100) return '#3b82f6' // blue - highway
-    if (limit >= 70) return '#8b5cf6'  // purple - fast road
-    if (limit >= 50) return '#f59e0b'  // amber - urban
-    return '#ef4444'                    // red - slow zone
-}
+// getLimitColor moved to @/lib/theme.ts as getLimitZoneColor()

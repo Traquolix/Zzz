@@ -4,8 +4,8 @@ import { useFibers } from '@/hooks/useFibers'
 import { useSection } from '@/hooks/useSection'
 import { filterValidCoords } from '@/lib/geoUtils'
 
-// Darker grey for the cable centerline
-const CABLE_COLOR = '#64748b'
+// Orange to visually distinguish from snapped directional fiber lines
+const CABLE_COLOR = '#f97316'
 
 /**
  * Renders the parent fiber cables as center lines (no directional offset).
@@ -81,8 +81,9 @@ export function CableLayer() {
             if (parentFiberIds.has(parentId)) continue
             parentFiberIds.add(parentId)
 
-            // Use the raw coordinates (no offset) for the center line
-            const coords = filterValidCoords(fiber.coordinates as ([number, number] | [null, null])[])
+            // Use the original base coordinates (no directional offset) for the center line
+            const rawCoords = fiber.baseCoordinates ?? fiber.coordinates
+            const coords = filterValidCoords(rawCoords as ([number, number] | [null, null])[])
             if (coords.length >= 2) {
                 parentFiberCoords.set(parentId, coords)
             }
@@ -120,8 +121,7 @@ export function CableLayer() {
                 paint: {
                     'line-color': CABLE_COLOR,
                     'line-width': 2,
-                    'line-opacity': 0.6,
-                    'line-dasharray': [4, 2]  // Dashed line to distinguish from directional fibers
+                    'line-opacity': 0.7,
                 }
             })
         }

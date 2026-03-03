@@ -2,12 +2,16 @@
 User authentication models.
 """
 
+import logging
 import uuid
-from django.core.exceptions import ValidationError
+
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 
 from apps.shared.constants import ALL_WIDGETS, ALL_LAYERS, USER_ROLES
+
+logger = logging.getLogger('sequoia.accounts')
 
 
 class User(AbstractUser):
@@ -78,8 +82,12 @@ class User(AbstractUser):
                 org_widgets = self.organization.settings.allowed_widgets
                 if org_widgets:
                     return list(org_widgets)
-            except Exception:
+            except ObjectDoesNotExist:
+                # Org has no settings record — fall through to defaults
                 pass
+            except AttributeError:
+                # Organization relation not loaded — fall through to defaults
+                logger.warning('Could not load org settings for user %s', self.pk)
         if self.role in ('admin', 'operator'):
             return list(ALL_WIDGETS)
         from apps.shared.constants import VIEWER_WIDGETS
@@ -92,8 +100,12 @@ class User(AbstractUser):
                 org_layers = self.organization.settings.allowed_layers
                 if org_layers:
                     return list(org_layers)
-            except Exception:
+            except ObjectDoesNotExist:
+                # Org has no settings record — fall through to defaults
                 pass
+            except AttributeError:
+                # Organization relation not loaded — fall through to defaults
+                logger.warning('Could not load org settings for user %s', self.pk)
         if self.role in ('admin', 'operator'):
             return list(ALL_LAYERS)
         from apps.shared.constants import VIEWER_LAYERS

@@ -1,6 +1,8 @@
 import { useRef, useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { format } from 'date-fns'
 import type { SpectralTimeSeries } from '@/types/infrastructure'
+import { COLORS } from '@/lib/theme'
 
 type Props = {
     data: SpectralTimeSeries
@@ -67,10 +69,11 @@ function getColor(value: number, min: number, max: number): [number, number, num
 }
 
 export function SpectralHeatmap({ data, width = 800, height = 280 }: Props) {
+    const { t } = useTranslation()
     const canvasRef = useRef<HTMLCanvasElement>(null)
 
-    // Axis padding
-    const padding = { top: 10, right: 10, bottom: 35, left: 45 }
+    // Axis padding (stable reference to avoid re-render loops)
+    const padding = useMemo(() => ({ top: 10, right: 10, bottom: 35, left: 45 }), [])
     const plotWidth = width - padding.left - padding.right
     const plotHeight = height - padding.top - padding.bottom
 
@@ -196,7 +199,7 @@ export function SpectralHeatmap({ data, width = 800, height = 280 }: Props) {
         ctx.drawImage(tempCanvas, padding.left, padding.top, plotWidth, plotHeight)
 
         // Draw axes
-        ctx.strokeStyle = '#e2e8f0'
+        ctx.strokeStyle = COLORS.canvas.grid
         ctx.lineWidth = 1
 
         // Y-axis
@@ -212,7 +215,7 @@ export function SpectralHeatmap({ data, width = 800, height = 280 }: Props) {
         ctx.stroke()
 
         // Draw tick marks and labels
-        ctx.fillStyle = '#64748b'
+        ctx.fillStyle = COLORS.canvas.axis
         ctx.font = '10px system-ui, sans-serif'
 
         // Frequency ticks (Y-axis)
@@ -242,7 +245,7 @@ export function SpectralHeatmap({ data, width = 800, height = 280 }: Props) {
         }
 
         // Axis labels
-        ctx.fillStyle = '#94a3b8'
+        ctx.fillStyle = COLORS.canvas.label
         ctx.font = '10px system-ui, sans-serif'
 
         // Y-axis label
@@ -251,14 +254,14 @@ export function SpectralHeatmap({ data, width = 800, height = 280 }: Props) {
         ctx.rotate(-Math.PI / 2)
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
-        ctx.fillText('Frequency (Hz)', 0, 0)
+        ctx.fillText(t('shm.frequencyHz'), 0, 0)
         ctx.restore()
 
         // X-axis label
         ctx.textAlign = 'center'
         ctx.textBaseline = 'top'
-        ctx.fillText('Time', padding.left + plotWidth / 2, height - 8)
-    }, [data, width, height, minVal, maxVal, plotWidth, plotHeight, padding, freqTicks, timeTicks])
+        ctx.fillText(t('shm.time'), padding.left + plotWidth / 2, height - 8)
+    }, [data, width, height, minVal, maxVal, plotWidth, plotHeight, padding, freqTicks, timeTicks, t])
 
     return (
         <canvas

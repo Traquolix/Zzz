@@ -1,11 +1,19 @@
-import { apiRequest } from './client'
-import type { Infrastructure, SpectralTimeSeries, PeakFrequencyData, SpectralSummary } from '@/types/infrastructure'
+import { apiRequest, apiPaginatedRequest } from './client'
+import type { Infrastructure, SpectralTimeSeries, PeakFrequencyData, SpectralSummary, SHMStatus } from '@/types/infrastructure'
 
 /**
  * Fetch all infrastructure items
  */
 export async function fetchInfrastructure(): Promise<Infrastructure[]> {
-    return apiRequest<Infrastructure[]>('/api/infrastructure')
+    const response = await apiPaginatedRequest<Infrastructure>('/api/infrastructure')
+    return response.results
+}
+
+/**
+ * Fetch SHM status for an infrastructure element.
+ */
+export async function fetchSHMStatus(infrastructureId: string): Promise<SHMStatus> {
+    return apiRequest<SHMStatus>(`/api/monitoring/shm/status/${infrastructureId}`)
 }
 
 /**

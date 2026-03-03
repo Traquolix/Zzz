@@ -9,6 +9,7 @@ import yaml
 
 from config.fiber_config import (
     FiberConfigManager,
+    InferenceConfig,
     ModelSpec,
     SectionConfig,
 )
@@ -247,7 +248,7 @@ class TestModelSpec:
             },
             "counting": {
                 "enabled": True,
-                "window_seconds": 360,
+                "window_seconds": 30,
             },
         }
 
@@ -258,3 +259,73 @@ class TestModelSpec:
         assert model.inference.samples_per_window == 300
         assert model.speed_detection.min_speed_kmh == 20.0
         assert model.counting.enabled is True
+
+    def test_model_defaults_merging(self):
+        """Model-specific values should override model_defaults."""
+        model_defaults = {
+            "path": "/default/path",
+            "exp_name": "default_exp",
+            "version": "best",
+            "type": "dtan",
+            "inference": {
+                "sampling_rate_hz": 10.0,
+                "window_seconds": 30,
+                "channels_per_section": 9,
+                "bidirectional_rnn": True,
+            },
+            "speed_detection": {
+                "correlation_threshold": 500.0,
+                "time_overlap_ratio": 0.5,
+            },
+            "counting": {
+                "enabled": True,
+            },
+        }
+        # Model only specifies fiber_id and one override
+        data = {
+            "fiber_id": "carros",
+            "speed_detection": {
+                "use_calibration": True,
+            },
+        }
+
+        model = ModelSpec.from_dict("test", data, model_defaults)
+
+        assert model.fiber_id == "carros"
+        assert model.path == "/default/path"
+        assert model.exp_name == "default_exp"
+        assert model.inference.bidirectional_rnn is True
+        # Merged: default threshold + model override
+        assert model.speed_detection.correlation_threshold == 500.0
+        assert model.speed_detection.use_calibration is True
+        assert model.speed_detection.time_overlap_ratio == 0.5
+
+
+class TestStepSize:
+    """Test step_size derived from overlap ratio."""
+
+    def test_step_size_with_half_overlap(self):
+        """window=300, overlap=0.5 -> step=150."""
+        config = InferenceConfig(window_seconds=30, sampling_rate_hz=10.0, time_overlap_ratio=0.5)
+        assert config.step_size == 150
+
+    def test_step_size_with_sixth_overlap(self):
+        """window=300, overlap=1/6 -> step=250."""
+        config = InferenceConfig(window_seconds=30, sampling_rate_hz=10.0, time_overlap_ratio=1/6)
+        assert config.step_size == 250
+
+    def test_step_size_with_zero_overlap(self):
+        """window=300, overlap=0 -> step=300."""
+        config = InferenceConfig(window_seconds=30, sampling_rate_hz=10.0, time_overlap_ratio=0.0)
+        assert config.step_size == 300
+
+    def test_overlap_ratio_propagated_from_speed_detection(self):
+        """time_overlap_ratio from speed_detection should propagate to inference."""
+        model_defaults = {
+            "speed_detection": {"time_overlap_ratio": 0.5},
+            "inference": {"sampling_rate_hz": 10.0, "window_seconds": 30},
+        }
+        data = {"fiber_id": "test"}
+        model = ModelSpec.from_dict("test", data, model_defaults)
+        assert model.inference.time_overlap_ratio == 0.5
+        assert model.inference.step_size == 150

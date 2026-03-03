@@ -30,7 +30,7 @@ export function DashboardHeader({ editMode, onToggle, onAddWidget }: Props) {
             {onAddWidget && availableWidgets.length > 0 && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="outline" size="sm" className="gap-2">
+                        <Button variant="outline" size="sm" className="gap-2" aria-label={t('dashboard.addWidget')}>
                             <Plus className="h-4 w-4" />
                             {t('dashboard.addWidget')}
                         </Button>

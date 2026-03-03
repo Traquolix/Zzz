@@ -29,7 +29,7 @@ export function SectionCreationIndicator() {
     }
 
     return (
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] pointer-events-auto">
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] pointer-events-auto max-w-[calc(100%-2rem)]">
             <div className="bg-amber-500 text-white px-4 py-2 rounded-lg shadow-lg flex items-center gap-3">
                 <div className="flex items-center gap-2">
                     <span className="relative flex h-2 w-2">
@@ -57,7 +57,7 @@ export function SectionCreationIndicator() {
                 </div>
                 <button
                     onClick={handleCancel}
-                    className="ml-2 text-white/80 hover:text-white text-xs font-medium px-2 py-0.5 rounded hover:bg-white/20 transition-colors"
+                    className="ml-2 text-white/80 hover:text-white text-xs font-medium px-3 py-2 md:px-2 md:py-0.5 min-h-[44px] md:min-h-0 rounded hover:bg-white/20 transition-colors flex items-center justify-center"
                 >
                     Cancel
                 </button>

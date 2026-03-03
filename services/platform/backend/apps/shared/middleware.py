@@ -6,6 +6,7 @@ import logging
 import time
 import uuid
 from django.utils.deprecation import MiddlewareMixin
+from apps.shared.logging_utils import set_request_id
 
 logger = logging.getLogger('sequoia.requests')
 
@@ -26,6 +27,7 @@ class RequestLoggingMiddleware(MiddlewareMixin):
     def process_request(self, request):
         request.start_time = time.time()
         request.request_id = str(uuid.uuid4())[:16]
+        set_request_id(request.request_id)
 
     def process_response(self, request, response):
         if request.path.startswith('/static/') or request.path.startswith('/media/'):

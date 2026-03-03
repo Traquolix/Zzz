@@ -44,6 +44,12 @@
       "doc": "Starting channel number for this fiber section"
     },
     {
+      "name": "direction",
+      "type": "int",
+      "default": 0,
+      "doc": "Dominant direction for this measurement (0=unknown, or directional indicator)"
+    },
+    {
       "name": "ai_metadata",
       "type": {
         "type": "record",

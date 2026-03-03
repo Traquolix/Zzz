@@ -1,7 +1,7 @@
 """
 Time-shifted replay buffer for AI engine inference results.
 
-The AI engine produces 30-second windows of speed/count data as bursts.
+The AI engine produces 28-second windows of speed/count data as bursts.
 This buffer replays them at the original 10 Hz rate with a fixed time
 offset, creating continuous flow to the frontend instead of bursts
 followed by silence.
@@ -202,8 +202,8 @@ class ReplayBuffer:
         if detection_accumulator:
             try:
                 await broadcast_fn('detections', detection_accumulator)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning('Failed to flush remaining detections on shutdown: %s', e)
 
         logger.info('Replay buffer drain stopped')
 

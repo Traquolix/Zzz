@@ -6,6 +6,8 @@ export type AuthData = {
     organizationName: string | null
     allowedWidgets: string[]
     allowedLayers: string[]
+    role: string | null
+    isSuperuser: boolean
 }
 
 type LoginResponse = AuthData & {
@@ -40,6 +42,8 @@ export async function verifyToken(): Promise<{ valid: boolean; data?: AuthData }
                     organizationName: response.organizationName ?? null,
                     allowedWidgets: response.allowedWidgets ?? [],
                     allowedLayers: response.allowedLayers ?? [],
+                    role: response.role ?? null,
+                    isSuperuser: response.isSuperuser ?? false,
                 }
             }
         }

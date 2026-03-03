@@ -25,9 +25,10 @@ from ai_engine.message_utils import (
 )
 from ai_engine.model_vehicle import (
     Args_NN_model_all_channels,
-    VehicleCounter,
     VehicleSpeedEstimator,
 )
+from ai_engine.model_vehicle.vehicle_speed import compute_edge_trim
+from ai_engine.model_vehicle.simple_interval_counter import SimpleIntervalCounter
 from ai_engine.model_vehicle.calibration import CalibrationManager
 
 # Unified config loader
@@ -69,7 +70,7 @@ class ModelRegistry:
     def __init__(
         self,
         default_model: VehicleSpeedEstimator,
-        default_counter: Optional[VehicleCounter] = None,
+        default_counter: Optional[SimpleIntervalCounter] = None,
         calibration_manager: Optional[CalibrationManager] = None,
         max_models: int = 20,
     ):
@@ -78,7 +79,7 @@ class ModelRegistry:
         self._calibration_manager = calibration_manager
         self._max_models = max_models
         self._loaded_models: OrderedDict[str, VehicleSpeedEstimator] = OrderedDict()
-        self._loaded_counters: Dict[str, VehicleCounter] = {}
+        self._loaded_counters: Dict[str, SimpleIntervalCounter] = {}
         self._lock = threading.Lock()
 
     def get_speed_estimator(self, model_hint: str) -> VehicleSpeedEstimator:
@@ -104,7 +105,7 @@ class ModelRegistry:
             self._loaded_models[model_hint] = model
             return model
 
-    def get_counter(self, model_hint: str) -> Optional[VehicleCounter]:
+    def get_counter(self, model_hint: str) -> Optional[SimpleIntervalCounter]:
         """Get vehicle counter by model hint (lazy-loaded)."""
         if model_hint == "default" or not model_hint:
             return self._default_counter
@@ -113,14 +114,6 @@ class ModelRegistry:
             if model_hint not in self._loaded_counters:
                 self._loaded_counters[model_hint] = self._load_counter(model_hint)
             return self._loaded_counters[model_hint]
-
-    def get_loaded_model_count(self) -> int:
-        """Get number of currently loaded models."""
-        return len(self._loaded_models)
-
-    def get_loaded_models(self) -> List[str]:
-        """Get list of currently loaded model names."""
-        return list(self._loaded_models.keys())
 
     def _load_speed_estimator(self, model_hint: str) -> VehicleSpeedEstimator:
         """Load a speed estimator model from fibers.yaml config."""
@@ -132,7 +125,7 @@ class ModelRegistry:
                 data_window_length=spec.inference.samples_per_window,
                 gauge=spec.inference.gauge_meters,
                 Nch=spec.inference.channels_per_section,
-                N_channels=1,
+                N_channels=spec.inference.channels_per_section - 1,  # overlap_space = Nch-1 → step=1 (matches notebook)
                 fs=spec.inference.sampling_rate_hz,
                 exp_name=spec.exp_name,
                 version=spec.version,
@@ -171,6 +164,10 @@ class ModelRegistry:
                 verbose=False,
                 calibration_data=calibration_data,
                 visualization_config=visualization_config,
+                bidirectional_detection=spec.speed_detection.bidirectional_detection,
+                speed_glrt_factor=spec.speed_detection.speed_glrt_factor,
+                speed_weighting=spec.speed_detection.speed_weighting,
+                speed_positive_glrt_only=spec.speed_detection.speed_positive_glrt_only,
             )
 
             logger.info(f"Loaded speed estimator: {model_hint}")
@@ -180,18 +177,23 @@ class ModelRegistry:
             logger.error(f"Failed to load model '{model_hint}': {e}. Using default.")
             return self._default_model
 
-    def _load_counter(self, model_hint: str) -> Optional[VehicleCounter]:
-        """Load a vehicle counter model from fibers.yaml config."""
+    def _load_counter(self, model_hint: str) -> Optional[SimpleIntervalCounter]:
+        """Load a vehicle counter from fibers.yaml config."""
         try:
             spec = get_model_spec(model_hint)
             if not spec.counting.enabled:
                 return None
 
-            # For now, counting uses same model path as speed estimation
-            # In the future, this could be separate per model
-            logger.info(f"Loading counter for model: {model_hint}")
-            # TODO: implement per-model counter loading if needed
-            return self._default_counter
+            counter = SimpleIntervalCounter(
+                fiber_id=spec.fiber_id or model_hint,
+                sampling_rate_hz=spec.inference.sampling_rate_hz,
+                correlation_threshold=spec.speed_detection.correlation_threshold,
+                channels_per_section=spec.inference.channels_per_section,
+                classify_threshold_factor=spec.counting.classify_threshold_factor,
+                min_peak_distance_s=spec.counting.min_peak_distance_s,
+            )
+            logger.info(f"Loaded counter for model: {model_hint}")
+            return counter
 
         except Exception as e:
             logger.warning(f"Failed to load counter for '{model_hint}': {e}")
@@ -221,7 +223,7 @@ class AIEngineService(RollingBufferedTransformer):
         default_model_name = get_default_model_name()
         self._model_spec = get_model_spec(default_model_name)
 
-        self._processing_contexts: Dict[str, ProcessingContext] = {}  # Per-buffer contexts
+        self._processing_contexts: OrderedDict[str, ProcessingContext] = OrderedDict()
         self._analyses_completed = 0
         self._counts_completed = 0
         self._last_stats_time = time.time()
@@ -298,7 +300,7 @@ class AIEngineService(RollingBufferedTransformer):
             data_window_length=spec.inference.samples_per_window,
             gauge=spec.inference.gauge_meters,
             Nch=spec.inference.channels_per_section,
-            N_channels=1,
+            N_channels=spec.inference.channels_per_section - 1,  # overlap_space = Nch-1 → step=1 (matches notebook)
             fs=spec.inference.sampling_rate_hz,
             exp_name=spec.exp_name,
             version=spec.version,
@@ -308,8 +310,9 @@ class AIEngineService(RollingBufferedTransformer):
         # Load calibration for default model if enabled
         calibration_data = None
         if spec.speed_detection.use_calibration:
-            fiber_id = spec.fiber_id or "carros"
-            calibration_data = self.calibration_manager.load_calibration(fiber_id)
+            if not spec.fiber_id:
+                raise ValueError("fiber_id is required in model spec for calibration")
+            calibration_data = self.calibration_manager.load_calibration(spec.fiber_id)
             if calibration_data is None:
                 self.logger.warning(
                     f"Calibration enabled but missing for '{fiber_id}', using static threshold"
@@ -324,46 +327,29 @@ class AIEngineService(RollingBufferedTransformer):
             corr_threshold=spec.speed_detection.correlation_threshold,
             verbose=False,
             calibration_data=calibration_data,
+            bidirectional_detection=spec.speed_detection.bidirectional_detection,
+            speed_glrt_factor=spec.speed_detection.speed_glrt_factor,
+            speed_weighting=spec.speed_detection.speed_weighting,
+            speed_positive_glrt_only=spec.speed_detection.speed_positive_glrt_only,
         )
 
         if spec.counting.enabled:
-            # Check if using temporary simple counting or neural network counting
-            use_simple = getattr(spec.counting, "use_simple_counting_TEMPORARY", False)
+            from ai_engine.model_vehicle.simple_interval_counter import (
+                SimpleIntervalCounter,
+            )
 
-            if use_simple:
-                # TEMPORARY: Simple interval-based counting (thesis Λ-based method)
-                from ai_engine.model_vehicle.simple_interval_counter import (
-                    SimpleIntervalCounter,
-                )  # noqa: E402
-
-                self.count_processor = SimpleIntervalCounter(
-                    fiber_id=spec.fiber_id or "unknown",
-                )
-                self.logger.warning(
-                    "=" * 80 + "\n"
-                    "TEMPORARY: Using simple interval-based counting\n"
-                    "Neural network counting disabled due to normalization mismatch.\n"
-                    "Set 'use_simple_counting_TEMPORARY: false' in config to use NN.\n" + "=" * 80
-                )
-            else:
-                # Original neural network counting
-                model_base_path = Path(spec.path)
-                model_path = model_base_path / "vehicle_counting_model.pt"
-                threshold_path = model_base_path / "detection_thresholds.csv"
-                mean_std_path = model_base_path / "mean_std_features.csv"
-
-                self.count_processor = VehicleCounter(
-                    vehicle_counting_model=str(model_path),
-                    time_window_duration=spec.counting.window_seconds,
-                    detection_threshold=str(threshold_path),
-                    mean_std_features=str(mean_std_path) if mean_std_path.exists() else None,
-                    Nch=spec.inference.channels_per_section,
-                    fs=spec.inference.sampling_rate_hz,
-                    corr_threshold=spec.speed_detection.correlation_threshold,
-                )
-                self.logger.info(
-                    f"Vehicle counting initialized (NN): window={spec.counting.window_seconds}s"
-                )
+            self.count_processor = SimpleIntervalCounter(
+                fiber_id=spec.fiber_id or "unknown",
+                sampling_rate_hz=spec.inference.sampling_rate_hz,
+                correlation_threshold=spec.speed_detection.correlation_threshold,
+                channels_per_section=spec.inference.channels_per_section,
+                classify_threshold_factor=spec.counting.classify_threshold_factor,
+                min_peak_distance_s=spec.counting.min_peak_distance_s,
+            )
+            self.logger.info(
+                f"Peak-based counting initialized: window={spec.counting.window_seconds}s, "
+                f"classify_factor={spec.counting.classify_threshold_factor}"
+            )
         else:
             self.count_processor = None
 
@@ -421,7 +407,7 @@ class AIEngineService(RollingBufferedTransformer):
                     speed_processor.set_section(section)
 
                 try:
-                    filtered_speeds, count_results, window_timestamps_ns = (
+                    filtered_speeds, count_results, window_timestamps_ns, direction_mask = (
                         await self._run_ai_inference(
                             data_array,
                             timestamps,
@@ -457,7 +443,8 @@ class AIEngineService(RollingBufferedTransformer):
                 )
 
                 output_messages = self._create_speed_messages(
-                    fiber_id, filtered_speeds, timestamps, output_timestamps_ns, ctx
+                    fiber_id, filtered_speeds, timestamps, output_timestamps_ns, ctx,
+                    direction_mask=direction_mask,
                 )
                 for msg in output_messages:
                     msg.output_id = "speed"
@@ -490,14 +477,15 @@ class AIEngineService(RollingBufferedTransformer):
                 # Record individual vehicle detections for speed messages
                 for msg in output_messages:
                     if msg.output_id == "speed":
-                        speed = msg.payload.get("speed_kmh", 0)
                         direction = msg.payload.get("direction", 0)
-                        self.ai_metrics.record_vehicle(
-                            fiber_id=fiber_id,
-                            section=section,
-                            direction=direction,
-                            speed_kmh=speed,
-                        )
+                        # Payload "speeds" is an array of {channel_number, speed}
+                        for speed_entry in msg.payload.get("speeds", []):
+                            self.ai_metrics.record_vehicle(
+                                fiber_id=fiber_id,
+                                section=section,
+                                direction=direction,
+                                speed_kmh=speed_entry.get("speed", 0),
+                            )
 
                 self.logger.info(
                     f"Analysis complete for {buffer_key} (model={model_hint}): "
@@ -522,9 +510,17 @@ class AIEngineService(RollingBufferedTransformer):
         """Validate that incoming sampling rate matches expected rate."""
         validate_sampling_rate(payload, self._model_spec.inference.sampling_rate_hz)
 
+    _MAX_PROCESSING_CONTEXTS = 100
+
     def _get_or_create_context(self, buffer_key: str) -> ProcessingContext:
-        """Get or create a processing context for a buffer key."""
+        """Get or create a processing context for a buffer key (LRU-bounded)."""
         if buffer_key not in self._processing_contexts:
+            # Evict oldest if at capacity
+            while len(self._processing_contexts) >= self._MAX_PROCESSING_CONTEXTS:
+                oldest_key = next(iter(self._processing_contexts))
+                del self._processing_contexts[oldest_key]
+                logger.debug(f"Evicted processing context: {oldest_key}")
+
             spec = self._model_spec
             buffer_size = (
                 spec.counting.samples_per_window(spec.inference.sampling_rate_hz)
@@ -549,15 +545,12 @@ class AIEngineService(RollingBufferedTransformer):
         buffer_key: str,
         ctx: ProcessingContext,
         speed_processor: Optional[VehicleSpeedEstimator] = None,
-        count_processor: Optional[VehicleCounter] = None,
+        count_processor: Optional[SimpleIntervalCounter] = None,
     ) -> tuple:
-        """Run AI inference and return (filtered_speeds, count_results, window_timestamps_ns).
+        """Run AI inference and return results.
 
         Returns:
-            Tuple of (filtered_speeds, count_results, window_timestamps_ns)
-            - filtered_speeds: Speed array trimmed to valid window region
-            - count_results: Vehicle counting results (or None)
-            - window_timestamps_ns: Correct timestamps for the output window (trimmed)
+            Tuple of (filtered_speeds, count_results, window_timestamps_ns, direction_mask)
         """
         return await asyncio.to_thread(
             self._sync_ai_inference,
@@ -578,52 +571,45 @@ class AIEngineService(RollingBufferedTransformer):
         buffer_key: str,
         ctx: ProcessingContext,
         speed_processor: VehicleSpeedEstimator,
-        count_processor: Optional[VehicleCounter] = None,
+        count_processor: Optional[SimpleIntervalCounter] = None,
     ) -> tuple:
         timestamps = np.array(timestamp_list)
         timestamps_ns_array = np.array(timestamps_ns)
 
-        # Collect results from all yields (process_file may yield multiple windows
-        # when batch/window size mismatch causes accumulated saved data)
+        # Collect results from all yields
         all_speeds = []
         all_timestamps_ns = []
         all_count_results = []
+        all_direction_masks = []
 
-        for (
-            unaligned_speed,
-            filtered_speed,
-            glrt_res,
-            aligned,
-            date_window,
-            date_window_ns,
-        ) in speed_processor.process_file(data, timestamps, timestamps_ns_array):
+        for result in speed_processor.process_file(data, timestamps, timestamps_ns_array):
+            # Support both old (6-tuple) and new (7-tuple with direction_mask) signatures
+            if len(result) == 7:
+                unaligned_speed, filtered_speed, glrt_res, aligned, date_window, date_window_ns, direction_mask = result
+            else:
+                unaligned_speed, filtered_speed, glrt_res, aligned, date_window, date_window_ns = result
+                direction_mask = None
             all_speeds.append(unaligned_speed)
             if date_window_ns is not None:
                 all_timestamps_ns.append(date_window_ns)
+            if direction_mask is not None:
+                all_direction_masks.append(direction_mask)
 
             count_results = None
             if self._model_spec.counting.enabled and count_processor is not None:
                 try:
-                    use_simple = getattr(
-                        self._model_spec.counting, "use_simple_counting_TEMPORARY", False
+                    speed_intervals = speed_processor.intervals
+                    window_timestamps_ns = (
+                        date_window_ns.tolist()
+                        if date_window_ns is not None
+                        else ctx.timestamps_ns
                     )
-
-                    if use_simple:
-                        speed_intervals = speed_processor.intervals
-                        window_timestamps_ns = (
-                            date_window_ns.tolist()
-                            if date_window_ns is not None
-                            else ctx.timestamps_ns
-                        )
-                        count_results = count_processor.count_from_intervals(
-                            filtered_speed=filtered_speed,
-                            intervals_list=speed_intervals,
-                            timestamps_ns=window_timestamps_ns,
-                        )
-                    else:
-                        count_results = self._process_counting(
-                            filtered_speed, glrt_res, aligned, count_processor, ctx
-                        )
+                    count_results = count_processor.count_from_intervals(
+                        filtered_speed=filtered_speed,
+                        glrt_summed=glrt_res,
+                        intervals_list=speed_intervals,
+                        timestamps_ns=window_timestamps_ns,
+                    )
 
                     speed_processor.set_count_data(count_results)
                     if count_results is not None:
@@ -638,11 +624,15 @@ class AIEngineService(RollingBufferedTransformer):
         if len(all_speeds) == 1:
             combined_speeds = all_speeds[0]
             combined_timestamps_ns = all_timestamps_ns[0] if all_timestamps_ns else None
+            combined_direction = all_direction_masks[0] if all_direction_masks else None
         else:
             # Multiple windows: concatenate along time axis
             combined_speeds = np.concatenate(all_speeds, axis=-1)
             combined_timestamps_ns = (
                 np.concatenate(all_timestamps_ns) if all_timestamps_ns else None
+            )
+            combined_direction = (
+                np.concatenate(all_direction_masks, axis=-1) if all_direction_masks else None
             )
             self.logger.info(
                 f"Processed {len(all_speeds)} windows in single batch for {buffer_key}"
@@ -651,39 +641,7 @@ class AIEngineService(RollingBufferedTransformer):
         # For counting, use the last result (or could aggregate)
         combined_count_results = all_count_results[-1] if all_count_results else None
 
-        return combined_speeds, combined_count_results, combined_timestamps_ns
-
-    def _process_counting(
-        self,
-        filtered_speed,
-        glrt_res,
-        aligned,
-        count_processor: VehicleCounter,
-        ctx: ProcessingContext,
-    ) -> tuple | None:
-        ctx.counting_buffer.extend(ctx.timestamps_ns)
-        spec = self._model_spec
-
-        self.logger.debug(
-            f"Counting buffer size: {len(ctx.counting_buffer)}, required: {spec.counting.samples_per_window(spec.inference.sampling_rate_hz)}"
-        )
-
-        for count, intervals in count_processor.process_data_chunk(
-            aligned_speed=filtered_speed, correlations=glrt_res, aligned_data=aligned
-        ):
-            buffer_list = list(ctx.counting_buffer)
-            counting_samples = spec.counting.samples_per_window(spec.inference.sampling_rate_hz)
-            window_timestamps = buffer_list[:counting_samples]
-
-            ctx.counting_buffer = deque(
-                buffer_list[spec.counting.step_samples :],
-                maxlen=ctx.counting_buffer.maxlen,
-            )
-
-            self._counts_completed += 1
-            return (count, intervals, window_timestamps)
-
-        return None
+        return combined_speeds, combined_count_results, combined_timestamps_ns, combined_direction
 
     def _create_speed_messages(
         self,
@@ -692,6 +650,7 @@ class AIEngineService(RollingBufferedTransformer):
         timestamp_list: list,
         timestamps_ns: list,
         ctx: ProcessingContext,
+        direction_mask: np.ndarray = None,
     ) -> List[Message]:
         """Create speed messages from filtered speeds array."""
         spec = self._model_spec
@@ -705,6 +664,7 @@ class AIEngineService(RollingBufferedTransformer):
             sampling_rate_hz=spec.inference.sampling_rate_hz,
             service_name=self.service_name,
             log_fn=self.logger.info,
+            direction_mask=direction_mask,
         )
 
     def _create_count_messages(
@@ -713,6 +673,8 @@ class AIEngineService(RollingBufferedTransformer):
         """Create count messages from counting results."""
         spec = self._model_spec
         counting_samples = spec.counting.samples_per_window(spec.inference.sampling_rate_hz)
+        step_samples = spec.inference.step_size
+        edge_trim = compute_edge_trim(spec.speed_detection.glrt_window)
         return create_count_messages(
             fiber_id=fiber_id,
             count_results=count_results,
@@ -720,9 +682,10 @@ class AIEngineService(RollingBufferedTransformer):
             sampling_rate_hz=spec.inference.sampling_rate_hz,
             channels_per_section=spec.inference.channels_per_section,
             counting_samples=counting_samples,
-            step_samples=spec.counting.step_samples,
+            step_samples=step_samples,
             service_name=self.service_name,
             log_fn=self.logger.info,
+            edge_trim=edge_trim,
         )
 
     def _show_stats(self) -> None:

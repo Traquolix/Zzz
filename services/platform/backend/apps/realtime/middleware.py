@@ -1,18 +1,17 @@
 """
 WebSocket authentication middleware.
 
-Supports two authentication methods:
-1. Query string token (?token=xxx) - DEPRECATED, kept for backwards compatibility
-2. Message-based auth (send {"action": "authenticate", "token": "xxx"} after connect)
+All connections start as AnonymousUser with _pending_auth=True.
+The consumer handles message-based auth: send {"action": "authenticate", "token": "xxx"}
+after connecting.
 
-Method 2 is preferred as tokens in URLs appear in server logs, browser history,
-and proxy logs, creating security risks.
+This is more secure than URL-based tokens which appear in server logs,
+browser history, and proxy logs.
 
-The consumer handles the 'authenticate' action and validates the token.
+The get_user_from_token() function is used by the consumer for message-based auth.
 """
 
 import logging
-from urllib.parse import parse_qs
 
 from channels.db import database_sync_to_async
 from channels.middleware import BaseMiddleware
@@ -47,30 +46,13 @@ def get_user_from_token(token_str):
 
 class JWTAuthMiddleware(BaseMiddleware):
     """
-    Supports JWT authentication via query string (deprecated) or message.
+    WebSocket JWT authentication middleware.
 
-    Query string auth (DEPRECATED - security risk):
-        ws://host/?token=<jwt>
-
-    Message-based auth (PREFERRED):
-        Connect without token, then send: {"action": "authenticate", "token": "<jwt>"}
-
-    If no token is provided at connect time, scope['user'] is AnonymousUser.
-    The consumer accepts the connection and waits for an 'authenticate' message.
+    All connections start unauthenticated. The consumer accepts the connection
+    and waits for an 'authenticate' message with a valid JWT token.
     """
 
     async def __call__(self, scope, receive, send):
-        query_string = scope.get('query_string', b'').decode('utf-8')
-        params = parse_qs(query_string)
-        token_list = params.get('token', [])
-
-        if token_list:
-            # DEPRECATED: URL-based token auth (kept for backwards compatibility)
-            logger.debug('WebSocket auth via URL token (deprecated)')
-            scope['user'] = await get_user_from_token(token_list[0])
-        else:
-            # No token in URL - consumer will handle message-based auth
-            scope['user'] = AnonymousUser()
-            scope['_pending_auth'] = True  # Flag for consumer to expect auth message
-
+        scope['user'] = AnonymousUser()
+        scope['_pending_auth'] = True
         return await super().__call__(scope, receive, send)

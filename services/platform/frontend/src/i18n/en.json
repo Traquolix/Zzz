@@ -5,7 +5,12 @@
         "shm": "Structural Health",
         "reports": "Reports",
         "apiData": "API & Data",
-        "settings": "Settings"
+        "settings": "Settings",
+        "admin": "Admin",
+        "logout": "Log out"
+    },
+    "breadcrumb": {
+        "home": "Home"
     },
     "auth": {
         "login": "Sign in",
@@ -22,6 +27,10 @@
     "incidents": {
         "title": "Incident History",
         "noIncidents": "No incidents recorded",
+        "empty": "No incidents found",
+        "emptyDescription": "No incidents match your search. Try adjusting your filters.",
+        "searchPlaceholder": "Search incidents...",
+        "count": "{{count}} incidents",
         "new": "NEW",
         "types": {
             "slowdown": "Slowdown",
@@ -87,11 +96,23 @@
             "justNow": "Just now",
             "minutesAgo": "{{count}}m ago",
             "hoursAgo": "{{count}}h ago"
+        },
+        "actions": {
+            "acknowledged": "Acknowledge",
+            "investigating": "Investigate",
+            "resolved": "Resolve",
+            "addNote": "Add note",
+            "notePlaceholder": "Optional note...",
+            "history": "Action History",
+            "noHistory": "No actions recorded",
+            "statusChanged": "Incident status updated"
         }
     },
     "connection": {
         "reconnecting": "Reconnecting to real-time data...",
-        "disconnected": "Disconnected from real-time data"
+        "disconnected": "Disconnected from real-time data",
+        "authFailed": "Session expired — real-time data unavailable",
+        "reLogin": "Log in again"
     },
     "common": {
         "loading": "Loading...",
@@ -116,22 +137,63 @@
         "appTitle": "Sequoia Analytics",
         "name": "Name",
         "all": "All",
+        "yes": "Yes",
+        "no": "No",
         "clickToConfirm": "Click again to confirm",
         "clickToEdit": "Click to edit",
         "noData": "No data",
         "tryAgain": "Try again",
         "somethingWentWrong": "Something went wrong",
-        "unexpectedError": "An unexpected error occurred"
+        "unexpectedError": "An unexpected error occurred",
+        "skipToContent": "Skip to content",
+        "menu": "Menu",
+        "min": "Min",
+        "avg": "Avg",
+        "max": "Max"
     },
     "chart": {
         "scatter": "Scatter",
         "occupancy": "Occupancy"
+    },
+    "traffic": {
+        "tabs": {
+            "landmarks": "Landmarks",
+            "sections": "Sections"
+        },
+        "occupancy": {
+            "slots": "slots",
+            "waitingForDetections": "Waiting for detections..."
+        },
+        "landmarks": {
+            "favorites": "Favorites",
+            "directionForward": "Direction →",
+            "directionBackward": "Direction ←",
+            "removeFromFavorites": "Remove from favorites",
+            "addToFavorites": "Add to favorites",
+            "goToLocation": "Go to location",
+            "vehicleUnit": "veh"
+        },
+        "empty": {
+            "noLandmarks": "No landmarks",
+            "createLandmarkHint": "Double-click on a fiber to create one",
+            "noSections": "No sections",
+            "createSectionHint": "Use Ctrl+Click on a fiber to define a section"
+        },
+        "prompt": {
+            "selectLandmark": "Select a landmark above, or click",
+            "selectLandmarkHint": "any point on a fiber line on the map",
+            "selectSection": "Select a section above to view",
+            "selectSectionHint": "detailed traffic statistics"
+        }
     },
     "reports": {
         "title": "Reports",
         "generate": "Generate Report",
         "generateTitle": "Generate Report",
         "noReports": "No reports generated yet",
+        "empty": "No reports found",
+        "emptyDescription": "No reports match your search. Try adjusting your filters.",
+        "searchPlaceholder": "Search reports...",
         "titleLabel": "Title",
         "titlePlaceholder": "e.g. Weekly Traffic Summary",
         "dateRange": "Date Range",
@@ -160,6 +222,23 @@
             "generating": "Generating",
             "completed": "Completed",
             "failed": "Failed"
+        },
+        "schedules": {
+            "title": "Report Schedules",
+            "create": "Create Schedule",
+            "frequency": "Frequency",
+            "daily": "Daily",
+            "weekly": "Weekly",
+            "monthly": "Monthly",
+            "fibers": "Fibers",
+            "sections": "Sections",
+            "recipients": "Recipients",
+            "lastRun": "Last Run",
+            "active": "Active",
+            "noSchedules": "No schedules configured",
+            "deleteConfirm": "Delete this schedule?",
+            "created": "Schedule created",
+            "deleted": "Schedule deleted"
         }
     },
     "settings": {
@@ -193,6 +272,8 @@
         "backLink": "Back to Dashboard"
     },
     "dashboard": {
+        "empty": "Your dashboard is empty",
+        "emptyDescription": "Click Edit to add widgets and customize your view.",
         "addWidget": "Add Widget",
         "editing": "Editing",
         "locked": "Locked",
@@ -210,14 +291,15 @@
             "baseLayers": "Base Layers",
             "labels": "Labels",
             "overlays": "Overlays",
-            "cables": "Cables",
-            "fiberLines": "Fiber Lines",
-            "vehicles": "Vehicles",
+            "cables": "Fiber Line",
+            "fiberLines": "Monitored Roads",
+            "vehicles": "Vehicles (3D)",
             "speedHeatmap": "Speed Heatmap",
             "landmarks": "Landmarks",
             "sections": "Sections",
             "infrastructure": "Infrastructure",
-            "detections": "Detections",
+            "detections": "Detection Dots",
+            "detectionMode": "Detection View",
             "incidents": "Incidents",
             "newSection": "+ New Section",
             "clickFiberToStart": "Click fiber to start..."
@@ -260,24 +342,30 @@
     },
     "apiHub": {
         "title": "API & Data Hub",
-        "description": "Access your organization's real-time and historical data through the Sequoia REST API.",
+        "description": "Access your organization's real-time and historical data through the SequoIA REST API.",
         "endpoints": "Available Endpoints",
         "authentication": "Authentication",
-        "authDescription": "All requests require a Bearer token. Obtain one via the login endpoint.",
+        "authDescription": "Authenticate with a Bearer token (JWT) or an API Key.",
         "baseUrl": "Base URL",
+        "apiKeyAuth": "API Key Authentication",
+        "apiKeyDescription": "Use the X-API-Key header for programmatic access without user sessions.",
+        "webhooks": "Webhooks",
+        "webhookDescription": "Verify webhook payloads using the X-Sequoia-Signature HMAC header.",
         "endpointList": {
-            "detections": "Real-time vehicle detections",
             "incidents": "Incident history and active alerts",
             "fibers": "Fiber line metadata and geometry",
-            "speedStats": "Speed statistics by section",
-            "reports": "Generated traffic reports"
+            "stats": "Traffic statistics by section",
+            "infrastructure": "SHM infrastructure data",
+            "reports": "Generated traffic reports",
+            "exportIncidents": "Export incident data (CSV/JSON)",
+            "exportSpeeds": "Export speed data (CSV/JSON)",
+            "exportCounts": "Export vehicle count data (CSV/JSON)"
         },
         "rateLimits": "Rate Limits",
         "rateLimitsDescription": "API requests are rate-limited per organization. Contact support if you need higher limits.",
         "requestsPerMinute": "{{count}} requests/minute",
         "docsLink": "Full API Documentation",
-        "docsDescription": "See the complete API reference with request/response examples.",
-        "comingSoon": "Interactive API explorer coming soon."
+        "docsDescription": "See the complete API reference with request/response examples."
     },
     "shm": {
         "title": "Structural Health Monitoring",
@@ -308,6 +396,19 @@
         "duration": "Duration",
         "freqRange": "Frequency range",
         "samples": "Samples",
+        "frequencyHz": "Frequency (Hz)",
+        "time": "Time",
+        "hzUnit": "Hz",
+        "comparison": {
+            "title": "Compare",
+            "dayOverDay": "Day over day",
+            "weekOverWeek": "Week over week",
+            "frequencyShift": "Frequency shift:",
+            "mean": "Mean:",
+            "start": "Start",
+            "end": "End",
+            "vs": "vs"
+        },
         "status": {
             "nominal": "Nominal",
             "warning": "Warning",
@@ -318,9 +419,24 @@
             "peakFreq": "Peak frequency",
             "expected": "Expected",
             "deviation": "Deviation"
+        },
+        "statusNominal": "Nominal",
+        "statusWarning": "Warning",
+        "statusCritical": "Critical",
+        "detail": {
+            "currentFreq": "Current Freq",
+            "amplitude": "Amplitude",
+            "today": "Today",
+            "yesterday": "Yesterday",
+            "time": "Time",
+            "freq": "Freq",
+            "amp": "Amp"
         }
     },
     "errors": {
+        "appCrash": "Application Error",
+        "appCrashDescription": "Something went wrong. Please reload the page.",
+        "reloadPage": "Reload Page",
         "accountLocked": "Account temporarily locked. Try again later.",
         "invalidCredentials": "Invalid credentials.",
         "refreshMissing": "Session expired. Please log in again.",
@@ -336,5 +452,119 @@
         "payloadTooLarge": "Payload is too large.",
         "analyticsUnavailable": "Analytics service temporarily unavailable.",
         "internalError": "Internal server error."
+    },
+    "theme": {
+        "switchToLight": "Switch to light mode",
+        "switchToDark": "Switch to dark mode",
+        "switchToSequoia": "Switch to SequoIA theme"
+    },
+    "notifications": {
+        "title": "Notifications",
+        "aria": "Notifications with {{count}} unread",
+        "markAllRead": "Mark all as read",
+        "noNotifications": "No notifications",
+        "unreadCount": "{{count}} unread notifications"
+    },
+    "admin": {
+        "title": "Administration",
+        "searchPlaceholder": "Search...",
+        "noSearchResults": "No results found",
+        "tryDifferentSearch": "Try a different search term.",
+        "tabs": {
+            "users": "Users",
+            "organizations": "Organizations",
+            "infrastructure": "Infrastructure",
+            "alertRules": "Alert Rules",
+            "alertLogs": "Alert Logs",
+            "settings": "Settings"
+        },
+        "username": "Username",
+        "email": "Email",
+        "password": "Password",
+        "role": "Role",
+        "organization": "Organization",
+        "status": "Status",
+        "slug": "Slug",
+        "type": "Type",
+        "channels": "Channels",
+        "ruleType": "Rule Type",
+        "threshold": "Threshold",
+        "dispatch": "Dispatch",
+        "createUser": "Create User",
+        "createOrg": "Create Organization",
+        "createRule": "Create Alert Rule",
+        "createInfra": "Create Infrastructure",
+        "create": "Create",
+        "save": "Save",
+        "edit": "Edit",
+        "noUsers": "No users found",
+        "noOrgs": "No organizations found",
+        "noInfra": "No infrastructure configured",
+        "noRules": "No alert rules defined",
+        "noLogs": "No alert logs recorded",
+        "userCreated": "User created successfully",
+        "userUpdated": "User updated successfully",
+        "orgCreated": "Organization created successfully",
+        "orgUpdated": "Organization updated successfully",
+        "infraCreated": "Infrastructure created successfully",
+        "infraUpdated": "Infrastructure updated successfully",
+        "ruleCreated": "Alert rule created successfully",
+        "ruleUpdated": "Alert rule updated successfully",
+        "ruleDeleted": "Alert rule deleted",
+        "infraDeleted": "Infrastructure deleted",
+        "settingsUpdated": "Settings updated successfully",
+        "fiberAssigned": "Fiber assigned successfully",
+        "fiberRemoved": "Fiber assignment removed",
+        "startChannel": "Start Channel",
+        "endChannel": "End Channel",
+        "settings": {
+            "timezone": "Timezone",
+            "timezoneLabel": "Timezone:",
+            "speedAlertThreshold": "Speed Alert Threshold (km/h)",
+            "speedAlertLabel": "Speed Alert:",
+            "incidentAutoResolve": "Auto-Resolve Incidents (minutes)",
+            "autoResolveLabel": "Auto-resolve:",
+            "shmEnabled": "SHM Enabled",
+            "shmLabel": "SHM:",
+            "enabled": "Enabled",
+            "disabled": "Disabled",
+            "widgets": "Allowed Widgets",
+            "layers": "Allowed Layers",
+            "inheritNote": "Empty selection inherits from organization defaults"
+        },
+        "fibers": {
+            "title": "Fiber Assignments",
+            "fiberId": "Fiber ID",
+            "assignedAt": "Assigned",
+            "addFiber": "Add Fiber",
+            "noFibers": "No fibers assigned"
+        },
+        "logs": {
+            "ruleName": "Rule",
+            "fiber": "Fiber",
+            "channel": "Channel",
+            "detail": "Detail",
+            "dispatchedAt": "Dispatched"
+        },
+        "editPermissions": "Edit Permissions",
+        "editUser": "Edit User",
+        "widgetNames": {
+            "map": "Map",
+            "trafficMonitor": "Traffic Monitor",
+            "incidents": "Incidents",
+            "shm": "SHM",
+            "admin": "Admin Panel"
+        },
+        "layerNames": {
+            "cables": "Fiber Line",
+            "fibers": "Monitored Roads",
+            "vehicles": "Vehicles",
+            "heatmap": "Speed Heatmap",
+            "landmarks": "Landmarks",
+            "sections": "Sections",
+            "detections": "Detections",
+            "incidents": "Incidents",
+            "infrastructure": "Infrastructure"
+        }
     }
 }

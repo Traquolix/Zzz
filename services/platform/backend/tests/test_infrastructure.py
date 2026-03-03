@@ -1,5 +1,7 @@
 """
 Tests for infrastructure endpoint.
+
+Response is wrapped in a paginated envelope: {results, hasMore, limit}.
 """
 
 import pytest
@@ -18,10 +20,13 @@ class TestInfrastructureList:
         response = authenticated_client.get(self.url)
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert len(data) == 2
+        assert 'results' in data
+        assert data['hasMore'] is False
+        results = data['results']
+        assert len(results) == 2
 
         # Verify camelCase field names match frontend type
-        item = data[0]
+        item = results[0]
         assert 'id' in item
         assert 'type' in item
         assert 'name' in item
@@ -31,8 +36,8 @@ class TestInfrastructureList:
 
     def test_infrastructure_types(self, authenticated_client, infrastructure):
         response = authenticated_client.get(self.url)
-        data = response.json()
-        types = {item['type'] for item in data}
+        results = response.json()['results']
+        types = {item['type'] for item in results}
         assert types == {'bridge', 'tunnel'}
 
     def test_infrastructure_unauthenticated(self, api_client):
@@ -47,19 +52,21 @@ class TestInfrastructureList:
 
         # Org A user should only see org A infrastructure
         response = authenticated_client.get(self.url)
-        data = response.json()
-        names = [item['name'] for item in data]
+        results = response.json()['results']
+        names = [item['name'] for item in results]
         assert 'Org A Bridge' in names
         assert 'Org B Bridge' not in names
 
         # Org B user should only see org B infrastructure
         response = other_org_client.get(self.url)
-        data = response.json()
-        names = [item['name'] for item in data]
+        results = response.json()['results']
+        names = [item['name'] for item in results]
         assert 'Org B Bridge' in names
         assert 'Org A Bridge' not in names
 
     def test_empty_infrastructure(self, authenticated_client):
         response = authenticated_client.get(self.url)
         assert response.status_code == status.HTTP_200_OK
-        assert response.json() == []
+        data = response.json()
+        assert data['results'] == []
+        assert data['hasMore'] is False

@@ -3,12 +3,16 @@ Tests for the RealtimeConsumer WebSocket consumer.
 
 Uses channels.testing.WebsocketCommunicator to test subscribe,
 unsubscribe, ping/pong, and channel validation behavior.
+
+Authentication uses message-based JWT: after connecting, the client
+sends {"action": "authenticate", "token": "<jwt>"} to authenticate.
 """
 
 import pytest
 from channels.testing import WebsocketCommunicator
 from channels.routing import URLRouter
 from django.urls import path
+from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.realtime.consumers import RealtimeConsumer
 from tests.factories import OrganizationFactory, UserFactory
@@ -24,16 +28,25 @@ def _make_application():
     ])
 
 
-def _make_authenticated_communicator(user):
+async def _make_authenticated_communicator(user):
     """
-    Create a WebsocketCommunicator with an authenticated user in scope.
+    Create a connected and authenticated WebsocketCommunicator.
 
-    Bypasses JWTAuthMiddleware by injecting the user directly into scope,
-    which is the standard Channels testing pattern.
+    Connects, then sends a JWT authenticate message and awaits the
+    success response, matching the consumer's message-based auth protocol.
     """
     application = _make_application()
     communicator = WebsocketCommunicator(application, '/ws/')
-    communicator.scope['user'] = user
+    connected, _ = await communicator.connect()
+    assert connected
+
+    # Authenticate via message-based JWT
+    token = str(AccessToken.for_user(user))
+    await communicator.send_json_to({'action': 'authenticate', 'token': token})
+    response = await communicator.receive_json_from(timeout=2)
+    assert response['action'] == 'authenticated'
+    assert response['success'] is True
+
     return communicator
 
 
@@ -49,22 +62,24 @@ class TestWebSocketConnect:
 
     @pytest.mark.asyncio
     async def test_authenticated_user_can_connect(self, ws_user):
-        communicator = _make_authenticated_communicator(ws_user)
-        connected, _ = await communicator.connect()
-        assert connected is True
+        communicator = await _make_authenticated_communicator(ws_user)
         await communicator.disconnect()
 
     @pytest.mark.asyncio
-    async def test_unauthenticated_user_rejected(self):
-        """Anonymous users should have the connection closed."""
-        from django.contrib.auth.models import AnonymousUser
-
+    async def test_unauthenticated_action_rejected(self):
+        """Actions before authentication should return an error."""
         application = _make_application()
         communicator = WebsocketCommunicator(application, '/ws/')
-        communicator.scope['user'] = AnonymousUser()
-        connected, code = await communicator.connect()
-        # Consumer calls self.close() for unauthenticated users
-        assert connected is False
+        connected, _ = await communicator.connect()
+        # Connection accepted (auth happens via message, not on connect)
+        assert connected is True
+
+        # Attempting to subscribe without authenticating should fail
+        await communicator.send_json_to({'action': 'subscribe', 'channel': 'detections'})
+        response = await communicator.receive_json_from(timeout=2)
+        assert response['action'] == 'error'
+        assert 'Authentication required' in response['message']
+        await communicator.disconnect()
 
 
 class TestSubscribe:
@@ -73,9 +88,7 @@ class TestSubscribe:
     @pytest.mark.asyncio
     async def test_subscribe_allowed_channel(self, ws_user):
         """Subscribing to an allowed channel should succeed silently."""
-        communicator = _make_authenticated_communicator(ws_user)
-        connected, _ = await communicator.connect()
-        assert connected
+        communicator = await _make_authenticated_communicator(ws_user)
 
         await communicator.send_json_to({
             'action': 'subscribe',
@@ -93,9 +106,7 @@ class TestSubscribe:
     @pytest.mark.asyncio
     async def test_subscribe_multiple_channels(self, ws_user):
         """Subscribing to multiple allowed channels should all succeed."""
-        communicator = _make_authenticated_communicator(ws_user)
-        connected, _ = await communicator.connect()
-        assert connected
+        communicator = await _make_authenticated_communicator(ws_user)
 
         for channel in ('detections', 'counts', 'shm_readings'):
             await communicator.send_json_to({
@@ -112,9 +123,7 @@ class TestSubscribe:
     @pytest.mark.asyncio
     async def test_subscribe_disallowed_channel(self, ws_user):
         """Subscribing to a channel not in ALLOWED_CHANNELS should be ignored."""
-        communicator = _make_authenticated_communicator(ws_user)
-        connected, _ = await communicator.connect()
-        assert connected
+        communicator = await _make_authenticated_communicator(ws_user)
 
         await communicator.send_json_to({
             'action': 'subscribe',
@@ -130,9 +139,7 @@ class TestSubscribe:
     @pytest.mark.asyncio
     async def test_subscribe_empty_channel(self, ws_user):
         """A subscribe action without a channel field should be ignored."""
-        communicator = _make_authenticated_communicator(ws_user)
-        connected, _ = await communicator.connect()
-        assert connected
+        communicator = await _make_authenticated_communicator(ws_user)
 
         await communicator.send_json_to({
             'action': 'subscribe',
@@ -150,9 +157,7 @@ class TestUnsubscribe:
     @pytest.mark.asyncio
     async def test_unsubscribe_from_subscribed_channel(self, ws_user):
         """Unsubscribing from a previously subscribed channel should work."""
-        communicator = _make_authenticated_communicator(ws_user)
-        connected, _ = await communicator.connect()
-        assert connected
+        communicator = await _make_authenticated_communicator(ws_user)
 
         # Subscribe first
         await communicator.send_json_to({
@@ -175,9 +180,7 @@ class TestUnsubscribe:
     @pytest.mark.asyncio
     async def test_unsubscribe_from_unsubscribed_channel(self, ws_user):
         """Unsubscribing from a channel you never subscribed to should be harmless."""
-        communicator = _make_authenticated_communicator(ws_user)
-        connected, _ = await communicator.connect()
-        assert connected
+        communicator = await _make_authenticated_communicator(ws_user)
 
         await communicator.send_json_to({
             'action': 'unsubscribe',
@@ -191,14 +194,16 @@ class TestUnsubscribe:
 
 
 class TestPingPong:
-    """Test the ping/pong heartbeat protocol."""
+    """Test the ping/pong heartbeat protocol.
+
+    Note: ping/pong works even without authentication (consumer allows it
+    before auth so clients can keep the connection alive during auth flow).
+    """
 
     @pytest.mark.asyncio
     async def test_ping_returns_pong(self, ws_user):
         """Sending a ping action should immediately return a pong response."""
-        communicator = _make_authenticated_communicator(ws_user)
-        connected, _ = await communicator.connect()
-        assert connected
+        communicator = await _make_authenticated_communicator(ws_user)
 
         await communicator.send_json_to({'action': 'ping'})
 
@@ -210,9 +215,7 @@ class TestPingPong:
     @pytest.mark.asyncio
     async def test_multiple_pings(self, ws_user):
         """Multiple pings should each return a pong."""
-        communicator = _make_authenticated_communicator(ws_user)
-        connected, _ = await communicator.connect()
-        assert connected
+        communicator = await _make_authenticated_communicator(ws_user)
 
         for _ in range(3):
             await communicator.send_json_to({'action': 'ping'})
@@ -228,9 +231,7 @@ class TestUnknownAction:
     @pytest.mark.asyncio
     async def test_unknown_action_ignored(self, ws_user):
         """An unknown action should be silently ignored."""
-        communicator = _make_authenticated_communicator(ws_user)
-        connected, _ = await communicator.connect()
-        assert connected
+        communicator = await _make_authenticated_communicator(ws_user)
 
         await communicator.send_json_to({
             'action': 'unknown_action',
@@ -245,9 +246,7 @@ class TestUnknownAction:
     @pytest.mark.asyncio
     async def test_empty_message_ignored(self, ws_user):
         """An empty JSON object should be silently ignored."""
-        communicator = _make_authenticated_communicator(ws_user)
-        connected, _ = await communicator.connect()
-        assert connected
+        communicator = await _make_authenticated_communicator(ws_user)
 
         await communicator.send_json_to({})
 
@@ -266,9 +265,7 @@ class TestBroadcastMessage:
         After subscribing to a channel, broadcasts to that channel's group
         should be delivered to the consumer.
         """
-        communicator = _make_authenticated_communicator(ws_user)
-        connected, _ = await communicator.connect()
-        assert connected
+        communicator = await _make_authenticated_communicator(ws_user)
 
         # Subscribe to detections
         await communicator.send_json_to({
@@ -301,9 +298,7 @@ class TestBroadcastMessage:
         After unsubscribing from a channel, broadcasts to that channel
         should NOT be delivered.
         """
-        communicator = _make_authenticated_communicator(ws_user)
-        connected, _ = await communicator.connect()
-        assert connected
+        communicator = await _make_authenticated_communicator(ws_user)
 
         # Subscribe then unsubscribe
         await communicator.send_json_to({

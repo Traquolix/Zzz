@@ -143,12 +143,12 @@ class TestPostgresIsolation:
         InfrastructureFactory(organization=other_org, id='org-b-1', name='Org B Tunnel')
 
         resp_a = authenticated_client.get('/api/infrastructure')
-        names_a = [i['name'] for i in resp_a.json()]
+        names_a = [i['name'] for i in resp_a.json()['results']]
         assert 'Org A Bridge' in names_a
         assert 'Org B Tunnel' not in names_a
 
         resp_b = other_org_client.get('/api/infrastructure')
-        names_b = [i['name'] for i in resp_b.json()]
+        names_b = [i['name'] for i in resp_b.json()['results']]
         assert 'Org B Tunnel' in names_b
         assert 'Org A Bridge' not in names_b
 
@@ -249,7 +249,8 @@ class TestFiberEndpointIsolation:
         """If org has no fiber assignments, ClickHouse should never be called."""
         response = authenticated_client.get('/api/fibers')
         assert response.status_code == status.HTTP_200_OK
-        assert response.json() == []
+        assert response.json()['results'] == []
+        assert response.json()['hasMore'] is False
         mock_get_client.assert_not_called()
 
     @patch('apps.fibers.views.get_client')
@@ -285,7 +286,7 @@ class TestFiberEndpointIsolation:
 class TestIncidentEndpointIsolation:
     """Cross-org isolation for incident endpoints (ClickHouse)."""
 
-    @patch('apps.monitoring.views.query')
+    @patch('apps.monitoring.incident_service.query')
     def test_incident_list_parameterized_with_org_fibers(
         self, mock_query, authenticated_client, org
     ):
@@ -302,7 +303,7 @@ class TestIncidentEndpointIsolation:
         params = mock_query.call_args[1].get('parameters') or mock_query.call_args[0][1] if len(mock_query.call_args[0]) > 1 else mock_query.call_args[1]['parameters']
         assert set(params['fids']) == {'carros', 'mathis'}
 
-    @patch('apps.monitoring.views.query')
+    @patch('apps.monitoring.incident_service.query')
     def test_incident_list_different_orgs_get_different_fibers(
         self, mock_query, authenticated_client, other_org_client, org, other_org
     ):
@@ -324,14 +325,16 @@ class TestIncidentEndpointIsolation:
         params_b = call_b[1].get('parameters', {})
         assert params_b['fids'] == ['promenade']
 
-    @patch('apps.monitoring.views.query')
+    @patch('apps.monitoring.incident_service.query')
     def test_incident_list_no_assignments_returns_empty(
         self, mock_query, authenticated_client
     ):
-        """Org with no fibers gets empty list, ClickHouse is not queried."""
+        """Org with no fibers gets empty result, ClickHouse is not queried."""
         response = authenticated_client.get('/api/incidents')
         assert response.status_code == status.HTTP_200_OK
-        assert response.json() == []
+        data = response.json()
+        assert data['results'] == []
+        assert data['hasMore'] is False
         mock_query.assert_not_called()
 
     @patch('apps.monitoring.views.query')
@@ -374,7 +377,7 @@ class TestIncidentEndpointIsolation:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data['incidentId'] == 'inc-own-org'
-        assert data['fiberLine'] == 'carros'
+        assert data['fiberLine'] == 'carros:0'  # Normalized with directional suffix
 
 
 class TestStatsEndpointIsolation:
@@ -470,7 +473,7 @@ class TestSuperuserBypass:
         sql = mock_client.query.call_args[0][0]
         assert 'IN {fids:Array(String)}' not in sql
 
-    @patch('apps.monitoring.views.query')
+    @patch('apps.monitoring.incident_service.query')
     def test_superuser_incidents_no_filter(self, mock_query, superuser_client):
         """Superuser incident query should have no fiber_id IN clause."""
         mock_query.return_value = []
@@ -511,7 +514,7 @@ class TestSuperuserBypass:
 class TestCacheIsolation:
     """Cached responses must be org-scoped."""
 
-    @patch('apps.monitoring.views.query')
+    @patch('apps.monitoring.incident_service.query')
     def test_incident_cache_per_org(
         self, mock_query, authenticated_client, other_org_client, org, other_org
     ):
@@ -533,8 +536,9 @@ class TestCacheIsolation:
             'duration_seconds': None,
         }]
         resp_a = authenticated_client.get('/api/incidents')
-        assert len(resp_a.json()) == 1
-        assert resp_a.json()[0]['fiberLine'] == 'carros'
+        data_a = resp_a.json()
+        assert len(data_a['results']) == 1
+        assert data_a['results'][0]['fiberLine'] == 'carros:0'  # Directional suffix
 
         # Org B: even with the cache warm for org A, B should query separately
         mock_query.return_value = [{
@@ -548,8 +552,9 @@ class TestCacheIsolation:
             'duration_seconds': None,
         }]
         resp_b = other_org_client.get('/api/incidents')
-        assert len(resp_b.json()) == 1
-        assert resp_b.json()[0]['fiberLine'] == 'promenade'
+        data_b = resp_b.json()
+        assert len(data_b['results']) == 1
+        assert data_b['results'][0]['fiberLine'] == 'promenade:0'  # Directional suffix
 
     @patch('apps.fibers.views.get_client')
     def test_fiber_cache_per_org(
@@ -581,17 +586,19 @@ class TestCacheIsolation:
         mock_get_client.return_value = mock_client
 
         resp_a = authenticated_client.get('/api/fibers')
+        results_a = resp_a.json()['results']
         # 1 physical cable × 2 directions = 2 directional fibers
-        assert len(resp_a.json()) == 2
-        assert resp_a.json()[0]['id'] == 'carros:0'
-        assert resp_a.json()[0]['parentFiberId'] == 'carros'
-        assert resp_a.json()[1]['id'] == 'carros:1'
+        assert len(results_a) == 2
+        assert results_a[0]['id'] == 'carros:0'
+        assert results_a[0]['parentFiberId'] == 'carros'
+        assert results_a[1]['id'] == 'carros:1'
 
         resp_b = other_org_client.get('/api/fibers')
-        assert len(resp_b.json()) == 2
-        assert resp_b.json()[0]['id'] == 'promenade:0'
-        assert resp_b.json()[0]['parentFiberId'] == 'promenade'
-        assert resp_b.json()[1]['id'] == 'promenade:1'
+        results_b = resp_b.json()['results']
+        assert len(results_b) == 2
+        assert results_b[0]['id'] == 'promenade:0'
+        assert results_b[0]['parentFiberId'] == 'promenade'
+        assert results_b[1]['id'] == 'promenade:1'
 
     @patch('apps.monitoring.views.query_scalar')
     def test_stats_cache_per_org(
@@ -620,7 +627,11 @@ class TestCacheIsolation:
 # ---------------------------------------------------------------------------
 
 class TestWebSocketIsolation:
-    """WebSocket consumers must join org-scoped groups."""
+    """WebSocket consumers must join org-scoped groups.
+
+    Authentication uses message-based JWT: connect first, then send
+    {"action": "authenticate", "token": "<jwt>"}.
+    """
 
     @pytest.mark.asyncio
     async def test_broadcast_to_wrong_org_not_received(self):
@@ -632,6 +643,7 @@ class TestWebSocketIsolation:
         from channels.routing import URLRouter
         from channels.layers import get_channel_layer
         from django.urls import path
+        from rest_framework_simplejwt.tokens import AccessToken
         from apps.realtime.consumers import RealtimeConsumer
 
         org_a = await _create_org_async('Org A')
@@ -640,10 +652,14 @@ class TestWebSocketIsolation:
 
         application = URLRouter([path('ws/', RealtimeConsumer.as_asgi())])
         communicator = WebsocketCommunicator(application, '/ws/')
-        communicator.scope['user'] = user_a
-
         connected, _ = await communicator.connect()
         assert connected
+
+        # Authenticate via message-based JWT
+        token = await sync_to_async(lambda: str(AccessToken.for_user(user_a)))()
+        await communicator.send_json_to({'action': 'authenticate', 'token': token})
+        auth_resp = await communicator.receive_json_from(timeout=2)
+        assert auth_resp['success'] is True
 
         # Subscribe to detections
         await communicator.send_json_to({
@@ -679,6 +695,7 @@ class TestWebSocketIsolation:
         from channels.routing import URLRouter
         from channels.layers import get_channel_layer
         from django.urls import path
+        from rest_framework_simplejwt.tokens import AccessToken
         from apps.realtime.consumers import RealtimeConsumer
 
         org_a = await _create_org_async('Org Rx')
@@ -686,10 +703,14 @@ class TestWebSocketIsolation:
 
         application = URLRouter([path('ws/', RealtimeConsumer.as_asgi())])
         communicator = WebsocketCommunicator(application, '/ws/')
-        communicator.scope['user'] = user_a
-
         connected, _ = await communicator.connect()
         assert connected
+
+        # Authenticate via message-based JWT
+        token = await sync_to_async(lambda: str(AccessToken.for_user(user_a)))()
+        await communicator.send_json_to({'action': 'authenticate', 'token': token})
+        auth_resp = await communicator.receive_json_from(timeout=2)
+        assert auth_resp['success'] is True
 
         await communicator.send_json_to({
             'action': 'subscribe',
@@ -723,6 +744,7 @@ class TestWebSocketIsolation:
         from channels.routing import URLRouter
         from channels.layers import get_channel_layer
         from django.urls import path
+        from rest_framework_simplejwt.tokens import AccessToken
         from apps.realtime.consumers import RealtimeConsumer
 
         org = await _create_org_async('Org SU')
@@ -730,10 +752,14 @@ class TestWebSocketIsolation:
 
         application = URLRouter([path('ws/', RealtimeConsumer.as_asgi())])
         communicator = WebsocketCommunicator(application, '/ws/')
-        communicator.scope['user'] = su
-
         connected, _ = await communicator.connect()
         assert connected
+
+        # Authenticate via message-based JWT
+        token = await sync_to_async(lambda: str(AccessToken.for_user(su)))()
+        await communicator.send_json_to({'action': 'authenticate', 'token': token})
+        auth_resp = await communicator.receive_json_from(timeout=2)
+        assert auth_resp['success'] is True
 
         await communicator.send_json_to({
             'action': 'subscribe',

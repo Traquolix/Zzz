@@ -1,8 +1,4 @@
-import { useContext } from 'react'
 import { RealtimeContext } from '@/context/RealtimeContext'
+import { createContextHook } from './createContextHook'
 
-export function useRealtime() {
-    const context = useContext(RealtimeContext)
-    if (!context) throw new Error('useRealtime must be used within RealtimeProvider')
-    return context
-}
+export const useRealtime = createContextHook(RealtimeContext, 'useRealtime', 'RealtimeProvider')

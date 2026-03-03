@@ -19,6 +19,8 @@ export function SectionResizeHandles() {
     const startMarkerRef = useRef<mapboxgl.Marker | null>(null)
     const endMarkerRef = useRef<mapboxgl.Marker | null>(null)
     const [tempBounds, setTempBounds] = useState<{ start: number; end: number } | null>(null)
+    const tempBoundsRef = useRef(tempBounds)
+    tempBoundsRef.current = tempBounds
 
     const section = selectedSection ? sections.get(selectedSection.sectionId) : null
     const fiber = section ? fibers.find(f => f.id === section.fiberId) : null
@@ -49,27 +51,31 @@ export function SectionResizeHandles() {
     // Create draggable handle element
     const createHandleElement = useCallback((type: 'start' | 'end') => {
         const el = document.createElement('div')
-        el.className = 'w-4 h-4 bg-green-500 border-2 border-white rounded-full shadow-lg cursor-grab active:cursor-grabbing'
+        el.className = 'w-6 h-6 md:w-4 md:h-4 bg-green-500 border-2 border-white rounded-full shadow-lg cursor-grab active:cursor-grabbing'
         el.style.zIndex = '1000'
+        el.style.touchAction = 'none'
 
-        el.addEventListener('mousedown', (e) => {
+        const handleDragStart = (e: Event) => {
             e.preventDefault()
             e.stopPropagation()
             if (section) {
                 setDraggingEndpoint({ sectionId: section.id, endpoint: type })
                 setTempBounds({ start: section.startChannel, end: section.endChannel })
             }
-        })
+        }
+
+        el.addEventListener('mousedown', handleDragStart)
+        el.addEventListener('touchstart', handleDragStart)
 
         return el
     }, [section, setDraggingEndpoint])
 
-    // Handle mouse move during drag
+    // Handle mouse/touch move during drag
     useEffect(() => {
         if (!map || !draggingEndpoint || !section || !fiberOffsetCoords) return
 
-        const handleMouseMove = (e: mapboxgl.MapMouseEvent) => {
-            const { lng, lat } = e.lngLat
+        const handleDragMove = (lngLat: { lng: number; lat: number }) => {
+            const { lng, lat } = lngLat
             const nearestChannel = findNearestChannel(lng, lat)
             if (nearestChannel === null) return
 
@@ -85,24 +91,44 @@ export function SectionResizeHandles() {
             })
         }
 
-        const handleMouseUp = () => {
-            if (tempBounds && section) {
-                updateSectionBounds(section.id, tempBounds.start, tempBounds.end)
+        const handleMouseMove = (e: mapboxgl.MapMouseEvent) => {
+            handleDragMove(e.lngLat)
+        }
+
+        const handleTouchMove = (e: TouchEvent) => {
+            if (e.touches.length === 0) return
+            const touch = e.touches[0]
+            const canvasPos = map.getCanvas().getBoundingClientRect()
+            const lngLat = map.unproject([
+                touch.clientX - canvasPos.left,
+                touch.clientY - canvasPos.top
+            ])
+            handleDragMove({ lng: lngLat.lng, lat: lngLat.lat })
+        }
+
+        const handleEnd = () => {
+            const bounds = tempBoundsRef.current
+            if (bounds && section) {
+                updateSectionBounds(section.id, bounds.start, bounds.end)
             }
             setDraggingEndpoint(null)
             setTempBounds(null)
         }
 
         map.on('mousemove', handleMouseMove)
-        window.addEventListener('mouseup', handleMouseUp)
+        window.addEventListener('touchmove', handleTouchMove)
+        window.addEventListener('mouseup', handleEnd)
+        window.addEventListener('touchend', handleEnd)
         map.getCanvas().style.cursor = 'grabbing'
 
         return () => {
             map.off('mousemove', handleMouseMove)
-            window.removeEventListener('mouseup', handleMouseUp)
+            window.removeEventListener('touchmove', handleTouchMove)
+            window.removeEventListener('mouseup', handleEnd)
+            window.removeEventListener('touchend', handleEnd)
             map.getCanvas().style.cursor = ''
         }
-    }, [map, draggingEndpoint, section, fiberOffsetCoords, tempBounds, findNearestChannel, updateSectionBounds, setDraggingEndpoint])
+    }, [map, draggingEndpoint, section, fiberOffsetCoords, findNearestChannel, updateSectionBounds, setDraggingEndpoint])
 
     // Create/update markers when section is selected
     useEffect(() => {

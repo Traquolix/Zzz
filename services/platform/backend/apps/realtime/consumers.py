@@ -19,6 +19,7 @@ Org-scoped: each client joins org-specific groups (realtime_{channel}_org_{org_i
 Superusers join the __all__ group to receive all data.
 """
 
+import asyncio
 import logging
 import time
 
@@ -39,6 +40,9 @@ ALLOWED_CHANNELS = frozenset({
 RATE_LIMIT_MESSAGES = 100
 RATE_LIMIT_WINDOW_SECONDS = 10
 
+# Seconds to wait for auth message before closing connection
+AUTH_TIMEOUT_SECONDS = 5
+
 
 def _org_group_name(channel: str, org_id: str) -> str:
     """Build the org-scoped Channels group name."""
@@ -51,33 +55,47 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
     Clients subscribe to named data channels and receive broadcasts
     via the Channels layer group system. Groups are org-scoped.
 
-    Supports two authentication flows:
-    1. URL token (deprecated): ws://host/?token=<jwt>
-    2. Message auth (preferred): connect then send {"action": "authenticate", "token": "<jwt>"}
+    Authentication: connect then send {"action": "authenticate", "token": "<jwt>"}
     """
 
     async def connect(self):
-        user = self.scope.get('user')
-        pending_auth = self.scope.get('_pending_auth', False)
+        # Origin check — reject cross-origin WebSocket connections (CSRF mitigation)
+        headers = dict(self.scope.get('headers', []))
+        origin = headers.get(b'origin', b'').decode('utf-8', errors='ignore')
+        host = headers.get(b'host', b'').decode('utf-8', errors='ignore')
+        if origin and host:
+            from urllib.parse import urlparse
+            origin_host = urlparse(origin).hostname
+            request_host = host.split(':')[0]
+            if origin_host and request_host and origin_host != request_host:
+                logger.warning('WebSocket rejected: origin=%s does not match host=%s', origin, host)
+                await self.close(code=4003)
+                return
 
-        # If no token in URL and pending auth, accept connection and wait for auth message
-        if pending_auth and (user is None or not user.is_authenticated):
-            self.subscriptions = set()
-            self._user = None
-            self._org_id = None
-            self._authenticated = False
-            await self.accept()
-            logger.debug('WebSocket client connected (pending authentication)')
-            return
-
-        # URL-based token auth (deprecated but supported)
-        if user is None or not user.is_authenticated:
-            await self.close()
-            return
-
-        self._setup_user(user)
+        # All connections start unauthenticated — require message-based auth
+        self.subscriptions = set()
+        self._user = None
+        self._org_id = None
+        self._authenticated = False
+        self._auth_timeout_task = None
         await self.accept()
-        logger.debug('WebSocket client connected: %s (org=%s)', user.username, self._org_id)
+        # Start auth timeout — close connection if client doesn't authenticate in time
+        self._auth_timeout_task = asyncio.ensure_future(self._auth_timeout())
+        logger.debug('WebSocket client connected (pending authentication, %ds timeout)', AUTH_TIMEOUT_SECONDS)
+
+    async def _auth_timeout(self):
+        """Close connection if authentication is not completed within timeout."""
+        try:
+            await asyncio.sleep(AUTH_TIMEOUT_SECONDS)
+            if not getattr(self, '_authenticated', False):
+                logger.warning('WebSocket auth timeout after %ds — closing connection', AUTH_TIMEOUT_SECONDS)
+                await self.send_json({
+                    'action': 'error',
+                    'message': 'Authentication timeout',
+                })
+                await self.close(code=4001)
+        except asyncio.CancelledError:
+            pass  # Auth succeeded or connection closed before timeout
 
     def _setup_user(self, user):
         """Initialize user state after authentication."""
@@ -93,12 +111,19 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             self._org_id = str(user.organization_id)
 
     async def disconnect(self, close_code):
+        # Cancel auth timeout if still pending
+        if getattr(self, '_auth_timeout_task', None) and not self._auth_timeout_task.done():
+            self._auth_timeout_task.cancel()
+
         # Leave all channel groups
         for channel in list(self.subscriptions):
             await self.channel_layer.group_discard(
                 _org_group_name(channel, self._org_id), self.channel_name
             )
         self.subscriptions.clear()
+        if getattr(self, '_authenticated', False):
+            from apps.shared.metrics import WEBSOCKET_CONNECTIONS
+            WEBSOCKET_CONNECTIONS.dec()
         logger.debug('WebSocket client disconnected (code=%s)', close_code)
 
     def _is_rate_limited(self) -> bool:
@@ -171,7 +196,15 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
                 logger.debug('Client unsubscribed from: %s', channel)
 
     async def _handle_authenticate(self, token: str | None):
-        """Handle message-based authentication."""
+        """Handle message-based authentication with rate limiting."""
+        # Rate limit auth attempts (max 5 per connection)
+        self._auth_attempts = getattr(self, '_auth_attempts', 0) + 1
+        if self._auth_attempts > 5:
+            logger.warning('WebSocket auth rate limit exceeded')
+            await self.send_json({'action': 'authenticated', 'success': False, 'message': 'Too many attempts'})
+            await self.close(code=4029)
+            return
+
         if not token:
             await self.send_json({'action': 'authenticated', 'success': False, 'message': 'Token required'})
             return
@@ -180,12 +213,19 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         user = await get_user_from_token(token)
 
         if user is None or not user.is_authenticated:
+            from apps.shared.metrics import WEBSOCKET_AUTH_FAILURES
+            WEBSOCKET_AUTH_FAILURES.inc()
             logger.warning('WebSocket authentication failed: invalid token')
             await self.send_json({'action': 'authenticated', 'success': False, 'message': 'Invalid token'})
             await self.close()
             return
 
         self._setup_user(user)
+        # Cancel auth timeout — client authenticated successfully
+        if getattr(self, '_auth_timeout_task', None) and not self._auth_timeout_task.done():
+            self._auth_timeout_task.cancel()
+        from apps.shared.metrics import WEBSOCKET_CONNECTIONS
+        WEBSOCKET_CONNECTIONS.inc()
         logger.debug('WebSocket client authenticated: %s (org=%s)', user.username, self._org_id)
         await self.send_json({'action': 'authenticated', 'success': True})
 
@@ -193,11 +233,22 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
     # These are called when the Channels layer routes a group_send to this consumer
 
     async def broadcast_message(self, event):
-        """Handle broadcast from channel layer group."""
-        await self.send_json({
-            'channel': event['channel'],
-            'data': event['data'],
-        })
+        """Handle broadcast from channel layer group. Timeout prevents slow clients from blocking."""
+        try:
+            await asyncio.wait_for(
+                self.send_json({
+                    'channel': event['channel'],
+                    'data': event['data'],
+                }),
+                timeout=5.0,
+            )
+            from apps.shared.metrics import WEBSOCKET_MESSAGES_SENT
+            WEBSOCKET_MESSAGES_SENT.labels(channel=event['channel']).inc()
+        except asyncio.TimeoutError:
+            from apps.shared.metrics import WEBSOCKET_SEND_TIMEOUTS
+            WEBSOCKET_SEND_TIMEOUTS.inc()
+            logger.warning('WebSocket send timeout for user=%s, channel=%s', self._user, event.get('channel'))
+            await self.close(code=4008)
 
     # ----- Initial data senders -----
 
@@ -221,17 +272,10 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
 
     def _query_initial_incidents(self):
         """Synchronous ClickHouse query for initial incidents (org-scoped)."""
-        from apps.shared.clickhouse import query
+        from apps.monitoring.incident_service import query_active
 
         if self._org_id == '__all__':
-            rows = query("""
-                SELECT incident_id, incident_type, severity, fiber_id,
-                       channel_start, timestamp, status, duration_seconds
-                FROM sequoia.fiber_incidents
-                WHERE status = 'active'
-                ORDER BY timestamp DESC
-                LIMIT 100
-            """)
+            return query_active(fiber_ids=None, limit=100)
         else:
             from apps.fibers.utils import get_org_fiber_ids
             from apps.organizations.models import Organization
@@ -239,32 +283,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             fiber_ids = get_org_fiber_ids(org)
             if not fiber_ids:
                 return []
-            rows = query(
-                """
-                SELECT incident_id, incident_type, severity, fiber_id,
-                       channel_start, timestamp, status, duration_seconds
-                FROM sequoia.fiber_incidents
-                WHERE status = 'active'
-                  AND fiber_id IN {fids:Array(String)}
-                ORDER BY timestamp DESC
-                LIMIT 100
-                """,
-                parameters={'fids': fiber_ids},
-            )
-
-        return [
-            {
-                'id': row['incident_id'],
-                'type': row['incident_type'],
-                'severity': row['severity'],
-                'fiberLine': row['fiber_id'],
-                'channel': row['channel_start'],
-                'detectedAt': str(row['timestamp']),
-                'status': row['status'],
-                'duration': row['duration_seconds'] * 1000 if row['duration_seconds'] else None,
-            }
-            for row in rows
-        ]
+            return query_active(fiber_ids=fiber_ids, limit=100)
 
     async def _send_initial_fibers(self):
         """Send fiber configuration on subscribe.

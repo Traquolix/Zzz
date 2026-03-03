@@ -12,6 +12,10 @@ from typing import List
 
 import numpy as np
 
+# Version constants
+ENGINE_VERSION = "1.0"
+MODEL_TYPE_PEAK_DETECTION = "peak_detection"
+
 
 @dataclass
 class ProcessingContext:
@@ -111,6 +115,7 @@ def create_speed_messages(
     sampling_rate_hz: float,
     service_name: str,
     log_fn=None,
+    direction_mask: np.ndarray = None,
 ) -> List:
     """Create speed messages from filtered speeds array."""
     from shared.message import Message
@@ -170,13 +175,26 @@ def create_speed_messages(
         else:
             timestamp_ns = current_time_nanoseconds()
 
+        # Compute dominant direction for this time index
+        direction = 0
+        if direction_mask is not None:
+            if len(direction_mask.shape) == 2:
+                dir_col = direction_mask[:, time_idx] if time_idx < direction_mask.shape[1] else np.zeros(direction_mask.shape[0])
+            else:
+                dir_col = direction_mask
+            # Most common non-zero direction
+            nonzero = dir_col[dir_col > 0]
+            if len(nonzero) > 0:
+                direction = int(np.median(nonzero))
+
         payload = {
             "fiber_id": fiber_id,
             "timestamp_ns": timestamp_ns,
             "speeds": speeds,
             "channel_start": channel_start,
+            "direction": direction,
             "ai_metadata": {
-                "engine_version": "1.0",
+                "engine_version": ENGINE_VERSION,
                 "spatial_points": total_spatial_points,
                 "time_index": time_idx,
             },
@@ -214,6 +232,7 @@ def create_count_messages(
     step_samples: int,
     service_name: str,
     log_fn=None,
+    edge_trim: int = 0,
 ) -> List:
     """Create count messages from counting results."""
     from shared.message import Message
@@ -222,7 +241,10 @@ def create_count_messages(
     messages = []
     counts, intervals, window_timestamps = count_results
 
-    new_data_start = counting_samples - step_samples
+    # Intervals are in trimmed space (edge_trim samples removed from each side).
+    # The overlap region in trimmed space is [0, step_samples - edge_trim).
+    # Only count detections starting at or after this boundary as "new".
+    new_data_start = max(0, step_samples - edge_trim)
     window_start_ns = window_timestamps[0] if window_timestamps else current_time_nanoseconds()
 
     base_channel_start = ctx.channel_start
@@ -261,6 +283,14 @@ def create_count_messages(
             actual_channel_start = base_channel_start + (section_array_start * channel_step)
             actual_channel_end = base_channel_start + (section_array_end * channel_step)
 
+            # Extract car/truck classification if count is a tuple (n_vehicles, n_cars, n_trucks)
+            if isinstance(count, (tuple, list)) and len(count) == 3:
+                n_vehicles, n_cars, n_trucks = count
+            else:
+                n_vehicles = float(count)
+                n_cars = float(count)
+                n_trucks = 0.0
+
             messages.append(
                 Message(
                     id=fiber_id,
@@ -269,9 +299,11 @@ def create_count_messages(
                         "channel_start": int(actual_channel_start),
                         "channel_end": int(actual_channel_end),
                         "count_timestamp_ns": count_timestamp_ns,
-                        "vehicle_count": float(count),
-                        "engine_version": "1.0",
-                        "model_type": "neural_network",
+                        "vehicle_count": float(n_vehicles),
+                        "n_cars": float(n_cars),
+                        "n_trucks": float(n_trucks),
+                        "engine_version": ENGINE_VERSION,
+                        "model_type": MODEL_TYPE_PEAK_DETECTION,
                     },
                     headers={
                         "source": "ai_engine_count",

@@ -3,23 +3,37 @@ import { useTranslation } from 'react-i18next'
 
 type Status = 'nominal' | 'warning' | 'critical'
 
+type SHMData = {
+    currentMean: number
+    baselineMean: number
+    deviationSigma: number
+    direction: string
+}
+
 type Props = {
     status?: Status
     size?: 'sm' | 'md'
     className?: string
+    shmData?: SHMData | null
 }
 
-const STATUS_CONFIG: Record<Status, { color: string; bgColor: string; label: string }> = {
-    nominal: { color: 'bg-emerald-500', bgColor: 'bg-emerald-50', label: 'Nominal' },
-    warning: { color: 'bg-amber-500', bgColor: 'bg-amber-50', label: 'Warning' },
-    critical: { color: 'bg-red-500', bgColor: 'bg-red-50', label: 'Critical' },
+const STATUS_CONFIG: Record<Status, { color: string; bgColor: string; label: string; i18nKey: string }> = {
+    nominal: { color: 'bg-emerald-500', bgColor: 'bg-emerald-50', label: 'Nominal', i18nKey: 'shm.statusNominal' },
+    warning: { color: 'bg-amber-500', bgColor: 'bg-amber-50', label: 'Warning', i18nKey: 'shm.statusWarning' },
+    critical: { color: 'bg-red-500', bgColor: 'bg-red-50', label: 'Critical', i18nKey: 'shm.statusCritical' },
 }
 
-export function StatusDot({ status = 'nominal', size = 'md', className = '' }: Props) {
+export function StatusDot({ status = 'nominal', size = 'md', className = '', shmData = null }: Props) {
     const [showTooltip, setShowTooltip] = useState(false)
     const [tooltipStyle, setTooltipStyle] = useState<{ top?: number; bottom?: number; left: number; showAbove: boolean }>({ left: 0, showAbove: true })
     const dotRef = useRef<HTMLDivElement>(null)
     const { t } = useTranslation()
+
+    // Format deviation with sigma symbol
+    const formatDeviation = (sigma: number): string => {
+        const sign = sigma >= 0 ? '+' : ''
+        return `${sign}${sigma.toFixed(1)}σ`
+    }
 
     const config = STATUS_CONFIG[status]
     const dotSize = size === 'sm' ? 'w-2 h-2' : 'w-2.5 h-2.5'
@@ -78,7 +92,7 @@ export function StatusDot({ status = 'nominal', size = 'md', className = '' }: P
                             <div className="flex items-center gap-2">
                                 <div className={`w-2 h-2 rounded-full ${config.color}`} />
                                 <span className="font-semibold text-slate-900">
-                                    {t(`shm.status.${status}`, config.label)}
+                                    {t(config.i18nKey, config.label)}
                                 </span>
                             </div>
                         </div>
@@ -91,12 +105,22 @@ export function StatusDot({ status = 'nominal', size = 'md', className = '' }: P
                                 <div className="space-y-1">
                                     <div className="flex justify-between">
                                         <span className="text-slate-500">{t('shm.status.peakFreq', 'Peak frequency')}</span>
-                                        <span className="font-medium text-slate-700">1.12 - 1.18 Hz</span>
+                                        <span className="font-medium text-slate-700">
+                                            {shmData ? `${shmData.currentMean.toFixed(2)} Hz` : '1.12 - 1.18 Hz'}
+                                        </span>
                                     </div>
                                     <div className="flex justify-between">
                                         <span className="text-slate-500">{t('shm.status.expected', 'Expected')}</span>
-                                        <span className="font-medium text-slate-700">1.05 - 1.20 Hz</span>
+                                        <span className="font-medium text-slate-700">
+                                            {shmData ? `${shmData.baselineMean.toFixed(2)} Hz` : '1.05 - 1.20 Hz'}
+                                        </span>
                                     </div>
+                                    {shmData && (
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-500">{t('shm.status.deviation', 'Deviation')}</span>
+                                            <span className="font-medium text-slate-700">{formatDeviation(shmData.deviationSigma)}</span>
+                                        </div>
+                                    )}
                                 </div>
                             </>
                         )}
@@ -107,10 +131,27 @@ export function StatusDot({ status = 'nominal', size = 'md', className = '' }: P
                                     {t('shm.status.warningDesc', 'Minor deviations detected. Monitoring closely.')}
                                 </p>
                                 <div className="space-y-1">
-                                    <div className="flex justify-between">
-                                        <span className="text-slate-500">{t('shm.status.deviation', 'Deviation')}</span>
-                                        <span className="font-medium text-amber-600">+5%</span>
-                                    </div>
+                                    {shmData ? (
+                                        <>
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-500">{t('shm.status.peakFreq', 'Peak frequency')}</span>
+                                                <span className="font-medium text-amber-600">{shmData.currentMean.toFixed(2)} Hz</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-500">{t('shm.status.expected', 'Expected')}</span>
+                                                <span className="font-medium text-amber-600">{shmData.baselineMean.toFixed(2)} Hz</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-500">{t('shm.status.deviation', 'Deviation')}</span>
+                                                <span className="font-medium text-amber-600">{formatDeviation(shmData.deviationSigma)}</span>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-500">{t('shm.status.deviation', 'Deviation')}</span>
+                                            <span className="font-medium text-amber-600">+5%</span>
+                                        </div>
+                                    )}
                                 </div>
                             </>
                         )}
@@ -121,10 +162,27 @@ export function StatusDot({ status = 'nominal', size = 'md', className = '' }: P
                                     {t('shm.status.criticalDesc', 'Significant anomaly detected. Review recommended.')}
                                 </p>
                                 <div className="space-y-1">
-                                    <div className="flex justify-between">
-                                        <span className="text-slate-500">{t('shm.status.deviation', 'Deviation')}</span>
-                                        <span className="font-medium text-red-600">+15%</span>
-                                    </div>
+                                    {shmData ? (
+                                        <>
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-500">{t('shm.status.peakFreq', 'Peak frequency')}</span>
+                                                <span className="font-medium text-red-600">{shmData.currentMean.toFixed(2)} Hz</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-500">{t('shm.status.expected', 'Expected')}</span>
+                                                <span className="font-medium text-red-600">{shmData.baselineMean.toFixed(2)} Hz</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span className="text-slate-500">{t('shm.status.deviation', 'Deviation')}</span>
+                                                <span className="font-medium text-red-600">{formatDeviation(shmData.deviationSigma)}</span>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="flex justify-between">
+                                            <span className="text-slate-500">{t('shm.status.deviation', 'Deviation')}</span>
+                                            <span className="font-medium text-red-600">+15%</span>
+                                        </div>
+                                    )}
                                 </div>
                             </>
                         )}

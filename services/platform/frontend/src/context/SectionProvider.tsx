@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, type ReactNode } from 'react'
-import type { FiberSection, PendingSectionPoint, LayerVisibility, SelectedSection, DraggingEndpoint } from '@/types/section'
+import type { FiberSection, LayerVisibility, SelectedSection } from '@/types/section'
 import { SectionDataContext } from './SectionContext'
 import { useUserPreferences } from '@/hooks/useUserPreferences'
 import { useDebouncedSync } from '@/hooks/useDebouncedSync'
@@ -21,22 +21,26 @@ const DEFAULT_LAYER_VISIBILITY: LayerVisibility = {
 }
 
 /**
- * Provider for section data and UI state.
- * Selection state is managed by MapSelectionProvider.
+ * Provider for persistent section data and layer visibility.
+ *
+ * Manages the sections Map, CRUD operations, and layer visibility
+ * state — all of which are synced to user preferences on the server.
+ *
+ * Ephemeral UI state (hover, drag, pending points, naming dialog)
+ * lives in SectionUIProvider.
  */
 export function SectionDataProvider({ children }: { children: ReactNode }) {
     const { preferences, updatePreferences, isLoading: prefsLoading } = useUserPreferences()
     const initializedRef = useRef(false)
+    const preferencesRef = useRef(preferences)
+    preferencesRef.current = preferences
 
     const [sections, setSections] = useState<Map<string, FiberSection>>(new Map())
-    const [pendingPoint, setPendingPoint] = useState<PendingSectionPoint>(null)
-    const [showNamingDialog, setShowNamingDialog] = useState(false)
-    const [pendingSection, setPendingSection] = useState<{ fiberId: string; startChannel: number; endChannel: number } | null>(null)
-    const [hoveredSectionId, setHoveredSectionId] = useState<string | null>(null)
-    const [draggingEndpoint, setDraggingEndpoint] = useState<DraggingEndpoint>(null)
     const [layerVisibility, setLayerVisibilityState] = useState<LayerVisibility>(DEFAULT_LAYER_VISIBILITY)
-    const [sectionCreationMode, setSectionCreationMode] = useState(false)
-    const [previewChannel, setPreviewChannel] = useState<number | null>(null)
+    const sectionsRef = useRef(sections)
+    sectionsRef.current = sections
+    const layerVisibilityRef = useRef(layerVisibility)
+    layerVisibilityRef.current = layerVisibility
 
     // Initialize from server preferences (only once when preferences first load)
     useEffect(() => {
@@ -56,18 +60,19 @@ export function SectionDataProvider({ children }: { children: ReactNode }) {
         }
     }, [prefsLoading, preferences])
 
-    // Debounced save to server
+    // Debounced save to server — use ref to avoid stale closure over preferences
     const saveToServer = useDebouncedSync(
         useCallback((newSections: Map<string, FiberSection>, newVisibility: LayerVisibility) => {
+            const current = preferencesRef.current
             updatePreferences({
-                ...preferences,
+                ...current,
                 map: {
-                    ...preferences?.map,
+                    ...current?.map,
                     sections: Array.from(newSections.values()),
                     layerVisibility: newVisibility
                 }
             })
-        }, [preferences, updatePreferences])
+        }, [updatePreferences])
     )
 
     // Returns the created section for caller to handle selection
@@ -90,11 +95,11 @@ export function SectionDataProvider({ children }: { children: ReactNode }) {
         setSections(prev => {
             const next = new Map(prev)
             next.set(id, section)
-            saveToServer(next, layerVisibility)
+            saveToServer(next, layerVisibilityRef.current)
             return next
         })
         return { sectionId: id, fiberId }
-    }, [layerVisibility, saveToServer])
+    }, [saveToServer])
 
     const renameSection = useCallback((sectionId: string, name: string) => {
         setSections(prev => {
@@ -102,19 +107,19 @@ export function SectionDataProvider({ children }: { children: ReactNode }) {
             if (!section) return prev
             const next = new Map(prev)
             next.set(sectionId, { ...section, name: name.trim() })
-            saveToServer(next, layerVisibility)
+            saveToServer(next, layerVisibilityRef.current)
             return next
         })
-    }, [layerVisibility, saveToServer])
+    }, [saveToServer])
 
     const deleteSection = useCallback((sectionId: string) => {
         setSections(prev => {
             const next = new Map(prev)
             next.delete(sectionId)
-            saveToServer(next, layerVisibility)
+            saveToServer(next, layerVisibilityRef.current)
             return next
         })
-    }, [layerVisibility, saveToServer])
+    }, [saveToServer])
 
     const toggleSectionFavorite = useCallback((sectionId: string) => {
         setSections(prev => {
@@ -122,10 +127,10 @@ export function SectionDataProvider({ children }: { children: ReactNode }) {
             if (!section) return prev
             const next = new Map(prev)
             next.set(sectionId, { ...section, favorite: !section.favorite })
-            saveToServer(next, layerVisibility)
+            saveToServer(next, layerVisibilityRef.current)
             return next
         })
-    }, [layerVisibility, saveToServer])
+    }, [saveToServer])
 
     // Returns the new section reference if bounds were updated
     const updateSectionBounds = useCallback((
@@ -153,27 +158,17 @@ export function SectionDataProvider({ children }: { children: ReactNode }) {
             })
 
             newSection = { sectionId: newId, fiberId: section.fiberId }
-            saveToServer(next, layerVisibility)
+            saveToServer(next, layerVisibilityRef.current)
             return next
         })
 
         return newSection
-    }, [layerVisibility, saveToServer])
-
-    const openNamingDialog = useCallback((fiberId: string, startChannel: number, endChannel: number) => {
-        setPendingSection({ fiberId, startChannel, endChannel })
-        setShowNamingDialog(true)
-    }, [])
-
-    const closeNamingDialog = useCallback(() => {
-        setShowNamingDialog(false)
-        setPendingSection(null)
-    }, [])
+    }, [saveToServer])
 
     const setLayerVisibility = useCallback((visibility: LayerVisibility) => {
         setLayerVisibilityState(visibility)
-        saveToServer(sections, visibility)
-    }, [sections, saveToServer])
+        saveToServer(sectionsRef.current, visibility)
+    }, [saveToServer])
 
     return (
         <SectionDataContext.Provider value={{
@@ -183,22 +178,8 @@ export function SectionDataProvider({ children }: { children: ReactNode }) {
             deleteSection,
             updateSectionBounds,
             toggleSectionFavorite,
-            pendingPoint,
-            setPendingPoint,
-            showNamingDialog,
-            pendingSection,
-            openNamingDialog,
-            closeNamingDialog,
-            hoveredSectionId,
-            setHoveredSectionId,
-            draggingEndpoint,
-            setDraggingEndpoint,
             layerVisibility,
             setLayerVisibility,
-            sectionCreationMode,
-            setSectionCreationMode,
-            previewChannel,
-            setPreviewChannel
         }}>
             {children}
         </SectionDataContext.Provider>

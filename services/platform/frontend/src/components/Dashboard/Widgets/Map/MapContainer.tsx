@@ -42,9 +42,10 @@ export function MapContainer({
     useEffect(() => {
         if (!mapContainerRef.current) return
 
+        const isDark = document.documentElement.classList.contains('dark')
         const mapInstance = new mapboxgl.Map({
             container: mapContainerRef.current,
-            style: 'mapbox://styles/mapbox/light-v11',
+            style: isDark ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11',
             center,
             zoom,
             pitch,
@@ -87,6 +88,16 @@ export function MapContainer({
             }
         })
 
+        // Observe dark mode changes
+        const observer = new MutationObserver(() => {
+            const nowDark = document.documentElement.classList.contains('dark')
+            const targetStyle = nowDark ? 'mapbox://styles/mapbox/dark-v11' : 'mapbox://styles/mapbox/light-v11'
+            if (mapRef.current) {
+                mapRef.current.setStyle(targetStyle)
+            }
+        })
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+
         let resizeRafId: number | null = null
         const scheduleResize = () => {
             if (resizeRafId !== null) return
@@ -114,6 +125,7 @@ export function MapContainer({
             }
 
             // Stop observers and pending rAF
+            observer.disconnect()
             resizer.disconnect()
             if (resizeRafId !== null) cancelAnimationFrame(resizeRafId)
 

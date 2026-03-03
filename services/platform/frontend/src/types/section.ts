@@ -1,8 +1,6 @@
-export type FiberSection = {
-    id: string              // `section:${fiberId}:${start}-${end}`
-    fiberId: string
-    startChannel: number
-    endChannel: number
+import type { FiberRange } from './fiber'
+
+export type FiberSection = FiberRange & {
     name: string
     color?: string
     favorite?: boolean

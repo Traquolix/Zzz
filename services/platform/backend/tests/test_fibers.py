@@ -2,6 +2,7 @@
 Tests for fibers endpoint (ClickHouse mocked).
 
 Each physical cable is expanded into two directional fibers (direction 0 and 1).
+Response is wrapped in a paginated envelope: {results, hasMore, limit}.
 """
 
 import pytest
@@ -59,11 +60,17 @@ class TestFiberList:
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
 
+        # Paginated envelope
+        assert 'results' in data
+        assert 'hasMore' in data
+        assert data['hasMore'] is False
+        results = data['results']
+
         # 2 physical cables x 2 directions = 4 directional fibers
-        assert len(data) == 4
+        assert len(results) == 4
 
         # Direction 0 of carros
-        fiber0 = data[0]
+        fiber0 = results[0]
         assert fiber0['id'] == 'fiber-carros:0'
         assert fiber0['parentFiberId'] == 'fiber-carros'
         assert fiber0['direction'] == 0
@@ -74,7 +81,7 @@ class TestFiberList:
         assert fiber0['coordinates'][2] == [None, None]  # Null coords preserved
 
         # Direction 1 of carros
-        fiber1 = data[1]
+        fiber1 = results[1]
         assert fiber1['id'] == 'fiber-carros:1'
         assert fiber1['parentFiberId'] == 'fiber-carros'
         assert fiber1['direction'] == 1
@@ -89,17 +96,17 @@ class TestFiberList:
         mock_get_client.return_value = mock_client
 
         response = authenticated_client.get(self.url)
-        data = response.json()
+        results = response.json()['results']
 
         # Carros direction 0
-        carros = data[0]
+        carros = results[0]
         assert carros['landmarks'] is not None
         assert len(carros['landmarks']) == 2
         assert carros['landmarks'][0] == {'channel': 0, 'name': 'Start'}
         assert carros['landmarks'][1] == {'channel': 3, 'name': 'End'}
 
         # Promenade direction 0 (index 2: carros:0, carros:1, promenade:0)
-        promenade = data[2]
+        promenade = results[2]
         assert promenade['landmarks'] is None  # No non-null labels
 
     @patch('apps.fibers.views.get_client')
@@ -107,7 +114,9 @@ class TestFiberList:
         """If user's org has no fiber assignments, return empty list."""
         response = authenticated_client.get(self.url)
         assert response.status_code == status.HTTP_200_OK
-        assert response.json() == []
+        data = response.json()
+        assert data['results'] == []
+        assert data['hasMore'] is False
 
     @patch('apps.fibers.views.get_client')
     def test_fibers_clickhouse_unavailable(self, mock_get_client, authenticated_client, org):
@@ -116,7 +125,10 @@ class TestFiberList:
 
         response = authenticated_client.get(self.url)
         assert response.status_code == status.HTTP_200_OK
-        assert response.json() == []
+        # Falls back to JSON files (which likely don't exist in test env)
+        data = response.json()
+        assert 'results' in data
+        assert data['hasMore'] is False
 
     def test_fibers_unauthenticated(self, api_client):
         response = api_client.get(self.url)

@@ -1,12 +1,21 @@
 import { useState, useRef, useEffect } from 'react'
-import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { LogOut } from 'lucide-react'
+import { LogOut, Menu, X } from 'lucide-react'
+import { Tooltip } from '@/components/ui/tooltip'
 import { useAuth } from '@/hooks/useAuth'
 import { usePermissions } from '@/hooks/usePermissions'
+import { useBreadcrumbs } from '@/hooks/useBreadcrumbs'
+import { Breadcrumb } from '@/components/ui/breadcrumb'
 import { TechStatsHoverCard } from '@/components/TechStatsHoverCard'
+import { ThemeToggle } from '@/components/ThemeToggle'
+import { NotificationBell } from '@/components/NotificationBell'
+import { useNotifications } from '@/hooks/useNotifications'
+import { logger } from '@/lib/logger'
+import { useRealtime } from '@/hooks/useRealtime'
+import { PageTransition } from '@/components/PageTransition'
 import type { NavItem } from '@/constants/navigation'
 
 const HOVER_DELAY_MS = 400
@@ -25,6 +34,7 @@ function NavItemWithDropdown({ item, visibleAlternates, t }: NavItemWithDropdown
     const location = useLocation()
     const openTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const animationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     // Track which item in this group was last visited (persists across navigation)
     const [lastVisitedPath, setLastVisitedPath] = useState<string | null>(null)
@@ -33,6 +43,8 @@ function NavItemWithDropdown({ item, visibleAlternates, t }: NavItemWithDropdown
     const allPaths = [item.path, ...visibleAlternates.map(a => a.path)]
     const isGroupActive = allPaths.some(p => location.pathname.toLowerCase() === p.toLowerCase())
     const currentMatchingPath = allPaths.find(p => location.pathname.toLowerCase() === p.toLowerCase())
+    const primaryPath = currentMatchingPath || lastVisitedPath || item.path
+    const isCurrentPath = location.pathname.toLowerCase() === primaryPath.toLowerCase()
 
     // Update last visited when we're on a path in this group
     useEffect(() => {
@@ -45,7 +57,6 @@ function NavItemWithDropdown({ item, visibleAlternates, t }: NavItemWithDropdown
     // 1. If currently on a path in this group, show that one
     // 2. Otherwise, show the last visited path in this group
     // 3. Fall back to the main item
-    const primaryPath = currentMatchingPath || lastVisitedPath || item.path
     const primaryItem = primaryPath === item.path
         ? item
         : visibleAlternates.find(a => a.path.toLowerCase() === primaryPath.toLowerCase()) || item
@@ -73,7 +84,7 @@ function NavItemWithDropdown({ item, visibleAlternates, t }: NavItemWithDropdown
         closeTimeoutRef.current = setTimeout(() => {
             setIsVisible(false)
             // Wait for animation to complete before removing from DOM
-            setTimeout(() => setIsOpen(false), 150)
+            animationTimeoutRef.current = setTimeout(() => setIsOpen(false), 150)
         }, CLOSE_DELAY_MS)
     }
 
@@ -81,6 +92,7 @@ function NavItemWithDropdown({ item, visibleAlternates, t }: NavItemWithDropdown
         return () => {
             if (openTimeoutRef.current) clearTimeout(openTimeoutRef.current)
             if (closeTimeoutRef.current) clearTimeout(closeTimeoutRef.current)
+            if (animationTimeoutRef.current) clearTimeout(animationTimeoutRef.current)
         }
     }, [])
 
@@ -99,6 +111,7 @@ function NavItemWithDropdown({ item, visibleAlternates, t }: NavItemWithDropdown
                         ? 'bg-blue-50 text-blue-600'
                         : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                 }`}
+                aria-current={isCurrentPath ? 'page' : undefined}
             >
                 {t(primaryItem.labelKey)}
             </NavLink>
@@ -122,6 +135,7 @@ function NavItemWithDropdown({ item, visibleAlternates, t }: NavItemWithDropdown
                                         : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                                 }`
                             }
+                            aria-current={location.pathname.toLowerCase() === dropItem.path.toLowerCase() ? 'page' : undefined}
                             onClick={() => {
                                 setIsVisible(false)
                                 setTimeout(() => setIsOpen(false), 150)
@@ -141,17 +155,119 @@ export function Layout() {
     const { visibleNavItems, hasWidget } = usePermissions()
     const navigate = useNavigate()
     const { t } = useTranslation()
+    const location = useLocation()
+    const breadcrumbs = useBreadcrumbs()
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+    const mobileMenuRef = useRef<HTMLDivElement>(null)
+    const {
+        notifications,
+        unreadCount,
+        markAsRead,
+        markAllRead,
+        addNotification,
+    } = useNotifications()
+    const realtime = useRealtime()
+
+    // Wire up WebSocket notifications from RealtimeProvider
+    useEffect(() => {
+        if (!realtime) return
+
+        const unsubscribe = realtime.subscribe('incident', (data: unknown) => {
+            try {
+                const incident = data as {
+                    type?: string
+                    fiber?: string
+                    fiberId?: string
+                    id?: string
+                    status?: string
+                    prevStatus?: string
+                }
+
+                if (!incident) return
+
+                // Handle new incident creation
+                if (incident.type && incident.fiberId) {
+                    addNotification({
+                        ruleName: `New incident: ${incident.type}`,
+                        fiberId: incident.fiberId,
+                        channel: 0,
+                        detail: `A new incident of type "${incident.type}" has been created.`,
+                        timestamp: new Date().toISOString(),
+                        read: false,
+                    })
+                }
+                // Handle incident status change
+                else if (incident.id && incident.status) {
+                    addNotification({
+                        ruleName: `Incident ${incident.id}`,
+                        fiberId: incident.fiberId || 'unknown',
+                        channel: 0,
+                        detail: `Status changed to: ${incident.status}${
+                            incident.prevStatus ? ` (from ${incident.prevStatus})` : ''
+                        }`,
+                        timestamp: new Date().toISOString(),
+                        read: false,
+                    })
+                }
+            } catch (error) {
+                logger.error('Error processing incident notification:', error)
+            }
+        })
+
+        return unsubscribe
+    }, [realtime, addNotification])
 
     const handleLogout = async () => {
         await logout()
         navigate('/login')
     }
 
+    // Close mobile menu when clicking outside
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (
+                mobileMenuRef.current &&
+                !mobileMenuRef.current.contains(event.target as Node)
+            ) {
+                setMobileMenuOpen(false)
+            }
+        }
+
+        if (mobileMenuOpen) {
+            document.addEventListener('mousedown', handleClickOutside)
+            return () => {
+                document.removeEventListener('mousedown', handleClickOutside)
+            }
+        }
+    }, [mobileMenuOpen])
+
     const initial = username?.charAt(0).toUpperCase() || 'U'
     return (
         <div className="h-screen flex flex-col">
-            <header className="h-14 border-b bg-white px-6 flex items-center justify-between">
-                <div className="flex items-center gap-8">
+            <a
+                href="#main-content"
+                className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:bg-white focus:px-4 focus:py-2 focus:rounded focus-visible:ring-2 focus-visible:ring-blue-500"
+            >
+                {t('common.skipToContent')}
+            </a>
+            <header className="h-14 border-b border-slate-200 bg-white px-4 md:px-6 flex items-center justify-between">
+                <div className="flex items-center gap-4 md:gap-8 flex-1 md:flex-none">
+                    {/* Hamburger menu button - visible only on mobile */}
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="md:hidden"
+                        onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                        aria-label={t('common.menu') || 'Toggle menu'}
+                        aria-expanded={mobileMenuOpen}
+                    >
+                        {mobileMenuOpen ? (
+                            <X className="h-5 w-5" />
+                        ) : (
+                            <Menu className="h-5 w-5" />
+                        )}
+                    </Button>
+
                     <div className="flex items-center gap-2">
                         <span className="font-bold text-lg">{t('common.appTitle')}</span>
                         <TechStatsHoverCard>
@@ -159,7 +275,8 @@ export function Layout() {
                         </TechStatsHoverCard>
                     </div>
 
-                    <nav className="flex items-center gap-1" aria-label="Main navigation">
+                    {/* Desktop navigation - hidden on mobile */}
+                    <nav className="hidden md:flex items-center gap-1" aria-label="Main navigation">
                         {visibleNavItems.map(item => {
                             // Filter alternates by permission
                             const visibleAlternates = (item.alternates || []).filter(
@@ -191,6 +308,7 @@ export function Layout() {
                                                 : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
                                         }`
                                     }
+                                    aria-current={location.pathname === item.path ? 'page' : undefined}
                                 >
                                     {t(item.labelKey)}
                                 </NavLink>
@@ -200,21 +318,96 @@ export function Layout() {
                 </div>
 
                 <div className="flex items-center gap-3">
+                    <NotificationBell
+                        notifications={notifications}
+                        unreadCount={unreadCount}
+                        onMarkAsRead={markAsRead}
+                        onMarkAllRead={markAllRead}
+                    />
+
+                    <ThemeToggle />
+
                     <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm font-medium" aria-hidden="true">
                             {initial}
                         </div>
-                        <span className="text-sm">{username}</span>
+                        <span className="text-sm hidden sm:inline">{username}</span>
                     </div>
 
-                    <Button variant="ghost" size="icon" onClick={handleLogout} aria-label={t('auth.logout')}>
-                        <LogOut className="h-4 w-4 text-gray-500" />
-                    </Button>
+                    <Tooltip content={t('nav.logout', 'Log out')}>
+                        <Button variant="ghost" size="icon" onClick={handleLogout} aria-label={t('auth.logout')}>
+                            <LogOut className="h-4 w-4 text-gray-500" />
+                        </Button>
+                    </Tooltip>
                 </div>
             </header>
 
-            <main className="flex-1 bg-slate-50 relative overflow-auto">
-                <Outlet />
+            {/* Mobile navigation menu - visible on mobile when open */}
+            {mobileMenuOpen && (
+                <nav
+                    ref={mobileMenuRef}
+                    className="md:hidden bg-white border-b border-gray-200 overflow-y-auto"
+                    aria-label="Mobile navigation"
+                >
+                    <div className="flex flex-col">
+                        {visibleNavItems.map(item => {
+                            // Filter alternates by permission
+                            const visibleAlternates = (item.alternates || []).filter(
+                                alt => !alt.requiredWidget || hasWidget(alt.requiredWidget)
+                            )
+
+                            // Regular nav link
+                            return (
+                                <div key={item.path}>
+                                    <NavLink
+                                        to={item.path}
+                                        end={item.end}
+                                        className={({ isActive }) =>
+                                            `block px-4 py-3 font-medium text-sm border-b border-gray-100 transition-colors ${
+                                                isActive
+                                                    ? 'bg-blue-50 text-blue-600'
+                                                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                                            }`
+                                        }
+                                        aria-current={location.pathname === item.path ? 'page' : undefined}
+                                        onClick={() => setMobileMenuOpen(false)}
+                                    >
+                                        {t(item.labelKey)}
+                                    </NavLink>
+
+                                    {/* Alternates submenu */}
+                                    {visibleAlternates.length > 0 && (
+                                        <div className="bg-gray-50">
+                                            {visibleAlternates.map(altItem => (
+                                                <NavLink
+                                                    key={altItem.path}
+                                                    to={altItem.path}
+                                                    className={({ isActive }) =>
+                                                        `block px-6 py-2 text-sm border-b border-gray-100 transition-colors ${
+                                                            isActive
+                                                                ? 'bg-blue-100 text-blue-600'
+                                                                : 'text-gray-600 hover:bg-gray-100'
+                                                        }`
+                                                    }
+                                                    aria-current={location.pathname === altItem.path ? 'page' : undefined}
+                                                    onClick={() => setMobileMenuOpen(false)}
+                                                >
+                                                    {t(altItem.labelKey)}
+                                                </NavLink>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )
+                        })}
+                    </div>
+                </nav>
+            )}
+
+            <Breadcrumb items={breadcrumbs} />
+
+            <main className="flex-1 min-h-0 flex flex-col relative overflow-hidden bg-slate-50">
+                <PageTransition />
             </main>
         </div>
     )

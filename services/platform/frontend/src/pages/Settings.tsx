@@ -12,14 +12,14 @@ function CollapsibleSection({ title, children, defaultOpen = false }: Collapsibl
     const [isOpen, setIsOpen] = useState(defaultOpen)
 
     return (
-        <div className="border border-slate-200 rounded-lg overflow-hidden">
+        <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 hover:bg-slate-100 transition-colors"
+                className="w-full px-4 py-3 flex items-center justify-between bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
             >
-                <span className="font-medium text-slate-700">{title}</span>
+                <span className="font-medium text-slate-700 dark:text-slate-200">{title}</span>
                 <svg
-                    className={`w-5 h-5 text-slate-500 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                    className={`w-5 h-5 text-slate-500 dark:text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -28,7 +28,7 @@ function CollapsibleSection({ title, children, defaultOpen = false }: Collapsibl
                 </svg>
             </button>
             {isOpen && (
-                <div className="p-4 bg-white">
+                <div className="p-4 bg-white dark:bg-slate-900">
                     {children}
                 </div>
             )}
@@ -40,9 +40,9 @@ export function Settings() {
     const { t } = useTranslation()
 
     return (
-        <div className="h-full overflow-auto bg-slate-100">
+        <div className="h-full overflow-auto bg-slate-100 dark:bg-slate-950">
             <div className="max-w-6xl mx-auto p-6">
-                <h1 className="text-2xl font-semibold text-slate-800 mb-6">{t('settings.title')}</h1>
+                <h1 className="text-2xl font-semibold text-slate-800 dark:text-slate-100 mb-6">{t('settings.title')}</h1>
 
                 <div className="space-y-4">
                     <CollapsibleSection title={t('settings.speedLimits')} defaultOpen={true}>

@@ -54,8 +54,11 @@ def get_fiber_org_map() -> dict[str, list[str]]:
 
 
 def invalidate_org_fiber_cache(org_id):
-    """Invalidate the per-org fiber cache after admin changes."""
+    """Invalidate all fiber caches related to an org after admin changes."""
     cache.delete(f'org_fibers:{org_id}')
+    # Also invalidate view-level fiber caches
+    cache.delete(f'fibers:org:{org_id}')
+    cache.delete('fibers:all')  # superuser cache
     logger.debug('Invalidated org fiber cache for %s', org_id)
 
 

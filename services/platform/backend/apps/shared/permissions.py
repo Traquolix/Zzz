@@ -32,3 +32,18 @@ class IsActiveUser(BasePermission):
         if not org.is_active:
             return False
         return True
+
+
+class IsNotViewer(BasePermission):
+    """
+    Rejects users with viewer role (including API key service users).
+    Use on write endpoints that should not be accessible via API keys.
+    """
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if user.is_superuser:
+            return True
+        return getattr(user, 'role', None) != 'viewer'

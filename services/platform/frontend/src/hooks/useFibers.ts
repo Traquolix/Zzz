@@ -3,23 +3,38 @@ import type { FiberLine } from '@/types/fiber'
 import { fetchFibers } from '@/api/fibers'
 import { DIRECTION_OFFSET_METERS } from '@/lib/geoUtils'
 
-// Shared cache: all useFibers() instances share a single fetch
+// Shared cache: all useFibers() instances share a single fetch.
+// TTL prevents stale data when fiber config changes (e.g., new cable deployed).
 let _cache: FiberLine[] | null = null
+let _cacheTime = 0
 let _pending: Promise<FiberLine[]> | null = null
+const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+
+function isCacheStale(): boolean {
+    return !_cache || (Date.now() - _cacheTime) > CACHE_TTL_MS
+}
 
 function getCachedFibers(): Promise<FiberLine[]> {
-    if (_cache) return Promise.resolve(_cache)
+    if (_cache && !isCacheStale()) return Promise.resolve(_cache)
     if (!_pending) {
-        _pending = fetchFibers().then(data => {
-            _cache = data
+        _pending = fetchFibers().then(response => {
+            _cache = response.results
+            _cacheTime = Date.now()
             _pending = null
-            return data
+            return response.results
         }).catch(err => {
             _pending = null
             throw err
         })
     }
     return _pending
+}
+
+/** Force cache invalidation (e.g., after admin fiber config change). */
+export function invalidateFiberCache(): void {
+    _cache = null
+    _cacheTime = 0
+    _pending = null
 }
 
 // Meters per degree at ~43.7° latitude
@@ -32,15 +47,17 @@ export function useFibers() {
     const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
-        if (_cache) {
+        if (_cache && !isCacheStale()) {
             setFibers(_cache)
             setLoading(false)
             return
         }
+        let cancelled = false
         getCachedFibers()
-            .then(setFibers)
-            .catch(err => setError(err.message))
-            .finally(() => setLoading(false))
+            .then(data => { if (!cancelled) setFibers(data) })
+            .catch(err => { if (!cancelled) setError(err.message) })
+            .finally(() => { if (!cancelled) setLoading(false) })
+        return () => { cancelled = true }
     }, [])
 
     const getPosition = useCallback((fiberLine: string, channel: number, direction: 0 | 1) => {

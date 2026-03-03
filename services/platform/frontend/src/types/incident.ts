@@ -1,3 +1,5 @@
+export type IncidentStatus = 'active' | 'acknowledged' | 'investigating' | 'resolved'
+
 export type Incident = {
     id: string
     type: 'slowdown' | 'congestion' | 'accident' | 'anomaly'
@@ -5,8 +7,22 @@ export type Incident = {
     fiberLine: string      // which fiber
     channel: number        // which channel (array index)
     detectedAt: string
-    status: 'active' | 'resolved'
+    status: IncidentStatus
     duration?: number      // ms, for temporary incidents
+}
+
+export type IncidentAction = {
+    id: string
+    fromStatus: IncidentStatus
+    toStatus: IncidentStatus
+    performedBy: string | null
+    note: string
+    performedAt: string
+}
+
+export type IncidentActionHistory = {
+    currentStatus: IncidentStatus
+    actions: IncidentAction[]
 }
 
 export type BufferedDetection = {

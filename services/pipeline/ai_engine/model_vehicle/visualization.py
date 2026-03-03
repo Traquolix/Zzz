@@ -68,7 +68,7 @@ class VehicleVisualizer:
             calibration_data: Optional calibration for variable thresholds
             min_speed_kmh: Minimum speed for final filter (default: 20.0)
             max_speed_kmh: Maximum speed for final filter (default: 120.0)
-            count_data: Optional tuple of (counts, intervals, timestamps) from VehicleCounter
+            count_data: Optional tuple of (counts, intervals, timestamps) from SimpleIntervalCounter
 
         Returns:
             Path to saved image file

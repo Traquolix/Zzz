@@ -1,8 +1,10 @@
 import { type Layout, Responsive, useContainerWidth } from "react-grid-layout"
+import { GripVertical } from "lucide-react"
 import { BREAKPOINTS, COLS } from "@/constants/dashboard"
 import type { Layouts, WidgetConfig } from "@/types/dashboard"
 import { WidgetGhost } from "@/components/Dashboard/Editing/WidgetGhost"
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary"
+import { cn } from "@/lib/utils"
 import * as React from "react"
 
 import 'react-grid-layout/css/styles.css'
@@ -48,15 +50,24 @@ export function DashboardGrid({ widgets, layouts, editMode, onLayoutChange, onDe
                     margin={[16, 16]}
                     containerPadding={[16, 16]}
                     onLayoutChange={onLayoutChange}
+                    {...{ draggableHandle: ".drag-handle" } as any}
                 >
                     {widgets.map(widget => {
                         const Component = widget.component
                         return (
                             <div
                                 key={widget.id}
-                                className={`grid-card h-full ${editMode ? 'editable' : ''}`}
+                                className={cn(
+                                    'grid-card h-full relative group',
+                                    editMode && 'ring-1 ring-slate-200 dark:ring-slate-700 ring-dashed rounded-lg'
+                                )}
                                 onContextMenu={(e) => handleContextMenu(e, widget.id)}
                             >
+                                {editMode && (
+                                    <div className="drag-handle absolute top-0 left-0 right-0 h-6 flex items-center justify-center cursor-grab active:cursor-grabbing z-10 opacity-0 hover:opacity-100 transition-opacity">
+                                        <GripVertical className="h-4 w-4 text-slate-400" />
+                                    </div>
+                                )}
                                 {editMode ? (
                                     <WidgetGhost name={widget.name} />
                                 ) : (

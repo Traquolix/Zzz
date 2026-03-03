@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import time
 import uuid
 from typing import Dict, List
@@ -42,7 +44,7 @@ class DASProcessor(MultiTransformer):
 
         # Pipelines built per-fiber dynamically from fibers.yaml
         self._fiber_pipelines: Dict[str, Dict[str, ProcessingChain]] = {}
-        self._fiber_configs: Dict[str, FiberConfig] = {}
+        self._fiber_config_hashes: Dict[str, str] = {}
 
         super().__init__(service_name, service_config)
 
@@ -67,14 +69,18 @@ class DASProcessor(MultiTransformer):
         except KeyError:
             return {}
 
-        # Check if config changed (hot-reload support)
-        cached_cfg = self._fiber_configs.get(fiber_id)
-        if cached_cfg is not fiber_cfg:
-            # Config changed or first time - rebuild pipelines
-            self._fiber_configs[fiber_id] = fiber_cfg
+        # Check if config content changed (not identity — objects may be recreated on reload)
+        config_hash = hashlib.md5(
+            json.dumps(fiber_cfg.__dict__, default=str, sort_keys=True).encode()
+        ).hexdigest()
+        cached_hash = self._fiber_config_hashes.get(fiber_id)
+        if cached_hash != config_hash:
+            # Config changed or first time — rebuild pipelines
+            self._fiber_config_hashes[fiber_id] = config_hash
             self._fiber_pipelines[fiber_id] = self._build_fiber_pipelines(fiber_cfg)
             self.logger.info(
-                f"Built pipelines for fiber '{fiber_id}': " f"{len(fiber_cfg.sections)} sections"
+                f"Built pipelines for fiber '{fiber_id}': {len(fiber_cfg.sections)} sections"
+                + (f" (config changed)" if cached_hash is not None else "")
             )
 
         return self._fiber_pipelines.get(fiber_id, {})

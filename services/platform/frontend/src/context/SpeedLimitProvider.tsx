@@ -1,79 +1,55 @@
-import { useState, useCallback, useEffect, type ReactNode } from 'react'
+import { useCallback, useMemo, type ReactNode } from 'react'
 import type { SpeedLimitZone } from '@/types/speedLimit'
+import type { UserPreferences } from '@/types/user'
 import { SpeedLimitContext } from './SpeedLimitContext'
-import { useUserPreferences } from '@/hooks/useUserPreferences'
-import { useDebouncedSync } from '@/hooks/useDebouncedSync'
+import { usePreferenceMap } from '@/hooks/usePreferenceMap'
 
 function generateZoneId(fiberId: string, startChannel: number, endChannel: number): string {
     return `zone:${fiberId}:${startChannel}-${endChannel}`
 }
 
-function zonesToMap(zones: SpeedLimitZone[]): Map<string, SpeedLimitZone> {
-    return new Map(zones.map(z => [z.id, z]))
-}
-
-function mapToZones(zonesMap: Map<string, SpeedLimitZone>): SpeedLimitZone[] {
-    return Array.from(zonesMap.values())
+const preferenceConfig = {
+    load: (prefs: UserPreferences) => {
+        const zones = prefs?.map?.speedLimitZones
+        if (!zones?.length) return null
+        return new Map(zones.map(z => [z.id, z]))
+    },
+    save: (map: Map<string, SpeedLimitZone>, currentPrefs: UserPreferences | null) => ({
+        map: {
+            ...currentPrefs?.map,
+            speedLimitZones: Array.from(map.values()),
+        },
+    }),
 }
 
 export function SpeedLimitProvider({ children }: { children: ReactNode }) {
-    const { preferences, updatePreferences, isLoading: prefsLoading } = useUserPreferences()
-    const [zones, setZones] = useState<Map<string, SpeedLimitZone>>(new Map())
-    const [initialized, setInitialized] = useState(false)
-
-    // Load from preferences once available
-    useEffect(() => {
-        if (prefsLoading || initialized) return
-        setInitialized(true)
-
-        const savedZones = preferences?.map?.speedLimitZones
-        if (savedZones?.length) {
-            setZones(zonesToMap(savedZones))
-        }
-    }, [prefsLoading, preferences, initialized])
-
-    // Debounced save to preferences
-    const scheduleSync = useDebouncedSync(
-        useCallback((newZones: Map<string, SpeedLimitZone>) => {
-            updatePreferences({
-                ...preferences,
-                map: {
-                    ...preferences?.map,
-                    speedLimitZones: mapToZones(newZones)
-                }
-            })
-        }, [preferences, updatePreferences])
-    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const config = useMemo(() => preferenceConfig, [])
+    const { map: zones, setMap: setZones, scheduleSave } = usePreferenceMap(config)
 
     const addZone = useCallback((
         fiberId: string,
         startChannel: number,
         endChannel: number,
-        limit: number
+        limit: number,
     ) => {
         const start = Math.min(startChannel, endChannel)
         const end = Math.max(startChannel, endChannel)
         const id = generateZoneId(fiberId, start, end)
 
-        const zone: SpeedLimitZone = {
-            id,
-            fiberId,
-            startChannel: start,
-            endChannel: end,
-            limit
-        }
+        const zone: SpeedLimitZone = { id, fiberId, startChannel: start, endChannel: end, limit }
 
         setZones(prev => {
             const next = new Map(prev)
             next.set(id, zone)
-            scheduleSync(next)
+            scheduleSave(next)
             return next
         })
-    }, [scheduleSync])
+    }, [setZones, scheduleSave])
 
     const updateZone = useCallback((
         zoneId: string,
-        updates: Partial<Pick<SpeedLimitZone, 'startChannel' | 'endChannel' | 'limit'>>
+        updates: Partial<Pick<SpeedLimitZone, 'startChannel' | 'endChannel' | 'limit'>>,
     ) => {
         setZones(prev => {
             const zone = prev.get(zoneId)
@@ -89,32 +65,30 @@ export function SpeedLimitProvider({ children }: { children: ReactNode }) {
                 : zoneId
 
             const next = new Map(prev)
-
             if (needsNewId && newId !== zoneId) {
                 next.delete(zoneId)
             }
-
             next.set(newId, {
                 ...zone,
                 id: newId,
                 startChannel: Math.min(newStart, newEnd),
                 endChannel: Math.max(newStart, newEnd),
-                limit: newLimit
+                limit: newLimit,
             })
 
-            scheduleSync(next)
+            scheduleSave(next)
             return next
         })
-    }, [scheduleSync])
+    }, [setZones, scheduleSave])
 
     const deleteZone = useCallback((zoneId: string) => {
         setZones(prev => {
             const next = new Map(prev)
             next.delete(zoneId)
-            scheduleSync(next)
+            scheduleSave(next)
             return next
         })
-    }, [scheduleSync])
+    }, [setZones, scheduleSave])
 
     const getZonesForFiber = useCallback((fiberId: string): SpeedLimitZone[] => {
         return Array.from(zones.values())
@@ -128,7 +102,7 @@ export function SpeedLimitProvider({ children }: { children: ReactNode }) {
             addZone,
             updateZone,
             deleteZone,
-            getZonesForFiber
+            getZonesForFiber,
         }}>
             {children}
         </SpeedLimitContext.Provider>

@@ -10,7 +10,7 @@ export function VehicleInfoPanel() {
 
     return (
         <div
-            className="absolute bg-white rounded-lg p-3 shadow-lg text-[13px] z-1000 min-w-52 pointer-events-auto whitespace-nowrap"
+            className="absolute bg-white rounded-lg p-3 shadow-lg text-[13px] z-[1000] min-w-52 pointer-events-auto whitespace-nowrap max-h-[calc(100vh-8rem)] md:max-h-none overflow-y-auto"
             style={{
                 left: selectedVehicle.screenX + 15,
                 top: selectedVehicle.screenY - 10
@@ -20,7 +20,7 @@ export function VehicleInfoPanel() {
                 <strong className="text-slate-700">{t('map.vehicle.title')}</strong>
                 <button
                     onClick={() => selectVehicle(null)}
-                    className="bg-transparent border-none cursor-pointer text-slate-400 text-base p-0 leading-none hover:text-slate-600"
+                    className="bg-transparent border-none cursor-pointer text-slate-400 text-base min-w-[44px] min-h-[44px] md:min-w-0 md:min-h-0 flex items-center justify-center p-0 leading-none hover:text-slate-600"
                 >
                     ×
                 </button>

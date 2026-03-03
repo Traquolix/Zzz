@@ -59,3 +59,9 @@ export type FiberGroup<T> = {
 
 export const TIME_WINDOW_MS = 60_000
 export const CHANNEL_TOLERANCE = 1
+
+// Hard caps to prevent memory growth during detection bursts.
+// At 10Hz with ~5 channels per landmark, 60s window ≈ 3000 points max.
+// Cap at 2000 as a safety ceiling — well above normal, catches pathological spikes.
+export const MAX_LANDMARK_POINTS = 2000
+export const MAX_SECTION_HISTORY = 600 // 10Hz × 60s, one aggregated point per tick

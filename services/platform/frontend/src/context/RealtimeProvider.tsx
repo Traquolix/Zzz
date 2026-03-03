@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode, useCallback } from 'react'
 import { getAuthToken } from '@/api/client'
+import { logger } from '@/lib/logger'
 import { RealtimeContext, type RealtimeContextType } from './RealtimeContext'
+import { useAppStore } from '@/stores/appStore'
 
 const PING_INTERVAL_MS = 30_000
 const INITIAL_RECONNECT_DELAY_MS = 1_000
@@ -13,6 +15,7 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
     const socketRef = useRef<WebSocket | null>(null)
     const [connected, setConnected] = useState(false)
     const [reconnecting, setReconnecting] = useState(false)
+    const [authFailed, setAuthFailed] = useState(false)
     const subscriptionsRef = useRef<Map<string, Set<(data: unknown) => void>>>(new Map())
     const reconnectDelayRef = useRef(INITIAL_RECONNECT_DELAY_MS)
     const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -65,6 +68,9 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
                         connect()
                     } else if (attempts < TOKEN_POLL_MAX_ATTEMPTS) {
                         tokenPollTimer = setTimeout(poll, TOKEN_POLL_INTERVAL_MS)
+                    } else {
+                        // Token polling exhausted — surface auth failure
+                        setAuthFailed(true)
                     }
                 }
                 tokenPollTimer = setTimeout(poll, TOKEN_POLL_INTERVAL_MS)
@@ -93,7 +99,7 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
                 // Set auth timeout - close connection if no auth response
                 authTimeoutRef.current = setTimeout(() => {
                     if (!authenticatedRef.current && ws.readyState === WebSocket.OPEN) {
-                        console.error('RealtimeProvider: authentication timeout')
+                        logger.error('RealtimeProvider: authentication timeout')
                         ws.close()
                     }
                 }, AUTH_TIMEOUT_MS)
@@ -131,6 +137,7 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
                             authenticatedRef.current = true
                             setConnected(true)
                             setReconnecting(false)
+                            setAuthFailed(false)
                             reconnectDelayRef.current = INITIAL_RECONNECT_DELAY_MS
 
                             // Now send queued subscriptions
@@ -141,7 +148,8 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
 
                             startPingPong(ws)
                         } else {
-                            console.error('RealtimeProvider: authentication failed:', parsed.message)
+                            logger.error('RealtimeProvider: authentication failed:', parsed.message)
+                            setAuthFailed(true)
                             ws.close()
                         }
                         return
@@ -149,7 +157,7 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
 
                     // Handle error responses
                     if (parsed.action === 'error') {
-                        console.error('RealtimeProvider: server error:', parsed.message)
+                        logger.error('RealtimeProvider: server error:', parsed.message)
                         return
                     }
 
@@ -158,7 +166,7 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
 
                     subscriptionsRef.current.get(channel)?.forEach(cb => cb(data))
                 } catch (error) {
-                    console.error('RealtimeProvider: failed to parse WebSocket message', error)
+                    logger.error('RealtimeProvider: failed to parse WebSocket message', error)
                 }
             }
         }
@@ -168,12 +176,14 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
             setReconnecting(true)
 
             const delay = reconnectDelayRef.current
+            // Add ±50% jitter to prevent thundering herd on mass reconnect
+            const jitter = delay * (0.5 + Math.random())
             reconnectTimerRef.current = setTimeout(() => {
                 if (!cancelledRef.current) {
                     reconnectDelayRef.current = Math.min(delay * 2, MAX_RECONNECT_DELAY_MS)
                     connect()
                 }
-            }, delay)
+            }, jitter)
         }
 
         connect()
@@ -186,6 +196,15 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
             socketRef.current = null
         }
     }, [url, clearTimers, startPingPong])
+
+    // Sync connection state to Zustand store for cross-cutting consumers
+    useEffect(() => {
+        useAppStore.getState().setConnected(connected)
+    }, [connected])
+
+    useEffect(() => {
+        useAppStore.getState().setAuthFailed(authFailed)
+    }, [authFailed])
 
     const subscribe = useCallback((channel: string, callback: (data: unknown) => void) => {
         if (!subscriptionsRef.current.has(channel)) {
@@ -215,6 +234,7 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
     const value: RealtimeContextType = {
         connected,
         reconnecting,
+        authFailed,
         subscribe,
     }
 

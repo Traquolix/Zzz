@@ -1,0 +1,93 @@
+.prototype {
+    --proto-base: #1a1a2e;
+    --proto-surface: #2b2d31;
+    --proto-surface-raised: #313338;
+    --proto-border: rgba(255, 255, 255, 0.08);
+    --proto-text: #e2e8f0;
+    --proto-text-secondary: #94a3b8;
+    --proto-text-muted: #64748b;
+    --proto-accent: #3b82f6;
+
+    --proto-green: #22c55e;
+    --proto-amber: #f59e0b;
+    --proto-red: #ef4444;
+
+    --proto-chart-grid: rgba(255, 255, 255, 0.03);
+
+    font-family: Inter, system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    color: var(--proto-text);
+    background: var(--proto-base);
+}
+
+/* Panel slide animations */
+.proto-panel {
+    transition: transform 250ms ease-out;
+}
+
+.proto-panel-enter-right {
+    transform: translateX(100%);
+}
+
+.proto-panel-enter-left {
+    transform: translateX(-100%);
+}
+
+.proto-panel-visible {
+    transform: translateX(0);
+}
+
+/* Map resize transition */
+.proto-map-wrapper {
+    transition: width 300ms ease-out, flex 300ms ease-out;
+}
+
+/* Analysis view fade in */
+.proto-analysis-enter {
+    animation: protoFadeIn 300ms ease-out forwards;
+}
+
+@keyframes protoFadeIn {
+    from {
+        opacity: 0;
+        transform: translateX(12px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Creation banner */
+.proto-creation-banner {
+    animation: protoFadeIn 200ms ease-out forwards;
+}
+
+/* Scrollbar styling for panels */
+.prototype ::-webkit-scrollbar {
+    width: 6px;
+}
+
+.prototype ::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.prototype ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 3px;
+}
+
+.prototype ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Mapbox overrides for dark theme */
+.prototype .mapboxgl-ctrl-attrib {
+    background: rgba(0, 0, 0, 0.5) !important;
+    color: var(--proto-text-muted) !important;
+    font-size: 10px !important;
+}
+
+.prototype .mapboxgl-ctrl-attrib a {
+    color: var(--proto-text-muted) !important;
+}

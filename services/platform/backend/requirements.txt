@@ -26,16 +26,22 @@ confluent-kafka[avro]==2.8.0
 # Redis
 redis==5.2.1
 
+# YAML config parsing
+PyYAML==6.0.2
+
 # Environment
 python-dotenv==1.2.1
 
 # HDF5 and signal processing (for SHM spectral data)
 h5py==3.13.0
 numpy==2.2.3
-scipy>=1.11.0
+scipy==1.15.2
 
 # Structured logging (production JSON output)
 python-json-logger==3.2.1
 
 # Error monitoring
 sentry-sdk[django]==2.51.0
+
+# Metrics
+prometheus_client==0.22.1

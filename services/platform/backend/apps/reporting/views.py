@@ -14,14 +14,17 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.fibers.utils import get_org_fiber_ids
-from apps.reporting.models import Report
-from apps.reporting.report_builder import build_report_html
+from apps.organizations.models import Organization
+from apps.reporting.models import Report, ReportSchedule
+from apps.reporting.task_runner import enqueue_report_generation
 from apps.reporting.serializers import (
     GenerateReportSerializer,
     ReportSerializer,
     SendReportSerializer,
+    ReportScheduleSerializer,
+    CreateScheduleSerializer,
 )
-from apps.shared.permissions import IsActiveUser
+from apps.shared.permissions import IsActiveUser, IsNotViewer
 
 logger = logging.getLogger('sequoia.reporting')
 
@@ -43,14 +46,24 @@ class ReportListView(APIView):
         tags=['reports'],
     )
     def get(self, request):
-        reports = _get_org_reports(request.user)[:50]
-        serializer = ReportSerializer(reports, many=True)
-        return Response(serializer.data)
+        try:
+            limit = min(int(request.query_params.get('limit', 50)), 200)
+        except (ValueError, TypeError):
+            limit = 50
+        reports = list(_get_org_reports(request.user)[:limit + 1])
+        has_more = len(reports) > limit
+        page = reports[:limit]
+        serializer = ReportSerializer(page, many=True)
+        return Response({
+            'results': serializer.data,
+            'hasMore': has_more,
+            'limit': limit,
+        })
 
 
 class ReportGenerateView(APIView):
     """POST /api/reports/generate — create and generate a report."""
-    permission_classes = [IsActiveUser]
+    permission_classes = [IsActiveUser, IsNotViewer]
 
     @extend_schema(
         request=GenerateReportSerializer,
@@ -62,29 +75,37 @@ class ReportGenerateView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        # Verify requested fibers belong to user's org
-        if not request.user.is_superuser:
-            allowed = set(get_org_fiber_ids(request.user.organization))
+        # Determine organization and validate fiber access
+        if request.user.is_superuser:
+            org_id = data.get('organizationId')
+            if not org_id:
+                return Response(
+                    {'detail': 'organizationId required for superusers', 'code': 'org_required'},
+                    status=400,
+                )
+            try:
+                org = Organization.objects.get(pk=org_id)
+            except Organization.DoesNotExist:
+                return Response(
+                    {'detail': 'Organization not found', 'code': 'org_invalid'},
+                    status=400,
+                )
+            # Verify all requested fibers belong to the specified org
+            allowed = set(get_org_fiber_ids(org))
+            requested = set(data['fiberIds'])
+            if not requested.issubset(allowed):
+                return Response(
+                    {'detail': 'Fibers not assigned to specified org', 'code': 'fiber_access_denied'},
+                    status=403,
+                )
+        else:
+            org = request.user.organization
+            allowed = set(get_org_fiber_ids(org))
             requested = set(data['fiberIds'])
             if not requested.issubset(allowed):
                 return Response(
                     {'detail': 'One or more fiber IDs are not accessible.', 'code': 'fiber_access_denied'},
                     status=403,
-                )
-
-        org = request.user.organization if not request.user.is_superuser else None
-        if org is None:
-            # Superuser: use the org of the first fiber or a fallback
-            from apps.fibers.models import FiberAssignment
-            assignment = FiberAssignment.objects.filter(
-                fiber_id=data['fiberIds'][0]
-            ).first()
-            if assignment:
-                org = assignment.organization
-            else:
-                return Response(
-                    {'detail': 'Cannot determine organization for these fibers.', 'code': 'org_unknown'},
-                    status=400,
                 )
 
         report = Report.objects.create(
@@ -96,17 +117,11 @@ class ReportGenerateView(APIView):
             fiber_ids=data['fiberIds'],
             sections=data['sections'],
             recipients=data.get('recipients', []),
-            status='generating',
+            status='pending',
         )
 
-        try:
-            report.html_content = build_report_html(report)
-            report.status = 'completed'
-        except Exception as e:
-            logger.error('Report generation failed: %s', e)
-            report.status = 'failed'
-
-        report.save()
+        # Enqueue background generation — returns immediately
+        enqueue_report_generation(report.pk)
 
         out = ReportSerializer(report)
         return Response(out.data, status=201)
@@ -133,7 +148,7 @@ class ReportDetailView(APIView):
 
 class ReportSendView(APIView):
     """POST /api/reports/<uuid>/send — email the report to recipients."""
-    permission_classes = [IsActiveUser]
+    permission_classes = [IsActiveUser, IsNotViewer]
 
     @extend_schema(
         request=SendReportSerializer,
@@ -172,6 +187,118 @@ class ReportSendView(APIView):
             logger.info('Report %s sent to %s', report.id, recipients)
         except Exception as e:
             logger.error('Failed to send report %s: %s', report.id, e)
-            return Response({'detail': f'Email sending failed: {e}', 'code': 'email_failed'}, status=500)
+            return Response({'detail': 'Email sending failed', 'code': 'email_failed'}, status=500)
 
         return Response({'sent': True})
+
+
+def _get_org_schedules(user):
+    """Return queryset of schedules scoped to the user's org."""
+    qs = ReportSchedule.objects.select_related('created_by')
+    if not user.is_superuser:
+        qs = qs.filter(organization=user.organization)
+    return qs
+
+
+class ReportScheduleListView(APIView):
+    """GET /api/reports/schedules — list schedules; POST — create new schedule."""
+
+    def get_permissions(self):
+        perms = [IsActiveUser()]
+        if self.request.method == 'POST':
+            perms.append(IsNotViewer())
+        return perms
+
+    @extend_schema(
+        responses={200: ReportScheduleSerializer(many=True)},
+        tags=['reports'],
+    )
+    def get(self, request):
+        try:
+            limit = min(int(request.query_params.get('limit', 50)), 200)
+        except (ValueError, TypeError):
+            limit = 50
+        schedules = list(_get_org_schedules(request.user)[:limit + 1])
+        has_more = len(schedules) > limit
+        page = schedules[:limit]
+        serializer = ReportScheduleSerializer(page, many=True)
+        return Response({
+            'results': serializer.data,
+            'hasMore': has_more,
+            'limit': limit,
+        })
+
+    @extend_schema(
+        request=CreateScheduleSerializer,
+        responses={201: ReportScheduleSerializer},
+        tags=['reports'],
+    )
+    def post(self, request):
+        serializer = CreateScheduleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        # Determine organization and validate fiber access
+        if request.user.is_superuser:
+            org_id = request.data.get('organizationId')
+            if not org_id:
+                return Response(
+                    {'detail': 'organizationId required for superusers', 'code': 'org_required'},
+                    status=400,
+                )
+            try:
+                org = Organization.objects.get(pk=org_id)
+            except Organization.DoesNotExist:
+                return Response(
+                    {'detail': 'Organization not found', 'code': 'org_invalid'},
+                    status=400,
+                )
+            # Verify all requested fibers belong to the specified org
+            allowed = set(get_org_fiber_ids(org))
+            requested = set(data['fiberIds'])
+            if not requested.issubset(allowed):
+                return Response(
+                    {'detail': 'Fibers not assigned to specified org', 'code': 'fiber_access_denied'},
+                    status=403,
+                )
+        else:
+            org = request.user.organization
+            allowed = set(get_org_fiber_ids(org))
+            requested = set(data['fiberIds'])
+            if not requested.issubset(allowed):
+                return Response(
+                    {'detail': 'One or more fiber IDs are not accessible.', 'code': 'fiber_access_denied'},
+                    status=403,
+                )
+
+        schedule = ReportSchedule.objects.create(
+            organization=org,
+            created_by=request.user,
+            title=data['title'],
+            frequency=data['frequency'],
+            fiber_ids=data['fiberIds'],
+            sections=data['sections'],
+            recipients=data.get('recipients', []),
+            is_active=True,
+        )
+
+        out = ReportScheduleSerializer(schedule)
+        return Response(out.data, status=201)
+
+
+class ReportScheduleDetailView(APIView):
+    """DELETE /api/reports/schedules/<uuid> — delete a schedule."""
+    permission_classes = [IsActiveUser, IsNotViewer]
+
+    @extend_schema(
+        responses={204: None},
+        tags=['reports'],
+    )
+    def delete(self, request, schedule_id):
+        try:
+            schedule = _get_org_schedules(request.user).get(pk=schedule_id)
+        except ReportSchedule.DoesNotExist:
+            return Response({'detail': 'Schedule not found', 'code': 'schedule_not_found'}, status=404)
+
+        schedule.delete()
+        return Response(status=204)

@@ -101,12 +101,13 @@ CREATE TABLE IF NOT EXISTS sequoia.fiber_incidents
     est_visible_public UInt8 DEFAULT 0 CODEC(LZ4)
 )
 ENGINE = ReplacingMergeTree(updated_at)
-PARTITION BY toYYYYMM(timestamp)
+PARTITION BY toYYYYMMDD(timestamp)
 ORDER BY (fiber_id, timestamp_ns, incident_id)
 SETTINGS index_granularity = 8192
 COMMENT 'Incident detection events with CIGT workflow support';
 
 -- Incident indexes
+ALTER TABLE sequoia.fiber_incidents ADD INDEX IF NOT EXISTS idx_incident_id (incident_id) TYPE bloom_filter GRANULARITY 1;
 ALTER TABLE sequoia.fiber_incidents ADD INDEX IF NOT EXISTS idx_location (channel_start, channel_end) TYPE minmax GRANULARITY 4;
 ALTER TABLE sequoia.fiber_incidents ADD INDEX IF NOT EXISTS idx_status (status) TYPE set(10) GRANULARITY 1;
 ALTER TABLE sequoia.fiber_incidents ADD INDEX IF NOT EXISTS idx_workflow (status_workflow) TYPE set(10) GRANULARITY 1;

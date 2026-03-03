@@ -5,6 +5,75 @@ import numpy as np
 from .constants import DEFAULT_EPSILON
 
 
+def normalize_channel_energy(data: np.ndarray) -> np.ndarray:
+    """Equalize per-channel energy so weak channels aren't ignored.
+
+    Centers each channel (removes DC offset), then scales each channel
+    so all channels have the same total energy.
+
+    Args:
+        data: 2D array (channels, time)
+
+    Returns:
+        Copy of data with equalized per-channel energy.
+    """
+    data_norm = data.copy()
+    data_norm -= np.mean(data_norm, axis=1, keepdims=True)
+    channel_energy = np.sum(np.square(data_norm), axis=1)
+    mean_energy = np.mean(channel_energy)
+    for i in range(data_norm.shape[0]):
+        if channel_energy[i] > 0:
+            data_norm[i] *= np.sqrt(mean_energy / channel_energy[i])
+    return data_norm
+
+
+def compute_speed_from_pairs(
+    glrt_per_pair: np.ndarray,
+    speed_per_pair: np.ndarray,
+    min_speed: float = 20,
+    max_speed: float = 120,
+    positive_glrt_only: bool = True,
+    weighting: str = "glrt",
+) -> np.ndarray:
+    """Compute speed from per-channel-pair estimates.
+
+    Args:
+        glrt_per_pair: (Nch-1, time) array of per-pair GLRT
+        speed_per_pair: (Nch-1, time) array of per-pair speeds
+        min_speed: minimum realistic speed (km/h)
+        max_speed: maximum realistic speed (km/h)
+        positive_glrt_only: if True, only use pairs with positive GLRT
+        weighting: 'glrt' (GLRT-weighted average) or 'median'
+
+    Returns:
+        (time,) array of speeds computed from valid pairs
+    """
+    n_pairs, n_time = glrt_per_pair.shape
+    result = np.full(n_time, np.nan)
+
+    for t in range(n_time):
+        glrt_col = glrt_per_pair[:, t]
+        speed_col = speed_per_pair[:, t]
+
+        valid_mask = (~np.isnan(speed_col)) & (speed_col >= min_speed) & (speed_col <= max_speed)
+        if positive_glrt_only:
+            valid_mask &= glrt_col > 0
+
+        if np.sum(valid_mask) == 0:
+            continue
+
+        valid_speeds = speed_col[valid_mask]
+        valid_glrt = glrt_col[valid_mask]
+
+        if weighting == "glrt" and np.sum(np.maximum(valid_glrt, 0)) > 0:
+            weights = np.maximum(valid_glrt, 0)
+            result[t] = np.sum(valid_speeds * weights) / np.sum(weights)
+        else:
+            result[t] = np.median(valid_speeds)
+
+    return result
+
+
 def normalize_windows(space_split: np.ndarray, epsilon: float = DEFAULT_EPSILON) -> np.ndarray:
     """Apply z-score normalization to each window.
 

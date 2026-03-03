@@ -4,6 +4,7 @@ import { useFibers } from '@/hooks/useFibers'
 import { useSpeedLimits } from '@/hooks/useSpeedLimits'
 import { FiberPreviewMap } from './FiberPreviewMap'
 import type { SpeedLimitZone } from '@/types/speedLimit'
+import { COLORS, getLimitZoneColor } from '@/lib/theme'
 
 type ZoneRowProps = {
     zone: SpeedLimitZone
@@ -123,9 +124,11 @@ export function SpeedLimitSettings() {
     }, [fibers, selectedFiberId])
 
     // Auto-select first fiber
-    if (fibers.length > 0 && !selectedFiberId) {
-        setSelectedFiberId(fibers[0].id)
-    }
+    useEffect(() => {
+        if (fibers.length > 0 && !selectedFiberId) {
+            setSelectedFiberId(fibers[0].id)
+        }
+    }, [fibers, selectedFiberId])
 
     const fiberZones = useMemo(() => {
         if (!selectedFiber) return []
@@ -237,23 +240,23 @@ export function SpeedLimitSettings() {
                     <p>{t('settings.speed.coloringInfo')}</p>
                     <div className="flex items-center gap-3 mt-2">
                         <span className="flex items-center gap-1">
-                            <span className="w-3 h-3 rounded" style={{ backgroundColor: '#22c55e' }}></span>
+                            <span className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.speedGradient.flowing }}></span>
                             80%+
                         </span>
                         <span className="flex items-center gap-1">
-                            <span className="w-3 h-3 rounded" style={{ backgroundColor: '#84cc16' }}></span>
+                            <span className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.speedGradient.moderate }}></span>
                             60-80%
                         </span>
                         <span className="flex items-center gap-1">
-                            <span className="w-3 h-3 rounded" style={{ backgroundColor: '#eab308' }}></span>
+                            <span className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.speedGradient.slowing }}></span>
                             40-60%
                         </span>
                         <span className="flex items-center gap-1">
-                            <span className="w-3 h-3 rounded" style={{ backgroundColor: '#f97316' }}></span>
+                            <span className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.speedGradient.congested }}></span>
                             20-40%
                         </span>
                         <span className="flex items-center gap-1">
-                            <span className="w-3 h-3 rounded" style={{ backgroundColor: '#ef4444' }}></span>
+                            <span className="w-3 h-3 rounded" style={{ backgroundColor: COLORS.speedGradient.severe }}></span>
                             &lt;20%
                         </span>
                     </div>
@@ -279,7 +282,7 @@ export function SpeedLimitSettings() {
                         <div key={zone.id} className="flex items-center gap-2 text-xs text-slate-600">
                             <span
                                 className="w-3 h-3 rounded"
-                                style={{ backgroundColor: getLimitColor(zone.limit) }}
+                                style={{ backgroundColor: getLimitZoneColor(zone.limit) }}
                             ></span>
                             <span>Ch {zone.startChannel}-{zone.endChannel}: {zone.limit} km/h</span>
                         </div>
@@ -294,10 +297,4 @@ export function SpeedLimitSettings() {
     )
 }
 
-// Color for each limit range (for legend/preview)
-function getLimitColor(limit: number): string {
-    if (limit >= 100) return '#3b82f6' // blue - highway
-    if (limit >= 70) return '#8b5cf6'  // purple - fast road
-    if (limit >= 50) return '#f59e0b'  // amber - urban
-    return '#ef4444'                    // red - slow zone
-}
+// getLimitColor moved to @/lib/theme.ts as getLimitZoneColor()

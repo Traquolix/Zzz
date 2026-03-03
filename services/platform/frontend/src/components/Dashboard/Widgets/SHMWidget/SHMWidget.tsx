@@ -91,7 +91,7 @@ export function SHMWidget() {
     // Handle fly to infrastructure
     const handleFlyTo = useCallback((infra: Infrastructure, e: React.MouseEvent) => {
         e.stopPropagation()
-        const fiber = fibers.find(f => f.id === infra.fiberId)
+        const fiber = fibers.find(f => f.parentFiberId === infra.fiberId)
         if (fiber) {
             const startCoord = fiber.coordinates[infra.startChannel]
             const endCoord = fiber.coordinates[infra.endChannel]

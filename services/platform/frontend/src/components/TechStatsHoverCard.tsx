@@ -1,24 +1,11 @@
 import { useState, useEffect, type ReactNode } from 'react'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card'
 import { useTechStats } from '@/hooks/useTechStats'
+import { formatDurationMs } from '@/lib/formatters'
 import { Wifi, WifiOff, Clock, Car, AlertTriangle, Activity, User } from 'lucide-react'
 
 type Props = {
     children: ReactNode
-}
-
-function formatDuration(ms: number): string {
-    const seconds = Math.floor(ms / 1000)
-    const minutes = Math.floor(seconds / 60)
-    const hours = Math.floor(minutes / 60)
-
-    if (hours > 0) {
-        return `${hours}h ${minutes % 60}m`
-    }
-    if (minutes > 0) {
-        return `${minutes}m ${seconds % 60}s`
-    }
-    return `${seconds}s`
 }
 
 function StatRow({ icon: Icon, label, value, className = '' }: {
@@ -125,7 +112,7 @@ export function TechStatsHoverCard({ children }: Props) {
                             <StatRow
                                 icon={Clock}
                                 label="Session"
-                                value={formatDuration(sessionDuration)}
+                                value={formatDurationMs(sessionDuration)}
                             />
                             <StatRow
                                 icon={Activity}

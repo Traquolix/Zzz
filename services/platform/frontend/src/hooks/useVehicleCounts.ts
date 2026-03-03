@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRealtime } from '@/hooks/useRealtime'
+import { parseVehicleCount } from '@/lib/parseMessage'
 import type { VehicleCount } from '@/types/realtime'
 
 const COUNT_TTL_MS = 60_000 // Keep counts for 60s
@@ -25,8 +26,8 @@ export function useVehicleCounts() {
                 const now = Date.now()
 
                 for (const item of items) {
-                    const count = item as VehicleCount
-                    if (!count || typeof count.fiberLine !== 'string') continue
+                    const count = parseVehicleCount(item)
+                    if (!count) continue
 
                     const key = `${count.fiberLine}:${count.channelStart}-${count.channelEnd}`
                     next.set(key, count)

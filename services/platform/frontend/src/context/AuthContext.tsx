@@ -8,6 +8,8 @@ export type AuthContextType = {
     organizationName: string | null
     allowedWidgets: string[]
     allowedLayers: string[]
+    role: string | null
+    isSuperuser: boolean
     login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>
     logout: () => Promise<void>
 }

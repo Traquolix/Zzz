@@ -62,3 +62,21 @@ class StatsSerializer(serializers.Serializer):
     detectionsPerSecond = serializers.FloatField()
     activeIncidents = serializers.IntegerField()
     systemUptime = serializers.IntegerField()
+
+
+class IncidentActionSerializer(serializers.Serializer):
+    """Serializes a single workflow action for display."""
+    id = serializers.UUIDField(read_only=True)
+    fromStatus = serializers.CharField(source='from_status')
+    toStatus = serializers.CharField(source='to_status')
+    performedBy = serializers.CharField(source='performed_by.username', default=None)
+    note = serializers.CharField()
+    performedAt = serializers.DateTimeField(source='performed_at')
+
+
+class IncidentActionInputSerializer(serializers.Serializer):
+    """Validates incoming workflow action requests."""
+    action = serializers.ChoiceField(
+        choices=['acknowledged', 'investigating', 'resolved'],
+    )
+    note = serializers.CharField(required=False, default='', allow_blank=True)

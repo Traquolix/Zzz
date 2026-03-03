@@ -14,6 +14,7 @@ from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers as s, status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle, ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -60,10 +61,11 @@ class LoginView(APIView):
     Returns access token + user info in JSON body.
     Sets refresh token as httpOnly cookie.
     Implements account lockout after repeated failed attempts.
+    Uses AnonRateThrottle for rate limiting to prevent brute force attacks.
     """
     permission_classes = [AllowAny]
     authentication_classes = []
-    throttle_classes = [LoginRateThrottle]
+    throttle_classes = [AnonRateThrottle]
 
     @staticmethod
     def _lockout_key(username):
@@ -113,6 +115,8 @@ class LoginView(APIView):
                 'allowedLayers': user.allowed_layers,
                 'organizationId': str(user.organization_id) if user.organization_id else None,
                 'organizationName': user.organization.name if user.organization else None,
+                'role': user.role,
+                'isSuperuser': user.is_superuser,
             })
             _set_refresh_cookie(response, str(refresh))
 
@@ -181,6 +185,8 @@ class VerifyView(APIView):
             'allowedLayers': user.allowed_layers,
             'organizationId': str(user.organization_id) if user.organization_id else None,
             'organizationName': user.organization.name if user.organization else None,
+            'role': user.role,
+            'isSuperuser': user.is_superuser,
         })
 
 
@@ -188,9 +194,13 @@ class CookieTokenRefreshView(APIView):
     """
     Refresh access token using the refresh token from httpOnly cookie.
     Returns new access token in body and rotates refresh cookie.
+
+    Uses rate limiting to prevent brute force attacks on token refresh.
     """
     permission_classes = [AllowAny]
     authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'login'  # Same aggressive rate limit as login
 
     @extend_schema(
         request=None,

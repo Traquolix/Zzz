@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { createContext, useContext, useState, useCallback, useRef, useEffect, type ReactNode } from 'react'
 import { Button } from './button'
+import i18n from '@/i18n'
 
 type ConfirmOptions = {
     title?: string
@@ -29,6 +30,7 @@ type DialogState = ConfirmOptions & {
 
 export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
     const [dialog, setDialog] = useState<DialogState | null>(null)
+    const dialogContentRef = useRef<HTMLDivElement>(null)
 
     const confirm = useCallback((options: ConfirmOptions): Promise<boolean> => {
         return new Promise((resolve) => {
@@ -54,12 +56,50 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
         }
     }
 
+    // Focus trap: keep focus within dialog when open
+    useEffect(() => {
+        if (!dialog) return
+
+        const focusableElements = dialogContentRef.current?.querySelectorAll(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )
+        const firstElement = focusableElements?.[0] as HTMLElement
+        const lastElement = focusableElements?.[focusableElements.length - 1] as HTMLElement
+
+        // Focus the confirm button by default
+        const confirmButton = dialogContentRef.current?.querySelector('button:last-of-type') as HTMLElement
+        confirmButton?.focus()
+
+        const handleTabKey = (e: KeyboardEvent) => {
+            if (e.key !== 'Tab') return
+
+            if (e.shiftKey) {
+                // Shift + Tab
+                if (document.activeElement === firstElement) {
+                    e.preventDefault()
+                    lastElement?.focus()
+                }
+            } else {
+                // Tab
+                if (document.activeElement === lastElement) {
+                    e.preventDefault()
+                    firstElement?.focus()
+                }
+            }
+        }
+
+        document.addEventListener('keydown', handleTabKey)
+        return () => {
+            document.removeEventListener('keydown', handleTabKey)
+        }
+    }, [dialog])
+
     return (
         <ConfirmContext.Provider value={{ confirm }}>
             {children}
             {dialog && (
                 <div
-                    className="fixed inset-0 bg-black/50 flex items-center justify-center z-[2000]"
+                    className="fixed inset-0 bg-black/50 flex items-center justify-center z-[2000] animate-in fade-in-0 duration-150"
                     onKeyDown={handleKeyDown}
                     onClick={handleCancel}
                     role="dialog"
@@ -67,28 +107,27 @@ export function ConfirmDialogProvider({ children }: { children: ReactNode }) {
                     aria-labelledby={dialog.title ? 'confirm-dialog-title' : undefined}
                     aria-describedby="confirm-dialog-message"
                 >
-                    <div className="bg-white rounded-lg p-5 shadow-xl min-w-[320px] max-w-[400px]" onClick={e => e.stopPropagation()}>
+                    <div ref={dialogContentRef} className="bg-white dark:bg-slate-900 rounded-lg p-5 shadow-xl min-w-[320px] max-w-[400px] mx-4 animate-in zoom-in-95 fade-in-0 duration-200" onClick={e => e.stopPropagation()}>
                         {dialog.title && (
-                            <h3 id="confirm-dialog-title" className="text-lg font-semibold mb-2 text-slate-800">
+                            <h3 id="confirm-dialog-title" className="text-lg font-semibold mb-2 text-slate-800 dark:text-slate-100">
                                 {dialog.title}
                             </h3>
                         )}
-                        <p id="confirm-dialog-message" className="text-slate-600 mb-5">{dialog.message}</p>
+                        <p id="confirm-dialog-message" className="text-slate-600 dark:text-slate-300 mb-5">{dialog.message}</p>
                         <div className="flex justify-end gap-2">
                             <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={handleCancel}
                             >
-                                {dialog.cancelText || 'Cancel'}
+                                {dialog.cancelText || i18n.t('common.cancel', 'Cancel')}
                             </Button>
                             <Button
                                 variant={dialog.variant === 'destructive' ? 'destructive' : 'default'}
                                 size="sm"
                                 onClick={handleConfirm}
-                                autoFocus
                             >
-                                {dialog.confirmText || 'Confirm'}
+                                {dialog.confirmText || i18n.t('common.confirm', 'Confirm')}
                             </Button>
                         </div>
                     </div>

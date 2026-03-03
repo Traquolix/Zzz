@@ -5,7 +5,9 @@ import { useFibers } from '@/hooks/useFibers'
 import { useMapInstance } from '@/hooks/useMapInstance'
 import { useMapSelection } from '@/hooks/useMapSelection'
 import { useIncidentSnapshot } from '@/hooks/useIncidentSnapshot'
+import { IncidentActionBar } from '@/components/IncidentTimeline/IncidentActionBar'
 import { getSpeedHexColor } from '@/lib/speedColors'
+import { COLORS } from '@/lib/theme'
 import type { Incident, IncidentSnapshot } from '@/types/incident'
 import { SEVERITY_BADGE, SEVERITY_INDICATOR as SEVERITY_INDICATOR_SHARED } from '@/constants/incidents'
 
@@ -99,10 +101,10 @@ function SnapshotChart({ snapshot }: SnapshotChartProps) {
         const maxSpeed = stats.normalSpeed * 1.15
 
         // Draw subtle horizontal grid lines (just 2)
-        ctx.strokeStyle = '#e2e8f0'
+        ctx.strokeStyle = COLORS.canvas.grid
         ctx.lineWidth = 1
         ctx.font = '10px system-ui, sans-serif'
-        ctx.fillStyle = '#94a3b8'
+        ctx.fillStyle = COLORS.canvas.label
         ctx.textAlign = 'right'
 
         const gridSpeeds = [0, Math.round(maxSpeed / 2), Math.round(maxSpeed)]
@@ -170,7 +172,7 @@ function SnapshotChart({ snapshot }: SnapshotChartProps) {
         }
 
         // Draw incident marker line
-        ctx.strokeStyle = '#dc2626'
+        ctx.strokeStyle = COLORS.severity.critical
         ctx.lineWidth = 2
         ctx.setLineDash([])
         ctx.beginPath()
@@ -179,7 +181,7 @@ function SnapshotChart({ snapshot }: SnapshotChartProps) {
         ctx.stroke()
 
         // Draw incident marker triangle at top
-        ctx.fillStyle = '#dc2626'
+        ctx.fillStyle = COLORS.severity.critical
         ctx.beginPath()
         ctx.moveTo(incidentX, padding.top)
         ctx.lineTo(incidentX - 6, padding.top - 8)
@@ -190,7 +192,7 @@ function SnapshotChart({ snapshot }: SnapshotChartProps) {
         // X-axis labels
         ctx.textAlign = 'center'
         ctx.font = '10px system-ui, sans-serif'
-        ctx.fillStyle = '#64748b'
+        ctx.fillStyle = COLORS.canvas.axis
 
         const incidentLabel = t('incidents.snapshot.incident')
         const distances = [-200, 0, 200]
@@ -276,6 +278,7 @@ type IncidentRowProps = {
     isNew: boolean
     onToggleExpand: () => void
     onClick: () => void
+    updateIncidentStatus?: (incidentId: string, newStatus: any) => void
 }
 
 const SEVERITY_INDICATOR = SEVERITY_INDICATOR_SHARED
@@ -289,7 +292,14 @@ function computeTimeAgo(detectedAt: string, t: (key: string, opts?: Record<strin
     return t('incidents.time.hoursAgo', { count: hours })
 }
 
-function IncidentRow({ incident, isSelected, isExpanded, isNew, onToggleExpand, onClick }: IncidentRowProps) {
+type FilterType = 'all' | Incident['type']
+type FilterSeverity = 'all' | Incident['severity']
+type SortOption = 'severity' | 'recent' | 'oldest' | 'type'
+
+const SEVERITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 }
+const TYPE_ORDER = { accident: 0, slowdown: 1, congestion: 2, anomaly: 3 }
+
+function IncidentRow({ incident, isSelected, isExpanded, isNew, onToggleExpand, onClick, updateIncidentStatus }: IncidentRowProps & { updateIncidentStatus: (incidentId: string, newStatus: any) => void }) {
     const { t } = useTranslation()
     const colors = SEVERITY_COLORS[incident.severity] || SEVERITY_COLORS.low
     const indicator = SEVERITY_INDICATOR[incident.severity] || SEVERITY_INDICATOR.low
@@ -371,38 +381,40 @@ function IncidentRow({ incident, isSelected, isExpanded, isNew, onToggleExpand, 
             </div>
 
             {isExpanded && (
-                loading ? (
-                    <div className="px-4 py-6 bg-gradient-to-b from-slate-50 to-white border-t border-slate-100">
-                        <div className="flex items-center justify-center gap-2 text-sm text-slate-400">
-                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                            </svg>
-                            {t('incidents.loadingSnapshot')}
+                <>
+                    {loading ? (
+                        <div className="px-4 py-6 bg-gradient-to-b from-slate-50 to-white border-t border-slate-100">
+                            <div className="flex items-center justify-center gap-2 text-sm text-slate-400">
+                                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                </svg>
+                                {t('incidents.loadingSnapshot')}
+                            </div>
                         </div>
+                    ) : error ? (
+                        <div className="px-4 py-6 bg-gradient-to-b from-slate-50 to-white border-t border-slate-100 text-sm text-slate-400 text-center">
+                            {error}
+                        </div>
+                    ) : snapshot ? (
+                        <SnapshotChart snapshot={snapshot} />
+                    ) : null}
+
+                    <div className="px-4 py-4 bg-gradient-to-b from-slate-50 to-white border-t border-slate-100">
+                        <IncidentActionBar
+                            incident={incident}
+                            onStatusChange={updateIncidentStatus}
+                        />
                     </div>
-                ) : error ? (
-                    <div className="px-4 py-6 bg-gradient-to-b from-slate-50 to-white border-t border-slate-100 text-sm text-slate-400 text-center">
-                        {error}
-                    </div>
-                ) : snapshot ? (
-                    <SnapshotChart snapshot={snapshot} />
-                ) : null
+                </>
             )}
         </div>
     )
 }
 
-type FilterType = 'all' | Incident['type']
-type FilterSeverity = 'all' | Incident['severity']
-type SortOption = 'severity' | 'recent' | 'oldest' | 'type'
-
-const SEVERITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 }
-const TYPE_ORDER = { accident: 0, slowdown: 1, congestion: 2, anomaly: 3 }
-
 export function IncidentWidget() {
     const { t } = useTranslation()
-    const { incidents, loading, isNewIncident } = useIncidents()
+    const { incidents, loading, isNewIncident, updateIncidentStatus } = useIncidents()
     const { getPosition } = useFibers()
     const { flyToWithLayer, ready: mapReady } = useMapInstance()
     const { selectedIncident, selectIncident } = useMapSelection()
@@ -564,6 +576,7 @@ export function IncidentWidget() {
                                     expandedIncidentId === incident.id ? null : incident.id
                                 )}
                                 onClick={() => handleIncidentClick(incident)}
+                                updateIncidentStatus={updateIncidentStatus}
                             />
                         ))}
                     </div>

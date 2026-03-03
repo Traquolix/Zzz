@@ -112,6 +112,90 @@
   --sidebar-ring: oklch(0.551 0.027 264.364);
 }
 
+.sequoia {
+  /* ── Semantic tokens (brand colors) ── */
+  --background: #101e2c;
+  --foreground: #e2e8f0;
+  --card: #1b3044;
+  --card-foreground: #e2e8f0;
+  --popover: #1b3044;
+  --popover-foreground: #e2e8f0;
+  --primary: #c1d868;
+  --primary-foreground: #101e2c;
+  --secondary: #1e3448;
+  --secondary-foreground: #e2e8f0;
+  --muted: #1e3448;
+  --muted-foreground: #8aa2b4;
+  --accent: #1e3448;
+  --accent-foreground: #e2e8f0;
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: rgba(255 255 255 / 14%);
+  --input: rgba(255 255 255 / 16%);
+  --ring: rgba(53 123 130 / 60%);
+  --chart-1: #c1d868;
+  --chart-2: #357b82;
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: #0c1620;
+  --sidebar-foreground: #e2e8f0;
+  --sidebar-primary: #c1d868;
+  --sidebar-primary-foreground: #101e2c;
+  --sidebar-accent: #1c2e3e;
+  --sidebar-accent-foreground: #e2e8f0;
+  --sidebar-border: rgba(255 255 255 / 8%);
+  --sidebar-ring: rgba(193 216 104 / 50%);
+
+  /* ── Tailwind palette overrides ──
+     Remap white/slate/gray/blue so hardcoded classes
+     (bg-white, bg-slate-50, text-gray-700, etc.) resolve
+     to dark-on-navy automatically. */
+
+  /* white → raised card surface (lighter than page bg) */
+  --color-white: #1b3044;
+
+  /* slate: light shades → dark navy tints, dark shades → light
+     950 = deepest, bg = #101e2c, 50 = card-level surface,
+     white (#1b3044) = card surface */
+  --color-slate-50:  #192d3f;
+  --color-slate-100: #1e3448;
+  --color-slate-200: #243e56;
+  --color-slate-300: #365a78;
+  --color-slate-400: #5e88a6;
+  --color-slate-500: #8aa2b4;
+  --color-slate-600: #a8bfce;
+  --color-slate-700: #c4d5e0;
+  --color-slate-800: #dae4ec;
+  --color-slate-900: #edf1f5;
+  --color-slate-950: #0a1218;
+
+  /* gray: same inversion with wider spread */
+  --color-gray-50:  #192d3f;
+  --color-gray-100: #1e3448;
+  --color-gray-200: #243e56;
+  --color-gray-300: #365a78;
+  --color-gray-400: #5e88a6;
+  --color-gray-500: #8aa2b4;
+  --color-gray-600: #a8bfce;
+  --color-gray-700: #c4d5e0;
+  --color-gray-800: #dae4ec;
+  --color-gray-900: #edf1f5;
+  --color-gray-950: #0a1218;
+
+  /* blue: remap to brand teal (#357b82) for interactive elements,
+     green (#c1d868) reserved for primary/active accents */
+  --color-blue-50:  #0f2b2e;
+  --color-blue-100: #153a3e;
+  --color-blue-200: #1e5258;
+  --color-blue-300: #2a6b72;
+  --color-blue-400: #357b82;
+  --color-blue-500: #43929a;
+  --color-blue-600: #357b82;
+  --color-blue-700: #2a6b72;
+  --color-blue-800: #1e5258;
+  --color-blue-900: #153a3e;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
@@ -128,6 +212,14 @@
   }
 }
 
+/* Theme transition — only active during toggle, not page load */
+.theme-transitioning,
+.theme-transitioning *,
+.theme-transitioning *::before,
+.theme-transitioning *::after {
+    transition: background-color 200ms ease, color 150ms ease, border-color 200ms ease, fill 200ms ease !important;
+}
+
 /* Pulse animation for incident markers */
 @keyframes pulse {
   0%, 100% {
@@ -137,5 +229,47 @@
   50% {
     transform: scale(1.1);
     opacity: 0.8;
+  }
+}
+
+/* Dashboard drag feedback */
+.react-draggable-dragging {
+  opacity: 0.7;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  z-index: 100;
+}
+
+/* ── SequoIA "control room" ambient styling ── */
+
+/* Ambient page background with dual radial gradients */
+.sequoia body {
+    background:
+        radial-gradient(ellipse at 10% 0%, rgba(53, 123, 130, 0.07) 0%, transparent 50%),
+        radial-gradient(ellipse at 90% 100%, rgba(193, 216, 104, 0.03) 0%, transparent 50%),
+        #101e2c;
+}
+
+/* Enhanced shadows for map overlays and popups */
+.sequoia .shadow-lg {
+    box-shadow:
+        0 0 1px rgba(53, 123, 130, 0.3),
+        0 10px 30px rgba(0, 0, 0, 0.4) !important;
+}
+
+.sequoia .shadow-xl {
+    box-shadow:
+        0 0 1px rgba(53, 123, 130, 0.4),
+        0 20px 40px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Mobile-friendly mapbox navigation controls */
+@media (max-width: 767px) {
+  .mapboxgl-ctrl-group button {
+    width: 44px;
+    height: 44px;
+  }
+  .mapboxgl-ctrl-group button .mapboxgl-ctrl-icon {
+    width: 44px;
+    height: 44px;
   }
 }

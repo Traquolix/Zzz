@@ -1,5 +1,12 @@
 """
 Tests for incidents endpoints (ClickHouse mocked).
+
+The incident list view uses incident_service.query_recent which internally
+calls apps.shared.clickhouse.query. We mock at the incident_service.query
+level so the full transform pipeline runs.
+
+The snapshot view calls apps.monitoring.views.query (from shared.clickhouse)
+directly, so we mock there.
 """
 
 import pytest
@@ -17,7 +24,7 @@ pytestmark = pytest.mark.django_db
 class TestIncidentList:
     url = '/api/incidents'
 
-    @patch('apps.monitoring.views.query')
+    @patch('apps.monitoring.incident_service.query')
     def test_list_incidents(self, mock_query, authenticated_client, org):
         FiberAssignment.objects.create(organization=org, fiber_id='fiber-carros')
         FiberAssignment.objects.create(organization=org, fiber_id='fiber-promenade')
@@ -47,28 +54,33 @@ class TestIncidentList:
         response = authenticated_client.get(self.url)
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
-        assert len(data) == 2
+        results = data['results']
+        assert len(results) == 2
 
-        inc = data[0]
+        inc = results[0]
         assert inc['id'] == 'inc-001'
         assert inc['type'] == 'accident'
         assert inc['severity'] == 'high'
-        assert inc['fiberLine'] == 'fiber-carros'
+        assert inc['fiberLine'] == 'fiber-carros:0'  # Normalized with directional suffix
         assert inc['channel'] == 150
         assert inc['status'] == 'active'
         assert inc['duration'] == 300_000  # Converted to ms
 
-        inc2 = data[1]
+        inc2 = results[1]
+        assert inc2['fiberLine'] == 'fiber-promenade:0'  # Normalized
         assert inc2['duration'] is None
 
-    @patch('apps.monitoring.views.query')
+        assert data['hasMore'] is False
+
+    @patch('apps.monitoring.incident_service.query')
     def test_incidents_clickhouse_unavailable(self, mock_query, authenticated_client, org):
         FiberAssignment.objects.create(organization=org, fiber_id='fiber-carros')
         mock_query.side_effect = ClickHouseUnavailableError("Connection refused")
 
         response = authenticated_client.get(self.url)
-        assert response.status_code == status.HTTP_200_OK
-        assert response.json() == []
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
+        data = response.json()
+        assert data['code'] == 'clickhouse_unavailable'
 
     def test_incidents_unauthenticated(self, api_client):
         response = api_client.get(self.url)
@@ -111,13 +123,13 @@ class TestIncidentSnapshot:
         data = response.json()
 
         assert data['incidentId'] == 'inc-001'
-        assert data['fiberLine'] == 'fiber-carros'
+        assert data['fiberLine'] == 'fiber-carros:0'  # Normalized with directional suffix
         assert data['centerChannel'] == 105  # (100 + 110) // 2
         assert isinstance(data['capturedAt'], int)
         assert len(data['detections']) == 2
 
         det = data['detections'][0]
-        assert det['fiberLine'] == 'fiber-carros'
+        assert det['fiberLine'] == 'fiber-carros:0'  # Normalized
         assert det['channel'] == 105
         assert det['speed'] == 85.0
         assert det['direction'] == 0  # Positive speed

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { DataPoint } from './types'
 import { TIME_WINDOW_MS } from './types'
 import { getSpeedHexColor } from '@/lib/speedColors'
+import { COLORS } from '@/lib/theme'
 import {
     setupCanvas,
     getChartDimensions,
@@ -14,7 +16,6 @@ import {
 } from '@/lib/chartUtils'
 
 const MAX_SLOTS = 3
-const EMPTY_CELL_COLOR = '#e2e8f0'
 const BUCKET_MS = 1000
 
 type OccupancyBucket = {
@@ -29,6 +30,7 @@ type OccupancyChartProps = {
 }
 
 export function OccupancyChart({ visiblePoints, now }: OccupancyChartProps) {
+    const { t } = useTranslation()
     const canvasRef = useRef<HTMLCanvasElement>(null)
 
     const buckets = useMemo(() => {
@@ -73,7 +75,7 @@ export function OccupancyChart({ visiblePoints, now }: OccupancyChartProps) {
 
         // Draw Y-axis labels for slots
         ctx.font = '12px system-ui, -apple-system, sans-serif'
-        ctx.fillStyle = '#64748b'
+        ctx.fillStyle = COLORS.canvas.axis
         ctx.textAlign = 'right'
         ctx.textBaseline = 'middle'
         for (let slot = 1; slot <= MAX_SLOTS; slot++) {
@@ -83,13 +85,13 @@ export function OccupancyChart({ visiblePoints, now }: OccupancyChartProps) {
 
         // Draw Y-axis unit label
         ctx.font = '11px system-ui, -apple-system, sans-serif'
-        ctx.fillStyle = '#94a3b8'
+        ctx.fillStyle = COLORS.canvas.label
         ctx.textAlign = 'left'
         ctx.textBaseline = 'bottom'
-        ctx.fillText('slots', padding.left, padding.top - 6)
+        ctx.fillText(t('traffic.occupancy.slots'), padding.left, padding.top - 6)
 
         // Draw horizontal slot dividers
-        ctx.strokeStyle = '#e2e8f0'
+        ctx.strokeStyle = COLORS.canvas.grid
         ctx.lineWidth = 1
         for (let slot = 1; slot < MAX_SLOTS; slot++) {
             const y = padding.top + chartHeight - (slot / MAX_SLOTS) * chartHeight
@@ -100,7 +102,7 @@ export function OccupancyChart({ visiblePoints, now }: OccupancyChartProps) {
         }
 
         if (visiblePoints.length === 0) {
-            drawNoDataMessage(ctx, width, height, 'Waiting for detections...')
+            drawNoDataMessage(ctx, width, height, t('traffic.occupancy.waitingForDetections'))
             return
         }
 
@@ -118,7 +120,7 @@ export function OccupancyChart({ visiblePoints, now }: OccupancyChartProps) {
             // Draw empty cell background for all slots
             for (let slot = 0; slot < MAX_SLOTS; slot++) {
                 const y = padding.top + chartHeight - (slot + 1) * slotHeight
-                ctx.fillStyle = EMPTY_CELL_COLOR
+                ctx.fillStyle = COLORS.canvas.grid
                 ctx.fillRect(x + 0.5, y + 0.5, cellWidth - 1, slotHeight - 1)
             }
 
@@ -136,7 +138,7 @@ export function OccupancyChart({ visiblePoints, now }: OccupancyChartProps) {
         }
 
         ctx.restore()
-    }, [buckets, visiblePoints, now])
+    }, [buckets, visiblePoints, now, t])
 
     return (
         <canvas

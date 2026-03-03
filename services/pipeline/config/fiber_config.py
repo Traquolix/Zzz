@@ -71,19 +71,21 @@ class InferenceConfig:
     """AI model inference parameters."""
 
     sampling_rate_hz: float = 10.0
-    window_seconds: int = 30
+    window_seconds: int = 28  # Must match model checkpoint (fullSet_28s)
     channels_per_section: int = 9
     gauge_meters: int = 10
-    bidirectional_rnn: bool = True  # False for newer unidirectional models
+    bidirectional_rnn: bool = True
+    time_overlap_ratio: float = 0.5
 
     @classmethod
     def from_dict(cls, data: dict) -> InferenceConfig:
         return cls(
             sampling_rate_hz=data.get("sampling_rate_hz", 10.0),
-            window_seconds=data.get("window_seconds", 30),
+            window_seconds=data.get("window_seconds", 28),
             channels_per_section=data.get("channels_per_section", 9),
             gauge_meters=data.get("gauge_meters", 10),
             bidirectional_rnn=data.get("bidirectional_rnn", True),
+            time_overlap_ratio=data.get("time_overlap_ratio", 0.5),
         )
 
     @property
@@ -92,23 +94,12 @@ class InferenceConfig:
 
     @property
     def step_size(self) -> int:
-        """Step size for rolling buffer (valid output per window).
+        """Step size for rolling buffer derived from overlap ratio.
 
-        This is samples_per_window minus the edge trim on both sides.
-        Edge trim = safety_samples + glrt_window//2 = 15 + 10 = 25.
-        With window=300, step_size = 300 - 2*25 = 250.
-
-        Using step_size as buffer size ensures constant memory usage
-        (always keep exactly 50 samples between batches).
+        With 50% overlap: window=300, step=150 (process 2x more often).
+        The overlap ensures seamless window handoff with no gaps.
         """
-        # Import here to avoid circular dependency
-        from ai_engine.model_vehicle.constants import (
-            GLRT_DEFAULT_WINDOW,
-            GLRT_EDGE_SAFETY_SAMPLES,
-        )
-
-        edge_trim = GLRT_EDGE_SAFETY_SAMPLES + GLRT_DEFAULT_WINDOW // 2
-        return self.samples_per_window - 2 * edge_trim
+        return int(self.samples_per_window * (1 - self.time_overlap_ratio))
 
 
 @dataclass(frozen=True)
@@ -117,20 +108,28 @@ class SpeedDetectionConfig:
 
     min_speed_kmh: float = 20.0
     max_speed_kmh: float = 120.0
-    correlation_threshold: float = 130.0
-    time_overlap_ratio: float = 1 / 6
+    correlation_threshold: float = 500.0
+    time_overlap_ratio: float = 0.5
     glrt_window: int = 20
     use_calibration: bool = False
+    bidirectional_detection: bool = True
+    speed_glrt_factor: float = 1.0
+    speed_weighting: str = "median"
+    speed_positive_glrt_only: bool = False
 
     @classmethod
     def from_dict(cls, data: dict) -> SpeedDetectionConfig:
         return cls(
             min_speed_kmh=data.get("min_speed_kmh", 20.0),
             max_speed_kmh=data.get("max_speed_kmh", 120.0),
-            correlation_threshold=data.get("correlation_threshold", 130.0),
-            time_overlap_ratio=data.get("time_overlap_ratio", 1 / 6),
+            correlation_threshold=data.get("correlation_threshold", 500.0),
+            time_overlap_ratio=data.get("time_overlap_ratio", 0.5),
             glrt_window=data.get("glrt_window", 20),
             use_calibration=data.get("use_calibration", False),
+            bidirectional_detection=data.get("bidirectional_detection", True),
+            speed_glrt_factor=data.get("speed_glrt_factor", 1.0),
+            speed_weighting=data.get("speed_weighting", "median"),
+            speed_positive_glrt_only=data.get("speed_positive_glrt_only", False),
         )
 
 
@@ -139,10 +138,9 @@ class CountingConfig:
     """Vehicle counting configuration."""
 
     enabled: bool = True
-    window_seconds: int = 360
-    step_samples: int = 250
-    # TEMPORARY: Simple speed-based counting while NN is being recalibrated
-    use_simple_counting_TEMPORARY: bool = False
+    window_seconds: int = 28  # Must match inference window
+    classify_threshold_factor: float = 10.0
+    min_peak_distance_s: float = 0.25
 
     @classmethod
     def from_dict(cls, data: Optional[dict]) -> CountingConfig:
@@ -150,9 +148,9 @@ class CountingConfig:
             return cls(enabled=False)
         return cls(
             enabled=data.get("enabled", True),
-            window_seconds=data.get("window_seconds", 360),
-            step_samples=data.get("step_samples", 250),
-            use_simple_counting_TEMPORARY=data.get("use_simple_counting_TEMPORARY", False),
+            window_seconds=data.get("window_seconds", 28),
+            classify_threshold_factor=data.get("classify_threshold_factor", 10.0),
+            min_peak_distance_s=data.get("min_peak_distance_s", 0.25),
         )
 
     def samples_per_window(self, sampling_rate_hz: float) -> int:
@@ -194,18 +192,33 @@ class ModelSpec:
     fiber_id: str = ""
 
     @classmethod
-    def from_dict(cls, name: str, data: dict) -> ModelSpec:
+    def from_dict(cls, name: str, data: dict, model_defaults: Optional[dict] = None) -> ModelSpec:
+        """Parse model spec from dict, merging with model_defaults if provided."""
+        defaults = model_defaults or {}
+
+        def _merge(section: str) -> dict:
+            """Merge per-model section with defaults (model overrides default)."""
+            base = dict(defaults.get(section, {}))
+            base.update(data.get(section, {}))
+            return base
+
+        speed_det = _merge("speed_detection")
+        inference = _merge("inference")
+        # Propagate time_overlap_ratio to inference config for step_size calculation
+        if "time_overlap_ratio" not in inference and "time_overlap_ratio" in speed_det:
+            inference["time_overlap_ratio"] = speed_det["time_overlap_ratio"]
+
         return cls(
             name=name,
-            path=data.get("path", ""),
-            exp_name=data.get("exp_name", ""),
-            version=data.get("version", "best"),
-            model_type=data.get("type", "dtan"),
-            inference=InferenceConfig.from_dict(data.get("inference", {})),
-            speed_detection=SpeedDetectionConfig.from_dict(data.get("speed_detection", {})),
-            counting=CountingConfig.from_dict(data.get("counting")),
-            visualization=VisualizationConfig.from_dict(data.get("visualization")),
-            fiber_id=data.get("fiber_id", ""),
+            path=data.get("path", defaults.get("path", "")),
+            exp_name=data.get("exp_name", defaults.get("exp_name", "")),
+            version=data.get("version", defaults.get("version", "best")),
+            model_type=data.get("type", defaults.get("type", "dtan")),
+            inference=InferenceConfig.from_dict(inference),
+            speed_detection=SpeedDetectionConfig.from_dict(speed_det),
+            counting=CountingConfig.from_dict(_merge("counting") or None),
+            visualization=VisualizationConfig.from_dict(_merge("visualization") or None),
+            fiber_id=data.get("fiber_id", defaults.get("fiber_id", "")),
         )
 
     # Backwards compatibility properties
@@ -294,16 +307,17 @@ class FiberConfigManager:
             self._raw_config = raw
 
             defaults = raw.get("defaults", {})
+            model_defaults = raw.get("model_defaults", {})
 
             # Parse fibers
             fibers = {}
             for fiber_id, fiber_data in raw.get("fibers", {}).items():
                 fibers[fiber_id] = FiberConfig.from_dict(fiber_id, fiber_data, defaults)
 
-            # Parse models
+            # Parse models (merge with model_defaults)
             models = {}
             for model_name, model_data in raw.get("models", {}).items():
-                models[model_name] = ModelSpec.from_dict(model_name, model_data)
+                models[model_name] = ModelSpec.from_dict(model_name, model_data, model_defaults)
 
             self._config = FibersConfig(
                 fibers=fibers,

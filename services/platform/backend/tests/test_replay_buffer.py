@@ -39,7 +39,7 @@ class TestTransformSpeedMessage:
         assert len(detections) == 2
 
         d0 = detections[0]
-        assert d0['fiberLine'] == 'carros'
+        assert d0['fiberLine'] == 'carros:0'  # directional: positive speed -> direction 0
         assert d0['channel'] == 100
         assert d0['speed'] == 85.5
         assert d0['direction'] == 0  # positive speed
@@ -47,6 +47,7 @@ class TestTransformSpeedMessage:
         assert d0['timestamp'] == 1706000000_000
 
         d1 = detections[1]
+        assert d1['fiberLine'] == 'carros:1'  # directional: negative speed -> direction 1
         assert d1['channel'] == 200
         assert d1['speed'] == 62.3  # abs()
         assert d1['direction'] == 1  # negative speed
@@ -90,12 +91,14 @@ class TestTransformSpeedMessage:
         assert len(detections) == 2
 
     def test_parse_speed_message_valid(self):
-        raw = json.dumps({'fiber_id': 'test', 'speeds': []}).encode()
-        result = _parse_speed_message(raw)
+        """_parse_speed_message expects Avro-deserialized dict, not bytes."""
+        data = {'fiber_id': 'test', 'speeds': []}
+        result = _parse_speed_message(data)
         assert result is not None
         assert result['fiber_id'] == 'test'
 
     def test_parse_speed_message_invalid(self):
+        # bytes are rejected (Avro deserializer yields dicts, not bytes)
         assert _parse_speed_message(b'not json') is None
         assert _parse_speed_message(None) is None
 
@@ -108,7 +111,8 @@ class TestTransformCountMessage:
     """Test count message transformation."""
 
     def test_valid_count_message(self):
-        raw = json.dumps({
+        """transform_count_message expects Avro-deserialized dict, not bytes."""
+        data = {
             'fiber_id': 'carros',
             'channel_start': 1000,
             'channel_end': 1300,
@@ -116,9 +120,9 @@ class TestTransformCountMessage:
             'vehicle_count': 3.2,
             'engine_version': '1.0',
             'model_type': 'neural_network',
-        }).encode()
+        }
 
-        result = transform_count_message(raw)
+        result = transform_count_message(data)
         assert result is not None
 
         count_data, section_key, ts_ns = result
@@ -130,12 +134,14 @@ class TestTransformCountMessage:
         assert section_key == 'carros:1000'
         assert ts_ns == 1706000030_000_000_000
 
-    def test_invalid_json(self):
+    def test_invalid_input(self):
+        """Non-dict input is rejected (bytes, None, etc.)."""
         assert transform_count_message(b'not json') is None
+        assert transform_count_message(None) is None
 
     def test_missing_fields_use_defaults(self):
-        raw = json.dumps({'fiber_id': 'test'}).encode()
-        result = transform_count_message(raw)
+        data = {'fiber_id': 'test'}
+        result = transform_count_message(data)
         assert result is not None
         count_data, _, _ = result
         assert count_data['channelStart'] == 0

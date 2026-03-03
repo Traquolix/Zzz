@@ -27,7 +27,19 @@
     {
       "name": "vehicle_count",
       "type": "float",
-      "doc": "Predicted vehicle count (neural network output)"
+      "doc": "Total vehicle count from peak detection"
+    },
+    {
+      "name": "n_cars",
+      "type": "float",
+      "default": 0.0,
+      "doc": "Number of cars detected (peak below truck threshold)"
+    },
+    {
+      "name": "n_trucks",
+      "type": "float",
+      "default": 0.0,
+      "doc": "Number of trucks detected (peak above truck threshold)"
     },
     {
       "name": "engine_version",

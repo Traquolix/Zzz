@@ -5,7 +5,12 @@
         "shm": "Sante Structurelle",
         "reports": "Rapports",
         "apiData": "API & Donnees",
-        "settings": "Parametres"
+        "settings": "Parametres",
+        "admin": "Admin",
+        "logout": "Se deconnecter"
+    },
+    "breadcrumb": {
+        "home": "Accueil"
     },
     "auth": {
         "login": "Connexion",
@@ -22,6 +27,10 @@
     "incidents": {
         "title": "Historique des incidents",
         "noIncidents": "Aucun incident enregistre",
+        "empty": "Aucun incident trouve",
+        "emptyDescription": "Aucun incident ne correspond a votre recherche. Essayez d'ajuster vos filtres.",
+        "searchPlaceholder": "Rechercher les incidents...",
+        "count": "{{count}} incidents",
         "new": "NOUVEAU",
         "types": {
             "slowdown": "Ralentissement",
@@ -87,11 +96,23 @@
             "justNow": "A l'instant",
             "minutesAgo": "il y a {{count}}min",
             "hoursAgo": "il y a {{count}}h"
+        },
+        "actions": {
+            "acknowledged": "Accuser reception",
+            "investigating": "Enqueter",
+            "resolved": "Resoudre",
+            "addNote": "Ajouter une note",
+            "notePlaceholder": "Note optionnelle...",
+            "history": "Historique des actions",
+            "noHistory": "Aucune action enregistree",
+            "statusChanged": "Statut de l'incident mis a jour"
         }
     },
     "connection": {
         "reconnecting": "Reconnexion aux donnees en temps reel...",
-        "disconnected": "Deconnecte des donnees en temps reel"
+        "disconnected": "Deconnecte des donnees en temps reel",
+        "authFailed": "Session expiree — donnees en temps reel indisponibles",
+        "reLogin": "Se reconnecter"
     },
     "common": {
         "loading": "Chargement...",
@@ -116,22 +137,63 @@
         "appTitle": "Sequoia Analytics",
         "name": "Nom",
         "all": "Tous",
+        "yes": "Oui",
+        "no": "Non",
         "clickToConfirm": "Cliquez pour confirmer",
         "clickToEdit": "Cliquez pour modifier",
         "noData": "Aucune donnee",
         "tryAgain": "Reessayer",
         "somethingWentWrong": "Une erreur est survenue",
-        "unexpectedError": "Une erreur inattendue s'est produite"
+        "unexpectedError": "Une erreur inattendue s'est produite",
+        "skipToContent": "Aller au contenu principal",
+        "menu": "Menu",
+        "min": "Min",
+        "avg": "Moy",
+        "max": "Max"
     },
     "chart": {
         "scatter": "Dispersion",
         "occupancy": "Remplissage"
+    },
+    "traffic": {
+        "tabs": {
+            "landmarks": "Points de repere",
+            "sections": "Sections"
+        },
+        "occupancy": {
+            "slots": "places",
+            "waitingForDetections": "En attente de detections..."
+        },
+        "landmarks": {
+            "favorites": "Favoris",
+            "directionForward": "Direction →",
+            "directionBackward": "Direction ←",
+            "removeFromFavorites": "Retirer des favoris",
+            "addToFavorites": "Ajouter aux favoris",
+            "goToLocation": "Aller a la position",
+            "vehicleUnit": "veh"
+        },
+        "empty": {
+            "noLandmarks": "Aucun repere",
+            "createLandmarkHint": "Double-cliquez sur une fibre pour en creer un",
+            "noSections": "Aucune section",
+            "createSectionHint": "Utilisez Ctrl+Clic sur une fibre pour definir une section"
+        },
+        "prompt": {
+            "selectLandmark": "Selectionnez un repere ci-dessus, ou cliquez",
+            "selectLandmarkHint": "sur un point de la ligne de fibre sur la carte",
+            "selectSection": "Selectionnez une section ci-dessus pour voir",
+            "selectSectionHint": "les statistiques de trafic detaillees"
+        }
     },
     "reports": {
         "title": "Rapports",
         "generate": "Generer un rapport",
         "generateTitle": "Generer un rapport",
         "noReports": "Aucun rapport genere",
+        "empty": "Aucun rapport trouve",
+        "emptyDescription": "Aucun rapport ne correspond a votre recherche. Essayez d'ajuster vos filtres.",
+        "searchPlaceholder": "Rechercher les rapports...",
         "titleLabel": "Titre",
         "titlePlaceholder": "ex. Bilan hebdomadaire du trafic",
         "dateRange": "Periode",
@@ -160,6 +222,23 @@
             "generating": "En cours",
             "completed": "Termine",
             "failed": "Echoue"
+        },
+        "schedules": {
+            "title": "Planifications de rapports",
+            "create": "Creer une planification",
+            "frequency": "Frequence",
+            "daily": "Quotidienne",
+            "weekly": "Hebdomadaire",
+            "monthly": "Mensuelle",
+            "fibers": "Fibres",
+            "sections": "Sections",
+            "recipients": "Destinataires",
+            "lastRun": "Derniere execution",
+            "active": "Actif",
+            "noSchedules": "Aucune planification configuree",
+            "deleteConfirm": "Supprimer cette planification ?",
+            "created": "Planification creee",
+            "deleted": "Planification supprimee"
         }
     },
     "settings": {
@@ -193,6 +272,8 @@
         "backLink": "Retour au tableau de bord"
     },
     "dashboard": {
+        "empty": "Votre tableau de bord est vide",
+        "emptyDescription": "Cliquez sur Éditer pour ajouter des widgets et personnaliser votre vue.",
         "addWidget": "Ajouter un widget",
         "editing": "Edition",
         "locked": "Verrouille",
@@ -210,14 +291,15 @@
             "baseLayers": "Couches de base",
             "labels": "Etiquettes",
             "overlays": "Superpositions",
-            "cables": "Cables",
-            "fiberLines": "Lignes de fibre",
-            "vehicles": "Vehicules",
+            "cables": "Ligne de fibre",
+            "fiberLines": "Routes surveillees",
+            "vehicles": "Vehicules (3D)",
             "speedHeatmap": "Carte thermique de vitesse",
             "landmarks": "Points de repere",
             "sections": "Sections",
             "infrastructure": "Infrastructure",
-            "detections": "Detections",
+            "detections": "Points de detection",
+            "detectionMode": "Vue detection",
             "incidents": "Incidents",
             "newSection": "+ Nouvelle section",
             "clickFiberToStart": "Cliquez sur une fibre pour commencer..."
@@ -260,24 +342,30 @@
     },
     "apiHub": {
         "title": "Hub API & Donnees",
-        "description": "Accedez aux donnees en temps reel et historiques de votre organisation via l'API REST Sequoia.",
+        "description": "Accedez aux donnees en temps reel et historiques de votre organisation via l'API REST SequoIA.",
         "endpoints": "Points d'acces disponibles",
         "authentication": "Authentification",
-        "authDescription": "Toutes les requetes necessitent un token Bearer. Obtenez-en un via le point d'acces de connexion.",
+        "authDescription": "Authentifiez-vous avec un token Bearer (JWT) ou une cle API.",
         "baseUrl": "URL de base",
+        "apiKeyAuth": "Authentification par cle API",
+        "apiKeyDescription": "Utilisez l'en-tete X-API-Key pour un acces programmatique sans session utilisateur.",
+        "webhooks": "Webhooks",
+        "webhookDescription": "Verifiez les charges utiles webhook avec l'en-tete HMAC X-Sequoia-Signature.",
         "endpointList": {
-            "detections": "Detections de vehicules en temps reel",
             "incidents": "Historique des incidents et alertes actives",
             "fibers": "Metadonnees et geometrie des lignes de fibre",
-            "speedStats": "Statistiques de vitesse par section",
-            "reports": "Rapports de trafic generes"
+            "stats": "Statistiques de trafic par section",
+            "infrastructure": "Donnees d'infrastructure SHM",
+            "reports": "Rapports de trafic generes",
+            "exportIncidents": "Exporter les incidents (CSV/JSON)",
+            "exportSpeeds": "Exporter les vitesses (CSV/JSON)",
+            "exportCounts": "Exporter les comptages (CSV/JSON)"
         },
         "rateLimits": "Limites de debit",
         "rateLimitsDescription": "Les requetes API sont limitees par organisation. Contactez le support si vous avez besoin de limites plus elevees.",
         "requestsPerMinute": "{{count}} requetes/minute",
         "docsLink": "Documentation complete de l'API",
-        "docsDescription": "Consultez la reference complete de l'API avec des exemples de requetes et reponses.",
-        "comingSoon": "Explorateur d'API interactif a venir."
+        "docsDescription": "Consultez la reference complete de l'API avec des exemples de requetes et reponses."
     },
     "shm": {
         "title": "Surveillance de la Sante Structurelle",
@@ -308,6 +396,19 @@
         "duration": "Duree",
         "freqRange": "Plage de frequences",
         "samples": "Echantillons",
+        "frequencyHz": "Frequence (Hz)",
+        "time": "Temps",
+        "hzUnit": "Hz",
+        "comparison": {
+            "title": "Comparer",
+            "dayOverDay": "Jour apres jour",
+            "weekOverWeek": "Semaine apres semaine",
+            "frequencyShift": "Decalage de frequence :",
+            "mean": "Moyenne :",
+            "start": "Debut",
+            "end": "Fin",
+            "vs": "vs"
+        },
         "status": {
             "nominal": "Nominal",
             "warning": "Attention",
@@ -318,9 +419,24 @@
             "peakFreq": "Frequence de pointe",
             "expected": "Attendu",
             "deviation": "Deviation"
+        },
+        "statusNominal": "Nominal",
+        "statusWarning": "Avertissement",
+        "statusCritical": "Critique",
+        "detail": {
+            "currentFreq": "Fréq. actuelle",
+            "amplitude": "Amplitude",
+            "today": "Aujourd'hui",
+            "yesterday": "Hier",
+            "time": "Heure",
+            "freq": "Fréq",
+            "amp": "Amp"
         }
     },
     "errors": {
+        "appCrash": "Erreur de l'application",
+        "appCrashDescription": "Un probleme est survenu. Veuillez recharger la page.",
+        "reloadPage": "Recharger la page",
         "accountLocked": "Compte temporairement verrouille. Reessayez plus tard.",
         "invalidCredentials": "Identifiants invalides.",
         "refreshMissing": "Session expiree. Veuillez vous reconnecter.",
@@ -336,5 +452,119 @@
         "payloadTooLarge": "La charge est trop volumineuse.",
         "analyticsUnavailable": "Service d'analyse temporairement indisponible.",
         "internalError": "Erreur interne du serveur."
+    },
+    "theme": {
+        "switchToLight": "Basculer en mode clair",
+        "switchToDark": "Basculer en mode sombre",
+        "switchToSequoia": "Basculer en thème SequoIA"
+    },
+    "notifications": {
+        "title": "Notifications",
+        "aria": "Notifications avec {{count}} non lues",
+        "markAllRead": "Tout marquer comme lu",
+        "noNotifications": "Aucune notification",
+        "unreadCount": "{{count}} notifications non lues"
+    },
+    "admin": {
+        "title": "Administration",
+        "searchPlaceholder": "Rechercher...",
+        "noSearchResults": "Aucun résultat trouvé",
+        "tryDifferentSearch": "Essayez un terme de recherche différent.",
+        "tabs": {
+            "users": "Utilisateurs",
+            "organizations": "Organisations",
+            "infrastructure": "Infrastructure",
+            "alertRules": "Règles d'alerte",
+            "alertLogs": "Journal des alertes",
+            "settings": "Paramètres"
+        },
+        "username": "Nom d'utilisateur",
+        "email": "E-mail",
+        "password": "Mot de passe",
+        "role": "Rôle",
+        "organization": "Organisation",
+        "status": "Statut",
+        "slug": "Slug",
+        "type": "Type",
+        "channels": "Canaux",
+        "ruleType": "Type de règle",
+        "threshold": "Seuil",
+        "dispatch": "Dispatch",
+        "createUser": "Créer un utilisateur",
+        "createOrg": "Créer une organisation",
+        "createRule": "Créer une règle d'alerte",
+        "createInfra": "Créer une infrastructure",
+        "create": "Créer",
+        "save": "Enregistrer",
+        "edit": "Modifier",
+        "noUsers": "Aucun utilisateur trouvé",
+        "noOrgs": "Aucune organisation trouvée",
+        "noInfra": "Aucune infrastructure configurée",
+        "noRules": "Aucune règle d'alerte définie",
+        "noLogs": "Aucun journal d'alerte enregistré",
+        "userCreated": "Utilisateur créé avec succès",
+        "userUpdated": "Utilisateur mis à jour avec succès",
+        "orgCreated": "Organisation créée avec succès",
+        "orgUpdated": "Organisation mise à jour avec succès",
+        "infraCreated": "Infrastructure créée avec succès",
+        "infraUpdated": "Infrastructure mise à jour avec succès",
+        "ruleCreated": "Règle d'alerte créée avec succès",
+        "ruleUpdated": "Règle d'alerte mise à jour avec succès",
+        "ruleDeleted": "Règle d'alerte supprimée",
+        "infraDeleted": "Infrastructure supprimée",
+        "settingsUpdated": "Paramètres mis à jour avec succès",
+        "fiberAssigned": "Fibre assignée avec succès",
+        "fiberRemoved": "Assignation de fibre supprimée",
+        "startChannel": "Canal de début",
+        "endChannel": "Canal de fin",
+        "settings": {
+            "timezone": "Fuseau horaire",
+            "timezoneLabel": "Fuseau horaire :",
+            "speedAlertThreshold": "Seuil d'alerte vitesse (km/h)",
+            "speedAlertLabel": "Alerte vitesse :",
+            "incidentAutoResolve": "Auto-résolution incidents (minutes)",
+            "autoResolveLabel": "Auto-résolution :",
+            "shmEnabled": "SHM activé",
+            "shmLabel": "SHM :",
+            "enabled": "Activé",
+            "disabled": "Désactivé",
+            "widgets": "Widgets autorisés",
+            "layers": "Couches autorisées",
+            "inheritNote": "Sélection vide hérite des paramètres de l'organisation"
+        },
+        "fibers": {
+            "title": "Assignations de fibres",
+            "fiberId": "ID Fibre",
+            "assignedAt": "Assignée le",
+            "addFiber": "Ajouter une fibre",
+            "noFibers": "Aucune fibre assignée"
+        },
+        "logs": {
+            "ruleName": "Règle",
+            "fiber": "Fibre",
+            "channel": "Canal",
+            "detail": "Détail",
+            "dispatchedAt": "Dispatché"
+        },
+        "editPermissions": "Modifier les permissions",
+        "editUser": "Modifier l'utilisateur",
+        "widgetNames": {
+            "map": "Carte",
+            "trafficMonitor": "Moniteur de trafic",
+            "incidents": "Incidents",
+            "shm": "SHM",
+            "admin": "Panneau admin"
+        },
+        "layerNames": {
+            "cables": "Ligne de fibre",
+            "fibers": "Routes surveillees",
+            "vehicles": "Véhicules",
+            "heatmap": "Carte de chaleur",
+            "landmarks": "Points de repère",
+            "sections": "Sections",
+            "detections": "Détections",
+            "incidents": "Incidents",
+            "infrastructure": "Infrastructure"
+        }
     }
 }

@@ -4,6 +4,7 @@ import { useRealtime } from '@/hooks/useRealtime'
 import { fetchInfrastructure } from '@/api/infrastructure'
 import type { Infrastructure, FrequencyReading } from '@/types/infrastructure'
 import { parseFrequencyReadings } from '@/lib/parseMessage'
+import { logger } from '@/lib/logger'
 
 /**
  * Provider for infrastructure data (bridges, tunnels).
@@ -17,12 +18,25 @@ export function InfrastructureDataProvider({ children }: { children: ReactNode }
 
     // Load infrastructure on mount
     useEffect(() => {
+        let mounted = true
+
         fetchInfrastructure()
             .then(data => {
-                setInfrastructures(data)
+                if (mounted) {
+                    setInfrastructures(data)
+                    setLoading(false)
+                }
             })
-            .catch(err => console.error('Failed to fetch infrastructure:', err))
-            .finally(() => setLoading(false))
+            .catch(err => {
+                if (mounted) {
+                    logger.error('Failed to fetch infrastructure:', err)
+                    setLoading(false)
+                }
+            })
+
+        return () => {
+            mounted = false
+        }
     }, [])
 
     // Subscribe to real-time frequency readings

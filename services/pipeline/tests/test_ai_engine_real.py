@@ -30,12 +30,16 @@ from ai_engine.model_vehicle import calibration as calibration_module  # noqa: E
 
 mock_model_vehicle = MagicMock()
 mock_model_vehicle.Args_NN_model_all_channels = MagicMock
-mock_model_vehicle.VehicleCounter = MagicMock
 mock_model_vehicle.VehicleSpeedEstimator = MagicMock
 # Keep calibration classes accessible even after mocking parent module
 mock_model_vehicle.calibration = calibration_module
 sys.modules["ai_engine.model_vehicle"] = mock_model_vehicle
 sys.modules["ai_engine.model_vehicle.DTAN"] = MagicMock()
+
+# Mock simple_interval_counter sub-module so main.py can import SimpleIntervalCounter
+mock_simple_counter_module = MagicMock()
+mock_simple_counter_module.SimpleIntervalCounter = MagicMock
+sys.modules["ai_engine.model_vehicle.simple_interval_counter"] = mock_simple_counter_module
 
 from ai_engine.main import ModelRegistry  # noqa: E402
 
@@ -137,9 +141,9 @@ class TestModelRegistry:
         registry.get_speed_estimator("model_2")
         registry.get_speed_estimator("model_3")
 
-        assert registry.get_loaded_model_count() == 2
-        assert "model_1" not in registry.get_loaded_models()
-        assert "model_3" in registry.get_loaded_models()
+        assert len(registry._loaded_models) == 2
+        assert "model_1" not in registry._loaded_models
+        assert "model_3" in registry._loaded_models
 
     def test_thread_safe_access(self, mock_speed_estimator, mock_counter):
         """Concurrent access should be thread-safe."""

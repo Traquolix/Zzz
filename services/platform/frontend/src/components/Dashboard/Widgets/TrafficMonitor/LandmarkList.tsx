@@ -1,8 +1,10 @@
 import { useState, useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { getSpeedBgClass } from '@/lib/speedColors'
 import type { LandmarkInfo, LandmarkData, DataPoint, FiberGroup, DirectionGroup } from './types'
 import { TIME_WINDOW_MS } from './types'
 import { groupDetectionsIntoVehiclePasses } from '@/lib/groupDetections'
+import { useTrafficMonitorActions } from './TrafficMonitorContext'
 import type { FiberLine } from '@/types/fiber'
 
 type LandmarkListProps = {
@@ -11,11 +13,6 @@ type LandmarkListProps = {
     landmarkData: Map<string, LandmarkData>
     selectedKey: string | null
     now: number
-    onSelect: (landmark: LandmarkInfo) => void
-    onFlyTo: (landmark: LandmarkInfo, e: React.MouseEvent) => void
-    onRename: (fiberId: string, channel: number, name: string) => void
-    onToggleFavorite: (fiberId: string, channel: number) => void
-    onDelete: (fiberId: string, channel: number) => void
 }
 
 export function LandmarkList({
@@ -24,12 +21,9 @@ export function LandmarkList({
     landmarkData,
     selectedKey,
     now,
-    onSelect,
-    onFlyTo,
-    onRename,
-    onToggleFavorite,
-    onDelete,
 }: LandmarkListProps) {
+    const { t } = useTranslation()
+    const { onSelect, onFlyTo, onRename, onToggleFavorite, onDelete } = useTrafficMonitorActions()
     const [editingKey, setEditingKey] = useState<string | null>(null)
     const [editingName, setEditingName] = useState('')
     const [confirmDeleteKey, setConfirmDeleteKey] = useState<string | null>(null)
@@ -109,7 +103,7 @@ export function LandmarkList({
             if (favDirections.length > 0) {
                 groups.push({
                     parentFiberId: '__favorites__',
-                    fiberName: 'Favorites',
+                    fiberName: t('traffic.landmarks.favorites'),
                     directions: favDirections.sort((a, b) => a.direction - b.direction)
                 })
             }
@@ -156,7 +150,7 @@ export function LandmarkList({
         }
 
         return groups
-    }, [landmarks, fibers])
+    }, [landmarks, fibers, t])
 
     const toggleFiberExpand = useCallback((parentFiberId: string) => {
         setExpandedFibers(prev => {
@@ -267,7 +261,7 @@ export function LandmarkList({
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                             </svg>
                                             <span className="text-[11px] text-slate-500">
-                                                {dirGroup.direction === 0 ? 'Direction →' : 'Direction ←'}
+                                                {dirGroup.direction === 0 ? t('traffic.landmarks.directionForward') : t('traffic.landmarks.directionBackward')}
                                             </span>
                                             <span className="text-[10px] text-slate-400 ml-auto">
                                                 {dirGroup.items.length}
@@ -337,7 +331,7 @@ export function LandmarkList({
                                                                     ? 'text-amber-500 hover:text-amber-600'
                                                                     : 'text-slate-300 hover:text-amber-500'
                                                             }`}
-                                                            title={landmark.favorite ? 'Remove from favorites' : 'Add to favorites'}
+                                                            title={landmark.favorite ? t('traffic.landmarks.removeFromFavorites') : t('traffic.landmarks.addToFavorites')}
                                                         >
                                                             <svg className="w-3.5 h-3.5" fill={landmark.favorite ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
@@ -347,7 +341,7 @@ export function LandmarkList({
                                                         <button
                                                             onClick={(e) => onFlyTo(landmark, e)}
                                                             className="p-1 text-slate-400 hover:text-blue-500 transition-colors"
-                                                            title="Go to location"
+                                                            title={t('traffic.landmarks.goToLocation')}
                                                         >
                                                             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -363,7 +357,7 @@ export function LandmarkList({
                                                                     ? 'text-white bg-red-500 rounded'
                                                                     : 'text-slate-400 hover:text-red-500'
                                                             }`}
-                                                            title={isConfirmingDelete ? 'Click again to confirm' : 'Delete'}
+                                                            title={isConfirmingDelete ? t('common.clickToConfirm') : t('common.delete')}
                                                         >
                                                             {isConfirmingDelete ? (
                                                                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -381,7 +375,7 @@ export function LandmarkList({
                                                             {stats.avg > 0 ? `${stats.avg}` : '—'}
                                                         </div>
                                                         <div className="text-[10px] text-slate-400">
-                                                            {stats.count > 0 ? `${stats.count} veh` : ''}
+                                                            {stats.count > 0 ? `${stats.count} ${t('traffic.landmarks.vehicleUnit')}` : ''}
                                                         </div>
                                                     </div>
                                                     {stats.count > 0 && (

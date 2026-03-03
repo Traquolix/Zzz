@@ -38,6 +38,8 @@ REST_FRAMEWORK = {
         'anon': None,
         'user': None,
         'login': None,
+        'api_key': None,
+        'export': None,
     },
 }
 

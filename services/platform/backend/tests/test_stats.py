@@ -45,13 +45,9 @@ class TestStats:
         mock_scalar.side_effect = ClickHouseUnavailableError("Connection refused")
 
         response = authenticated_client.get(self.url)
-        assert response.status_code == status.HTTP_200_OK
+        assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
         data = response.json()
-        assert data['fiberCount'] == 0
-        assert data['totalChannels'] == 0
-        assert data['activeIncidents'] == 0
-        assert data['detectionsPerSecond'] == 0.0
-        assert data['activeVehicles'] == 0
+        assert data['code'] == 'clickhouse_unavailable'
 
     def test_stats_no_fiber_assignments_returns_zeros(self, authenticated_client):
         """User with no fiber assignments gets zero stats."""

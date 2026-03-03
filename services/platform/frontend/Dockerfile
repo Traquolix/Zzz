@@ -4,13 +4,13 @@ FROM node:22-alpine AS build
 WORKDIR /app
 
 # Accept build-time env vars for Vite
-ARG VITE_API_BASE_URL=http://localhost:8001
+ARG VITE_API_URL=http://localhost:8001
 ARG VITE_MAPBOX_TOKEN
 ARG HTTP_PROXY
 ARG HTTPS_PROXY
 ARG NO_PROXY
 
-ENV VITE_API_URL=$VITE_API_BASE_URL
+ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_MAPBOX_TOKEN=$VITE_MAPBOX_TOKEN
 
 # Install dependencies (cache layer)

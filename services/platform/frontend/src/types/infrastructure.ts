@@ -2,16 +2,13 @@
  * Infrastructure types for Structural Health Monitoring (SHM)
  * Infrastructure is like a section but predefined/static - defined by fiber, start/end channels
  */
+import type { FiberRange } from './fiber'
 
 export type InfrastructureType = 'bridge' | 'tunnel'
 
-export type Infrastructure = {
-    id: string
+export type Infrastructure = FiberRange & {
     type: InfrastructureType
     name: string
-    fiberId: string
-    startChannel: number
-    endChannel: number
     imageUrl?: string | null
 }
 
@@ -70,4 +67,15 @@ export type SpectralSummary = {
     t0: string
     endTime: string
     durationSeconds: number
+}
+
+/**
+ * SHM status data from the backend.
+ */
+export type SHMStatus = {
+    status: 'nominal' | 'warning' | 'critical'
+    currentMean: number
+    baselineMean: number
+    deviationSigma: number
+    direction: string
 }

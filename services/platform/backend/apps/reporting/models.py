@@ -43,3 +43,60 @@ class Report(models.Model):
 
     def __str__(self):
         return f'{self.title} ({self.status})'
+
+
+class ReportSchedule(models.Model):
+    """
+    Recurring report schedule — generates and optionally emails reports on a cadence.
+    """
+    FREQUENCY_CHOICES = [
+        ('daily', 'Daily'),
+        ('weekly', 'Weekly'),
+        ('monthly', 'Monthly'),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        'organizations.Organization',
+        on_delete=models.CASCADE,
+        related_name='report_schedules',
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='report_schedules',
+    )
+    title = models.CharField(max_length=200)
+    frequency = models.CharField(max_length=20, choices=FREQUENCY_CHOICES)
+    fiber_ids = models.JSONField(default=list)
+    sections = models.JSONField(default=list)
+    recipients = models.JSONField(default=list)
+    is_active = models.BooleanField(default=True)
+    last_run_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.title} ({self.frequency})'
+
+    def is_due(self) -> bool:
+        """Check if this schedule is due to run based on frequency."""
+        if not self.is_active:
+            return False
+        if self.last_run_at is None:
+            return True
+
+        from django.utils import timezone
+        now = timezone.now()
+        delta = now - self.last_run_at
+
+        if self.frequency == 'daily':
+            return delta >= timezone.timedelta(hours=24)
+        elif self.frequency == 'weekly':
+            return delta >= timezone.timedelta(days=7)
+        elif self.frequency == 'monthly':
+            return delta >= timezone.timedelta(days=30)
+        return False

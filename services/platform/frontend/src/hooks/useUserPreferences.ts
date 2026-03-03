@@ -1,10 +1,4 @@
-import { useContext } from 'react'
 import { UserPreferencesContext } from '@/context/UserPreferencesContext'
+import { createContextHook } from './createContextHook'
 
-export function useUserPreferences() {
-    const context = useContext(UserPreferencesContext)
-    if (!context) {
-        throw new Error('useUserPreferences must be used within a UserPreferencesProvider')
-    }
-    return context
-}
+export const useUserPreferences = createContextHook(UserPreferencesContext, 'useUserPreferences', 'UserPreferencesProvider')

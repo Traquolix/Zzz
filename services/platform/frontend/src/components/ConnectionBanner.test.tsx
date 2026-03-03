@@ -24,6 +24,7 @@ describe('ConnectionBanner', () => {
         mockedUseRealtime.mockReturnValue({
             connected: true,
             reconnecting: false,
+            authFailed: false,
             subscribe: vi.fn(),
         })
 
@@ -35,6 +36,7 @@ describe('ConnectionBanner', () => {
         mockedUseRealtime.mockReturnValue({
             connected: false,
             reconnecting: false,
+            authFailed: false,
             subscribe: vi.fn(),
         })
 
@@ -46,6 +48,7 @@ describe('ConnectionBanner', () => {
         mockedUseRealtime.mockReturnValue({
             connected: false,
             reconnecting: true,
+            authFailed: false,
             subscribe: vi.fn(),
         })
 
@@ -57,6 +60,7 @@ describe('ConnectionBanner', () => {
         mockedUseRealtime.mockReturnValue({
             connected: false,
             reconnecting: false,
+            authFailed: false,
             subscribe: vi.fn(),
         })
 

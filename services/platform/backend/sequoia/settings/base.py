@@ -42,9 +42,11 @@ INSTALLED_APPS = [
     'apps.accounts',
     'apps.fibers',
     'apps.monitoring',
+    'apps.alerting',
     'apps.preferences',
     'apps.reporting',
     'apps.realtime',
+    'apps.api_keys',
 ]
 
 MIDDLEWARE = [
@@ -125,6 +127,7 @@ AUTH_USER_MODEL = 'accounts.User'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'apps.api_keys.authentication.APIKeyAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'apps.shared.permissions.IsActiveUser',
@@ -134,9 +137,11 @@ REST_FRAMEWORK = {
         'rest_framework.throttling.UserRateThrottle',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '100/hour',
+        'anon': '5/minute',
         'user': '1000/hour',
         'login': '5/minute',
+        'api_key': '100/hour',
+        'export': '10/hour',
     },
     'DATETIME_FORMAT': '%Y-%m-%dT%H:%M:%SZ',
     'DATETIME_INPUT_FORMATS': ['iso-8601'],
@@ -223,9 +228,14 @@ CACHES = {
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'filters': {
+        'request_id': {
+            '()': 'apps.shared.logging_utils.RequestIdFilter',
+        },
+    },
     'formatters': {
         'verbose': {
-            'format': '{levelname} {asctime} {name} {message}',
+            'format': '[{request_id}] {levelname} {asctime} {name} {message}',
             'style': '{',
         },
     },
@@ -233,6 +243,7 @@ LOGGING = {
         'console': {
             'class': 'logging.StreamHandler',
             'formatter': 'verbose',
+            'filters': ['request_id'],
         },
     },
     'loggers': {

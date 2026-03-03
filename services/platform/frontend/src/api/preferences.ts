@@ -1,5 +1,6 @@
 import { apiRequest } from './client'
 import type { UserPreferences } from '@/types/user'
+import { logger } from '@/lib/logger'
 
 /**
  * Load user preferences from server
@@ -7,7 +8,8 @@ import type { UserPreferences } from '@/types/user'
 export async function loadPreferences(): Promise<UserPreferences> {
     try {
         return await apiRequest<UserPreferences>('/api/user/preferences')
-    } catch {
+    } catch (error) {
+        logger.error('Failed to load user preferences:', error)
         return {}
     }
 }

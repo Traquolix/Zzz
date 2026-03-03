@@ -2,6 +2,7 @@
 Django production settings for SequoIA platform.
 """
 
+import logging as _logging
 import os
 import sentry_sdk
 from django.core.exceptions import ImproperlyConfigured
@@ -99,6 +100,13 @@ CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS.copy()
 # ---------------------------------------------------------------------------
 _USE_SSL = os.environ.get('SECURE_SSL_REDIRECT', 'true').lower() == 'true'
 
+if not _USE_SSL:
+    _logger = _logging.getLogger('sequoia')
+    _logger.warning(
+        'SECURITY: SECURE_SSL_REDIRECT is disabled. '
+        'Ensure your deployment terminates SSL at the load balancer.'
+    )
+
 SECURE_SSL_REDIRECT = _USE_SSL
 SESSION_COOKIE_SECURE = _USE_SSL
 SESSION_COOKIE_HTTPONLY = True
@@ -125,7 +133,7 @@ if _USE_SSL:
 # Redis cache (inherits _REDIS_AUTH / _REDIS_HOST from base.py)
 # ---------------------------------------------------------------------------
 _REDIS_PASSWORD_PROD = get_secret('REDIS_PASSWORD', default='')
-_REDIS_AUTH_PROD = f":{_REDIS_PASSWORD_PROD}@" if _REDIS_PASSWORD_PROD else _REDIS_AUTH
+_REDIS_AUTH_PROD = f":{_REDIS_PASSWORD_PROD}@" if _REDIS_PASSWORD_PROD else ""
 _REDIS_HOST_PROD = os.environ.get('REDIS_HOST', 'localhost')
 
 CHANNEL_LAYERS = {
@@ -153,6 +161,8 @@ if sentry_dsn:
         dsn=sentry_dsn,
         traces_sample_rate=0.1,
         send_default_pii=False,
+        environment=os.environ.get('ENVIRONMENT', 'production'),
+        release=os.environ.get('VERSION', 'unknown'),
     )
 
 # ---------------------------------------------------------------------------
@@ -194,7 +204,6 @@ LOGGING = {
 # ---------------------------------------------------------------------------
 # Startup validation
 # ---------------------------------------------------------------------------
-import logging as _logging
 
 _required_settings = {
     'ALLOWED_HOSTS': ALLOWED_HOSTS,
@@ -218,12 +227,26 @@ if len(SECRET_KEY) < 50:
         "SECRET_KEY is too short (must be at least 50 characters)."
     )
 
-# ClickHouse credentials — warn if password is empty in production
-if not CLICKHOUSE_PASSWORD:
+# ---------------------------------------------------------------------------
+# Trusted proxy IPs for X-Forwarded-For parsing
+# Set TRUSTED_PROXY_IPS as comma-separated IPs/CIDRs (e.g., "10.0.0.0/8,172.16.0.0/12")
+# When empty, X-Forwarded-For headers are IGNORED — REMOTE_ADDR is used directly
+# ---------------------------------------------------------------------------
+_trusted_proxy_raw = os.environ.get('TRUSTED_PROXY_IPS', '')
+TRUSTED_PROXY_IPS = [ip.strip() for ip in _trusted_proxy_raw.split(',') if ip.strip()] or []
+
+if not TRUSTED_PROXY_IPS:
     _logger = _logging.getLogger('sequoia')
     _logger.warning(
-        "SECURITY: CLICKHOUSE_PASSWORD is empty. "
-        "Set it via environment variable for production deployments."
+        'SECURITY: TRUSTED_PROXY_IPS not configured. '
+        'X-Forwarded-For headers will be ignored — REMOTE_ADDR used for all IP resolution.'
+    )
+
+# ClickHouse credentials — require password in production
+if not CLICKHOUSE_PASSWORD:
+    raise ImproperlyConfigured(
+        "SECURITY: CLICKHOUSE_PASSWORD is empty in production. "
+        "Set it via environment variable or Docker Secrets (CLICKHOUSE_PASSWORD_FILE)."
     )
 
 if _secrets_from_env:

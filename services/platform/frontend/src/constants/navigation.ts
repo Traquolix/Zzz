@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { LayoutDashboard, AlertTriangle, FileText, Database, Settings, Building2 } from 'lucide-react'
+import { LayoutDashboard, AlertTriangle, FileText, Database, Settings, Building2, Shield } from 'lucide-react'
 
 export type NavItem = {
     path: string
@@ -30,6 +30,7 @@ export const NAV_ITEMS: NavItem[] = [
         ]
     },
     { path: '/reports', labelKey: 'nav.reports', icon: FileText, requiredWidget: 'incidents' },
-    { path: '/apihub', labelKey: 'nav.apiData', icon: Database },
+    { path: '/api-hub', labelKey: 'nav.apiData', icon: Database },
     { path: '/settings', labelKey: 'nav.settings', icon: Settings },
+    { path: '/admin', labelKey: 'nav.admin', icon: Shield, requiredWidget: 'admin' },
 ]

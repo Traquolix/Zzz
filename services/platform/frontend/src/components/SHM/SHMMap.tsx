@@ -88,19 +88,58 @@ export function SHMMap({ infrastructures, selectedInfrastructure, onSelect, clas
             const [lng, lat] = coords
             const color = TYPE_COLORS[infra.type] || '#6b7280'
 
-            // Create marker element
+            // Create card-style marker element
             const el = document.createElement('div')
-            el.className = 'flex items-center gap-1.5 px-2 py-1 rounded-md text-white text-xs font-medium shadow-md cursor-pointer'
-            el.style.backgroundColor = color
+            el.className = 'flex rounded-lg shadow-md cursor-pointer overflow-hidden border border-gray-200'
+            el.style.cssText = 'width: 260px; background: white;'
 
-            // Status dot (green for nominal)
-            const statusDot = `<div class="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0"></div>`
+            // Left: image or colored placeholder
+            const imgContainer = document.createElement('div')
+            imgContainer.className = 'flex-shrink-0 flex items-center justify-center'
+            imgContainer.style.cssText = `width: 80px; min-height: 64px; background: ${color};`
 
-            // Icon
-            const iconSvg = `<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3H21m-3.75 3H21"/>
-            </svg>`
-            el.innerHTML = iconSvg + statusDot + `<span>${infra.name}</span>`
+            if (infra.imageUrl) {
+                const img = document.createElement('img')
+                img.src = infra.imageUrl
+                img.alt = infra.name
+                img.className = 'w-full h-full'
+                img.style.cssText = 'object-fit: cover; min-height: 64px;'
+                imgContainer.appendChild(img)
+            } else {
+                // Fallback: icon on colored background
+                imgContainer.innerHTML = `<svg class="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3H21m-3.75 3H21"/>
+                </svg>`
+            }
+            el.appendChild(imgContainer)
+
+            // Right: info stack
+            const info = document.createElement('div')
+            info.className = 'flex flex-col justify-center gap-0.5 px-2.5 py-1.5 min-w-0'
+
+            // Row 1: status dot + name
+            const nameRow = document.createElement('div')
+            nameRow.className = 'flex items-center gap-1.5'
+            nameRow.innerHTML = `<div class="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0"></div>`
+            const nameSpan = document.createElement('span')
+            nameSpan.className = 'text-sm font-semibold text-gray-900 truncate'
+            nameSpan.textContent = infra.name
+            nameRow.appendChild(nameSpan)
+            info.appendChild(nameRow)
+
+            // Row 2: type
+            const typeSpan = document.createElement('div')
+            typeSpan.className = 'text-xs text-gray-500 capitalize'
+            typeSpan.textContent = infra.type
+            info.appendChild(typeSpan)
+
+            // Row 3: fiber + channel range
+            const detailSpan = document.createElement('div')
+            detailSpan.className = 'text-[11px] text-gray-400 truncate'
+            detailSpan.textContent = `${infra.fiberId} · Ch ${infra.startChannel}–${infra.endChannel}`
+            info.appendChild(detailSpan)
+
+            el.appendChild(info)
 
             el.addEventListener('click', (e) => {
                 e.stopPropagation()
@@ -131,10 +170,10 @@ export function SHMMap({ infrastructures, selectedInfrastructure, onSelect, clas
             const isSelected = selectedInfrastructure?.id === id
 
             if (isSelected) {
-                el.style.boxShadow = '0 0 0 3px white, 0 4px 12px rgba(0,0,0,0.3)'
+                el.style.boxShadow = '0 0 0 2px #3b82f6, 0 4px 12px rgba(0,0,0,0.25)'
                 el.style.zIndex = '10'
             } else {
-                el.style.boxShadow = '0 2px 6px rgba(0,0,0,0.2)'
+                el.style.boxShadow = '0 2px 6px rgba(0,0,0,0.15)'
                 el.style.zIndex = '1'
             }
         }

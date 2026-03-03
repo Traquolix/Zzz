@@ -6,7 +6,7 @@ export function NotFound() {
     const { t } = useTranslation()
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-100">
+        <div className="min-h-screen flex items-center justify-center bg-background">
             <div className="text-center">
                 <h1 className="text-8xl font-bold text-slate-300">404</h1>
                 <h2 className="text-2xl font-semibold text-slate-700 mt-4">{t('notFound.title')}</h2>

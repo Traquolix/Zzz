@@ -65,8 +65,22 @@ export function VehicleLayer3D() {
     const showDetectionsRef = useRef(layerVisibility.detections)
     const zoomRef = useRef(map.getZoom())
     const zonesRef = useRef(zones)
+    const styleReadyRef = useRef(true)
     // Keep ref updated for use in render loop
     useEffect(() => { zonesRef.current = zones }, [zones])
+
+    // Pause deck.gl rendering during map style transitions (dark mode toggle)
+    // setStyle() causes WebGL context loss; deck.gl's viewport becomes null
+    useEffect(() => {
+        const onStyleData = () => { styleReadyRef.current = false }
+        const onStyleLoad = () => { styleReadyRef.current = true }
+        map.on('styledataloading', onStyleData)
+        map.on('style.load', onStyleLoad)
+        return () => {
+            map.off('styledataloading', onStyleData)
+            map.off('style.load', onStyleLoad)
+        }
+    }, [map])
 
     // Track zoom level (ref only, no state)
     useEffect(() => {
@@ -117,23 +131,9 @@ export function VehicleLayer3D() {
     }, [fibers])
 
     useEffect(() => {
-        let loggedOnce = false
         return subscribe('detections', (data: unknown) => {
             const detections = parseDetections(data)
             if (detections.length === 0) return
-
-            // Debug: log first batch to verify matching
-            if (!loggedOnce) {
-                const engineKeys = Array.from(enginesRef.current.keys())
-                const sample = detections[0]
-                console.log('[VehicleLayer3d] First detection batch:', {
-                    count: detections.length,
-                    sampleFiberLine: sample.fiberLine,
-                    engineKeys: engineKeys.slice(0, 6),
-                    willMatch: enginesRef.current.has(sample.fiberLine)
-                })
-                loggedOnce = true
-            }
 
             const now = performance.now()
             for (const d of detections) {
@@ -167,6 +167,12 @@ export function VehicleLayer3D() {
             // Always tick engines at 60fps for smooth physics
             for (const [, { engine }] of enginesRef.current) {
                 engine.tick(now, deltaMs)
+            }
+
+            // Skip deck.gl rendering during style transitions (WebGL context may be lost)
+            if (!styleReadyRef.current) {
+                rafIdRef.current = requestAnimationFrame(tick)
+                return
             }
 
             // Throttle deck.gl updates to ~30fps
@@ -243,14 +249,18 @@ export function VehicleLayer3D() {
                         const pos = channelToCoord(ch, offsetCoords)
                         if (!pos) continue
 
-                        // Viewport culling
-                        if (pos.lng < minLng - lngMargin || pos.lng > maxLng + lngMargin ||
-                            pos.lat < minLat - latMargin || pos.lat > maxLat + latMargin) {
+                        const vehicleId = `${track.id}:${car.id}`
+
+                        // Viewport culling — but always keep the selected vehicle
+                        // to prevent selection loss when panning away
+                        if (vehicleId !== selectedIdRef.current &&
+                            (pos.lng < minLng - lngMargin || pos.lng > maxLng + lngMargin ||
+                            pos.lat < minLat - latMargin || pos.lat > maxLat + latMargin)) {
                             continue
                         }
 
                         positions.push({
-                            id: `${track.id}:${car.id}`,
+                            id: vehicleId,
                             fiberId,
                             position: [pos.lng, pos.lat, 0],
                             angle: getBearing(ch, coordinates, direction),

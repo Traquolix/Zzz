@@ -15,9 +15,9 @@ Org-scoped: all broadcasts are routed to org-specific Channels groups
 via the fiber_org_map from FiberAssignment.
 
 Time-shifted replay:
-  AI engine inference produces 30-second windows as bursts. Instead of
+  AI engine inference produces 28-second windows as bursts. Instead of
   dumping them to the frontend, the ReplayBuffer replays messages at
-  the original 10 Hz rate with a fixed ~30s time offset. This creates
+  the original 10 Hz rate with a fixed ~28s time offset. This creates
   a continuous stream that feels real-time.
 """
 
@@ -30,6 +30,9 @@ import time
 
 from channels.layers import get_channel_layer
 from django.conf import settings
+
+from apps.alerting.integration import check_alerts_for_detections, check_alerts_for_incident
+from apps.shared.constants import MAP_REFRESH_INTERVAL
 
 logger = logging.getLogger('sequoia.kafka_bridge')
 
@@ -179,22 +182,10 @@ def transform_incident_row(row: dict) -> dict:
     """
     Transform a ClickHouse fiber_incidents row into frontend Incident shape.
 
-    Same transform used by IncidentListView and the simulation engine.
+    Delegates to the centralized IncidentService transform.
     """
-    return {
-        'id': row['incident_id'],
-        'type': row['incident_type'],
-        'severity': row['severity'],
-        'fiberLine': row['fiber_id'],
-        'channel': row['channel_start'],
-        'detectedAt': (
-            row['timestamp'].isoformat()
-            if hasattr(row['timestamp'], 'isoformat')
-            else str(row['timestamp'])
-        ),
-        'status': row['status'],
-        'duration': row['duration_seconds'] * 1000 if row.get('duration_seconds') else None,
-    }
+    from apps.monitoring.incident_service import transform_row
+    return transform_row(row)
 
 
 # ============================================================================
@@ -286,11 +277,12 @@ async def _org_broadcast(channel_layer, channel: str, data, fiber_org_map: dict[
     })
 
     if isinstance(data, list):
-        # Group items by org
+        # Group items by org (strip directional suffix for org lookup)
         org_items: dict[str, list[dict]] = {}
         for item in data:
             fid = item.get('fiberLine', '')
-            for org_id in fiber_org_map.get(fid, []):
+            parent_fid = fid.rsplit(':', 1)[0] if ':' in fid else fid
+            for org_id in fiber_org_map.get(parent_fid, []):
                 org_items.setdefault(org_id, []).append(item)
 
         for org_id, org_data in org_items.items():
@@ -301,7 +293,8 @@ async def _org_broadcast(channel_layer, channel: str, data, fiber_org_map: dict[
             })
     elif isinstance(data, dict):
         fid = data.get('fiberLine', '')
-        for org_id in fiber_org_map.get(fid, []):
+        parent_fid = fid.rsplit(':', 1)[0] if ':' in fid else fid
+        for org_id in fiber_org_map.get(parent_fid, []):
             await channel_layer.group_send(f'realtime_{channel}_org_{org_id}', {
                 'type': 'broadcast_message',
                 'channel': channel,
@@ -343,11 +336,20 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
     fiber_org_map = await _load_fiber_org_map()
     infra_org_map = _load_infra_org_map(infrastructure)
     last_map_refresh = time.time()
-    MAP_REFRESH_INTERVAL = 300  # 5 minutes
 
     # Org-aware broadcast helper for the replay buffer drain
     async def broadcast(channel: str, data):
         await _org_broadcast(channel_layer, channel, data, fiber_org_map)
+        # Check alerts for detections (per-org)
+        if channel == 'detections' and isinstance(data, list):
+            org_detections: dict[str, list[dict]] = {}
+            for det in data:
+                fid = det.get('fiberLine', '')
+                parent_fid = fid.rsplit(':', 1)[0] if ':' in fid else fid
+                for org_id in fiber_org_map.get(parent_fid, []):
+                    org_detections.setdefault(org_id, []).append(det)
+            for org_id, org_dets in org_detections.items():
+                await check_alerts_for_detections(org_dets, org_id)
 
     # Create replay buffer and Kafka consumer with Avro deserialization
     replay_buffer = ReplayBuffer()
@@ -374,7 +376,7 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
     # State for incident polling and SHM
     shm_state = {}
     last_incident_check = time.time()
-    known_incident_ids = set()
+    known_incident_ids: dict[str, str] = {}  # {incident_id: fiberLine}
     last_shm_broadcast = 0
     last_batch_cleanup = 0
 
@@ -397,8 +399,18 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
                 if msg.error():
                     if msg.error().code() != KafkaError._PARTITION_EOF:
                         logger.error('Kafka error: %s', msg.error())
+                        try:
+                            import sentry_sdk
+                            sentry_sdk.capture_message(
+                                f'Kafka consumer error: {msg.error()}',
+                                level='error',
+                            )
+                        except Exception:
+                            pass
                 else:
                     topic = msg.topic()
+                    from apps.shared.metrics import KAFKA_MESSAGES_CONSUMED
+                    KAFKA_MESSAGES_CONSUMED.labels(topic=topic).inc()
                     if topic == 'das.speeds':
                         _handle_speed_message(msg.value(), replay_buffer)
                     elif topic == 'das.counts':
@@ -489,52 +501,50 @@ def _handle_count_message(value: bytes, replay_buffer) -> None:
         replay_buffer.ingest_count(section_key, count_timestamp_ns, count_data)
 
 
-async def _poll_incidents(channel_layer, known_incident_ids: set, fiber_org_map: dict[str, list[str]]):
+async def _poll_incidents(channel_layer, known_incidents: dict, fiber_org_map: dict[str, list[str]]):
     """
     Poll ClickHouse for active incidents and broadcast changes (org-scoped).
 
     Compares current active incidents against known set to detect
     new incidents and resolutions.
+
+    Args:
+        known_incidents: Dict of {incident_id: fiberLine} for currently tracked
+            incidents. Stores fiberLine so resolved notifications can be routed
+            to the correct org groups.
     """
-    from apps.shared.clickhouse import query
+    from apps.monitoring.incident_service import query_active_raw
     from apps.shared.exceptions import ClickHouseUnavailableError
 
     try:
-        rows = query("""
-            SELECT
-                incident_id, incident_type, severity, fiber_id,
-                channel_start, timestamp, status, duration_seconds
-            FROM sequoia.fiber_incidents
-            FINAL
-            WHERE status = 'active'
-            ORDER BY timestamp DESC
-            LIMIT 200
-        """)
+        rows = query_active_raw(fiber_ids=None, limit=200)
     except ClickHouseUnavailableError:
         logger.debug('ClickHouse unavailable for incident polling')
         return
 
-    current_ids = set()
+    current_incidents: dict[str, str] = {}
     for row in rows:
         iid = row['incident_id']
-        current_ids.add(iid)
+        inc_data = transform_incident_row(row)
+        current_incidents[iid] = inc_data['fiberLine']
 
-        if iid not in known_incident_ids:
+        if iid not in known_incidents:
             # New incident -- broadcast to owning orgs
-            inc_data = transform_incident_row(row)
             await _org_broadcast(channel_layer, 'incidents', inc_data, fiber_org_map)
+            # Check alerts for incident
+            await check_alerts_for_incident(inc_data, fiber_org_map)
 
     # Detect resolved incidents (were known, no longer active)
-    resolved_ids = known_incident_ids - current_ids
+    resolved_ids = set(known_incidents) - set(current_incidents)
     for rid in resolved_ids:
         resolved_data = {
             'id': rid,
             'status': 'resolved',
-            'type': '', 'severity': '', 'fiberLine': '',
+            'type': '', 'severity': '',
+            'fiberLine': known_incidents[rid],  # Preserved from when incident was active
             'channel': 0, 'detectedAt': '', 'duration': None,
         }
-        # Resolved incidents have empty fiberLine, so broadcast to all orgs
         await _org_broadcast(channel_layer, 'incidents', resolved_data, fiber_org_map)
 
-    known_incident_ids.clear()
-    known_incident_ids.update(current_ids)
+    known_incidents.clear()
+    known_incidents.update(current_incidents)

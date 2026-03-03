@@ -11,8 +11,8 @@ export function ProtectedRoute() {
 
     if (isLoading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-slate-100">
-                <div className="text-slate-500">{t('common.loading')}</div>
+            <div className="min-h-screen flex items-center justify-center bg-background">
+                <div className="text-foreground/50">{t('common.loading')}</div>
             </div>
         )
     }

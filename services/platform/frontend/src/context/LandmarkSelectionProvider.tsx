@@ -1,8 +1,7 @@
-import { useState, useCallback, useEffect, type ReactNode } from 'react'
+import { useCallback, useMemo, type ReactNode } from 'react'
 import { LandmarkDataContext, type LandmarkEntry } from './LandmarkSelectionContext'
-import { useUserPreferences } from '@/hooks/useUserPreferences'
-import { useDebouncedSync } from '@/hooks/useDebouncedSync'
-import type { StoredLandmark } from '@/types/user'
+import { usePreferenceMap } from '@/hooks/usePreferenceMap'
+import type { StoredLandmark, UserPreferences } from '@/types/user'
 
 function landmarkKey(fiberId: string, channel: number): string {
     return `${fiberId}:${channel}`
@@ -41,40 +40,28 @@ function mapToLandmarks(map: Map<string, LandmarkEntry>): StoredLandmark[] {
     return landmarks
 }
 
+const preferenceConfig = {
+    load: (prefs: UserPreferences) => {
+        const saved = prefs?.map?.landmarks
+        if (!saved?.length) return null
+        return landmarksToMap(saved)
+    },
+    save: (map: Map<string, LandmarkEntry>, currentPrefs: UserPreferences | null) => ({
+        map: {
+            ...currentPrefs?.map,
+            landmarks: mapToLandmarks(map),
+        },
+    }),
+}
+
 /**
  * Provider for landmark data (names, favorites).
  * Selection state is managed by MapSelectionProvider.
  */
 export function LandmarkDataProvider({ children }: { children: ReactNode }) {
-    const { preferences, updatePreferences, isLoading: prefsLoading } = useUserPreferences()
-
-    const [landmarks, setLandmarks] = useState<Map<string, LandmarkEntry>>(new Map())
-    const [initialized, setInitialized] = useState(false)
-
-    // Initialize from server preferences
-    useEffect(() => {
-        if (prefsLoading || initialized) return
-
-        const savedLandmarks = preferences?.map?.landmarks
-        if (savedLandmarks && savedLandmarks.length > 0) {
-            setLandmarks(landmarksToMap(savedLandmarks))
-        }
-
-        setInitialized(true)
-    }, [prefsLoading, preferences, initialized])
-
-    // Debounced save to server
-    const saveToServer = useDebouncedSync(
-        useCallback((newLandmarks: Map<string, LandmarkEntry>) => {
-            updatePreferences({
-                ...preferences,
-                map: {
-                    ...preferences?.map,
-                    landmarks: mapToLandmarks(newLandmarks)
-                }
-            })
-        }, [preferences, updatePreferences])
-    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const config = useMemo(() => preferenceConfig, [])
+    const { map: landmarks, setMap: setLandmarks, scheduleSave } = usePreferenceMap(config)
 
     const renameLandmark = useCallback((fiberId: string, channel: number, name: string) => {
         setLandmarks(prev => {
@@ -90,10 +77,10 @@ export function LandmarkDataProvider({ children }: { children: ReactNode }) {
             } else {
                 next.delete(key)
             }
-            saveToServer(next)
+            scheduleSave(next)
             return next
         })
-    }, [saveToServer])
+    }, [setLandmarks, scheduleSave])
 
     const toggleLandmarkFavorite = useCallback((fiberId: string, channel: number) => {
         setLandmarks(prev => {
@@ -106,20 +93,20 @@ export function LandmarkDataProvider({ children }: { children: ReactNode }) {
                     ...existing,
                     favorite: !existing.favorite
                 })
-                saveToServer(next)
+                scheduleSave(next)
             }
             return next
         })
-    }, [saveToServer])
+    }, [setLandmarks, scheduleSave])
 
     const deleteLandmark = useCallback((fiberId: string, channel: number) => {
         setLandmarks(prev => {
             const next = new Map(prev)
             next.delete(landmarkKey(fiberId, channel))
-            saveToServer(next)
+            scheduleSave(next)
             return next
         })
-    }, [saveToServer])
+    }, [setLandmarks, scheduleSave])
 
     const getLandmarkName = useCallback((fiberId: string, channel: number): string | null => {
         return landmarks.get(landmarkKey(fiberId, channel))?.name ?? null

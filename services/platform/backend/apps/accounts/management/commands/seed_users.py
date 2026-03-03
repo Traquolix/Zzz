@@ -68,7 +68,19 @@ class Command(BaseCommand):
             admin.save()
             self.stdout.write(self.style.SUCCESS('Created admin user (password: admin)'))
         else:
-            self.stdout.write('Admin user already exists')
+            # Always sync permissions to latest ALL_WIDGETS / ALL_LAYERS
+            updated = False
+            if set(admin.allowed_widgets) != set(ALL_WIDGETS):
+                admin.allowed_widgets = list(ALL_WIDGETS)
+                updated = True
+            if set(admin.allowed_layers) != set(ALL_LAYERS):
+                admin.allowed_layers = list(ALL_LAYERS)
+                updated = True
+            if updated:
+                admin.save()
+                self.stdout.write(self.style.SUCCESS('Updated admin permissions to latest'))
+            else:
+                self.stdout.write('Admin user already exists (permissions up to date)')
 
         # Create demo viewer user
         demo, created = User.objects.get_or_create(

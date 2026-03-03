@@ -98,16 +98,18 @@ export function IncidentLayer() {
                     // Update position
                     marker.setLngLat([pos.lng, pos.lat])
 
-                    // Update element if recent status changed
+                    // Update styles in-place when recent status changes (avoids DOM churn)
                     const el = marker.getElement()
                     const currentIsRecent = el.style.boxShadow.includes('0 0 8px')
                     if (currentIsRecent !== isRecent) {
-                        const newEl = createIncidentMarkerEl(incident.type, incident.severity, isRecent)
-                        marker.remove()
-                        marker = new mapboxgl.Marker({ element: newEl })
-                            .setLngLat([pos.lng, pos.lat])
-                            .addTo(map)
-                        markers.set(incident.id, marker)
+                        const color = SEVERITY_HEX[incident.severity] || '#ef4444'
+                        const size = isRecent ? 26 : 24
+                        el.style.width = `${size}px`
+                        el.style.height = `${size}px`
+                        el.style.border = `${isRecent ? 2.5 : 2}px solid white`
+                        el.style.boxShadow = isRecent
+                            ? `0 0 8px ${color}, 0 2px 4px rgba(0,0,0,0.2)`
+                            : '0 2px 4px rgba(0,0,0,0.2)'
                     }
                 }
             })

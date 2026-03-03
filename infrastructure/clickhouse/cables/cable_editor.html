@@ -1,0 +1,1361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SequoIA Cable Editor</title>
+<link href="https://api.mapbox.com/mapbox-gl-js/v3.9.3/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v3.9.3/mapbox-gl.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; height: 100vh; overflow: hidden; background: #1a1a2e; color: #e0e0e0; }
+
+  #sidebar { width: 290px; min-width: 290px; background: #16213e; display: flex; flex-direction: column; border-right: 1px solid #0f3460; overflow-y: auto; }
+  #sidebar h1 { font-size: 15px; padding: 12px 14px; background: #0f3460; color: #e94560; letter-spacing: 0.5px; }
+  .section { padding: 10px 14px; border-bottom: 1px solid #0f3460; }
+  .section h3 { font-size: 11px; text-transform: uppercase; color: #7a7a9e; margin-bottom: 8px; letter-spacing: 0.5px; }
+  .section label { font-size: 12px; color: #b0b0c8; display: block; margin-bottom: 4px; }
+  .stat { font-size: 13px; color: #c8c8e0; margin-bottom: 2px; }
+  .stat span { color: #e94560; font-weight: 600; }
+
+  .btn { display: block; width: 100%; padding: 7px 10px; margin-bottom: 6px; border: 1px solid #0f3460; border-radius: 4px; background: #1a1a2e; color: #e0e0e0; font-size: 12px; cursor: pointer; text-align: left; transition: background 0.15s; }
+  .btn:hover { background: #0f3460; }
+  .btn:disabled { opacity: 0.4; cursor: default; pointer-events: none; }
+  .btn.primary { background: #e94560; border-color: #e94560; color: #fff; font-weight: 600; text-align: center; }
+  .btn.primary:hover { background: #c73652; }
+
+  .btn-row { display: flex; gap: 4px; }
+  .btn-row .btn { flex: 1; text-align: center; padding: 6px 4px; }
+  .btn-row .btn.active-dir0 { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+  .btn-row .btn.active-dir1 { background: #22c55e; border-color: #22c55e; color: #fff; }
+
+  .mode-group { display: flex; gap: 4px; }
+  .mode-group .btn { flex: 1; text-align: center; padding: 6px 4px; }
+  .mode-group .btn.active { background: #e94560; border-color: #e94560; color: #fff; }
+
+  .checkbox-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+  .checkbox-row input { accent-color: #e94560; }
+  .checkbox-row label { font-size: 11px; color: #b0b0c8; margin: 0; }
+
+  .offset-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .offset-row label { font-size: 12px; color: #b0b0c8; margin: 0; white-space: nowrap; }
+  .offset-row input[type="number"] { width: 70px; padding: 4px 6px; background: #1a1a2e; border: 1px solid #0f3460; border-radius: 4px; color: #e0e0e0; font-size: 12px; }
+
+  #map-container { flex: 1; position: relative; }
+  #map { width: 100%; height: 100%; }
+
+  #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #0f3460; color: #e0e0e0; padding: 8px 18px; border-radius: 6px; font-size: 13px; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 1000; white-space: nowrap; }
+  #toast.show { opacity: 1; }
+  #toast.error { background: #c73652; }
+
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 2000; }
+  .modal { background: #16213e; border: 1px solid #0f3460; border-radius: 8px; padding: 24px; width: 420px; max-width: 90vw; }
+  .modal h2 { font-size: 16px; margin-bottom: 12px; color: #e94560; }
+  .modal p { font-size: 12px; color: #b0b0c8; margin-bottom: 12px; }
+  .modal input[type="text"] { width: 100%; padding: 8px 10px; background: #1a1a2e; border: 1px solid #0f3460; border-radius: 4px; color: #e0e0e0; font-size: 13px; margin-bottom: 12px; }
+  .modal .modal-btns { display: flex; gap: 8px; justify-content: flex-end; }
+  .confirm-body { font-size: 13px; color: #c8c8e0; margin-bottom: 16px; line-height: 1.5; }
+
+  #header-bar { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; align-items: center; gap: 10px; z-index: 10; pointer-events: none; }
+  #header-bar > * { pointer-events: auto; }
+  #cable-name { background: rgba(22,33,62,0.85); padding: 4px 10px; border-radius: 4px; font-size: 13px; font-weight: 600; color: #e94560; backdrop-filter: blur(4px); }
+  #mode-indicator { background: rgba(22,33,62,0.85); padding: 4px 10px; border-radius: 4px; font-size: 12px; color: #b0b0c8; backdrop-filter: blur(4px); }
+  #dir-indicator { background: rgba(22,33,62,0.85); padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; backdrop-filter: blur(4px); }
+  #dir-indicator.dir0 { color: #3b82f6; }
+  #dir-indicator.dir1 { color: #22c55e; }
+
+  #selection-info { font-size: 12px; color: #c8c8e0; margin-top: 4px; min-height: 16px; }
+
+  #drop-overlay { position: fixed; inset: 0; background: rgba(233,69,96,0.15); border: 3px dashed #e94560; display: none; align-items: center; justify-content: center; z-index: 1500; font-size: 24px; color: #e94560; font-weight: 700; }
+
+  /* Legend */
+  .legend { font-size: 11px; margin-top: 6px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <h1>SequoIA Cable Editor</h1>
+
+  <div class="section">
+    <h3>File</h3>
+    <button class="btn primary" id="btn-load">Load Cable JSON</button>
+    <input type="file" id="file-input" accept=".json" style="display:none">
+    <div style="font-size:11px; color:#7a7a9e; margin-top:2px;">or drag &amp; drop a .json file</div>
+  </div>
+
+  <div class="section">
+    <h3>Active Direction</h3>
+    <div class="btn-row" id="dir-group">
+      <button class="btn active-dir0" data-dir="0">Dir 0 (blue)</button>
+      <button class="btn" data-dir="1">Dir 1 (green)</button>
+    </div>
+    <div class="offset-row" style="margin-top:8px;">
+      <label>Offset (m):</label>
+      <input type="number" id="offset-input" value="-12" step="1">
+    </div>
+    <button class="btn" id="btn-generate" disabled>Generate from Fiber</button>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#666;"></div> Fiber center (read-only)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#3b82f6;"></div> Direction 0</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#22c55e;"></div> Direction 1</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>Mode <span style="font-size:10px;color:#7a7a9e">(S / A / D)</span></h3>
+    <div class="mode-group">
+      <button class="btn active" data-mode="select">Select</button>
+      <button class="btn" data-mode="add">Add</button>
+      <button class="btn" data-mode="delete">Delete</button>
+    </div>
+    <div id="selection-info"></div>
+  </div>
+
+  <div class="section">
+    <h3>Interpolation</h3>
+    <button class="btn" id="btn-interp" disabled>Interpolate Between Selection</button>
+    <div class="checkbox-row">
+      <input type="checkbox" id="chk-snap-after-interp">
+      <label for="chk-snap-after-interp">Auto-snap after interpolation</label>
+    </div>
+    <button class="btn" id="btn-redistribute" disabled style="margin-top:6px;">Redistribute Selection</button>
+  </div>
+
+  <div class="section">
+    <h3>Road Snapping</h3>
+    <button class="btn" id="btn-snap-dir" disabled>Snap Active Direction</button>
+    <button class="btn" id="btn-snap-sel" disabled>Snap Selection</button>
+    <div class="stat" style="margin-top:6px;">API calls: <span id="api-count">0</span> this session</div>
+    <div id="snap-estimate" style="font-size:11px;color:#7a7a9e;margin-top:2px;"></div>
+  </div>
+
+  <div class="section">
+    <h3>Stats</h3>
+    <div class="stat">Channels: <span id="stat-total">—</span></div>
+    <div class="stat" id="stat-dir0-row">Dir 0 placed: <span id="stat-dir0">—</span></div>
+    <div class="stat" id="stat-dir1-row">Dir 1 placed: <span id="stat-dir1">—</span></div>
+    <div class="checkbox-row" style="margin-top:6px;">
+      <input type="checkbox" id="chk-fiber-labels">
+      <label for="chk-fiber-labels">Show fiber channel numbers</label>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>Actions</h3>
+    <button class="btn" id="btn-undo" disabled>Undo (Ctrl+Z)</button>
+    <button class="btn" id="btn-fit" disabled>Fit to Cable</button>
+    <button class="btn primary" id="btn-export" disabled>Export Cable JSON</button>
+  </div>
+</div>
+
+<div id="map-container">
+  <div id="header-bar">
+    <div id="cable-name">No cable loaded</div>
+    <div id="dir-indicator" class="dir0">Dir 0</div>
+    <div id="mode-indicator">Mode: Select</div>
+  </div>
+  <div id="map"></div>
+</div>
+
+<div id="toast"></div>
+<div id="drop-overlay">Drop cable JSON here</div>
+
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const BATCH_SIZE = 100;
+const BATCH_OVERLAP = 5;
+const DEFAULT_RADIUS = 25;
+const RATE_LIMIT_DELAY = 250;
+const MAX_RETRIES = 3;
+const RETRY_BACKOFF = 2000;
+const MAX_UNDO = 50;
+const MAPBOX_MATCHING_BASE = 'https://api.mapbox.com/matching/v5/mapbox/driving';
+const DIR0_COLOR = '#3b82f6';
+const DIR1_COLOR = '#22c55e';
+const CENTER_COLOR = '#666666';
+const SELECTED_COLOR = '#53d8fb';
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+const state = {
+  cable: null,            // { id, name, color, coordinates, directional_paths: { "0": [...], "1": [...] } }
+  activeDirection: '0',   // "0" or "1"
+  mode: 'select',
+  selectedIndices: [],
+  undoStack: [],
+  apiCallCount: 0,
+  mapboxToken: localStorage.getItem('sequoia_mapbox_token') || '',
+  offsets: { '0': -12, '1': 12 },
+  dragIndex: null,
+};
+
+let map = null;
+let isDragging = false;
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  if (!state.mapboxToken) {
+    showTokenModal();
+  } else {
+    initMap();
+  }
+  bindUI();
+});
+
+function showTokenModal() {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.innerHTML = `
+    <div class="modal">
+      <h2>Mapbox Access Token</h2>
+      <p>Required for map tiles and road snapping API. Saved in localStorage.</p>
+      <input type="text" id="token-input" placeholder="pk.ey..." value="${state.mapboxToken}">
+      <div class="modal-btns">
+        <button class="btn primary" id="btn-token-save">Save &amp; Continue</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('btn-token-save').onclick = () => {
+    const val = document.getElementById('token-input').value.trim();
+    if (!val) return;
+    state.mapboxToken = val;
+    localStorage.setItem('sequoia_mapbox_token', val);
+    overlay.remove();
+    initMap();
+  };
+}
+
+function initMap() {
+  mapboxgl.accessToken = state.mapboxToken;
+  map = new mapboxgl.Map({
+    container: 'map',
+    style: 'mapbox://styles/mapbox/dark-v11',
+    center: [7.26, 43.71],
+    zoom: 12,
+    boxZoom: false,
+  });
+  map.on('load', () => {
+    addMapSources();
+    addMapLayers();
+    bindMapInteractions();
+  });
+}
+
+// ─── MAP SOURCES & LAYERS ─────────────────────────────────────────────────────
+function emptyFC() {
+  return { type: 'FeatureCollection', features: [] };
+}
+
+function addMapSources() {
+  map.addSource('center-line', { type: 'geojson', data: emptyFC() });
+  map.addSource('dir0-dots', { type: 'geojson', data: emptyFC() });
+  map.addSource('dir0-line', { type: 'geojson', data: emptyFC() });
+  map.addSource('dir1-dots', { type: 'geojson', data: emptyFC() });
+  map.addSource('dir1-line', { type: 'geojson', data: emptyFC() });
+  map.addSource('selected', { type: 'geojson', data: emptyFC() });
+  map.addSource('labels', { type: 'geojson', data: emptyFC() });
+  map.addSource('center-labels', { type: 'geojson', data: emptyFC() });
+}
+
+function addMapLayers() {
+  // Center fiber line (read-only, dashed grey)
+  map.addLayer({
+    id: 'center-line',
+    type: 'line',
+    source: 'center-line',
+    paint: { 'line-color': CENTER_COLOR, 'line-width': 2, 'line-opacity': 0.7, 'line-dasharray': [4, 3] },
+  });
+
+  // Center fiber channel labels (hidden by default)
+  map.addLayer({
+    id: 'center-labels',
+    type: 'symbol',
+    source: 'center-labels',
+    minzoom: 15,
+    layout: {
+      'text-field': ['get', 'label'],
+      'text-size': 9,
+      'text-offset': [0, -1],
+      'text-allow-overlap': false,
+      'visibility': 'none',
+    },
+    paint: { 'text-color': '#999', 'text-halo-color': '#000', 'text-halo-width': 1 },
+  });
+
+  // Dir 0 line
+  map.addLayer({
+    id: 'dir0-line',
+    type: 'line',
+    source: 'dir0-line',
+    paint: { 'line-color': DIR0_COLOR, 'line-width': 2, 'line-opacity': 0.8 },
+  });
+  // Dir 0 dots
+  map.addLayer({
+    id: 'dir0-dots',
+    type: 'circle',
+    source: 'dir0-dots',
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 1.5, 14, 3, 18, 6],
+      'circle-color': DIR0_COLOR,
+      'circle-stroke-color': '#fff',
+      'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 10, 0, 15, 0.5, 18, 1],
+    },
+  });
+
+  // Dir 1 line
+  map.addLayer({
+    id: 'dir1-line',
+    type: 'line',
+    source: 'dir1-line',
+    paint: { 'line-color': DIR1_COLOR, 'line-width': 2, 'line-opacity': 0.8 },
+  });
+  // Dir 1 dots
+  map.addLayer({
+    id: 'dir1-dots',
+    type: 'circle',
+    source: 'dir1-dots',
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 1.5, 14, 3, 18, 6],
+      'circle-color': DIR1_COLOR,
+      'circle-stroke-color': '#fff',
+      'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 10, 0, 15, 0.5, 18, 1],
+    },
+  });
+
+  // Selected dots (active direction)
+  map.addLayer({
+    id: 'selected-dots',
+    type: 'circle',
+    source: 'selected',
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 3, 14, 5, 18, 8],
+      'circle-color': SELECTED_COLOR,
+      'circle-stroke-color': '#fff',
+      'circle-stroke-width': 1.5,
+    },
+  });
+
+  // Labels
+  map.addLayer({
+    id: 'labels',
+    type: 'symbol',
+    source: 'labels',
+    minzoom: 15,
+    layout: {
+      'text-field': ['get', 'label'],
+      'text-size': 10,
+      'text-offset': [0, -1.2],
+      'text-allow-overlap': false,
+    },
+    paint: { 'text-color': '#ffffff', 'text-halo-color': '#000', 'text-halo-width': 1 },
+  });
+}
+
+// ─── REBUILD LAYERS ───────────────────────────────────────────────────────────
+function rebuildLayers() {
+  if (!state.cable || !map) return;
+
+  rebuildCenterLine();
+  rebuildCenterLabels();
+  rebuildDirectionLayer('0');
+  rebuildDirectionLayer('1');
+  rebuildLabels();
+  rebuildSelection();
+  updateDirectionOpacity();
+  updateStats();
+}
+
+function rebuildCenterLine() {
+  const coords = state.cable.coordinates;
+  const lineCoords = [];
+  for (const c of coords) {
+    if (c[0] !== null && c[1] !== null) lineCoords.push([c[0], c[1]]);
+  }
+  const data = lineCoords.length >= 2
+    ? { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'LineString', coordinates: lineCoords } }] }
+    : emptyFC();
+  map.getSource('center-line').setData(data);
+}
+
+function rebuildCenterLabels() {
+  const coords = state.cable.coordinates;
+  const features = [];
+  for (let i = 0; i < coords.length; i++) {
+    const c = coords[i];
+    if (c[0] === null || c[1] === null) continue;
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [c[0], c[1]] },
+      properties: { label: String(i) },
+    });
+  }
+  map.getSource('center-labels').setData({ type: 'FeatureCollection', features });
+}
+
+function rebuildDirectionLayer(dir) {
+  const coords = state.cable.directional_paths[dir];
+  if (!coords) return;
+
+  const dotFeatures = [];
+  const lineCoords = [];
+
+  for (let i = 0; i < coords.length; i++) {
+    const c = coords[i];
+    if (c[0] === null || c[1] === null) continue;
+    dotFeatures.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [c[0], c[1]] },
+      properties: { idx: i },
+    });
+    lineCoords.push([c[0], c[1]]);
+  }
+
+  map.getSource(`dir${dir}-dots`).setData({ type: 'FeatureCollection', features: dotFeatures });
+
+  const lineData = lineCoords.length >= 2
+    ? { type: 'FeatureCollection', features: [{ type: 'Feature', geometry: { type: 'LineString', coordinates: lineCoords } }] }
+    : emptyFC();
+  map.getSource(`dir${dir}-line`).setData(lineData);
+}
+
+function rebuildLabels() {
+  const dir = state.activeDirection;
+  const coords = state.cable.directional_paths[dir];
+  if (!coords) { map.getSource('labels').setData(emptyFC()); return; }
+
+  const features = [];
+  for (let i = 0; i < coords.length; i++) {
+    const c = coords[i];
+    if (c[0] === null || c[1] === null) continue;
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [c[0], c[1]] },
+      properties: { label: String(i) },
+    });
+  }
+  map.getSource('labels').setData({ type: 'FeatureCollection', features });
+}
+
+function rebuildSelection() {
+  if (!state.cable || !map) return;
+  const dir = state.activeDirection;
+  const coords = state.cable.directional_paths[dir];
+  if (!coords) { map.getSource('selected').setData(emptyFC()); return; }
+
+  const features = [];
+  for (const i of state.selectedIndices) {
+    const c = coords[i];
+    if (c && c[0] !== null && c[1] !== null) {
+      features.push({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [c[0], c[1]] },
+        properties: { idx: i },
+      });
+    }
+  }
+  map.getSource('selected').setData({ type: 'FeatureCollection', features });
+  updateSelectionInfo();
+  updateInterpButton();
+  updateRedistributeButton();
+  updateSnapButtons();
+}
+
+function updateDirectionOpacity() {
+  const active = state.activeDirection;
+  const inactiveDot = active === '0' ? 'dir1-dots' : 'dir0-dots';
+  const activeDot = active === '0' ? 'dir0-dots' : 'dir1-dots';
+  const inactiveLine = active === '0' ? 'dir1-line' : 'dir0-line';
+  const activeLine = active === '0' ? 'dir0-line' : 'dir1-line';
+
+  map.setPaintProperty(activeDot, 'circle-opacity', 1);
+  map.setPaintProperty(inactiveDot, 'circle-opacity', 0.3);
+  map.setPaintProperty(activeLine, 'line-opacity', 0.8);
+  map.setPaintProperty(inactiveLine, 'line-opacity', 0.3);
+}
+
+// ─── ACTIVE DIRECTION COORDS ─────────────────────────────────────────────────
+function activeCoords() {
+  if (!state.cable) return null;
+  return state.cable.directional_paths[state.activeDirection];
+}
+
+function activeDotLayer() {
+  return `dir${state.activeDirection}-dots`;
+}
+
+// ─── STATS ────────────────────────────────────────────────────────────────────
+function updateStats() {
+  if (!state.cable) return;
+  document.getElementById('stat-total').textContent = state.cable.coordinates.length;
+
+  for (const d of ['0', '1']) {
+    const coords = state.cable.directional_paths[d];
+    const placed = coords ? coords.filter(c => c[0] !== null && c[1] !== null).length : 0;
+    document.getElementById(`stat-dir${d}`).textContent = `${placed} / ${state.cable.coordinates.length}`;
+  }
+}
+
+function updateSelectionInfo() {
+  const el = document.getElementById('selection-info');
+  if (state.selectedIndices.length === 0) {
+    el.textContent = '';
+  } else if (state.selectedIndices.length === 1) {
+    el.textContent = `Selected: ch ${state.selectedIndices[0]}`;
+  } else {
+    const sorted = [...state.selectedIndices].sort((a, b) => a - b);
+    el.textContent = `Selected: ch ${sorted[0]}–${sorted[sorted.length - 1]} (${sorted.length})`;
+  }
+}
+
+function updateInterpButton() {
+  document.getElementById('btn-interp').disabled = state.selectedIndices.length !== 2;
+}
+
+function updateSnapButtons() {
+  const hasData = !!state.cable;
+  document.getElementById('btn-snap-dir').disabled = !hasData;
+  document.getElementById('btn-snap-sel').disabled = !hasData || state.selectedIndices.length < 2;
+}
+
+// ─── FILE I/O ─────────────────────────────────────────────────────────────────
+function loadCableJSON(text) {
+  try {
+    const data = JSON.parse(text);
+    if (!data.coordinates || !Array.isArray(data.coordinates)) {
+      throw new Error('Missing coordinates array');
+    }
+    const n = data.coordinates.length;
+    const nullArr = () => Array.from({ length: n }, () => [null, null]);
+
+    // Load directional paths or init empty
+    const dp = data.directional_paths || {};
+    const dir0 = dp['0'] && dp['0'].length === n ? dp['0'].map(c => [c[0], c[1]]) : nullArr();
+    const dir1 = dp['1'] && dp['1'].length === n ? dp['1'].map(c => [c[0], c[1]]) : nullArr();
+
+    state.cable = {
+      id: data.id || 'unknown',
+      name: data.name || 'Unnamed Cable',
+      color: data.color || '#e94560',
+      coordinates: data.coordinates.map(c => [c[0], c[1]]),
+      directional_paths: { '0': dir0, '1': dir1 },
+    };
+    state.selectedIndices = [];
+    state.undoStack = [];
+    document.getElementById('cable-name').textContent = state.cable.name;
+    pushUndo();
+    rebuildLayers();
+    fitToCable();
+    enableButtons(true);
+    toast(`Loaded ${state.cable.name}: ${n} channels`);
+  } catch (e) {
+    toast('Failed to parse cable JSON: ' + e.message, true);
+  }
+}
+
+function exportCableJSON() {
+  if (!state.cable) return;
+  const out = {
+    id: state.cable.id,
+    name: state.cable.name,
+    coordinates: state.cable.coordinates,
+    color: state.cable.color,
+    directional_paths: {
+      '0': state.cable.directional_paths['0'],
+      '1': state.cable.directional_paths['1'],
+    },
+  };
+  const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${state.cable.id}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Exported ' + a.download);
+}
+
+function enableButtons(enabled) {
+  document.getElementById('btn-fit').disabled = !enabled;
+  document.getElementById('btn-export').disabled = !enabled;
+  document.getElementById('btn-generate').disabled = !enabled;
+  updateSnapButtons();
+  updateInterpButton();
+}
+
+// ─── DRAG & DROP ──────────────────────────────────────────────────────────────
+document.addEventListener('dragover', e => { e.preventDefault(); document.getElementById('drop-overlay').style.display = 'flex'; });
+document.addEventListener('dragleave', e => {
+  if (e.relatedTarget === null || e.relatedTarget === document.documentElement)
+    document.getElementById('drop-overlay').style.display = 'none';
+});
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  document.getElementById('drop-overlay').style.display = 'none';
+  const file = e.dataTransfer.files[0];
+  if (file && file.name.endsWith('.json')) file.text().then(t => loadCableJSON(t));
+});
+
+// ─── UI BINDINGS ──────────────────────────────────────────────────────────────
+function bindUI() {
+  document.getElementById('btn-load').onclick = () => document.getElementById('file-input').click();
+  document.getElementById('file-input').onchange = e => {
+    const file = e.target.files[0];
+    if (file) file.text().then(t => loadCableJSON(t));
+  };
+
+  // Direction toggle
+  document.querySelectorAll('#dir-group .btn').forEach(btn => {
+    btn.onclick = () => setActiveDirection(btn.dataset.dir);
+  });
+
+  // Offset input
+  document.getElementById('offset-input').onchange = e => {
+    state.offsets[state.activeDirection] = parseFloat(e.target.value) || 0;
+  };
+
+  // Fiber labels toggle
+  document.getElementById('chk-fiber-labels').onchange = e => {
+    if (map) map.setLayoutProperty('center-labels', 'visibility', e.target.checked ? 'visible' : 'none');
+  };
+
+  // Generate
+  document.getElementById('btn-generate').onclick = doGenerate;
+
+  // Mode buttons
+  document.querySelectorAll('.mode-group .btn').forEach(btn => {
+    btn.onclick = () => setMode(btn.dataset.mode);
+  });
+
+  document.getElementById('btn-interp').onclick = doInterpolate;
+  document.getElementById('btn-redistribute').onclick = doRedistribute;
+  document.getElementById('btn-snap-dir').onclick = () => doSnap('dir');
+  document.getElementById('btn-snap-sel').onclick = () => doSnap('selection');
+  document.getElementById('btn-undo').onclick = doUndo;
+  document.getElementById('btn-fit').onclick = fitToCable;
+  document.getElementById('btn-export').onclick = exportCableJSON;
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 's' || e.key === 'S') { setMode('select'); e.preventDefault(); }
+    if (e.key === 'a' || e.key === 'A') { setMode('add'); e.preventDefault(); }
+    if (e.key === 'd' || e.key === 'D') { setMode('delete'); e.preventDefault(); }
+    if (e.key === '0') { setActiveDirection('0'); e.preventDefault(); }
+    if (e.key === '1') { setActiveDirection('1'); e.preventDefault(); }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z') { doUndo(); e.preventDefault(); }
+    if (e.key === 'Escape') { state.selectedIndices = []; rebuildSelection(); }
+  });
+}
+
+function setActiveDirection(dir) {
+  state.activeDirection = dir;
+  state.selectedIndices = [];
+  // Update UI
+  document.querySelectorAll('#dir-group .btn').forEach(b => {
+    b.className = 'btn' + (b.dataset.dir === dir ? (dir === '0' ? ' active-dir0' : ' active-dir1') : '');
+  });
+  document.getElementById('offset-input').value = state.offsets[dir];
+  const indicator = document.getElementById('dir-indicator');
+  indicator.textContent = `Dir ${dir}`;
+  indicator.className = dir === '0' ? 'dir0' : 'dir1';
+  if (state.cable && map) {
+    rebuildLabels();
+    rebuildSelection();
+    updateDirectionOpacity();
+  }
+}
+
+function setMode(mode) {
+  state.mode = mode;
+  document.querySelectorAll('.mode-group .btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  document.getElementById('mode-indicator').textContent = `Mode: ${mode.charAt(0).toUpperCase() + mode.slice(1)}`;
+  if (map) {
+    map.getCanvas().style.cursor = mode === 'add' ? 'crosshair' : mode === 'delete' ? 'not-allowed' : '';
+  }
+}
+
+// ─── MAP INTERACTIONS ─────────────────────────────────────────────────────────
+function bindMapInteractions() {
+  // Click on active direction dots
+  map.on('click', 'dir0-dots', onDotClick);
+  map.on('click', 'dir1-dots', onDotClick);
+  map.on('click', 'selected-dots', onDotClick);
+  map.on('click', onMapClick);
+
+  // Mousedown for dragging
+  map.on('mousedown', 'dir0-dots', onDotMouseDown);
+  map.on('mousedown', 'dir1-dots', onDotMouseDown);
+  map.on('mousedown', 'selected-dots', onDotMouseDown);
+
+  // Cursor hints
+  for (const layer of ['dir0-dots', 'dir1-dots', 'selected-dots']) {
+    map.on('mouseenter', layer, () => {
+      if (state.mode === 'select') map.getCanvas().style.cursor = 'grab';
+      if (state.mode === 'delete') map.getCanvas().style.cursor = 'pointer';
+    });
+    map.on('mouseleave', layer, () => {
+      map.getCanvas().style.cursor = state.mode === 'add' ? 'crosshair' : '';
+    });
+  }
+}
+
+function getClickedDir(e) {
+  const layerId = e.features[0].layer.id;
+  if (layerId === 'selected-dots') return state.activeDirection;
+  if (layerId === 'dir0-dots') return '0';
+  if (layerId === 'dir1-dots') return '1';
+  return state.activeDirection;
+}
+
+function onDotClick(e) {
+  if (!state.cable) return;
+  if (isDragging) return;
+  e.preventDefault();
+  e._handled = true;
+
+  const clickedDir = getClickedDir(e);
+  const idx = e.features[0].properties.idx;
+
+  // Clicked inactive direction — switch to it
+  if (clickedDir !== state.activeDirection) {
+    setActiveDirection(clickedDir);
+    state.selectedIndices = [idx];
+    rebuildSelection();
+    return;
+  }
+
+  if (state.mode === 'delete') {
+    pushUndo();
+    state.cable.directional_paths[state.activeDirection][idx] = [null, null];
+    state.selectedIndices = state.selectedIndices.filter(i => i !== idx);
+    rebuildDirectionLayer(state.activeDirection);
+    rebuildLabels();
+    rebuildSelection();
+    updateStats();
+    toast(`Deleted ch ${idx} from dir ${state.activeDirection}`);
+    return;
+  }
+
+  if (state.mode === 'select') {
+    if (e.originalEvent.shiftKey) {
+      if (state.selectedIndices.includes(idx)) {
+        state.selectedIndices = state.selectedIndices.filter(i => i !== idx);
+      } else {
+        state.selectedIndices.push(idx);
+      }
+    } else {
+      state.selectedIndices = [idx];
+    }
+    rebuildSelection();
+  }
+}
+
+function onMapClick(e) {
+  if (e._handled) return;
+  if (!state.cable) return;
+
+  if (state.mode === 'add') {
+    const chStr = prompt('Channel index to place:');
+    if (chStr === null) return;
+    const ch = parseInt(chStr, 10);
+    const coords = activeCoords();
+    if (!coords || isNaN(ch) || ch < 0 || ch >= coords.length) {
+      toast('Invalid channel index', true);
+      return;
+    }
+    pushUndo();
+    coords[ch] = [e.lngLat.lng, e.lngLat.lat];
+    rebuildDirectionLayer(state.activeDirection);
+    rebuildLabels();
+    updateStats();
+    toast(`Placed ch ${ch} on dir ${state.activeDirection}`);
+    return;
+  }
+
+  if (state.mode === 'select') {
+    state.selectedIndices = [];
+    rebuildSelection();
+  }
+}
+
+// ─── DOT DRAGGING ─────────────────────────────────────────────────────────────
+const DRAG_THRESHOLD = 4; // pixels of movement before we commit to a drag
+
+function onDotMouseDown(e) {
+  if (state.mode !== 'select' || !state.cable) return;
+  if (e.originalEvent.shiftKey) return; // shift-click is for selection, not drag
+
+  const clickedDir = getClickedDir(e);
+  if (clickedDir !== state.activeDirection) return;
+
+  const idx = e.features[0].properties.idx;
+  const coords = activeCoords();
+  const coord = coords[idx];
+  if (!coord || coord[0] === null) return;
+
+  const startX = e.originalEvent.clientX;
+  const startY = e.originalEvent.clientY;
+  let dragStarted = false;
+  let undoPushed = false;
+
+  const canvas = map.getCanvas();
+
+  const onMouseMove = (moveEvt) => {
+    const dx = moveEvt.clientX - startX;
+    const dy = moveEvt.clientY - startY;
+
+    if (!dragStarted && (dx * dx + dy * dy) >= DRAG_THRESHOLD * DRAG_THRESHOLD) {
+      // Crossed threshold — this is a real drag
+      dragStarted = true;
+      isDragging = true;
+      state.dragIndex = idx;
+      map.dragPan.disable();
+      canvas.style.cursor = 'grabbing';
+      pushUndo();
+      undoPushed = true;
+    }
+
+    if (dragStarted) {
+      // Convert screen position to lngLat and update the dot in real time
+      const rect = canvas.getBoundingClientRect();
+      const point = new mapboxgl.Point(
+        moveEvt.clientX - rect.left,
+        moveEvt.clientY - rect.top
+      );
+      const lngLat = map.unproject(point);
+      coords[idx] = [lngLat.lng, lngLat.lat];
+      rebuildDirectionLayer(state.activeDirection);
+      rebuildLabels();
+      rebuildSelection();
+    }
+  };
+
+  const onMouseUp = () => {
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+
+    if (dragStarted) {
+      // Finish drag
+      map.dragPan.enable();
+      canvas.style.cursor = '';
+      state.dragIndex = null;
+      updateStats();
+      // Keep isDragging true briefly so the click event that follows is suppressed
+      setTimeout(() => { isDragging = false; }, 50);
+    }
+    // If !dragStarted, it was a plain click — onDotClick handles selection normally
+  };
+
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+}
+
+// ─── GENERATE FROM FIBER ──────────────────────────────────────────────────────
+function doGenerate() {
+  if (!state.cable) return;
+  const dir = state.activeDirection;
+  const offset = state.offsets[dir];
+  pushUndo();
+
+  const generated = offsetCoords(state.cable.coordinates, offset);
+  state.cable.directional_paths[dir] = generated;
+
+  rebuildDirectionLayer(dir);
+  rebuildLabels();
+  rebuildSelection();
+  updateStats();
+  toast(`Generated dir ${dir} with ${offset}m offset`);
+}
+
+// ─── OFFSET COORDS (ported from road_snap.py _offset_coords) ─────────────────
+function offsetCoords(coordinates, offsetMeters) {
+  const result = [];
+  const valid = [];
+  for (let i = 0; i < coordinates.length; i++) {
+    const c = coordinates[i];
+    if (c && c[0] !== null && c[1] !== null) valid.push(i);
+  }
+
+  if (valid.length < 2) return coordinates.map(c => [c[0], c[1]]);
+
+  for (let i = 0; i < coordinates.length; i++) {
+    const coord = coordinates[i];
+    if (coord === null || coord[0] === null || coord[1] === null) {
+      result.push([null, null]);
+      continue;
+    }
+
+    const bearing = localBearing(coordinates, i);
+    if (bearing === null) {
+      result.push([coord[0], coord[1]]);
+      continue;
+    }
+
+    // Perpendicular bearing (90 degrees clockwise)
+    const perpBearing = bearing + Math.PI / 2;
+    result.push(offsetPoint(coord, perpBearing, offsetMeters));
+  }
+  return result;
+}
+
+function localBearing(coordinates, index) {
+  let prev = null;
+  for (let j = index - 1; j >= 0; j--) {
+    const c = coordinates[j];
+    if (c && c[0] !== null && c[1] !== null) { prev = c; break; }
+  }
+
+  let nxt = null;
+  for (let j = index + 1; j < coordinates.length; j++) {
+    const c = coordinates[j];
+    if (c && c[0] !== null && c[1] !== null) { nxt = c; break; }
+  }
+
+  if (prev === null && nxt === null) return null;
+
+  const current = coordinates[index];
+  if (prev !== null && nxt !== null) return bearing(prev, nxt);
+  if (nxt !== null) return bearing(current, nxt);
+  return bearing(prev, current);
+}
+
+function bearing(c1, c2) {
+  const lng1 = c1[0] * Math.PI / 180;
+  const lat1 = c1[1] * Math.PI / 180;
+  const lng2 = c2[0] * Math.PI / 180;
+  const lat2 = c2[1] * Math.PI / 180;
+  const dlng = lng2 - lng1;
+  const x = Math.sin(dlng) * Math.cos(lat2);
+  const y = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dlng);
+  return Math.atan2(x, y);
+}
+
+function offsetPoint(coord, brng, distanceM) {
+  const R = 6371000;
+  const lat1 = coord[1] * Math.PI / 180;
+  const lng1 = coord[0] * Math.PI / 180;
+
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(distanceM / R) +
+    Math.cos(lat1) * Math.sin(distanceM / R) * Math.cos(brng)
+  );
+  const lng2 = lng1 + Math.atan2(
+    Math.sin(brng) * Math.sin(distanceM / R) * Math.cos(lat1),
+    Math.cos(distanceM / R) - Math.sin(lat1) * Math.sin(lat2)
+  );
+
+  return [lng2 * 180 / Math.PI, lat2 * 180 / Math.PI];
+}
+
+// ─── INTERPOLATION ────────────────────────────────────────────────────────────
+function doInterpolate() {
+  const coords = activeCoords();
+  if (!coords || state.selectedIndices.length !== 2) return;
+  const [a, b] = [...state.selectedIndices].sort((x, y) => x - y);
+  const cA = coords[a];
+  const cB = coords[b];
+  if (cA[0] === null || cB[0] === null) {
+    toast('Both anchor points must have coordinates', true);
+    return;
+  }
+  if (b - a < 2) {
+    toast('Nothing to interpolate between adjacent channels', true);
+    return;
+  }
+
+  pushUndo();
+  const count = b - a;
+  for (let i = 1; i < count; i++) {
+    const t = i / count;
+    coords[a + i] = [
+      cA[0] + t * (cB[0] - cA[0]),
+      cA[1] + t * (cB[1] - cA[1]),
+    ];
+  }
+  rebuildDirectionLayer(state.activeDirection);
+  rebuildLabels();
+  rebuildSelection();
+  updateStats();
+  toast(`Interpolated ch ${a + 1}–${b - 1} on dir ${state.activeDirection} (${count - 1} points)`);
+
+  if (document.getElementById('chk-snap-after-interp').checked) {
+    const indices = [];
+    for (let i = a; i <= b; i++) indices.push(i);
+    doSnapRange(indices);
+  }
+}
+
+// ─── REDISTRIBUTE ─────────────────────────────────────────────────────────────
+function doRedistribute() {
+  const coords = activeCoords();
+  if (!coords || state.selectedIndices.length < 3) return;
+
+  const sorted = [...state.selectedIndices].sort((a, b) => a - b);
+  const first = sorted[0];
+  const last = sorted[sorted.length - 1];
+  const n = sorted.length;
+
+  // Verify endpoints have coordinates
+  if (coords[first][0] === null || coords[last][0] === null) {
+    toast('Endpoints must have coordinates', true);
+    return;
+  }
+
+  // Build polyline from all placed coords between first and last (inclusive)
+  const polyline = [];
+  for (let i = first; i <= last; i++) {
+    const c = coords[i];
+    if (c[0] !== null && c[1] !== null) {
+      polyline.push([c[0], c[1]]);
+    }
+  }
+  if (polyline.length < 2) {
+    toast('Not enough placed points to redistribute along', true);
+    return;
+  }
+
+  // Compute cumulative arc-length along the polyline
+  const cumDist = [0];
+  for (let i = 1; i < polyline.length; i++) {
+    cumDist.push(cumDist[i - 1] + haversineDistance(polyline[i - 1], polyline[i]));
+  }
+  const totalLength = cumDist[cumDist.length - 1];
+  if (totalLength === 0) {
+    toast('All points overlap, cannot redistribute', true);
+    return;
+  }
+
+  pushUndo();
+
+  // For each selected index (except first and last), compute evenly-spaced position
+  for (let k = 1; k < n - 1; k++) {
+    const targetDist = totalLength * k / (n - 1);
+
+    // Walk the polyline to find the segment containing targetDist
+    let segIdx = 0;
+    while (segIdx < cumDist.length - 2 && cumDist[segIdx + 1] < targetDist) {
+      segIdx++;
+    }
+
+    const segStart = cumDist[segIdx];
+    const segEnd = cumDist[segIdx + 1];
+    const segLen = segEnd - segStart;
+    const t = segLen > 0 ? (targetDist - segStart) / segLen : 0;
+
+    const lng = polyline[segIdx][0] + t * (polyline[segIdx + 1][0] - polyline[segIdx][0]);
+    const lat = polyline[segIdx][1] + t * (polyline[segIdx + 1][1] - polyline[segIdx][1]);
+    coords[sorted[k]] = [lng, lat];
+  }
+
+  rebuildDirectionLayer(state.activeDirection);
+  rebuildLabels();
+  rebuildSelection();
+  updateStats();
+  toast(`Redistributed ${n - 2} points evenly along polyline`);
+}
+
+function updateRedistributeButton() {
+  document.getElementById('btn-redistribute').disabled = state.selectedIndices.length < 3;
+}
+
+// ─── ROAD SNAPPING ────────────────────────────────────────────────────────────
+function haversineDistance(c1, c2) {
+  const R = 6371000;
+  const lat1 = c1[1] * Math.PI / 180;
+  const lat2 = c2[1] * Math.PI / 180;
+  const dlat = lat2 - lat1;
+  const dlng = (c2[0] - c1[0]) * Math.PI / 180;
+  const a = Math.sin(dlat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dlng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function projectPointToSegment(p, a, b) {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const segLenSq = dx * dx + dy * dy;
+  if (segLenSq === 0) return [a[0], a[1]];
+  let t = ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / segLenSq;
+  t = Math.max(0, Math.min(1, t));
+  return [a[0] + t * dx, a[1] + t * dy];
+}
+
+function projectToPath(original, path) {
+  const result = [];
+  for (const coord of original) {
+    let bestPoint = path[0];
+    let bestDist = Infinity;
+    for (let i = 0; i < path.length - 1; i++) {
+      const proj = projectPointToSegment(coord, path[i], path[i + 1]);
+      const d = haversineDistance(coord, proj);
+      if (d < bestDist) {
+        bestDist = d;
+        bestPoint = proj;
+      }
+    }
+    result.push(bestPoint);
+  }
+  return result;
+}
+
+async function snapSingleBatch(coords, token, radius = DEFAULT_RADIUS) {
+  const coordStr = coords.map(c => `${c[0]},${c[1]}`).join(';');
+  const url = `${MAPBOX_MATCHING_BASE}/${coordStr}`;
+  const params = new URLSearchParams({
+    access_token: token,
+    geometries: 'geojson',
+    overview: 'full',
+    radiuses: coords.map(() => String(radius)).join(';'),
+    tidy: 'true',
+  });
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    await sleep(RATE_LIMIT_DELAY);
+    state.apiCallCount++;
+    document.getElementById('api-count').textContent = state.apiCallCount;
+
+    try {
+      const resp = await fetch(`${url}?${params}`);
+      if (resp.status === 429) {
+        if (attempt < MAX_RETRIES) {
+          const wait = RETRY_BACKOFF * (2 ** attempt);
+          toast(`Rate limited, retrying in ${wait / 1000}s...`);
+          await sleep(wait);
+          continue;
+        }
+        toast('Rate limited after retries', true);
+        return null;
+      }
+      if (!resp.ok) {
+        toast(`API error: ${resp.status}`, true);
+        return null;
+      }
+      const data = await resp.json();
+      if (data.code !== 'Ok' || !data.matchings || data.matchings.length === 0) {
+        toast(`No matchings returned: ${data.code}`, true);
+        return null;
+      }
+      const matchedCoords = data.matchings[0].geometry.coordinates;
+      if (matchedCoords.length < 2) {
+        toast('Matched geometry too short', true);
+        return null;
+      }
+      return projectToPath(coords, matchedCoords);
+    } catch (err) {
+      if (attempt < MAX_RETRIES) {
+        const wait = RETRY_BACKOFF * (2 ** attempt);
+        toast(`Request failed, retrying in ${wait / 1000}s...`);
+        await sleep(wait);
+        continue;
+      }
+      toast('API request failed: ' + err.message, true);
+      return null;
+    }
+  }
+  return null;
+}
+
+async function snapBatched(coords, token, radius = DEFAULT_RADIUS) {
+  if (coords.length <= BATCH_SIZE) {
+    return snapSingleBatch(coords, token, radius);
+  }
+
+  const result = [];
+  let start = 0;
+  const step = BATCH_SIZE - BATCH_OVERLAP;
+  const totalBatches = Math.ceil(Math.max(1, coords.length - BATCH_OVERLAP) / step);
+  let batchNum = 0;
+
+  while (start < coords.length) {
+    const end = Math.min(start + BATCH_SIZE, coords.length);
+    const batch = coords.slice(start, end);
+    batchNum++;
+    toast(`Snapping batch ${batchNum}/${totalBatches}...`);
+
+    const snapped = await snapSingleBatch(batch, token, radius);
+    if (!snapped) {
+      toast(`Batch ${batchNum} failed`, true);
+      return null;
+    }
+
+    if (start === 0) {
+      result.push(...snapped);
+    } else {
+      result.push(...snapped.slice(BATCH_OVERLAP));
+    }
+    start += step;
+  }
+
+  return result.slice(0, coords.length);
+}
+
+function estimateApiCalls(coordCount) {
+  if (coordCount <= BATCH_SIZE) return 1;
+  const step = BATCH_SIZE - BATCH_OVERLAP;
+  return Math.ceil(Math.max(1, coordCount - BATCH_OVERLAP) / step);
+}
+
+async function doSnap(scope) {
+  if (!state.cable) return;
+  const dir = state.activeDirection;
+  const dirCoords = state.cable.directional_paths[dir];
+
+  let coordsToSnap, indices;
+  if (scope === 'dir') {
+    coordsToSnap = dirCoords;
+    indices = null;
+  } else {
+    indices = [...state.selectedIndices].sort((a, b) => a - b);
+    if (indices.length < 2) {
+      toast('Select at least 2 channels to snap', true);
+      return;
+    }
+    coordsToSnap = indices.map(i => dirCoords[i]);
+  }
+
+  const validCount = coordsToSnap.filter(c => c[0] !== null && c[1] !== null).length;
+  const estCalls = estimateApiCalls(validCount);
+
+  if (!await showConfirm('Snap to Road', `Snap dir ${dir}: ~${estCalls} API call${estCalls > 1 ? 's' : ''} (${validCount} valid coords).\nProceed?`)) return;
+
+  document.getElementById('snap-estimate').textContent = `Snapping ${validCount} coords...`;
+
+  if (scope === 'dir') {
+    // Snap entire direction
+    const valid = [];
+    const validIndices = [];
+    for (let i = 0; i < dirCoords.length; i++) {
+      const c = dirCoords[i];
+      if (c[0] !== null && c[1] !== null) {
+        valid.push([c[0], c[1]]);
+        validIndices.push(i);
+      }
+    }
+    if (valid.length < 2) {
+      toast('Need at least 2 valid coords', true);
+      document.getElementById('snap-estimate').textContent = '';
+      return;
+    }
+
+    pushUndo();
+    const snapped = await snapBatched(valid, state.mapboxToken);
+    if (snapped) {
+      for (let i = 0; i < validIndices.length; i++) {
+        dirCoords[validIndices[i]] = snapped[i];
+      }
+      rebuildDirectionLayer(dir);
+      rebuildLabels();
+      rebuildSelection();
+      updateStats();
+      toast(`Snapped ${valid.length} coords on dir ${dir}`);
+    }
+  } else {
+    await doSnapRange(indices);
+  }
+  document.getElementById('snap-estimate').textContent = '';
+}
+
+async function doSnapRange(indices) {
+  if (!state.cable) return;
+  const dir = state.activeDirection;
+  const dirCoords = state.cable.directional_paths[dir];
+  const coordsToSnap = indices.map(i => dirCoords[i]);
+  const validCoords = [];
+  const validOrigIdx = [];
+  for (let j = 0; j < coordsToSnap.length; j++) {
+    if (coordsToSnap[j][0] !== null && coordsToSnap[j][1] !== null) {
+      validCoords.push(coordsToSnap[j]);
+      validOrigIdx.push(j);
+    }
+  }
+  if (validCoords.length < 2) {
+    toast('Need at least 2 valid coords to snap', true);
+    return;
+  }
+
+  pushUndo();
+  const snapped = await snapBatched(validCoords, state.mapboxToken);
+  if (!snapped) return;
+
+  for (let j = 0; j < validOrigIdx.length; j++) {
+    dirCoords[indices[validOrigIdx[j]]] = snapped[j];
+  }
+  rebuildDirectionLayer(dir);
+  rebuildLabels();
+  rebuildSelection();
+  updateStats();
+  toast(`Snapped ${validCoords.length} selected coords on dir ${dir}`);
+}
+
+// ─── UNDO ─────────────────────────────────────────────────────────────────────
+function pushUndo() {
+  if (!state.cable) return;
+  const snapshot = JSON.stringify(state.cable.directional_paths);
+  state.undoStack.push(snapshot);
+  if (state.undoStack.length > MAX_UNDO) state.undoStack.shift();
+  document.getElementById('btn-undo').disabled = false;
+}
+
+function doUndo() {
+  if (state.undoStack.length <= 1 || !state.cable) return;
+  state.undoStack.pop();
+  const prev = state.undoStack[state.undoStack.length - 1];
+  state.cable.directional_paths = JSON.parse(prev);
+  rebuildDirectionLayer('0');
+  rebuildDirectionLayer('1');
+  rebuildLabels();
+  rebuildSelection();
+  updateStats();
+  toast('Undone');
+  if (state.undoStack.length <= 1) document.getElementById('btn-undo').disabled = true;
+}
+
+// ─── FIT TO CABLE ─────────────────────────────────────────────────────────────
+function fitToCable() {
+  if (!state.cable || !map) return;
+  // Fit to all coords (center + both directions)
+  const allCoords = [
+    ...state.cable.coordinates,
+    ...state.cable.directional_paths['0'],
+    ...state.cable.directional_paths['1'],
+  ].filter(c => c[0] !== null && c[1] !== null);
+  if (allCoords.length === 0) return;
+  const bounds = new mapboxgl.LngLatBounds();
+  for (const c of allCoords) bounds.extend([c[0], c[1]]);
+  map.fitBounds(bounds, { padding: 60, maxZoom: 16 });
+}
+
+// ─── UTILITIES ────────────────────────────────────────────────────────────────
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+let toastTimer = null;
+function toast(msg, isError = false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show' + (isError ? ' error' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.className = '', 3000);
+}
+
+function showConfirm(title, message) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal">
+        <h2>${title}</h2>
+        <div class="confirm-body">${message.replace(/\n/g, '<br>')}</div>
+        <div class="modal-btns">
+          <button class="btn" id="confirm-no">Cancel</button>
+          <button class="btn primary" id="confirm-yes">Confirm</button>
+        </div>
+      </div>`;
+    document.body.appendChild(overlay);
+    document.getElementById('confirm-yes').onclick = () => { overlay.remove(); resolve(true); };
+    document.getElementById('confirm-no').onclick = () => { overlay.remove(); resolve(false); };
+  });
+}
+</script>
+</body>
+</html>

@@ -4,12 +4,14 @@ import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/button'
+import { FormField } from '@/components/ui/form-field'
 
 export function Login() {
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
     const [error, setError] = useState<string | null>(null)
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [touched, setTouched] = useState<Record<string, boolean>>({})
 
     const { login } = useAuth()
     const navigate = useNavigate()
@@ -33,7 +35,7 @@ export function Login() {
     }
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-100">
+        <div className="min-h-screen flex items-center justify-center bg-background">
             <div className="w-full max-w-sm">
                 <div className="bg-white rounded-lg shadow-lg p-8">
                     <div className="text-center mb-8">
@@ -42,49 +44,46 @@ export function Login() {
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-4">
-                        <div>
-                            <label htmlFor="username" className="block text-sm font-medium text-slate-700 mb-1">
-                                {t('auth.username')}
-                            </label>
-                            <input
-                                id="username"
-                                type="text"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                required
-                                autoComplete="username"
-                                autoFocus
-                            />
-                        </div>
-
-                        <div>
-                            <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1">
-                                {t('auth.password')}
-                            </label>
-                            <input
-                                id="password"
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                required
-                                autoComplete="current-password"
-                            />
-                        </div>
-
                         {error && (
                             <div role="alert" className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-md">
                                 {error}
                             </div>
                         )}
 
+                        <FormField
+                            id="username"
+                            label={t('auth.username')}
+                            type="text"
+                            value={username}
+                            onChange={(e) => setUsername(e.target.value)}
+                            onBlur={() => setTouched(prev => ({ ...prev, username: true }))}
+                            required
+                            autoComplete="username"
+                            autoFocus
+                            touched={touched.username}
+                            error={!username ? t('auth.username') + ' ' + t('common.required') : undefined}
+                        />
+
+                        <FormField
+                            id="password"
+                            label={t('auth.password')}
+                            type="password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            onBlur={() => setTouched(prev => ({ ...prev, password: true }))}
+                            required
+                            autoComplete="current-password"
+                            touched={touched.password}
+                            error={!password ? t('auth.password') + ' ' + t('common.required') : undefined}
+                        />
+
                         <Button
                             type="submit"
                             className="w-full"
-                            disabled={isSubmitting}
+                            isLoading={isSubmitting}
+                            loadingText={t('auth.signingIn')}
                         >
-                            {isSubmitting ? t('auth.signingIn') : t('auth.loginButton')}
+                            {t('auth.loginButton')}
                         </Button>
                     </form>
                 </div>

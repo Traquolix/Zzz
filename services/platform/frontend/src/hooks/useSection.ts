@@ -1,15 +1,25 @@
 import { useContext, useCallback } from 'react'
 import { SectionDataContext } from '@/context/SectionContext'
+import { SectionUIContext } from '@/context/SectionUIContext'
 import { useMapSelection } from './useMapSelection'
 
 /**
- * Combined hook for section data and selection.
- * Provides backward-compatible API while using unified selection.
+ * Combined hook for section data, UI state, and selection.
+ *
+ * Merges three contexts into a single backward-compatible API:
+ * - SectionDataContext: persistent CRUD + layer visibility
+ * - SectionUIContext: ephemeral interaction state
+ * - MapSelectionContext: selected section
  */
 export function useSection() {
     const dataContext = useContext(SectionDataContext)
     if (!dataContext) {
         throw new Error('useSection must be used within SectionDataProvider')
+    }
+
+    const uiContext = useContext(SectionUIContext)
+    if (!uiContext) {
+        throw new Error('useSection must be used within SectionUIProvider')
     }
 
     const { selectedSection, selectSection } = useMapSelection()
@@ -59,22 +69,24 @@ export function useSection() {
         updateSectionBounds: updateSectionBoundsAndSelection,
         toggleSectionFavorite: dataContext.toggleSectionFavorite,
 
-        // UI state (from SectionDataContext)
-        pendingPoint: dataContext.pendingPoint,
-        setPendingPoint: dataContext.setPendingPoint,
-        showNamingDialog: dataContext.showNamingDialog,
-        pendingSection: dataContext.pendingSection,
-        openNamingDialog: dataContext.openNamingDialog,
-        closeNamingDialog: dataContext.closeNamingDialog,
-        hoveredSectionId: dataContext.hoveredSectionId,
-        setHoveredSectionId: dataContext.setHoveredSectionId,
-        draggingEndpoint: dataContext.draggingEndpoint,
-        setDraggingEndpoint: dataContext.setDraggingEndpoint,
+        // Layer visibility (from SectionDataContext — persisted)
         layerVisibility: dataContext.layerVisibility,
         setLayerVisibility: dataContext.setLayerVisibility,
-        sectionCreationMode: dataContext.sectionCreationMode,
-        setSectionCreationMode: dataContext.setSectionCreationMode,
-        previewChannel: dataContext.previewChannel,
-        setPreviewChannel: dataContext.setPreviewChannel
+
+        // UI state (from SectionUIContext — ephemeral)
+        pendingPoint: uiContext.pendingPoint,
+        setPendingPoint: uiContext.setPendingPoint,
+        showNamingDialog: uiContext.showNamingDialog,
+        pendingSection: uiContext.pendingSection,
+        openNamingDialog: uiContext.openNamingDialog,
+        closeNamingDialog: uiContext.closeNamingDialog,
+        hoveredSectionId: uiContext.hoveredSectionId,
+        setHoveredSectionId: uiContext.setHoveredSectionId,
+        draggingEndpoint: uiContext.draggingEndpoint,
+        setDraggingEndpoint: uiContext.setDraggingEndpoint,
+        sectionCreationMode: uiContext.sectionCreationMode,
+        setSectionCreationMode: uiContext.setSectionCreationMode,
+        previewChannel: uiContext.previewChannel,
+        setPreviewChannel: uiContext.setPreviewChannel,
     }
 }

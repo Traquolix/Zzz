@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Loader2 } from 'lucide-react'
+import { logger } from '@/lib/logger'
 import { fetchPeakFrequencies } from '@/api/infrastructure'
 import type { PeakFrequencyData } from '@/types/infrastructure'
 
@@ -33,13 +34,14 @@ export function MiniPeakChart({ infrastructureId, width = 200, height = 60 }: Pr
                 const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
 
                 const peaks = await fetchPeakFrequencies({
+                    infrastructureId,
                     maxSamples: 500,
                     startTime: oneDayAgo,
                     endTime: now,
                 })
                 setData(peaks)
             } catch (err) {
-                console.error('Failed to load mini peak data:', err)
+                logger.error('Failed to load mini peak data:', err)
                 setError(true)
             } finally {
                 setLoading(false)

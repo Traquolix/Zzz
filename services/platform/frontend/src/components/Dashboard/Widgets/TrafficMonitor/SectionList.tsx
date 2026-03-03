@@ -92,7 +92,7 @@ export function SectionList({
             if (favDirections.length > 0) {
                 groups.push({
                     parentFiberId: '__favorites__',
-                    fiberName: 'Favorites',
+                    fiberName: t('traffic.landmarks.favorites'),
                     directions: favDirections.sort((a, b) => a.direction - b.direction)
                 })
             }
@@ -248,7 +248,7 @@ export function SectionList({
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                             </svg>
                                             <span className="text-[11px] text-slate-500">
-                                                {dirGroup.direction === 0 ? 'Direction →' : 'Direction ←'}
+                                                {dirGroup.direction === 0 ? t('traffic.landmarks.directionForward') : t('traffic.landmarks.directionBackward')}
                                             </span>
                                             <span className="text-[10px] text-slate-400 ml-auto">
                                                 {dirGroup.items.length}
@@ -330,7 +330,7 @@ export function SectionList({
                                                                     ? 'text-amber-500 hover:text-amber-600'
                                                                     : 'text-slate-300 hover:text-amber-500'
                                                             }`}
-                                                            title={section.favorite ? 'Remove from favorites' : 'Add to favorites'}
+                                                            title={section.favorite ? t('traffic.landmarks.removeFromFavorites') : t('traffic.landmarks.addToFavorites')}
                                                         >
                                                             <svg className="w-3.5 h-3.5" fill={section.favorite ? 'currentColor' : 'none'} viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
@@ -374,7 +374,7 @@ export function SectionList({
                                                             {combinedSpeed ? `${Math.round(combinedSpeed)}` : '—'}
                                                         </div>
                                                         <div className="text-[10px] text-slate-400">
-                                                            {totalVehicles > 0 ? `${totalVehicles} veh` : ''}
+                                                            {totalVehicles > 0 ? `${totalVehicles} ${t('traffic.landmarks.vehicleUnit')}` : ''}
                                                         </div>
                                                     </div>
                                                     {totalVehicles > 0 && combinedSpeed && (

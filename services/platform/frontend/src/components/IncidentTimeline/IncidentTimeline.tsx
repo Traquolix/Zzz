@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { Incident } from '@/types/incident'
 import { AlertTriangle, TrendingDown, TrafficCone, HelpCircle, CheckCircle } from 'lucide-react'
 import { SEVERITY_DOT, SEVERITY_TEXT } from '@/constants/incidents'
+import { formatTime, formatDate, formatDurationMs } from '@/lib/formatters'
 
 type Props = {
     incidents: Incident[]
@@ -24,25 +25,6 @@ const TYPE_ICONS = {
     congestion: TrafficCone,
     accident: AlertTriangle,
     anomaly: HelpCircle,
-}
-
-function formatTime(dateStr: string): string {
-    const date = new Date(dateStr)
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-
-function formatDate(dateStr: string): string {
-    const date = new Date(dateStr)
-    return date.toLocaleDateString([], { month: 'short', day: 'numeric' })
-}
-
-function formatDuration(ms: number): string {
-    const minutes = Math.floor(ms / 60000)
-    const hours = Math.floor(minutes / 60)
-    if (hours > 0) {
-        return `${hours}h ${minutes % 60}m`
-    }
-    return `${minutes}m`
 }
 
 function getTimeBetween(date1: string, date2: string): number {
@@ -189,7 +171,7 @@ export function IncidentTimeline({ incidents, selectedIncidentId, onSelectIncide
                                     <div className="w-1 h-1 rounded-full bg-slate-300" />
                                     <div className="w-1 h-1 rounded-full bg-slate-300" />
                                     <span className="text-xs text-slate-400 italic ml-2">
-                                        {formatDuration(item.duration)}
+                                        {formatDurationMs(item.duration)}
                                     </span>
                                 </div>
                             </div>
@@ -264,7 +246,7 @@ export function IncidentTimeline({ incidents, selectedIncidentId, onSelectIncide
                                     {incident.duration && (
                                         <>
                                             <span className="text-slate-300">|</span>
-                                            <span>{formatDuration(incident.duration)}</span>
+                                            <span>{formatDurationMs(incident.duration)}</span>
                                         </>
                                     )}
                                 </div>
