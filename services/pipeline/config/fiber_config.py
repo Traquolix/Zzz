@@ -70,20 +70,20 @@ class SectionConfig:
 class InferenceConfig:
     """AI model inference parameters."""
 
-    sampling_rate_hz: float = 10.0
-    window_seconds: int = 28  # Must match model checkpoint (fullSet_28s)
+    sampling_rate_hz: float = 10.4167
+    window_seconds: int = 30
     channels_per_section: int = 9
-    gauge_meters: int = 10
+    gauge_meters: float = 15.3846
     bidirectional_rnn: bool = True
     time_overlap_ratio: float = 0.5
 
     @classmethod
     def from_dict(cls, data: dict) -> InferenceConfig:
         return cls(
-            sampling_rate_hz=data.get("sampling_rate_hz", 10.0),
-            window_seconds=data.get("window_seconds", 28),
+            sampling_rate_hz=data.get("sampling_rate_hz", 10.4167),
+            window_seconds=data.get("window_seconds", 30),
             channels_per_section=data.get("channels_per_section", 9),
-            gauge_meters=data.get("gauge_meters", 10),
+            gauge_meters=data.get("gauge_meters", 15.3846),
             bidirectional_rnn=data.get("bidirectional_rnn", True),
             time_overlap_ratio=data.get("time_overlap_ratio", 0.5),
         )
@@ -116,6 +116,7 @@ class SpeedDetectionConfig:
     speed_glrt_factor: float = 1.0
     speed_weighting: str = "median"
     speed_positive_glrt_only: bool = False
+    min_vehicle_duration_s: float = 0.3
 
     @classmethod
     def from_dict(cls, data: dict) -> SpeedDetectionConfig:
@@ -130,6 +131,7 @@ class SpeedDetectionConfig:
             speed_glrt_factor=data.get("speed_glrt_factor", 1.0),
             speed_weighting=data.get("speed_weighting", "median"),
             speed_positive_glrt_only=data.get("speed_positive_glrt_only", False),
+            min_vehicle_duration_s=data.get("min_vehicle_duration_s", 0.3),
         )
 
 
@@ -138,9 +140,15 @@ class CountingConfig:
     """Vehicle counting configuration."""
 
     enabled: bool = True
-    window_seconds: int = 28  # Must match inference window
-    classify_threshold_factor: float = 10.0
-    min_peak_distance_s: float = 0.25
+    window_seconds: int = 30
+    classify_threshold_factor: float = 50.0
+    min_peak_distance_s: float = 1.2
+    model_path: str = ""
+    thresholds_path: str = ""
+    mean_std_path: str = ""
+    truck_ratio_for_split: float = 2.0
+    time_window_duration: float = 360.0
+    corr_threshold: float = 500.0
 
     @classmethod
     def from_dict(cls, data: Optional[dict]) -> CountingConfig:
@@ -148,9 +156,15 @@ class CountingConfig:
             return cls(enabled=False)
         return cls(
             enabled=data.get("enabled", True),
-            window_seconds=data.get("window_seconds", 28),
-            classify_threshold_factor=data.get("classify_threshold_factor", 10.0),
-            min_peak_distance_s=data.get("min_peak_distance_s", 0.25),
+            window_seconds=data.get("window_seconds", 30),
+            classify_threshold_factor=data.get("classify_threshold_factor", 50.0),
+            min_peak_distance_s=data.get("min_peak_distance_s", 1.2),
+            model_path=data.get("model_path", ""),
+            thresholds_path=data.get("thresholds_path", ""),
+            mean_std_path=data.get("mean_std_path", ""),
+            truck_ratio_for_split=data.get("truck_ratio_for_split", 2.0),
+            time_window_duration=data.get("time_window_duration", 360.0),
+            corr_threshold=data.get("corr_threshold", 500.0),
         )
 
     def samples_per_window(self, sampling_rate_hz: float) -> int:
@@ -409,7 +423,7 @@ class FiberConfigManager:
     def get_default_model_name(self) -> str:
         """Get the default model name from config defaults."""
         self._check_reload()
-        return self._config.defaults.get("model", "dtan_carros")
+        return self._config.defaults.get("model", "dtan_unified")
 
     @classmethod
     def reset(cls) -> None:

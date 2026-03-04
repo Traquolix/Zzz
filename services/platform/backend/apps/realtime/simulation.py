@@ -84,6 +84,8 @@ class Detection:
     channel: int
     speed: float
     count: int
+    n_cars: int
+    n_trucks: int
     direction: int
     timestamp: int
 
@@ -504,15 +506,15 @@ class SimulationEngine:
                     inc.status = 'resolved'
                     resolved_incidents.append(inc)
 
-        # Maybe generate new incidents
-        hours_frac = delta_ms / 3_600_000
+        # Maybe generate new incidents (15x multiplier for dev testing)
+        hours_frac = delta_ms / 3_600_000 * 15
         for cfg in INCIDENT_CONFIGS:
             if random.random() > cfg['prob'] * hours_frac:
                 continue
             fiber = random.choice(self.fibers)
             ch = random.randint(10, max(11, fiber.channel_count - 10))
             severity = _weighted_choice(SEVERITIES, cfg['weights'])
-            dur = cfg['dur'][0] + random.random() * (cfg['dur'][1] - cfg['dur'][0])
+            dur = (cfg['dur'][0] + random.random() * (cfg['dur'][1] - cfg['dur'][0])) / 15
             inc = Incident(
                 id=f'inc-{int(now_ms)}-{uuid.uuid4().hex[:4]}',
                 type=cfg['type'], severity=severity,
@@ -554,11 +556,14 @@ class SimulationEngine:
                 processed.add(o.id)
             ch_noise = (random.random() - 0.5) * 4
             sp_noise = (random.random() - 0.5) * 10
+            count = len(nearby)
             detections.append(Detection(
                 fiber_line=v.fiber_line,
                 channel=round(avg_ch + ch_noise),
                 speed=max(0.0, avg_sp + sp_noise),
-                count=len(nearby),
+                count=count,
+                n_cars=count,
+                n_trucks=0,
                 direction=v.direction,
                 timestamp=now_ms,
             ))
@@ -630,6 +635,8 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
     last_detection_broadcast = time.time()
     detection_broadcast_interval = 0.1  # 100ms (10 Hz)
     pending_detections: list[Detection] = []  # Accumulate detections between broadcasts
+    pending_new_incidents: list[Incident] = []  # Accumulate new incidents between broadcasts
+    pending_resolved_incidents: list[Incident] = []  # Accumulate resolved incidents between broadcasts
 
     while True:
         tick_start = time.time()
@@ -647,6 +654,9 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
 
         # Accumulate detections
         pending_detections.extend(detections)
+        # Accumulate incidents (broadcast happens every 100 ticks)
+        pending_new_incidents.extend(new_incidents)
+        pending_resolved_incidents.extend(resolved_incidents)
 
         # Broadcast detections at 10 Hz (time-based, not tick-based)
         time_since_last_broadcast = tick_start - last_detection_broadcast
@@ -658,6 +668,8 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
                     'channel': d.channel,
                     'speed': round(d.speed, 1),
                     'count': d.count,
+                    'nCars': d.n_cars,
+                    'nTrucks': d.n_trucks,
                     'direction': d.direction,
                     'timestamp': d.timestamp,
                 }
@@ -715,7 +727,7 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
             incident_counter = 0
             # Update cache for REST API fallback
             _update_simulation_incidents_cache(engine.incidents)
-            for inc in new_incidents + resolved_incidents:
+            for inc in pending_new_incidents + pending_resolved_incidents:
                 inc_data = transform_simulation_incident(inc)
                 directional_fid = inc_data['fiberLine']
                 await _broadcast_to_orgs(
@@ -724,6 +736,8 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
                 )
                 # Check alerts for incident
                 await check_alerts_for_incident(inc_data, fiber_org_map)
+            pending_new_incidents.clear()
+            pending_resolved_incidents.clear()
 
         # Broadcast vehicle counts every 100 ticks (5 seconds) — per-org
         if count_counter >= 100:

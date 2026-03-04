@@ -72,9 +72,13 @@ def transform_row(row: dict) -> dict:
         'severity': row['severity'],
         'fiberLine': _ensure_directional_fiber_id(row['fiber_id']),
         'channel': row['channel_start'],
+        'channelEnd': row.get('channel_end', row['channel_start']),
         'detectedAt': detected_at,
         'status': row['status'],
         'duration': dur * 1000 if dur else None,
+        'speedBefore': row.get('speed_before_kmh'),
+        'speedDuring': row.get('speed_during_kmh'),
+        'speedDropPercent': row.get('speed_drop_percent'),
     }
 
 
@@ -91,9 +95,13 @@ def transform_simulation_incident(incident) -> dict:
         'severity': incident.severity,
         'fiberLine': f'{incident.fiber_line}:0',
         'channel': incident.channel,
+        'channelEnd': incident.channel,
         'detectedAt': incident.detected_at,
         'status': incident.status,
         'duration': incident.duration,
+        'speedBefore': None,
+        'speedDuring': None,
+        'speedDropPercent': None,
     }
 
 
@@ -103,7 +111,8 @@ def transform_simulation_incident(incident) -> dict:
 
 _ACTIVE_SQL_SCOPED = """
     SELECT incident_id, incident_type, severity, fiber_id,
-           channel_start, timestamp, status, duration_seconds
+           channel_start, channel_end, timestamp, status, duration_seconds,
+           speed_before_kmh, speed_during_kmh, speed_drop_percent
     FROM sequoia.fiber_incidents
     FINAL
     WHERE status = 'active'
@@ -114,7 +123,8 @@ _ACTIVE_SQL_SCOPED = """
 
 _ACTIVE_SQL_ALL = """
     SELECT incident_id, incident_type, severity, fiber_id,
-           channel_start, timestamp, status, duration_seconds
+           channel_start, channel_end, timestamp, status, duration_seconds,
+           speed_before_kmh, speed_during_kmh, speed_drop_percent
     FROM sequoia.fiber_incidents
     FINAL
     WHERE status = 'active'
@@ -124,7 +134,8 @@ _ACTIVE_SQL_ALL = """
 
 _RECENT_SQL_SCOPED = """
     SELECT incident_id, incident_type, severity, fiber_id,
-           channel_start, timestamp, status, duration_seconds
+           channel_start, channel_end, timestamp, status, duration_seconds,
+           speed_before_kmh, speed_during_kmh, speed_drop_percent
     FROM sequoia.fiber_incidents
     FINAL
     WHERE timestamp >= now() - INTERVAL {hours:UInt32} HOUR
@@ -135,7 +146,8 @@ _RECENT_SQL_SCOPED = """
 
 _RECENT_SQL_ALL = """
     SELECT incident_id, incident_type, severity, fiber_id,
-           channel_start, timestamp, status, duration_seconds
+           channel_start, channel_end, timestamp, status, duration_seconds,
+           speed_before_kmh, speed_during_kmh, speed_drop_percent
     FROM sequoia.fiber_incidents
     FINAL
     WHERE timestamp >= now() - INTERVAL {hours:UInt32} HOUR

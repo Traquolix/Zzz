@@ -97,7 +97,19 @@
             "name": "decimation_factor",
             "type": ["null", "int"],
             "default": null,
-            "doc": "Temporal decimation factor if applied"
+            "doc": "Temporal decimation factor if applied (legacy)"
+          },
+          {
+            "name": "temporal_decimation_factor",
+            "type": ["null", "int"],
+            "default": null,
+            "doc": "Temporal decimation factor applied (e.g. 12 for 125Hz -> 10.4167Hz)"
+          },
+          {
+            "name": "spatial_decimation_factor",
+            "type": ["null", "int"],
+            "default": null,
+            "doc": "Spatial decimation factor applied (e.g. 3 for every 3rd channel)"
           },
           {
             "name": "processing_timestamp_ns",

@@ -7,11 +7,12 @@ const LazyChart = lazy(() => import('./TimeSeriesChartInner'))
 
 interface TimeSeriesChartProps {
     data: TimeSeriesPoint[]
+    timeRange?: string
 }
 
 type MetricKey = 'speed' | 'flow' | 'occupancy'
 
-export function TimeSeriesChart({ data }: TimeSeriesChartProps) {
+export function TimeSeriesChart({ data, timeRange }: TimeSeriesChartProps) {
     const [metric, setMetric] = useState<MetricKey>('speed')
 
     return (
@@ -40,7 +41,7 @@ export function TimeSeriesChart({ data }: TimeSeriesChartProps) {
                     </div>
                 }
             >
-                <LazyChart data={data} metric={metric} config={chartColors[metric]} />
+                <LazyChart data={data} metric={metric} config={chartColors[metric]} timeRange={timeRange} />
             </Suspense>
         </div>
     )

@@ -63,12 +63,14 @@
           {
             "name": "spatial_points",
             "type": "int",
-            "doc": "Total number of spatial measurement points"
+            "default": 0,
+            "doc": "Total number of spatial measurement points (legacy, unused for interval detections)"
           },
           {
             "name": "time_index",
             "type": "int",
-            "doc": "Time point index within batch"
+            "default": 0,
+            "doc": "Time point index within batch (legacy, unused for interval detections)"
           }
         ]
       },

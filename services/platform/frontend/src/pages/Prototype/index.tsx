@@ -1,98 +1,121 @@
-import { useReducer, useEffect, useCallback, useState } from 'react'
-import { cn } from '@/lib/utils'
-import type { ProtoState, ProtoAction, Severity, Section } from './types'
-import { initialSections, fibers } from './data'
-import { PrototypeMap } from './components/PrototypeMap'
+import { useReducer, useEffect, useCallback, useRef, useState, useMemo } from 'react'
+import type { ProtoState, ProtoAction, Incident } from './types'
+import { fibers, defaultSpeedThresholds, buildThresholdLookup, resolveDirectionalFiber, channelToCoord } from './data'
+import { PrototypeMap, type PrototypeMapHandle } from './components/PrototypeMap'
 import { StatusBar } from './components/StatusBar'
 import { Legend } from './components/Legend'
-import { IncidentPanel } from './components/IncidentPanel'
-import { SectionPanel } from './components/SectionPanel'
-import { AnalysisView } from './components/AnalysisView'
+import { SidePanel } from './components/SidePanel'
+import { useDetections } from './hooks/useDetections'
+import { useVehicleSim } from './hooks/useVehicleSim'
+import { useLiveStats } from './hooks/useLiveStats'
+import { useStructures } from './hooks/useStructures'
+import { useSections } from './hooks/useSections'
+import { useIncidents } from '@/hooks/useIncidents'
+import { useUnseenIncidents } from './hooks/useUnseenIncidents'
+import { IncidentToastStack } from './components/IncidentToastStack'
+import type { Incident as ApiIncident } from '@/types/incident'
 import './prototype.css'
 
-function generateHistory(base: number, variance: number, len: number): number[] {
-    return Array.from({ length: len }, () =>
-        Math.round(base + (Math.random() - 0.5) * 2 * variance)
-    )
+/** Map an API incident to the prototype Incident shape. */
+function toProtoIncident(api: ApiIncident): Incident {
+    const fiberId = api.fiberLine
+    const loc = channelToCoord(fiberId, api.channel)
+    const fiberName = fibers.find(f => f.id === fiberId)?.name ?? fiberId
+    const typeLabel = api.type.charAt(0).toUpperCase() + api.type.slice(1)
+    const title = `${typeLabel} — ${fiberName}`
+
+    let description = `${typeLabel} detected on ${fiberName} at channel ${api.channel}.`
+    if (api.speedBefore != null && api.speedDuring != null) {
+        description += ` Speed dropped from ${Math.round(api.speedBefore)} to ${Math.round(api.speedDuring)} km/h.`
+    }
+
+    return {
+        id: api.id,
+        fiberId,
+        type: api.type as Incident['type'],
+        severity: api.severity as Incident['severity'],
+        title,
+        description,
+        location: loc ?? [7.24, 43.72],
+        timestamp: api.detectedAt,
+        resolved: api.status !== 'active',
+        channel: api.channel,
+        channelEnd: api.channelEnd,
+        status: api.status,
+        duration: api.duration,
+        speedBefore: api.speedBefore,
+        speedDuring: api.speedDuring,
+        speedDropPercent: api.speedDropPercent,
+    }
 }
 
 const initialState: ProtoState = {
-    layer: 0,
-    incidentPanelOpen: false,
-    sectionPanelOpen: false,
+    activeTab: 'incidents',
     selectedIncidentId: null,
     selectedSectionId: null,
     filterSeverity: null,
-    sections: initialSections,
+    hideResolved: true,
+    sectionMetric: 'speed',
+    sections: [],
+    incidents: [],
     sectionCreationMode: false,
     pendingPoint: null,
     showNamingDialog: false,
     pendingSection: null,
+    sidebarOpen: true,
+    displayMode: 'dots',
+    fiberThresholds: Object.fromEntries(
+        fibers.map(f => [f.id, { ...defaultSpeedThresholds }])
+    ),
+    fiberColors: Object.fromEntries(
+        fibers.map(f => [f.id, f.color])
+    ),
+    selectedStructureId: null,
+    showStructuresOnMap: false,
+    showStructureLabels: false,
+    showIncidentsOnMap: true,
+    hideFibersInOverview: false,
+    selectedChannel: null,
 }
 
 function reducer(state: ProtoState, action: ProtoAction): ProtoState {
     switch (action.type) {
-        case 'OPEN_INCIDENTS':
+        case 'SET_TAB':
             return {
                 ...state,
-                layer: 1,
-                incidentPanelOpen: true,
-                sectionPanelOpen: false,
+                activeTab: action.tab,
                 selectedIncidentId: null,
                 selectedSectionId: null,
-                sectionCreationMode: false,
-                pendingPoint: null,
-            }
-        case 'OPEN_SECTIONS':
-            return {
-                ...state,
-                layer: 1,
-                sectionPanelOpen: true,
-                incidentPanelOpen: false,
-                selectedIncidentId: null,
-                selectedSectionId: null,
-            }
-        case 'CLOSE_PANELS':
-            return {
-                ...state,
-                layer: 0,
-                incidentPanelOpen: false,
-                sectionPanelOpen: false,
-                selectedIncidentId: null,
-                selectedSectionId: null,
+                selectedStructureId: null,
+                selectedChannel: null,
                 filterSeverity: null,
             }
         case 'SELECT_INCIDENT':
             return {
                 ...state,
-                layer: 2,
+                activeTab: 'incidents',
                 selectedIncidentId: action.id,
                 selectedSectionId: null,
-            }
-        case 'SELECT_INCIDENT_FROM_MAP':
-            return {
-                ...state,
-                layer: 2,
-                incidentPanelOpen: true,
-                sectionPanelOpen: false,
-                selectedIncidentId: action.id,
-                selectedSectionId: null,
+                selectedChannel: null,
                 sectionCreationMode: false,
                 pendingPoint: null,
+                sidebarOpen: true,
             }
         case 'SELECT_SECTION':
             return {
                 ...state,
-                layer: 2,
+                activeTab: 'sections',
                 selectedSectionId: action.id,
                 selectedIncidentId: null,
+                selectedChannel: null,
             }
-        case 'BACK':
+        case 'CLEAR_SELECTION':
             return {
                 ...state,
-                layer: 1,
                 selectedIncidentId: null,
                 selectedSectionId: null,
+                selectedStructureId: null,
+                selectedChannel: null,
             }
         case 'SET_FILTER_SEVERITY':
             return { ...state, filterSeverity: action.severity }
@@ -100,9 +123,6 @@ function reducer(state: ProtoState, action: ProtoAction): ProtoState {
             return {
                 ...state,
                 sectionCreationMode: true,
-                sectionPanelOpen: false,
-                incidentPanelOpen: false,
-                layer: 0,
                 pendingPoint: null,
                 selectedIncidentId: null,
                 selectedSectionId: null,
@@ -145,8 +165,84 @@ function reducer(state: ProtoState, action: ProtoAction): ProtoState {
                 ...state,
                 sections: state.sections.filter((s) => s.id !== action.id),
                 selectedSectionId: state.selectedSectionId === action.id ? null : state.selectedSectionId,
-                layer: state.selectedSectionId === action.id ? 1 : state.layer,
             }
+        case 'TOGGLE_SIDEBAR':
+            return { ...state, sidebarOpen: !state.sidebarOpen }
+        case 'OPEN_SIDEBAR':
+            return {
+                ...state,
+                sidebarOpen: true,
+                ...(action.tab ? {
+                    activeTab: action.tab,
+                    selectedIncidentId: null,
+                    selectedSectionId: null,
+                } : {}),
+            }
+        case 'SET_DISPLAY_MODE':
+            return { ...state, displayMode: action.mode, selectedSectionId: null, selectedIncidentId: null }
+        case 'SET_SECTION_METRIC':
+            return { ...state, sectionMetric: action.metric }
+        case 'UPDATE_INCIDENT_DESCRIPTION':
+            return {
+                ...state,
+                incidents: state.incidents.map(inc =>
+                    inc.id === action.id ? { ...inc, description: action.description } : inc,
+                ),
+            }
+        case 'UPDATE_SECTION_THRESHOLDS':
+            return {
+                ...state,
+                sections: state.sections.map(s =>
+                    s.id === action.id ? { ...s, speedThresholds: action.thresholds } : s
+                ),
+            }
+        case 'SET_FIBER_THRESHOLDS':
+            return {
+                ...state,
+                fiberThresholds: { ...state.fiberThresholds, [action.fiberId]: action.thresholds },
+            }
+        case 'SET_FIBER_COLOR':
+            return {
+                ...state,
+                fiberColors: { ...state.fiberColors, [action.fiberId]: action.color },
+            }
+        case 'SELECT_STRUCTURE':
+            return {
+                ...state,
+                activeTab: 'shm',
+                selectedStructureId: action.id,
+                selectedIncidentId: null,
+                selectedSectionId: null,
+                selectedChannel: null,
+                sectionCreationMode: false,
+                pendingPoint: null,
+            }
+        case 'TOGGLE_STRUCTURES_ON_MAP':
+            return { ...state, showStructuresOnMap: !state.showStructuresOnMap }
+        case 'TOGGLE_STRUCTURE_LABELS':
+            return { ...state, showStructureLabels: !state.showStructureLabels }
+        case 'SELECT_CHANNEL':
+            return {
+                ...state,
+                activeTab: 'channel',
+                selectedChannel: action.channel,
+                selectedIncidentId: null,
+                selectedSectionId: null,
+                selectedStructureId: null,
+                sectionCreationMode: false,
+                pendingPoint: null,
+                sidebarOpen: true,
+            }
+        case 'SET_INCIDENTS':
+            return { ...state, incidents: action.incidents }
+        case 'SET_SECTIONS':
+            return { ...state, sections: action.sections }
+        case 'TOGGLE_HIDE_RESOLVED':
+            return { ...state, hideResolved: !state.hideResolved }
+        case 'TOGGLE_INCIDENTS_ON_MAP':
+            return { ...state, showIncidentsOnMap: !state.showIncidentsOnMap }
+        case 'TOGGLE_HIDE_FIBERS_OVERVIEW':
+            return { ...state, hideFibersInOverview: !state.hideFibersInOverview }
         default:
             return state
     }
@@ -154,10 +250,104 @@ function reducer(state: ProtoState, action: ProtoAction): ProtoState {
 
 export function Prototype() {
     const [state, dispatch] = useReducer(reducer, initialState)
+    const [isOverview, setIsOverview] = useState(false)
+    const mapRef = useRef<PrototypeMapHandle>(null)
+    const { buildGeoJSON, connected } = useDetections()
+    const { tickAndCollect } = useVehicleSim()
+    const { stats: liveStats, seriesData: liveSeriesData } = useLiveStats(state.sections)
+    const structureData = useStructures(state.selectedStructureId)
+
+    // Real incidents from API + WebSocket
+    const { incidents: apiIncidents, loading: incidentsLoading } = useIncidents()
+    const protoIncidents = useMemo(
+        () => apiIncidents.map(toProtoIncident),
+        [apiIncidents],
+    )
+    const { unseenIds, hasUnseen, markSeen, toasts, dismissToast } = useUnseenIncidents(protoIncidents, incidentsLoading)
+
+    useEffect(() => {
+        dispatch({ type: 'SET_INCIDENTS', incidents: protoIncidents })
+    }, [protoIncidents])
+
+    // Real sections from API
+    const { sections: apiSections, addSection, removeSection } = useSections()
+    useEffect(() => {
+        dispatch({ type: 'SET_SECTIONS', sections: apiSections })
+    }, [apiSections])
+
+    const thresholdLookup = useMemo(
+        () => buildThresholdLookup(state.sections, state.fiberThresholds),
+        [state.sections, state.fiberThresholds],
+    )
+
+    // Wrapped dispatch that intercepts DELETE_SECTION to also call the API
+    const wrappedDispatch = useCallback((action: ProtoAction) => {
+        if (action.type === 'DELETE_SECTION') {
+            removeSection(action.id).catch(() => { /* API error — ignore, already removed from UI */ })
+        }
+        dispatch(action)
+    }, [removeSection])
 
     const handleIncidentClick = useCallback((id: string) => {
-        dispatch({ type: 'SELECT_INCIDENT_FROM_MAP', id })
+        dispatch({ type: 'SELECT_INCIDENT', id })
     }, [])
+
+    // FlyTo on incident selection
+    useEffect(() => {
+        if (!state.selectedIncidentId) return
+        const inc = state.incidents.find(i => i.id === state.selectedIncidentId)
+        if (inc) {
+            mapRef.current?.flyTo(inc.location, 14)
+        }
+    }, [state.selectedIncidentId, state.incidents])
+
+    // FlyTo on section selection
+    useEffect(() => {
+        if (!state.selectedSectionId) return
+        const sec = state.sections.find(s => s.id === state.selectedSectionId)
+        if (!sec) return
+        const fiber = fibers.find(f => f.id === sec.fiberId)
+        if (!fiber) return
+        const midChannel = Math.floor((sec.startChannel + sec.endChannel) / 2)
+        const coord = fiber.coordinates[midChannel]
+        if (coord && coord[0] != null && coord[1] != null) {
+            mapRef.current?.flyTo(coord as [number, number], 13)
+        }
+    }, [state.selectedSectionId, state.sections])
+
+    // FlyTo on structure selection
+    useEffect(() => {
+        if (!state.selectedStructureId) return
+        const structure = structureData.structures.find(s => s.id === state.selectedStructureId)
+        if (!structure) return
+        const dirFiber = resolveDirectionalFiber(structure.fiberId)
+        const midChannel = Math.floor((structure.startChannel + structure.endChannel) / 2)
+        const coord = channelToCoord(dirFiber, midChannel)
+        if (coord) {
+            mapRef.current?.flyTo(coord, 14)
+        }
+    }, [state.selectedStructureId, structureData.structures])
+
+    // FlyTo on channel selection
+    useEffect(() => {
+        if (!state.selectedChannel) return
+        mapRef.current?.flyTo([state.selectedChannel.lng, state.selectedChannel.lat], 15)
+    }, [state.selectedChannel])
+
+    // Highlight selected section/incident/structure/channel on map, clear on deselect
+    useEffect(() => {
+        if (state.selectedSectionId) {
+            mapRef.current?.highlightSection(state.selectedSectionId)
+        } else if (state.selectedIncidentId) {
+            mapRef.current?.highlightIncident(state.selectedIncidentId)
+        } else if (state.selectedStructureId) {
+            mapRef.current?.highlightStructure(state.selectedStructureId, structureData.structures)
+        } else if (state.selectedChannel) {
+            mapRef.current?.highlightChannel(state.selectedChannel.lng, state.selectedChannel.lat)
+        } else {
+            mapRef.current?.clearHighlight()
+        }
+    }, [state.selectedSectionId, state.selectedIncidentId, state.selectedStructureId, state.selectedChannel, structureData.structures])
 
     // Keyboard shortcuts
     useEffect(() => {
@@ -165,52 +355,65 @@ export function Prototype() {
             if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
 
             if (e.key === 'i') {
-                dispatch({ type: 'OPEN_INCIDENTS' })
+                dispatch({ type: 'OPEN_SIDEBAR', tab: 'incidents' })
             } else if (e.key === 's' && !state.sectionCreationMode) {
-                dispatch({ type: 'OPEN_SECTIONS' })
+                dispatch({ type: 'OPEN_SIDEBAR', tab: 'sections' })
             } else if (e.key === 'c') {
                 if (state.sectionCreationMode) {
                     dispatch({ type: 'EXIT_SECTION_CREATION' })
                 } else {
                     dispatch({ type: 'ENTER_SECTION_CREATION' })
                 }
+            } else if (e.key === 'h') {
+                dispatch({ type: 'OPEN_SIDEBAR', tab: 'shm' })
             } else if (e.key === 'Escape') {
                 if (state.showNamingDialog) {
                     dispatch({ type: 'CLOSE_NAMING_DIALOG' })
                 } else if (state.sectionCreationMode) {
                     dispatch({ type: 'EXIT_SECTION_CREATION' })
-                } else if (state.layer === 2) {
-                    dispatch({ type: 'BACK' })
-                } else if (state.layer === 1) {
-                    dispatch({ type: 'CLOSE_PANELS' })
+                } else if (state.selectedIncidentId || state.selectedSectionId || state.selectedStructureId || state.selectedChannel) {
+                    dispatch({ type: 'CLEAR_SELECTION' })
                 }
             }
         }
 
         window.addEventListener('keydown', onKeyDown)
         return () => window.removeEventListener('keydown', onKeyDown)
-    }, [state.layer, state.sectionCreationMode, state.showNamingDialog])
-
-    const isAnalysisOpen = state.layer === 2
+    }, [state.sectionCreationMode, state.showNamingDialog, state.selectedIncidentId, state.selectedSectionId])
 
     return (
-        <div className="prototype w-screen h-screen flex overflow-hidden">
-            {/* Map area */}
-            <div
-                className={cn(
-                    'proto-map-wrapper relative h-full',
-                    isAnalysisOpen ? 'w-[45%]' : 'w-full',
-                )}
-            >
+        <div className="prototype w-screen h-screen relative overflow-hidden">
+            {/* Map area — full screen */}
+            <div className="absolute inset-0">
                 <PrototypeMap
+                    ref={mapRef}
+                    incidents={state.showIncidentsOnMap ? state.incidents : []}
                     onIncidentClick={handleIncidentClick}
+                    onMapClick={() => dispatch({ type: 'CLEAR_SELECTION' })}
                     sectionCreationMode={state.sectionCreationMode}
                     pendingPoint={state.pendingPoint}
                     sections={state.sections}
+                    selectedSectionId={state.selectedSectionId}
                     onFiberClick={(point) => dispatch({ type: 'SET_PENDING_POINT', point })}
                     onSectionComplete={(fiberId, startChannel, endChannel) =>
                         dispatch({ type: 'OPEN_NAMING_DIALOG', fiberId, startChannel, endChannel })
                     }
+                    buildVehicleGeoJSON={buildGeoJSON}
+                    tickAndCollect={tickAndCollect}
+                    displayMode={state.displayMode}
+                    liveStats={liveStats}
+                    onOverviewChange={setIsOverview}
+                    thresholdLookup={thresholdLookup}
+                    fiberColors={state.fiberColors}
+                    structures={structureData.structures}
+                    structureStatuses={structureData.allStatuses}
+                    showStructuresOnMap={state.showStructuresOnMap}
+                    showStructureLabels={state.showStructureLabels}
+                    selectedStructureId={state.selectedStructureId}
+                    onStructureClick={(id) => dispatch({ type: 'SELECT_STRUCTURE', id })}
+                    onChannelClick={(point) => dispatch({ type: 'SELECT_CHANNEL', channel: point })}
+                    sidebarOpen={state.sidebarOpen}
+                    hideFibersInOverview={state.hideFibersInOverview}
                 />
 
                 {/* Section creation banner */}
@@ -230,68 +433,59 @@ export function Prototype() {
                     </div>
                 )}
 
-                {/* Layer 0 overlays */}
+                {/* Map overlays */}
                 <StatusBar
-                    sections={state.sections}
-                    onOpenIncidents={() => dispatch({ type: 'OPEN_INCIDENTS' })}
-                    onOpenSections={() => dispatch({ type: 'OPEN_SECTIONS' })}
-                />
-                {!isAnalysisOpen && <Legend />}
-
-                {/* Layer 1 panels */}
-                <IncidentPanel
-                    open={state.incidentPanelOpen}
-                    filterSeverity={state.filterSeverity}
-                    onFilterChange={(severity: Severity | null) =>
-                        dispatch({ type: 'SET_FILTER_SEVERITY', severity })
-                    }
-                    onSelectIncident={(id: string) => dispatch({ type: 'SELECT_INCIDENT', id })}
-                    onClose={() => dispatch({ type: 'CLOSE_PANELS' })}
-                />
-                <SectionPanel
-                    open={state.sectionPanelOpen}
-                    sections={state.sections}
-                    onSelectSection={(id: string) => dispatch({ type: 'SELECT_SECTION', id })}
-                    onAddSection={() => dispatch({ type: 'ENTER_SECTION_CREATION' })}
-                    onDeleteSection={(id: string) => dispatch({ type: 'DELETE_SECTION', id })}
-                    onClose={() => dispatch({ type: 'CLOSE_PANELS' })}
+                    connected={connected}
+                    sectionCount={state.sections.length}
+                    incidentCount={state.incidents.filter(i => !i.resolved).length}
                 />
             </div>
 
-            {/* Layer 2 analysis view */}
-            {isAnalysisOpen && (
-                <div className="flex-1 h-full border-l border-[var(--proto-border)]">
-                    <AnalysisView
-                        sections={state.sections}
-                        selectedIncidentId={state.selectedIncidentId}
-                        selectedSectionId={state.selectedSectionId}
-                        onBack={() => dispatch({ type: 'BACK' })}
-                    />
-                </div>
-            )}
+            {/* Legend — top-right, moves with sidebar */}
+            <Legend
+                displayMode={state.displayMode}
+                onToggleDisplayMode={() => dispatch({ type: 'SET_DISPLAY_MODE', mode: state.displayMode === 'dots' ? 'vehicles' : 'dots' })}
+                isOverview={isOverview}
+                sidebarOpen={state.sidebarOpen}
+                hideFibersInOverview={state.hideFibersInOverview}
+                onToggleHideFibers={() => dispatch({ type: 'TOGGLE_HIDE_FIBERS_OVERVIEW' })}
+            />
+
+            {/* Toast notifications for new incidents */}
+            <IncidentToastStack toasts={toasts} onDismiss={dismissToast} />
+
+            {/* Sidebar — overlays the map from the right */}
+            <div className="absolute top-0 right-0 h-full z-20 pointer-events-none">
+                <SidePanel
+                    state={state}
+                    dispatch={wrappedDispatch}
+                    connected={connected}
+                    liveStats={liveStats}
+                    liveSeriesData={liveSeriesData}
+                    onHighlightFiber={(fiberId) => mapRef.current?.highlightFiber(fiberId)}
+                    onHighlightSection={(sectionId) => mapRef.current?.highlightSection(sectionId)}
+                    onHighlightIncident={(incidentId) => mapRef.current?.highlightIncident(incidentId)}
+                    onClearHighlight={() => mapRef.current?.clearHighlight()}
+                    structureData={structureData}
+                    unseenIds={unseenIds}
+                    hasUnseen={hasUnseen}
+                    onMarkSeen={markSeen}
+                />
+            </div>
 
             {/* Naming dialog overlay */}
             {state.showNamingDialog && state.pendingSection && (
                 <NamingDialog
                     pendingSection={state.pendingSection}
-                    onSave={(name) => {
+                    onSave={async (name) => {
                         const ps = state.pendingSection!
-                        const fiber = fibers.find((f) => f.id === ps.fiberId)
-                        const section: Section = {
-                            id: `section:${ps.fiberId}:${ps.startChannel}-${ps.endChannel}`,
-                            fiberId: ps.fiberId,
-                            name,
-                            startChannel: ps.startChannel,
-                            endChannel: ps.endChannel,
-                            avgSpeed: 60 + Math.round(Math.random() * 40),
-                            flow: 500 + Math.round(Math.random() * 1500),
-                            occupancy: 10 + Math.round(Math.random() * 40),
-                            travelTime: 1 + Math.round(Math.random() * 8 * 10) / 10,
-                            speedHistory: generateHistory(70, 15, 30),
-                            countHistory: generateHistory(1000, 200, 30),
+                        dispatch({ type: 'CLOSE_NAMING_DIALOG' })
+                        try {
+                            const section = await addSection(ps.fiberId, name, ps.startChannel, ps.endChannel)
+                            dispatch({ type: 'CREATE_SECTION', section })
+                        } catch {
+                            // API error — section not created
                         }
-                        void fiber // used in id generation context
-                        dispatch({ type: 'CREATE_SECTION', section })
                     }}
                     onCancel={() => dispatch({ type: 'CLOSE_NAMING_DIALOG' })}
                 />

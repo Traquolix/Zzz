@@ -45,6 +45,7 @@ class DASProcessor(MultiTransformer):
         # Pipelines built per-fiber dynamically from fibers.yaml
         self._fiber_pipelines: Dict[str, Dict[str, ProcessingChain]] = {}
         self._fiber_config_hashes: Dict[str, str] = {}
+        self._fiber_configs: Dict[str, FiberConfig] = {}
 
         super().__init__(service_name, service_config)
 
@@ -77,6 +78,7 @@ class DASProcessor(MultiTransformer):
         if cached_hash != config_hash:
             # Config changed or first time — rebuild pipelines
             self._fiber_config_hashes[fiber_id] = config_hash
+            self._fiber_configs[fiber_id] = fiber_cfg
             self._fiber_pipelines[fiber_id] = self._build_fiber_pipelines(fiber_cfg)
             self.logger.info(
                 f"Built pipelines for fiber '{fiber_id}': {len(fiber_cfg.sections)} sections"
@@ -258,6 +260,7 @@ class DASProcessor(MultiTransformer):
                 "channel_selection": {
                     "start": section.channel_start,
                     "stop": section.channel_stop,
+                    "step": spatial_decimation,
                 },
                 "processing_timestamp_ns": time.time_ns(),
                 "correlation_id": correlation_id,

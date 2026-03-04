@@ -1,14 +1,14 @@
 """
 Time-shifted replay buffer for AI engine inference results.
 
-The AI engine produces 28-second windows of speed/count data as bursts.
-This buffer replays them at the original 10 Hz rate with a fixed time
+The AI engine produces 30-second windows of detection data as bursts.
+This buffer replays them at the original ~10 Hz rate with a fixed time
 offset, creating continuous flow to the frontend instead of bursts
 followed by silence.
 
-Each speed message carries timestamp_ns (original sample time, 100ms apart)
-and ai_metadata.time_index (0-299 ordinal within the inference window).
-The buffer uses these to schedule each message for replay at:
+Each detection message carries timestamp_ns (original sample time, ~96ms apart).
+New batches are detected via timestamp gaps (>35s from first timestamp
+in current batch). The buffer schedules each message for replay at:
     wall_start + (msg.timestamp_ns - batch_first_ts_ns) / 1e9
 
 Multiple concurrent inference batches from different fiber sections
@@ -30,7 +30,7 @@ class ReplayItem:
     """Priority queue item ordered by replay wall-clock time."""
     replay_time: float
     sequence: int = field(compare=True)     # tie-breaker for same replay_time
-    channel: str = field(compare=False)     # 'detections' or 'counts'
+    channel: str = field(compare=False)     # 'detections'
     data: Any = field(compare=False)        # transformed message payload
 
 
@@ -72,15 +72,14 @@ class ReplayBuffer:
     def active_batches(self) -> int:
         return len(self._batches)
 
-    def ingest_speed(self, section_key: str, timestamp_ns: int,
-                     time_index: int, detections: list[dict]) -> None:
+    def ingest_detection(self, section_key: str, timestamp_ns: int,
+                         detections: list[dict]) -> None:
         """
-        Add a speed message to the replay queue.
+        Add a detection message to the replay queue.
 
         Args:
-            section_key: "{fiber_id}:{channel_start}" identifying the section
+            section_key: "{fiber_id}:{channel}" identifying the section
             timestamp_ns: Original sample timestamp in nanoseconds
-            time_index: Ordinal position (0-299) within inference window
             detections: Transformed Detection[] dicts ready for frontend
         """
         if not detections:
@@ -89,9 +88,8 @@ class ReplayBuffer:
         now = time.time()
         batch = self._batches.get(section_key)
 
-        # Detect new batch: time_index resets to 0 or large timestamp gap
+        # Detect new batch: no existing batch or large timestamp gap (>35s)
         if (batch is None
-                or time_index == 0
                 or (timestamp_ns - batch.first_ts_ns) > 35_000_000_000):
             batch = BatchTracker(wall_start=now, first_ts_ns=timestamp_ns)
             self._batches[section_key] = batch
@@ -115,40 +113,12 @@ class ReplayBuffer:
         ))
         self._event.set()
 
-    def ingest_count(self, section_key: str, count_timestamp_ns: int,
-                     count_data: dict) -> None:
-        """
-        Add a count message to the replay queue.
-
-        Time-shifted using the corresponding speed batch's anchor if available,
-        otherwise broadcast with minimal delay.
-        """
-        now = time.time()
-        batch = self._batches.get(section_key)
-
-        if batch is not None:
-            offset_s = (count_timestamp_ns - batch.first_ts_ns) / 1e9
-            replay_time = batch.wall_start + offset_s
-        else:
-            # No active speed batch for this section -- broadcast soon
-            replay_time = now + 0.5
-
-        self._sequence += 1
-        heapq.heappush(self._queue, ReplayItem(
-            replay_time=replay_time,
-            sequence=self._sequence,
-            channel='counts',
-            data=count_data,
-        ))
-        self._event.set()
-
     async def drain(self, broadcast_fn: BroadcastFn) -> None:
         """
         Drain loop: pops items from the queue and broadcasts them
         at their scheduled replay times.
 
         Detections are accumulated and flushed at ~10 Hz (100ms batches).
-        Counts are broadcast individually (low volume).
 
         Args:
             broadcast_fn: async callback(channel: str, data: Any)
@@ -188,8 +158,6 @@ class ReplayBuffer:
 
                 if item.channel == 'detections':
                     detection_accumulator.extend(item.data)
-                elif item.channel == 'counts':
-                    await broadcast_fn('counts', item.data)
 
             # Flush detections at ~10 Hz
             now = time.time()

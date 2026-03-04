@@ -1,0 +1,64 @@
+{
+  "type": "record",
+  "name": "DASDetection",
+  "namespace": "com.sequoia.das",
+  "doc": "Unified vehicle detection from AI engine — one record per detection interval with speed, count, and vehicle type classification",
+  "fields": [
+    {
+      "name": "fiber_id",
+      "type": "string",
+      "doc": "Unique identifier for the fiber optic cable"
+    },
+    {
+      "name": "timestamp_ns",
+      "type": "long",
+      "doc": "Timestamp at interval midpoint in nanoseconds since Unix epoch"
+    },
+    {
+      "name": "channel",
+      "type": "int",
+      "doc": "Physical DAS channel number (channel_start + section_idx * channel_step)"
+    },
+    {
+      "name": "speed_kmh",
+      "type": "float",
+      "doc": "Median speed across the detection interval in km/h (always positive)"
+    },
+    {
+      "name": "direction",
+      "type": "int",
+      "default": 0,
+      "doc": "Travel direction (1=forward, 2=reverse, 0=unknown)"
+    },
+    {
+      "name": "vehicle_count",
+      "type": "float",
+      "default": 1.0,
+      "doc": "Number of vehicles detected in this interval (via GLRT peak counting)"
+    },
+    {
+      "name": "n_cars",
+      "type": "float",
+      "default": 0.0,
+      "doc": "Number of cars (peaks below truck classification threshold)"
+    },
+    {
+      "name": "n_trucks",
+      "type": "float",
+      "default": 0.0,
+      "doc": "Number of trucks (peaks above truck classification threshold)"
+    },
+    {
+      "name": "glrt_max",
+      "type": "float",
+      "default": 0.0,
+      "doc": "Maximum GLRT value within the detection interval"
+    },
+    {
+      "name": "engine_version",
+      "type": "string",
+      "default": "1.0",
+      "doc": "AI engine version that produced this detection"
+    }
+  ]
+}

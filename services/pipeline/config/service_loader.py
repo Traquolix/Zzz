@@ -85,15 +85,10 @@ def _build_outputs(service_type: str, topics: dict, schemas: dict) -> Dict[str, 
         }
     elif service_type == "ai_engine":
         return {
-            "speed": OutputConfig(
-                topic=topics.get("speeds", "das.speeds"),
-                key_schema_file=schemas.get("speed_key"),
-                value_schema_file=schemas.get("speed_value"),
-            ),
-            "counting": OutputConfig(
-                topic=topics.get("counts", "das.counts"),
-                key_schema_file=schemas.get("count_key"),
-                value_schema_file=schemas.get("count_value"),
+            "default": OutputConfig(
+                topic=topics.get("detections", "das.detections"),
+                key_schema_file=schemas.get("detection_key"),
+                value_schema_file=schemas.get("detection_value"),
             ),
         }
     else:

@@ -270,142 +270,93 @@ class TestMessagesToArrays:
 
 
 class TestCreateSpeedMessages:
-    """Test speed message creation."""
+    """Test speed message creation from detection dicts."""
 
-    def test_filters_speeds_by_range(self):
-        """Should filter out speeds outside min/max range."""
+    def test_creates_one_message_per_detection(self):
+        """Each detection dict should produce one message."""
         ctx = ProcessingContext(channel_start=0, channel_step=1)
-        speeds = np.array(
-            [
-                [15.0, 50.0, 150.0],  # 15 too slow, 50 valid, 150 too fast
-            ]
-        )
-        timestamps_ns = [1000000000000, 2000000000000, 3000000000000]
+        detections = [
+            {"section_idx": 0, "speed_kmh": 50.0, "direction": 1, "timestamp_ns": 1000000000000, "glrt_max": 5000.0},
+            {"section_idx": 1, "speed_kmh": 60.0, "direction": 1, "timestamp_ns": 2000000000000, "glrt_max": 6000.0},
+        ]
 
         messages = create_speed_messages(
             fiber_id="test",
-            filtered_speeds=speeds,
-            timestamps_ns=timestamps_ns,
+            detections=detections,
             ctx=ctx,
-            min_speed_kmh=20.0,
-            max_speed_kmh=120.0,
-            sampling_rate_hz=10.0,
             service_name="test",
         )
 
-        assert len(messages) == 1
+        assert len(messages) == 2
         assert messages[0].payload["speeds"][0]["speed"] == 50.0
+        assert messages[1].payload["speeds"][0]["speed"] == 60.0
 
     def test_maps_channels_with_step(self):
-        """Should map channel indices using channel_step."""
+        """Should map section_idx to channel using channel_step."""
         ctx = ProcessingContext(channel_start=100, channel_step=2)
-        speeds = np.array(
-            [
-                [50.0],
-                [60.0],
-                [70.0],
-            ]
-        )
-        timestamps_ns = [1000000000000]
+        detections = [
+            {"section_idx": 0, "speed_kmh": 50.0, "direction": 1, "timestamp_ns": 1000000000000, "glrt_max": 5000.0},
+            {"section_idx": 1, "speed_kmh": 60.0, "direction": 1, "timestamp_ns": 1000000000000, "glrt_max": 5000.0},
+            {"section_idx": 2, "speed_kmh": 70.0, "direction": 1, "timestamp_ns": 1000000000000, "glrt_max": 5000.0},
+        ]
 
         messages = create_speed_messages(
             fiber_id="test",
-            filtered_speeds=speeds,
-            timestamps_ns=timestamps_ns,
+            detections=detections,
             ctx=ctx,
-            min_speed_kmh=20.0,
-            max_speed_kmh=120.0,
-            sampling_rate_hz=10.0,
             service_name="test",
         )
 
-        speeds_data = messages[0].payload["speeds"]
-        assert speeds_data[0]["channel_number"] == 100
-        assert speeds_data[1]["channel_number"] == 102
-        assert speeds_data[2]["channel_number"] == 104
+        assert messages[0].payload["speeds"][0]["channel_number"] == 100
+        assert messages[1].payload["speeds"][0]["channel_number"] == 102
+        assert messages[2].payload["speeds"][0]["channel_number"] == 104
 
-    def test_preserves_speed_sign_for_direction(self):
-        """Should preserve sign of speed (negative = opposite direction)."""
+    def test_preserves_direction(self):
+        """Should preserve direction from detection dict."""
         ctx = ProcessingContext(channel_start=0, channel_step=1)
-        speeds = np.array([[-50.0]])
-        timestamps_ns = [1000000000000]
+        detections = [
+            {"section_idx": 0, "speed_kmh": 50.0, "direction": 1, "timestamp_ns": 1000000000000, "glrt_max": 5000.0},
+            {"section_idx": 0, "speed_kmh": 60.0, "direction": 2, "timestamp_ns": 2000000000000, "glrt_max": 5000.0},
+        ]
 
         messages = create_speed_messages(
             fiber_id="test",
-            filtered_speeds=speeds,
-            timestamps_ns=timestamps_ns,
+            detections=detections,
             ctx=ctx,
-            min_speed_kmh=20.0,
-            max_speed_kmh=120.0,
-            sampling_rate_hz=10.0,
             service_name="test",
         )
 
-        # Should preserve negative sign to indicate direction
-        assert messages[0].payload["speeds"][0]["speed"] == -50.0
+        assert messages[0].payload["direction"] == 1
+        assert messages[1].payload["direction"] == 2
 
-    def test_handles_nan_speeds(self):
-        """Should filter out NaN speeds."""
+    def test_empty_detections(self):
+        """No detections should produce no messages."""
         ctx = ProcessingContext(channel_start=0, channel_step=1)
-        speeds = np.array([[50.0, float("nan"), 70.0]])
-        timestamps_ns = [1000000000000, 2000000000000, 3000000000000]
 
         messages = create_speed_messages(
             fiber_id="test",
-            filtered_speeds=speeds,
-            timestamps_ns=timestamps_ns,
+            detections=[],
             ctx=ctx,
-            min_speed_kmh=20.0,
-            max_speed_kmh=120.0,
-            sampling_rate_hz=10.0,
             service_name="test",
         )
 
-        assert len(messages) == 2
+        assert len(messages) == 0
 
-    def test_handles_3d_array(self):
-        """Should handle 3D speed array (sections x channels x time)."""
+    def test_timestamp_from_detection(self):
+        """Should use timestamp_ns from detection dict."""
         ctx = ProcessingContext(channel_start=0, channel_step=1)
-        speeds = np.array(
-            [
-                [[50.0, 60.0]],
-                [[70.0, 80.0]],
-            ]
-        )
-        timestamps_ns = [1000000000000, 2000000000000]
+        detections = [
+            {"section_idx": 0, "speed_kmh": 90.0, "direction": 1, "timestamp_ns": 1234567890000, "glrt_max": 5000.0},
+        ]
 
         messages = create_speed_messages(
             fiber_id="test",
-            filtered_speeds=speeds,
-            timestamps_ns=timestamps_ns,
+            detections=detections,
             ctx=ctx,
-            min_speed_kmh=20.0,
-            max_speed_kmh=120.0,
-            sampling_rate_hz=10.0,
             service_name="test",
         )
 
-        assert len(messages) == 2
-        assert len(messages[0].payload["speeds"]) == 2
-
-    def test_speed_exactly_at_boundaries_included(self):
-        """Speed exactly at min/max should be included."""
-        ctx = ProcessingContext(channel_start=0, channel_step=1)
-        speeds = np.array([[20.0, 120.0]])
-        timestamps_ns = [1000000000000, 2000000000000]
-
-        messages = create_speed_messages(
-            fiber_id="test",
-            filtered_speeds=speeds,
-            timestamps_ns=timestamps_ns,
-            ctx=ctx,
-            min_speed_kmh=20.0,
-            max_speed_kmh=120.0,
-            sampling_rate_hz=10.0,
-            service_name="test",
-        )
-
-        assert len(messages) == 2
+        assert messages[0].payload["timestamp_ns"] == 1234567890000
 
 
 class TestCreateCountMessages:

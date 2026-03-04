@@ -61,7 +61,7 @@ class Args_NN_model_all_channels:
 
         self.tess_size = 20
         self.bidirectional_RNN = bidirectional_rnn
-        self.zero_boundary = True
+        self.zero_boundary = False
 
         if TORCH_AVAILABLE and torch.backends.mps.is_available():
             self.batch_size = 64

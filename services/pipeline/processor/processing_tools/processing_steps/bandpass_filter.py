@@ -13,7 +13,6 @@ class BandpassFilter(ProcessingStep):
         low_freq: float,
         high_freq: float,
         sampling_rate: float = 50.0,
-        warmup_time_seconds: float = 3.0,
     ):
         super().__init__("bandpass_filter")
 
@@ -28,7 +27,6 @@ class BandpassFilter(ProcessingStep):
                 f"low_freq ({low_freq} Hz) must be less than high_freq ({high_freq} Hz)"
             )
 
-        self.warmup_samples = int(warmup_time_seconds * sampling_rate)
         self.filter = VectorizedBiquadFilter(low_freq, high_freq, sampling_rate)
         self._fiber_states = {}
 
@@ -46,7 +44,6 @@ class BandpassFilter(ProcessingStep):
         if fiber_id not in self._fiber_states:
             self._fiber_states[fiber_id] = {
                 "state": self.filter.create_state(channel_count),
-                "count": 0,
                 "channels": channel_count,
             }
 
@@ -58,14 +55,6 @@ class BandpassFilter(ProcessingStep):
 
         values_array = np.array(values, dtype=np.float64)
         filtered_values = self.filter.filter(values_array, fiber_state["state"])
-
-        # During warmup, run samples through the filter to prime its state,
-        # but discard the output (transient response is unreliable)
-        if fiber_state["count"] < self.warmup_samples:
-            fiber_state["count"] += 1
-            return None
-
-        fiber_state["count"] += 1
 
         result = measurement_data.copy()
         result["values"] = filtered_values.tolist()

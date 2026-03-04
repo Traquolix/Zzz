@@ -3,11 +3,13 @@ export type Detection = {
     channel: number
     speed: number
     count: number
+    nCars: number
+    nTrucks: number
     direction: 0 | 1
     timestamp: number
 }
 
-/** AI-derived vehicle flow count for a fiber section. */
+/** @deprecated Vehicle counts are now included in Detection (count, nCars, nTrucks). */
 export type VehicleCount = {
     fiberLine: string
     channelStart: number

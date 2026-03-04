@@ -5,7 +5,7 @@
 # Naming conventions:
 #   - fiber: A physical fiber optic cable installation
 #   - section: A contiguous range of channels processed together (with its own model)
-#   - temporal_decimation: Reduce sampling rate (e.g., 50Hz -> 10Hz)
+#   - temporal_decimation: Reduce sampling rate (e.g., 125Hz -> 10.4167Hz)
 #   - spatial_decimation: Reduce channel count (e.g., keep every Nth channel)
 
 # =============================================================================
@@ -23,8 +23,7 @@ service_defaults:
   topics:
     raw_pattern: "^das\\.raw\\.[^.]+$"    # Input pattern for processor (excludes .params)
     processed: das.processed           # Output from processor, input to ai_engine
-    speeds: das.speeds                 # Speed analysis output
-    counts: das.counts                 # Vehicle counting output
+    detections: das.detections           # Unified detection output (speed + count + vehicle type)
     dlq: das.dlq                       # Dead letter queue
 
   # Schema paths (relative to pipeline root / PYTHONPATH).
@@ -33,10 +32,8 @@ service_defaults:
       output_key: schema/string_key.avsc
       output_value: processor/schema/das_processed_measurement.avsc
     ai_engine:
-      speed_key: schema/string_key.avsc
-      speed_value: ai_engine/schema/das_speed_analysis.avsc
-      count_key: schema/string_key.avsc
-      count_value: ai_engine/schema/das_vehicle_count.avsc
+      detection_key: schema/string_key.avsc
+      detection_value: ai_engine/schema/das_detection.avsc
 
   # Producer settings (shared across services)
   producer:
@@ -75,161 +72,256 @@ fibers:
   carros:
     input_topic: das.raw.carros
     total_channels: 2829
-    sampling_rate_hz: 50.0
+    sampling_rate_hz: 125.0
 
     sections:
       - name: default
-        channels: [1000, 2700]
-        model: dtan_carros
+        channels: [1200, 2748]
+        model: dtan_unified
 
-        # Processing pipeline - steps executed in order (matches notebook experiment 12)
-        # Order: bandpass → temporal decimation → spatial decimation → CMR
+        # Processing pipeline - steps executed in order
+        # Order: bandpass → temporal decimation → spatial decimation
         pipeline:
           - step: bandpass_filter
             params:
               low_freq_hz: 0.3
               high_freq_hz: 2.0
               order: 4
-              warmup_seconds: 5.0
+
 
           - step: temporal_decimation
             params:
-              factor: 5  # 50Hz -> 10Hz
+              factor: 12  # 125Hz -> 10.4167Hz
 
           - step: spatial_decimation
             params:
-              factor: 3  # Keep every 3rd channel (1700 -> 567 channels)
-
-          - step: common_mode_removal
-            params:
-              warmup_seconds: 5.0
-              method: median
+              factor: 3  # Keep every 3rd channel
 
   mathis:
     input_topic: das.raw.mathis
-    total_channels: 5427  # Full ROI: raw channels 19892-47027, /5 ROI decimation = 5427
-    sampling_rate_hz: 50.0
+    total_channels: 5427
+    sampling_rate_hz: 125.0
 
     sections:
-      # Section 1: Channels 0-1700 of Mathis ROI (covers active vehicle zone)
-      - name: section1
-        channels: [0, 1700]
-        model: dtan_mathis_section1
-
+      # 4 notebook segments (channel offsets relative to Mathis ROI start)
+      - name: seg1
+        channels: [800, 870]
+        model: dtan_unified
         pipeline:
           - step: bandpass_filter
             params:
               low_freq_hz: 0.3
               high_freq_hz: 2.0
               order: 4
-              warmup_seconds: 5.0
 
           - step: temporal_decimation
             params:
-              factor: 5  # 50Hz -> 10Hz
-
+              factor: 12
           - step: spatial_decimation
             params:
-              factor: 3  # Keep every 3rd channel (1700 -> 567 channels)
+              factor: 3
 
-          - step: common_mode_removal
-            params:
-              warmup_seconds: 5.0
-              method: median
-
-      # Section 2: Channels 2500-3000 of Mathis ROI (second active vehicle zone)
-      - name: section2
-        channels: [2500, 3000]
-        model: dtan_mathis_section2
-
+      - name: seg2
+        channels: [971, 1441]
+        model: dtan_unified
         pipeline:
           - step: bandpass_filter
             params:
               low_freq_hz: 0.3
               high_freq_hz: 2.0
               order: 4
-              warmup_seconds: 5.0
 
           - step: temporal_decimation
             params:
-              factor: 5  # 50Hz -> 10Hz
-
+              factor: 12
           - step: spatial_decimation
             params:
-              factor: 3  # Keep every 3rd channel (500 -> 167 channels)
+              factor: 3
 
-          - step: common_mode_removal
+      - name: seg3
+        channels: [1794, 1981]
+        model: dtan_unified
+        pipeline:
+          - step: bandpass_filter
             params:
-              warmup_seconds: 5.0
-              method: median
+              low_freq_hz: 0.3
+              high_freq_hz: 2.0
+              order: 4
+
+          - step: temporal_decimation
+            params:
+              factor: 12
+          - step: spatial_decimation
+            params:
+              factor: 3
+
+      - name: seg4
+        channels: [2096, 2251]
+        model: dtan_unified
+        pipeline:
+          - step: bandpass_filter
+            params:
+              low_freq_hz: 0.3
+              high_freq_hz: 2.0
+              order: 4
+
+          - step: temporal_decimation
+            params:
+              factor: 12
+          - step: spatial_decimation
+            params:
+              factor: 3
 
   promenade:
     input_topic: das.raw.promenade
-    total_channels: 7694  # Full ROI: raw channels 47848-86319, /5 ROI decimation = 7694
-    sampling_rate_hz: 50.0
+    total_channels: 7694
+    sampling_rate_hz: 125.0
 
     sections:
-      - name: default
-        channels: [0, 4100]
-        model: dtan_promenade
-
+      # 6 notebook segments (channel offsets relative to Promenade ROI start)
+      - name: seg1
+        channels: [1762, 1822]
+        model: dtan_unified
         pipeline:
           - step: bandpass_filter
             params:
               low_freq_hz: 0.3
               high_freq_hz: 2.0
               order: 4
-              warmup_seconds: 5.0
 
           - step: temporal_decimation
             params:
-              factor: 5  # 50Hz -> 10Hz
-
+              factor: 12
           - step: spatial_decimation
             params:
-              factor: 3  # Keep every 3rd channel (4100 -> 1367 channels)
+              factor: 3
 
-          - step: common_mode_removal
+      - name: seg2
+        channels: [2392, 2582]
+        model: dtan_unified
+        pipeline:
+          - step: bandpass_filter
             params:
-              warmup_seconds: 5.0
-              method: median
+              low_freq_hz: 0.3
+              high_freq_hz: 2.0
+              order: 4
+
+          - step: temporal_decimation
+            params:
+              factor: 12
+          - step: spatial_decimation
+            params:
+              factor: 3
+
+      - name: seg3
+        channels: [2937, 3002]
+        model: dtan_unified
+        pipeline:
+          - step: bandpass_filter
+            params:
+              low_freq_hz: 0.3
+              high_freq_hz: 2.0
+              order: 4
+
+          - step: temporal_decimation
+            params:
+              factor: 12
+          - step: spatial_decimation
+            params:
+              factor: 3
+
+      - name: seg4
+        channels: [3132, 3217]
+        model: dtan_unified
+        pipeline:
+          - step: bandpass_filter
+            params:
+              low_freq_hz: 0.3
+              high_freq_hz: 2.0
+              order: 4
+
+          - step: temporal_decimation
+            params:
+              factor: 12
+          - step: spatial_decimation
+            params:
+              factor: 3
+
+      - name: seg5
+        channels: [3362, 3612]
+        model: dtan_unified
+        pipeline:
+          - step: bandpass_filter
+            params:
+              low_freq_hz: 0.3
+              high_freq_hz: 2.0
+              order: 4
+
+          - step: temporal_decimation
+            params:
+              factor: 12
+          - step: spatial_decimation
+            params:
+              factor: 3
+
+      - name: seg6
+        channels: [3682, 3912]
+        model: dtan_unified
+        pipeline:
+          - step: bandpass_filter
+            params:
+              low_freq_hz: 0.3
+              high_freq_hz: 2.0
+              order: 4
+
+          - step: temporal_decimation
+            params:
+              factor: 12
+          - step: spatial_decimation
+            params:
+              factor: 3
 
 # =============================================================================
 # Model Defaults
 # =============================================================================
 # Shared inference parameters - only override per-model where different.
-# All models now use the unified bidirectional checkpoint from experiment 12.
 
 model_defaults:
   path: ai_engine/model_vehicle/models_parameters
-  exp_name: allignment_parameters_16_02_2026_fullSet_28s
+  exp_name: allignment_parameters_3_03_2026_30s_windows
   version: best
   type: dtan
 
   inference:
-    sampling_rate_hz: 10.0
-    window_seconds: 28  # Must match model checkpoint (fullSet_28s)
+    sampling_rate_hz: 10.4167   # = 125/12
+    window_seconds: 30
     channels_per_section: 9
-    gauge_meters: 10
+    gauge_meters: 15.3846       # = 5.128 * 3 (post spatial decimation)
     bidirectional_rnn: true
 
   speed_detection:
     min_speed_kmh: 20.0
     max_speed_kmh: 120.0
-    correlation_threshold: 500.0    # Per-pair threshold (summed = this x (Nch-1))
+    correlation_threshold: 1100.0   # Per-pair threshold
     use_calibration: false
-    time_overlap_ratio: 0.5         # 50% overlap between windows
+    time_overlap_ratio: 0.5
     glrt_window: 20
     bidirectional_detection: true
-    speed_glrt_factor: 1.0          # Speed quality filter: require GLRT >= threshold * factor
-    speed_weighting: median         # 'glrt' (GLRT-weighted) or 'median'
-    speed_positive_glrt_only: false # Only use pairs with positive GLRT for speed
+    speed_glrt_factor: 1.0
+    speed_weighting: median
+    speed_positive_glrt_only: false
 
   counting:
     enabled: true
-    window_seconds: 28  # Must match inference window
-    classify_threshold_factor: 10.0   # Peak height > this * threshold = truck
-    min_peak_distance_s: 0.25         # Min seconds between peaks
+    window_seconds: 30
+    classify_threshold_factor: 50.0
+    min_peak_distance_s: 1.2
+    model_path: models_parameters/vehicle_counting_model.pt
+    thresholds_path: models_parameters/detection_thresholds_adapted_sectionwise.csv
+    mean_std_path: models_parameters/mean_std_features_adapted_sectionwise.csv
+    truck_ratio_for_split: 2.0
+    time_window_duration: 360
+    corr_threshold: 500.0
 
   visualization:
     enabled: true
@@ -239,27 +331,11 @@ model_defaults:
 # =============================================================================
 # Model Definitions
 # =============================================================================
-# Models are loaded lazily on first use.
-# All models inherit from model_defaults above; only overrides listed here.
+# Single unified model for all fibers.
 
 models:
-  dtan_carros:
-    fiber_id: carros
-    speed_detection:
-      use_calibration: true   # Calibration available for carros
-
-  dtan_mathis_section1:
-    fiber_id: mathis
-
-  dtan_mathis_section2:
-    fiber_id: mathis
-
-  dtan_promenade:
-    fiber_id: promenade
-
-  # Legacy model - kept for backwards compatibility
-  dtan_mathis:
-    fiber_id: mathis
+  dtan_unified:
+    fiber_id: null  # Works for all fibers
 
 # =============================================================================
 # Defaults
@@ -273,16 +349,11 @@ defaults:
         low_freq_hz: 0.3
         high_freq_hz: 2.0
         order: 4
-        warmup_seconds: 5.0
     - step: temporal_decimation
       params:
-        factor: 5
+        factor: 12
     - step: spatial_decimation
       params:
         factor: 3
-    - step: common_mode_removal
-      params:
-        warmup_seconds: 5.0
-        method: median
 
-  model: dtan_carros
+  model: dtan_unified

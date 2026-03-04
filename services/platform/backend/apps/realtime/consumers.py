@@ -257,10 +257,6 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         try:
             incidents = await sync_to_async(self._query_initial_incidents)()
             await self.send_json({'channel': 'incidents', 'data': incidents})
-        except ClickHouseUnavailableError as e:
-            # Expected when ClickHouse is down - log at info level and send empty data
-            logger.info('ClickHouse unavailable for initial incidents: %s', e)
-            await self.send_json({'channel': 'incidents', 'data': []})
         except ObjectDoesNotExist as e:
             # Organization not found - should not happen for authenticated users
             logger.error('Organization not found for user %s: %s', self._user.username, e)
@@ -271,19 +267,35 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             await self.send_json({'channel': 'incidents', 'data': []})
 
     def _query_initial_incidents(self):
-        """Synchronous ClickHouse query for initial incidents (org-scoped)."""
+        """Synchronous ClickHouse query for initial incidents (org-scoped).
+
+        Falls back to simulation cache when ClickHouse is unavailable or
+        returns no results (simulation keeps incidents in memory only).
+        """
         from apps.monitoring.incident_service import query_active
 
-        if self._org_id == '__all__':
-            return query_active(fiber_ids=None, limit=100)
-        else:
-            from apps.fibers.utils import get_org_fiber_ids
-            from apps.organizations.models import Organization
-            org = Organization.objects.get(pk=self._org_id)
-            fiber_ids = get_org_fiber_ids(org)
-            if not fiber_ids:
-                return []
-            return query_active(fiber_ids=fiber_ids, limit=100)
+        try:
+            if self._org_id == '__all__':
+                incidents = query_active(fiber_ids=None, limit=100)
+            else:
+                from apps.fibers.utils import get_org_fiber_ids
+                from apps.organizations.models import Organization
+                org = Organization.objects.get(pk=self._org_id)
+                fiber_ids = get_org_fiber_ids(org)
+                if not fiber_ids:
+                    return []
+                incidents = query_active(fiber_ids=fiber_ids, limit=100)
+            if incidents:
+                return incidents
+        except ClickHouseUnavailableError:
+            pass
+
+        # Fallback: simulation keeps incidents in memory, not in ClickHouse
+        from apps.realtime.simulation_manager import SimulationManager
+        if SimulationManager.instance().is_running:
+            from apps.realtime.simulation import get_simulation_incidents
+            return get_simulation_incidents()
+        return []
 
     async def _send_initial_fibers(self):
         """Send fiber configuration on subscribe.

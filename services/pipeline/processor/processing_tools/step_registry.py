@@ -48,13 +48,11 @@ _STEP_REGISTRY: Dict[str, Dict[str, Any]] = {
             # config param -> constructor arg
             "low_freq_hz": "low_freq",
             "high_freq_hz": "high_freq",
-            "warmup_seconds": "warmup_time_seconds",
             # order is not currently supported, but could be added
         },
         "defaults": {
             "low_freq": 0.1,
             "high_freq": 2.0,
-            "warmup_time_seconds": 5.0,
         },
     },
     "common_mode_removal": {

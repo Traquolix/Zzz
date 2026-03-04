@@ -3,9 +3,11 @@ from __future__ import annotations
 import logging
 import time
 import numpy as np
+from scipy.signal import find_peaks
 
 try:
     import torch
+    import torch.nn.functional as F
     from torch.utils.data import DataLoader, TensorDataset
     TORCH_AVAILABLE = True
 except ImportError:
@@ -32,7 +34,6 @@ from .constants import (
     SPEED_CONVERSION_FACTOR,
 )
 from .utils import (
-    compute_speed_from_pairs,
     correlation_threshold,
     find_ind,
     normalize_channel_energy,
@@ -52,17 +53,26 @@ def compute_edge_trim(glrt_window: int = GLRT_DEFAULT_WINDOW, safety: int = GLRT
     Returns:
         Number of samples to trim from each edge
     """
-    return safety + glrt_window // 2
+    return safety
 
 
 class VehicleSpeedEstimator:
     """Processes sensor data to estimate vehicle speeds using DTAN alignment.
 
-    Uses a sliding window approach with CPAB transformations to align sensor
-    channels and calculate vehicle speeds from the alignment parameters.
+    Matches the notebook's SpeedVehicules.process_one_file flow exactly:
+    1. split_channel_overlap → spatial windows
+    2. per-window energy normalization
+    3. predict_theta → DTAN forward pass
+    4. align_window → aligned channels
+    5. comp_speed → absolute speeds from grid_t
+    6. align_window(speeds) → aligned speeds
+    7. apply_glrt (F.conv1d) → per-pair GLRT
+    8. correlation_threshold → per-pair binary mask
+    9. filtering_speed → median per interval, reject outside [min, max]
+    10. align_window(-thetas) → unaligned speeds
 
-    Note: Not thread-safe. Each instance must be used by a single thread/buffer
-    key at a time.
+    For bidirectional: runs forward + reverse, combines with OR on detection
+    mask and max on GLRT. Filtered speeds come from the dominant direction.
 
     Args:
         model_args: Configuration from Args_NN_model_all_channels
@@ -70,17 +80,10 @@ class VehicleSpeedEstimator:
         glrt_win: Window size for GLRT calculation
         min_speed: Minimum realistic vehicle speed (km/h)
         max_speed: Maximum realistic vehicle speed (km/h)
-        corr_threshold: Correlation threshold for filtering (fallback if no calibration)
+        corr_threshold: Per-pair correlation threshold
         verbose: Enable verbose logging
         calibration_data: Optional CalibrationData for variable threshold + coupling
-
-    Attributes:
-        window_size: Size of the processing window in samples
-        overlap_time: Overlap between consecutive time windows
-        Nch: Number of channels per section
-        fs: Sampling frequency (Hz)
-        gauge: Sensor gauge distance (meters)
-        calibration_data: Optional calibration for variable threshold and coupling correction
+        bidirectional_detection: Enable bidirectional (forward + reverse) detection
     """
 
     def __init__(
@@ -95,6 +98,7 @@ class VehicleSpeedEstimator:
         calibration_data: CalibrationData | None = None,
         visualization_config: dict | None = None,
         bidirectional_detection: bool = True,
+        # Kept for config compatibility but unused — notebook doesn't have these
         speed_glrt_factor: float = 1.0,
         speed_weighting: str = "median",
         speed_positive_glrt_only: bool = False,
@@ -115,23 +119,8 @@ class VehicleSpeedEstimator:
 
         self.intervals = None
 
-        # Edge trimming: cut degraded samples from window edges
-        # GLRT zeroes out (safety + glrt_win//2) samples at each edge
+        # Edge trimming
         self.edge_trim = compute_edge_trim(glrt_win, GLRT_EDGE_SAFETY_SAMPLES)
-
-        # Validate overlap is sufficient for seamless window handoff
-        # Overlap should be >= 2 * edge_trim so trimmed outputs are adjacent
-        min_required_overlap = 2 * self.edge_trim
-        if self.overlap_time < min_required_overlap:
-            logger.warning(
-                f"Overlap ({self.overlap_time} samples) < 2 * edge_trim ({min_required_overlap}). "
-                f"This may cause gaps in output. Consider increasing time_overlap_ratio."
-            )
-        elif self.overlap_time > min_required_overlap:
-            logger.info(
-                f"Overlap ({self.overlap_time}) > min required ({min_required_overlap}). "
-                f"Output will have duplicate timestamps (downstream should deduplicate)."
-            )
 
         self.model_args = model_args
 
@@ -156,17 +145,11 @@ class VehicleSpeedEstimator:
         self.corr_threshold = corr_threshold
         self.calibration_data = calibration_data
         self.bidirectional_detection = bidirectional_detection
-        self.speed_glrt_factor = speed_glrt_factor
-        self.speed_weighting = speed_weighting
-        self.speed_positive_glrt_only = speed_positive_glrt_only
 
         # Initialize visualizer if enabled
         self.visualizer = None
         self.last_visualization_time = 0
         self.visualization_interval = 0
-        # Store last visualization data for post-filter plot
-        self.last_viz_data = None
-        # Store count data for visualization overlay
         self.count_data_for_viz = None
 
         if visualization_config and visualization_config.get("enabled", False):
@@ -181,25 +164,13 @@ class VehicleSpeedEstimator:
             logger.info(f"Visualization enabled: interval={self.visualization_interval}s")
 
     def set_section(self, section: str):
-        """Update the section name for visualization output.
-
-        Args:
-            section: Section name (e.g., 'section1', 'default')
-        """
+        """Update the section name for visualization output."""
         if self.visualizer is not None:
             self.visualizer.section = section
 
     def set_count_data(self, count_data: tuple | None):
-        """Store count data for visualization overlay.
-
-        Args:
-            count_data: Tuple of (counts, intervals, timestamps) from SimpleIntervalCounter
-        """
+        """Store count data for visualization overlay."""
         self.count_data_for_viz = count_data
-        if count_data is not None:
-            counts, intervals, timestamps = count_data
-            total_counts = sum(len(c) if c is not None else 0 for c in counts)
-            logger.info(f"Count data received for viz: {total_counts} count values across {len(counts)} sections")
 
     def split_channel_overlap(self, x: np.ndarray) -> np.ndarray:
         """Splits data into overlapping spatial windows.
@@ -238,9 +209,7 @@ class VehicleSpeedEstimator:
     def comp_speed(self, grid_t: np.ndarray) -> np.ndarray:
         """Calculates vehicle speeds from transformed grid data.
 
-        Matches notebook: returns absolute speed values without filtering.
-        Speed filtering is deferred to filtering_speed() and
-        compute_speed_from_pairs() downstream.
+        Matches notebook: speed = abs(3.6 * fs * gauge / delta)
 
         Args:
             grid_t: Transformed grid data
@@ -253,18 +222,15 @@ class VehicleSpeedEstimator:
         delta += self.eps
 
         speed_section = self.speed_scaling / delta
-
-        # Take absolute value — sign only indicates direction, not speed magnitude
-        # (matches notebook's comp_speed which returns np.abs())
         speed_section = np.abs(speed_section)
 
         return speed_section
 
     def apply_glrt(self, aligned, safety: int = GLRT_EDGE_SAFETY_SAMPLES):
-        """Applies Generalized Likelihood Ratio Test to aligned data.
+        """Applies GLRT using F.conv1d for vectorized sliding window sum.
 
-        Returns per-pair GLRT values (3D) so downstream can aggregate per-pair
-        speeds and do per-pair thresholding.
+        Matches notebook Cell 28: uses F.conv1d with box kernel instead
+        of a Python loop.
 
         Args:
             aligned: 3D tensor of aligned sensor data (sections, Nch, time)
@@ -276,18 +242,28 @@ class VehicleSpeedEstimator:
         dim = aligned.shape
         l = self.glrt_win
         n_pairs = dim[1] - 1
+        N = dim[0]
+        T = dim[2]
 
         # Per-pair product: adjacent channel correlation
-        values = aligned[:, :-1, :] * aligned[:, 1:, :]
+        values = aligned[:, :-1, :] * aligned[:, 1:, :]  # (N, n_pairs, T)
 
-        # Sliding window sum per pair
-        res = torch.zeros((dim[0], n_pairs, dim[2] - l))
-        out = torch.zeros((dim[0], n_pairs, dim[2]))
+        # Vectorized sliding sum via F.conv1d (matches notebook Cell 28)
+        values_flat = values.reshape(N * n_pairs, 1, T)  # (N*n_pairs, 1, T)
+        kernel = torch.ones(1, 1, l, device=values.device)  # box kernel
+        # F.conv1d with padding='valid' gives output length T - l + 1
+        conv_out = F.conv1d(values_flat, kernel)  # (N*n_pairs, 1, T-l+1)
+        conv_out = conv_out.squeeze(1).reshape(N, n_pairs, T - l + 1)
 
-        for i in range(dim[2] - l):
-            res[:, :, i] = torch.sum(values[:, :, i : i + l], dim=2)
+        # Place result with safety margins (matches notebook)
+        out = torch.zeros((N, n_pairs, T), device=values.device)
+        left = safety + l // 2
+        right = T - safety - l // 2
+        # conv_out indices [safety : -(safety)] map to out indices [left : right]
+        valid_len = right - left
+        if valid_len > 0 and conv_out.shape[2] > 2 * safety:
+            out[:, :, left:right] = conv_out[:, :, safety:safety + valid_len]
 
-        out[:, :, safety + l // 2 : -safety - l // 2] = res[:, :, safety:-safety]
         return out
 
     def predict_theta(self, data_window: np.ndarray) -> tuple:
@@ -435,7 +411,6 @@ class VehicleSpeedEstimator:
         intervals_list = []
 
         for i in range(speed.shape[0]):
-            # Per-section: find_ind on 2D (channels, time) → list of (starts, ends) per channel
             section_intervals = find_ind(binary_filter[i])
             intervals_list.append(section_intervals)
 
@@ -449,24 +424,26 @@ class VehicleSpeedEstimator:
     def _process_single_direction(self, data_window: np.ndarray):
         """Process data in one direction through DTAN pipeline.
 
-        Matches notebook's process_one_file flow:
-        1. predict_theta → thetas, grid_t
-        2. align_window → aligned channels
-        3. comp_speed → absolute speeds
-        4. align_window(speeds) → aligned_speed
-        5. apply_glrt → per-pair GLRT (3D)
-        6. correlation_threshold → per-pair binary mask
-        7. filtering_speed → per-pair filtered speeds
-        8. align_window(filtered, -thetas) → unaligned speeds
+        Matches notebook's process_one_file flow exactly:
+        1. split_channel_overlap → spatial windows
+        2. per-window energy normalization
+        3. predict_theta → thetas, grid_t
+        4. align_window → aligned channels
+        5. comp_speed → absolute speeds
+        6. align_window(speeds) → aligned_speed
+        7. apply_glrt (F.conv1d) → per-pair GLRT
+        8. correlation_threshold → per-pair binary mask
+        9. filtering_speed → per-pair filtered speeds
+        10. align_window(filtered, -thetas) → unaligned speeds
 
         Args:
             data_window: (channels, time) sensor data
 
         Returns:
-            Tuple of (glrt_per_pair, glrt_summed, aligned_speed, aligned, thetas)
+            Tuple of:
             - glrt_per_pair: (sections, Nch-1, time) per-pair GLRT
             - glrt_summed: (sections, time) summed GLRT for detection
-            - aligned_speed: (sections, Nch-1, time) per-pair aligned speeds (raw, abs)
+            - filtered_speed: (sections, Nch-1, time) filtered per-pair speeds
             - aligned: aligned sensor data tensor
             - thetas: CPAB transformation parameters
         """
@@ -474,47 +451,201 @@ class VehicleSpeedEstimator:
 
         space_split = self.split_channel_overlap(data_window)
 
+        # Energy normalization per spatial window (matches notebook Cell 4/28)
+        for i in range(space_split.shape[0]):
+            space_split[i] = normalize_channel_energy(space_split[i])
+
         thetas, grid_t = self.predict_theta(space_split)
         aligned = self.align_window(space_split, thetas, self.Nch, align_channel_idx)
 
         all_speed = self.comp_speed(grid_t)
-        aligned_speed_tensor = self.align_window(
+        aligned_speed = self.align_window(
             all_speed, thetas[:, :-1, :], self.Nch - 1, align_channel_idx
-        )
-        aligned_speed = aligned_speed_tensor.detach().cpu().numpy()
+        ).detach().cpu().numpy()
 
-        # Per-pair GLRT: (sections, Nch-1, time)
+        # Per-pair GLRT via F.conv1d: (sections, Nch-1, time)
         glrt_per_pair = self.apply_glrt(aligned).detach().cpu().numpy()
 
-        # Per-pair thresholding (matches notebook's correlation_threshold + filtering_speed)
+        # Per-pair thresholding + speed filtering (matches notebook exactly)
         binary_filter = correlation_threshold(glrt_per_pair, corr_threshold=self.corr_threshold)
         filtered_speed, _ = self.filtering_speed(aligned_speed, binary_filter)
-
-        # Unalign filtered speeds back to original frame (matches notebook)
-        unaligned_speed = self.align_window(
-            filtered_speed, -thetas[:, :-1, :], self.Nch - 1, align_channel_idx
-        ).detach().cpu().numpy()
 
         # Summed across pairs: (sections, time)
         glrt_summed = np.sum(glrt_per_pair, axis=1)
 
-        return glrt_per_pair, glrt_summed, aligned_speed, aligned, thetas
+        return glrt_per_pair, glrt_summed, filtered_speed, aligned, thetas
+
+    def _trim_and_yield(self, glrt_summed, filtered_speed, aligned, date_window,
+                        date_window_ns, direction_value):
+        """Trim edges and yield a single direction's results.
+
+        Args:
+            glrt_summed: (sections, time) summed GLRT
+            filtered_speed: (sections, Nch-1, time) per-pair filtered speeds
+            aligned: aligned sensor data tensor
+            date_window: timestamps
+            date_window_ns: timestamps in nanoseconds
+            direction_value: 1 for forward, 2 for reverse
+
+        Yields:
+            8-tuple matching downstream expectations.
+        """
+        trim_start = self.edge_trim
+        trim_end = self.window_size - self.edge_trim
+
+        # Aggregate across pairs → median per section for speed messages
+        agg_speed = np.nanmedian(filtered_speed[:, :, trim_start:trim_end], axis=1)
+        trimmed_filtered = agg_speed[:, np.newaxis, :]
+
+        trimmed_glrt = glrt_summed[:, trim_start:trim_end]
+        aligned_np = aligned.detach().cpu().numpy() if hasattr(aligned, 'detach') else aligned
+        trimmed_aligned = aligned_np[..., trim_start:trim_end]
+        trimmed_date = date_window[trim_start:trim_end]
+        trimmed_date_ns = date_window_ns[trim_start:trim_end] if date_window_ns is not None else None
+
+        # Direction mask: constant for all sections/time in this yield
+        n_sections = glrt_summed.shape[0]
+        trimmed_time = trim_end - trim_start
+        direction_mask = np.full((n_sections, trimmed_time), direction_value, dtype=int)
+
+        trimmed_aligned_speed = filtered_speed[..., trim_start:trim_end]
+
+        # Store intervals for counting
+        summed_threshold = self.corr_threshold * (self.Nch - 1)
+        detection_mask = (glrt_summed >= summed_threshold).astype(float)
+        intervals_full = find_ind(detection_mask)
+
+        self.intervals = []
+        for starts, ends in intervals_full:
+            shifted_starts = [s - trim_start for s in starts if s >= trim_start and s < trim_end]
+            shifted_ends = [min(e - trim_start, trim_end - trim_start) for s, e in zip(starts, ends) if s >= trim_start and s < trim_end]
+            self.intervals.append((shifted_starts, shifted_ends))
+        self._intervals_full = intervals_full
+
+        yield trimmed_filtered, trimmed_filtered, trimmed_glrt, trimmed_aligned, trimmed_date, trimmed_date_ns, direction_mask, trimmed_aligned_speed
+
+    def extract_detections(
+        self,
+        glrt_summed: np.ndarray,
+        aligned_speed_pairs: np.ndarray,
+        direction: int,
+        timestamps_ns: np.ndarray | None,
+        min_vehicle_duration_s: float = 0.3,
+        classify_threshold_factor: float = 2.0,
+    ) -> list[dict]:
+        """Extract vehicle detections from a single direction's output.
+
+        Matches the notebook's detection extraction:
+        1. Threshold summed GLRT → binary mask → find_ind intervals
+        2. Filter by min vehicle duration
+        3. Per interval: median speed across pairs and time → one detection
+        4. Per interval: count vehicles via peak detection, classify car/truck
+
+        Args:
+            glrt_summed: (sections, trimmed_time) summed GLRT
+            aligned_speed_pairs: (sections, Nch-1, trimmed_time) per-pair speeds
+            direction: 1 for forward, 2 for reverse
+            timestamps_ns: nanosecond timestamps for trimmed window, or None
+            min_vehicle_duration_s: minimum detection duration in seconds
+            classify_threshold_factor: peaks above detect_thr * this factor are trucks
+
+        Returns:
+            List of detection dicts with keys:
+                section_idx, speed_kmh, direction, timestamp_ns, glrt_max,
+                vehicle_count, n_cars, n_trucks
+        """
+        summed_threshold = self.corr_threshold * (self.Nch - 1)
+        min_vehicle_samples = max(3, int(min_vehicle_duration_s * self.fs))
+
+        # Peak counting parameters (matches _lambda_peak_count)
+        detect_thr = summed_threshold
+        classify_thr = detect_thr * classify_threshold_factor
+        min_peak_distance = max(1, int(0.25 * self.fs))
+        min_prominence = max(1.0, 0.1 * detect_thr)
+
+        binary_mask = correlation_threshold(glrt_summed, corr_threshold=summed_threshold)
+        intervals_per_section = find_ind(binary_mask)
+
+        detections = []
+        for section_idx, (starts, ends) in enumerate(intervals_per_section):
+            for v_start, v_end in zip(starts, ends):
+                if v_end - v_start < min_vehicle_samples:
+                    continue
+
+                # Per-interval median speed across valid pairs
+                interval_speeds = []
+                for ch_pair in range(aligned_speed_pairs.shape[1]):
+                    spd = aligned_speed_pairs[section_idx, ch_pair, v_start:v_end]
+                    valid = spd[~np.isnan(spd) & (spd > 0)]
+                    if len(valid) > 0:
+                        interval_speeds.append(float(np.median(valid)))
+                if not interval_speeds:
+                    continue
+
+                vehicle_speed = float(np.median(interval_speeds))
+                if vehicle_speed < self.min_speed or vehicle_speed > self.max_speed:
+                    continue
+
+                # Timestamp at midpoint of interval
+                t_mid = (v_start + v_end) // 2
+                if timestamps_ns is not None and t_mid < len(timestamps_ns):
+                    ts_ns = int(timestamps_ns[t_mid])
+                else:
+                    ts_ns = None
+
+                # Peak counting: how many vehicles in this interval + car/truck
+                seg = glrt_summed[section_idx, v_start:v_end]
+                peaks, props = find_peaks(
+                    seg, height=detect_thr, distance=min_peak_distance,
+                    prominence=min_prominence,
+                )
+
+                if len(peaks) == 0 and np.nanmax(seg) >= detect_thr:
+                    n_vehicles = 1.0
+                    if np.nanmax(seg) >= classify_thr:
+                        n_trucks = 1.0
+                        n_cars = 0.0
+                    else:
+                        n_trucks = 0.0
+                        n_cars = 1.0
+                else:
+                    n_vehicles = float(max(1, len(peaks)))
+                    peak_heights = props.get("peak_heights", np.array([]))
+                    n_trucks = float(np.sum(peak_heights >= classify_thr))
+                    n_cars = float(len(peaks) - n_trucks)
+
+                detections.append({
+                    "section_idx": section_idx,
+                    "speed_kmh": vehicle_speed,
+                    "direction": direction,
+                    "timestamp_ns": ts_ns,
+                    "glrt_max": float(np.max(seg)),
+                    "vehicle_count": n_vehicles,
+                    "n_cars": n_cars,
+                    "n_trucks": n_trucks,
+                })
+
+        return detections
 
     def process_file(self, x: np.ndarray, d: np.ndarray, d_ns: np.ndarray | None = None):
         """Processes a single window of sensor data through the DTAN pipeline.
 
-        Supports bidirectional detection (forward + reverse pass) and per-pair
-        speed aggregation matching notebook experiment 12.
+        Matches notebook Cell 28: forward and reverse are processed independently
+        and yielded separately. Each yield contains detections for one direction
+        only, allowing the consumer to treat them as independent detection lists.
 
         Args:
             x: Sensor data (channels, time_samples) - exactly window_size samples
-            d: Timestamps for each time sample (datetime objects)
+            d: Timestamps for each time sample
             d_ns: Timestamps in nanoseconds (optional, for output messages)
 
         Yields:
-            Tuple of (unaligned_speed, filtered_speed, glrt_summed, aligned_data,
-                       date_window, date_window_ns, direction_mask)
+            8-tuple of (filtered_speed_3d, filtered_speed_3d, glrt_summed,
+                        aligned_data, date_window, date_window_ns,
+                        direction_mask, aligned_speed_per_pair)
             All arrays are trimmed to exclude edge samples.
+            When bidirectional, yields twice: once for forward (direction=1),
+            once for reverse (direction=2).
         """
         _, L = x.shape
 
@@ -528,102 +659,33 @@ class VehicleSpeedEstimator:
                 f"Processing first window only."
             )
 
-        align_channel_idx = (self.Nch - 1) // 2
-
         # Extract exactly one window
         data_window = x[:, :self.window_size]
         date_window = d[:self.window_size]
         date_window_ns = d_ns[:self.window_size] if d_ns is not None else None
 
-        # Equalize per-channel energy before splitting into sections
-        data_window = normalize_channel_energy(data_window)
-
         # --- Forward pass ---
-        fwd_per_pair, fwd_summed, fwd_speed, fwd_aligned, fwd_thetas = (
+        fwd_per_pair, fwd_summed, fwd_filtered, fwd_aligned, fwd_thetas = (
             self._process_single_direction(data_window)
         )
-
-        # --- Reverse pass (if bidirectional) ---
-        if self.bidirectional_detection:
-            data_flipped = data_window[::-1, :].copy()
-            rev_per_pair, rev_summed, rev_speed, rev_aligned, rev_thetas = (
-                self._process_single_direction(data_flipped)
-            )
-            # Flip results back to original spatial order
-            rev_per_pair = rev_per_pair[::-1, :, :].copy()
-            rev_summed = rev_summed[::-1, :].copy()
-            rev_speed = rev_speed[::-1, :, :].copy()
-        else:
-            rev_per_pair = None
-            rev_summed = None
-            rev_speed = None
-
-        n_pairs = self.Nch - 1
-        # Per-pair threshold: corr_threshold is per-pair, sum threshold = corr_threshold * n_pairs
-        summed_threshold = self.corr_threshold * n_pairs
 
         # Apply coupling correction if available
         if self.calibration_data is not None:
             fwd_summed = self.calibration_data.apply_coupling_correction(fwd_summed)
 
-        # --- Combine directions ---
-        if self.bidirectional_detection and rev_summed is not None:
-            fwd_det = fwd_summed >= summed_threshold
-            rev_det = rev_summed >= summed_threshold
-            # Direction mask: 1=forward, 2=reverse, 3=both
-            direction_mask = fwd_det.astype(int) + 2 * rev_det.astype(int)
-            # Combined GLRT: max from either direction
-            glrt_summed = np.maximum(fwd_summed, rev_summed)
-            detection_mask = fwd_det | rev_det
-        else:
-            detection_mask = fwd_summed >= summed_threshold
-            direction_mask = detection_mask.astype(int)
-            glrt_summed = fwd_summed
-
-        # --- Per-pair speed aggregation ---
-        n_sections = fwd_per_pair.shape[0]
-        combined_speed = np.full((n_sections, self.window_size), np.nan)
-
-        for s in range(n_sections):
-            # Use forward speed where forward is dominant, reverse where reverse is dominant
-            if self.bidirectional_detection and rev_per_pair is not None:
-                fwd_dominant = fwd_summed[s] >= rev_summed[s]
-                # Forward pair speeds for this section
-                fwd_s = compute_speed_from_pairs(
-                    np.abs(fwd_per_pair[s]), np.abs(fwd_speed[s]),
-                    self.min_speed, self.max_speed,
-                    self.speed_positive_glrt_only, self.speed_weighting,
-                )
-                rev_s = compute_speed_from_pairs(
-                    np.abs(rev_per_pair[s]), np.abs(rev_speed[s]),
-                    self.min_speed, self.max_speed,
-                    self.speed_positive_glrt_only, self.speed_weighting,
-                )
-                combined_speed[s] = np.where(fwd_dominant, fwd_s, rev_s)
-            else:
-                combined_speed[s] = compute_speed_from_pairs(
-                    np.abs(fwd_per_pair[s]), np.abs(fwd_speed[s]),
-                    self.min_speed, self.max_speed,
-                    self.speed_positive_glrt_only, self.speed_weighting,
-                )
-
-        # --- Speed quality filter ---
-        speed_quality_mask = detection_mask & (glrt_summed >= summed_threshold * self.speed_glrt_factor)
-        filtered_speed = np.where(speed_quality_mask, combined_speed, np.nan)
-
-        # Store intervals for counting (on full window, before edge trimming)
-        binary_filter = detection_mask.astype(float)
-        self._intervals_full = find_ind(binary_filter)
-
-        # Generate visualization if enabled and interval elapsed
+        # Generate visualization using forward results
         if self.visualizer is not None:
             current_time = time.time()
             if current_time - self.last_visualization_time >= self.visualization_interval:
                 try:
+                    viz_speed = np.nanmedian(fwd_filtered, axis=1, keepdims=True)
+                    summed_threshold = self.corr_threshold * (self.Nch - 1)
+                    det_mask = (fwd_summed >= summed_threshold).astype(float)
+                    viz_intervals = find_ind(det_mask)
                     self.visualizer.generate_waterfall(
-                        glrt_res=glrt_summed,
-                        filtered_speed=filtered_speed[:, np.newaxis, :],
-                        intervals_list=self._intervals_full,
+                        glrt_res=fwd_summed,
+                        filtered_speed=viz_speed,
+                        intervals_list=viz_intervals,
                         date_window=date_window,
                         calibration_data=self.calibration_data,
                         min_speed_kmh=self.min_speed,
@@ -634,27 +696,24 @@ class VehicleSpeedEstimator:
                 except Exception as e:
                     logger.error(f"Visualization generation failed: {e}")
 
-        # Trim edges for seamless output
-        trim_start = self.edge_trim
-        trim_end = self.window_size - self.edge_trim
+        # Yield forward results (direction=1)
+        yield from self._trim_and_yield(
+            fwd_summed, fwd_filtered, fwd_aligned,
+            date_window, date_window_ns, direction_value=1,
+        )
 
-        # filtered_speed is already 2D (sections, time) - expand to 3D for compat
-        # Downstream expects (sections, channels, time) for unaligned_speed
-        trimmed_filtered = filtered_speed[:, np.newaxis, trim_start:trim_end]
-        trimmed_glrt = glrt_summed[:, trim_start:trim_end]
-        aligned_np = fwd_aligned.detach().cpu().numpy()
-        trimmed_aligned = aligned_np[..., trim_start:trim_end]
-        trimmed_date = date_window[trim_start:trim_end]
-        trimmed_date_ns = date_window_ns[trim_start:trim_end] if date_window_ns is not None else None
-        trimmed_direction = direction_mask[:, trim_start:trim_end]
+        # --- Reverse pass (if bidirectional) ---
+        if self.bidirectional_detection:
+            data_flipped = data_window[::-1, :].copy()
+            rev_per_pair, rev_summed, rev_filtered, rev_aligned, rev_thetas = (
+                self._process_single_direction(data_flipped)
+            )
+            # Flip results back to original spatial order
+            rev_summed = rev_summed[::-1, :].copy()
+            rev_filtered = rev_filtered[::-1, :, :].copy()
 
-        # Shift interval indices to match trimmed arrays
-        self.intervals = []
-        for starts, ends in self._intervals_full:
-            shifted_starts = [s - trim_start for s in starts if s >= trim_start and s < trim_end]
-            shifted_ends = [min(e - trim_start, trim_end - trim_start) for s, e in zip(starts, ends) if s >= trim_start and s < trim_end]
-            self.intervals.append((shifted_starts, shifted_ends))
-
-        # unaligned_speed = filtered_speed (already in original spatial frame for per-pair aggregated)
-        yield trimmed_filtered, trimmed_filtered, trimmed_glrt, trimmed_aligned, trimmed_date, trimmed_date_ns, trimmed_direction
-
+            # Yield reverse results (direction=2)
+            yield from self._trim_and_yield(
+                rev_summed, rev_filtered, rev_aligned,
+                date_window, date_window_ns, direction_value=2,
+            )

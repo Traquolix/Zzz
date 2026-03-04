@@ -1,13 +1,12 @@
 """
 Kafka -> Django Channels bridge for real-time data.
 
-Consumes from Kafka topics (das.speeds, das.counts) and broadcasts
-to the same Channels groups as the simulation engine, so the frontend
-sees identical data shapes regardless of source.
+Consumes from Kafka topic (das.detections) and broadcasts to the same
+Channels groups as the simulation engine, so the frontend sees identical
+data shapes regardless of source.
 
 Data flows:
-  das.speeds -> time-shifted replay -> realtime_detections group
-  das.counts -> time-shifted replay -> realtime_counts group
+  das.detections -> time-shifted replay -> realtime_detections group
   ClickHouse fiber_incidents (polled) -> realtime_incidents group
   Infrastructure SHM (simulated) -> realtime_shm_readings group
 
@@ -15,9 +14,9 @@ Org-scoped: all broadcasts are routed to org-specific Channels groups
 via the fiber_org_map from FiberAssignment.
 
 Time-shifted replay:
-  AI engine inference produces 28-second windows as bursts. Instead of
+  AI engine inference produces 30-second windows as bursts. Instead of
   dumping them to the frontend, the ReplayBuffer replays messages at
-  the original 10 Hz rate with a fixed ~28s time offset. This creates
+  the original ~10 Hz rate with a fixed ~30s time offset. This creates
   a continuous stream that feels real-time.
 """
 
@@ -57,125 +56,55 @@ def _try_import_confluent_kafka():
 # MESSAGE TRANSFORMS
 # ============================================================================
 
-def _parse_speed_message(value: dict | None) -> dict | None:
-    """Parse Avro-deserialized speed message (already a dict)."""
+def _parse_detection_message(value: dict | None) -> dict | None:
+    """Parse Avro-deserialized detection message (already a dict)."""
     if value is None:
         return None
     if not isinstance(value, dict):
-        logger.warning('Speed message is not a dict: %s', type(value))
+        logger.warning('Detection message is not a dict: %s', type(value))
         return None
     return value
 
 
-def transform_speed_message(data: dict) -> list[dict]:
+def transform_detection_message(data: dict) -> list[dict]:
     """
-    Transform a parsed das.speeds message into frontend Detection[] shape.
+    Transform a parsed das.detections message into frontend Detection[] shape.
 
-    Kafka Avro schema (das.speeds):
-        { fiber_id, timestamp_ns, speeds: [(channel_number, speed), ...],
-          channel_start, ai_metadata }
+    Kafka Avro schema (das.detections):
+        { fiber_id, timestamp_ns, channel, speed_kmh, direction,
+          vehicle_count, n_cars, n_trucks, glrt_max, engine_version }
 
     Frontend Detection:
-        { fiberLine, channel, speed, count, direction, timestamp }
+        { fiberLine, channel, speed, count, nCars, nTrucks, direction, timestamp }
 
-    Speed sign convention: positive = direction 0, negative = direction 1.
-    Nearby channels (within 8) are grouped with count > 1.
+    Direction convention:
+        AI engine sends direction 1 (forward) / 2 (reverse).
+        Frontend expects direction 0 / 1.
+        Mapping: 1 -> 0, 2 -> 1, 0 -> 0 (unknown treated as forward).
     """
     fiber_id = data.get('fiber_id', '')
     timestamp_ns = data.get('timestamp_ns', 0)
-    speeds = data.get('speeds', [])
+    channel = data.get('channel', 0)
+    speed = data.get('speed_kmh', 0.0)
+    vehicle_count = data.get('vehicle_count', 1.0)
+    n_cars = data.get('n_cars', 0.0)
+    n_trucks = data.get('n_trucks', 0.0)
     timestamp_ms = timestamp_ns // 1_000_000
 
-    if not speeds:
-        return []
+    # Map AI engine direction (1=fwd, 2=rev) to frontend (0, 1)
+    raw_direction = data.get('direction', 0)
+    direction = max(0, raw_direction - 1)  # 1->0, 2->1, 0->0
 
-    # Group nearby channels (within 8 channels) -- same logic as simulation
-    sorted_speeds = sorted(speeds, key=lambda s: s[0] if isinstance(s, (list, tuple)) else s.get('channel_number', 0))
-    detections = []
-    processed = set()
-
-    for i, entry in enumerate(sorted_speeds):
-        if i in processed:
-            continue
-
-        if isinstance(entry, (list, tuple)):
-            ch, spd = entry[0], entry[1]
-        else:
-            ch = entry.get('channel_number', 0)
-            spd = entry.get('speed', 0.0)
-
-        # Find nearby entries
-        group = [(ch, spd)]
-        processed.add(i)
-        for j in range(i + 1, len(sorted_speeds)):
-            if j in processed:
-                continue
-            other = sorted_speeds[j]
-            if isinstance(other, (list, tuple)):
-                other_ch, other_spd = other[0], other[1]
-            else:
-                other_ch = other.get('channel_number', 0)
-                other_spd = other.get('speed', 0.0)
-
-            if abs(other_ch - ch) < 8:
-                group.append((other_ch, other_spd))
-                processed.add(j)
-            else:
-                break  # sorted, so no more nearby
-
-        avg_ch = sum(g[0] for g in group) / len(group)
-        avg_spd = sum(g[1] for g in group) / len(group)
-        direction = 0 if avg_spd >= 0 else 1
-
-        detections.append({
-            'fiberLine': f'{fiber_id}:{direction}',  # Directional ID matches frontend fiber.id
-            'channel': round(avg_ch),
-            'speed': round(abs(avg_spd), 1),
-            'count': len(group),
-            'direction': direction,
-            'timestamp': timestamp_ms,
-        })
-
-    return detections
-
-
-def transform_count_message(value: dict | None) -> tuple[dict, str, int] | None:
-    """
-    Transform an Avro-deserialized das.counts message into frontend VehicleCount shape.
-
-    Kafka Avro schema (das.counts):
-        { fiber_id, channel_start, channel_end, count_timestamp_ns,
-          vehicle_count, engine_version, model_type }
-
-    Frontend VehicleCount:
-        { fiberLine, channelStart, channelEnd, vehicleCount, timestamp }
-
-    Returns (count_data, section_key, count_timestamp_ns) or None.
-    """
-    if value is None or not isinstance(value, dict):
-        logger.warning('Count message is not a dict: %s', type(value))
-        return None
-
-    data = value
-
-    fiber_id = data.get('fiber_id', '')
-    channel_start = data.get('channel_start', 0)
-    channel_end = data.get('channel_end', 0)
-    count_timestamp_ns = data.get('count_timestamp_ns', 0)
-    vehicle_count = data.get('vehicle_count', 0.0)
-    timestamp_ms = count_timestamp_ns // 1_000_000
-
-    section_key = f'{fiber_id}:{channel_start}'
-
-    count_data = {
-        'fiberLine': fiber_id,
-        'channelStart': channel_start,
-        'channelEnd': channel_end,
-        'vehicleCount': round(float(vehicle_count), 1),
+    return [{
+        'fiberLine': f'{fiber_id}:{direction}',
+        'channel': int(channel),
+        'speed': round(abs(speed), 1),
+        'count': round(float(vehicle_count), 1),
+        'nCars': round(float(n_cars), 1),
+        'nTrucks': round(float(n_trucks), 1),
+        'direction': direction,
         'timestamp': timestamp_ms,
-    }
-
-    return count_data, section_key, count_timestamp_ns
+    }]
 
 
 def transform_incident_row(row: dict) -> dict:
@@ -311,11 +240,10 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
     Main async loop -- consumes from Kafka and broadcasts via Channels.
 
     Uses a ReplayBuffer to time-shift AI engine inference bursts into
-    continuous 10 Hz streams. Four data streams:
-    1. Detections: das.speeds -> replay buffer -> realtime_detections (10 Hz)
-    2. Counts: das.counts -> replay buffer -> realtime_counts (per inference)
-    3. Incidents: polled from ClickHouse fiber_incidents (every 5s)
-    4. SHM: generated from infrastructure config (every 1s)
+    continuous 10 Hz streams. Three data streams:
+    1. Detections: das.detections -> replay buffer -> realtime_detections (10 Hz)
+    2. Incidents: polled from ClickHouse fiber_incidents (every 5s)
+    3. SHM: generated from infrastructure config (every 1s)
     """
     from apps.realtime.replay_buffer import ReplayBuffer
 
@@ -366,10 +294,10 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
         'session.timeout.ms': 10000,
         'value.deserializer': avro_deserializer,
     })
-    consumer.subscribe(['das.speeds', 'das.counts'])
+    consumer.subscribe(['das.detections'])
 
     logger.info(
-        'Kafka bridge started (time-shifted replay): %s, topics: das.speeds, das.counts, %d org mappings',
+        'Kafka bridge started (time-shifted replay): %s, topic: das.detections, %d org mappings',
         bootstrap_servers, len(fiber_org_map),
     )
 
@@ -411,10 +339,8 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
                     topic = msg.topic()
                     from apps.shared.metrics import KAFKA_MESSAGES_CONSUMED
                     KAFKA_MESSAGES_CONSUMED.labels(topic=topic).inc()
-                    if topic == 'das.speeds':
-                        _handle_speed_message(msg.value(), replay_buffer)
-                    elif topic == 'das.counts':
-                        _handle_count_message(msg.value(), replay_buffer)
+                    if topic == 'das.detections':
+                        _handle_detection_message(msg.value(), replay_buffer)
 
             now = time.time()
 
@@ -474,31 +400,21 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
         logger.info('Kafka consumer closed.')
 
 
-def _handle_speed_message(value: bytes, replay_buffer) -> None:
-    """Parse speed message, transform, and ingest into replay buffer."""
-    data = _parse_speed_message(value)
+def _handle_detection_message(value: dict, replay_buffer) -> None:
+    """Parse detection message, transform, and ingest into replay buffer."""
+    data = _parse_detection_message(value)
     if data is None:
         return
 
     fiber_id = data.get('fiber_id', '')
     timestamp_ns = data.get('timestamp_ns', 0)
-    channel_start = data.get('channel_start', 0)
-    ai_metadata = data.get('ai_metadata', {})
-    time_index = ai_metadata.get('time_index', -1)
+    channel = data.get('channel', 0)
 
-    section_key = f'{fiber_id}:{channel_start}'
+    section_key = f'{fiber_id}:{channel}'
 
-    detections = transform_speed_message(data)
+    detections = transform_detection_message(data)
     if detections:
-        replay_buffer.ingest_speed(section_key, timestamp_ns, time_index, detections)
-
-
-def _handle_count_message(value: bytes, replay_buffer) -> None:
-    """Parse count message, transform, and ingest into replay buffer."""
-    result = transform_count_message(value)
-    if result is not None:
-        count_data, section_key, count_timestamp_ns = result
-        replay_buffer.ingest_count(section_key, count_timestamp_ns, count_data)
+        replay_buffer.ingest_detection(section_key, timestamp_ns, detections)
 
 
 async def _poll_incidents(channel_layer, known_incidents: dict, fiber_org_map: dict[str, list[str]]):

@@ -129,11 +129,14 @@ class TestTransformRow:
         base.update(overrides)
         return base
 
-    def test_output_shape_has_exactly_8_keys(self):
+    def test_output_shape_has_expected_keys(self):
         result = transform_row(self._make_row())
-        expected_keys = {'id', 'type', 'severity', 'fiberLine', 'channel', 'detectedAt', 'status', 'duration'}
+        expected_keys = {
+            'id', 'type', 'severity', 'fiberLine', 'channel', 'channelEnd',
+            'detectedAt', 'status', 'duration',
+            'speedBefore', 'speedDuring', 'speedDropPercent',
+        }
         assert set(result.keys()) == expected_keys
-        assert len(result) == 8
 
     def test_fiber_id_without_suffix_gets_normalized(self):
         """
@@ -234,7 +237,11 @@ class TestTransformSimulationIncident:
 
     def test_output_shape(self):
         result = transform_simulation_incident(self._FakeIncident())
-        expected_keys = {'id', 'type', 'severity', 'fiberLine', 'channel', 'detectedAt', 'status', 'duration'}
+        expected_keys = {
+            'id', 'type', 'severity', 'fiberLine', 'channel', 'channelEnd',
+            'detectedAt', 'status', 'duration',
+            'speedBefore', 'speedDuring', 'speedDropPercent',
+        }
         assert set(result.keys()) == expected_keys
 
     def test_fiber_line_gets_direction_suffix(self):

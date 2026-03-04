@@ -101,18 +101,26 @@ class TestIncidentSnapshot:
                 'channel_end': 110,
                 'timestamp_ns': 1717200000000000000,
             }],
-            # Speed hires data
+            # Detection hires data
             [
                 {
                     'fiber_id': 'fiber-carros',
                     'ch': 105,
                     'speed': 85.0,
+                    'direction': 1,
+                    'vehicle_count': 1,
+                    'n_cars': 1,
+                    'n_trucks': 0,
                     'timestamp': 1717200000000,
                 },
                 {
                     'fiber_id': 'fiber-carros',
                     'ch': 106,
-                    'speed': -72.5,
+                    'speed': 72.5,
+                    'direction': 2,
+                    'vehicle_count': 1,
+                    'n_cars': 0,
+                    'n_trucks': 1,
                     'timestamp': 1717200001000,
                 },
             ],

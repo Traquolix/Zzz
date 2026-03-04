@@ -1,5 +1,5 @@
 """
-Bulk data export views — CSV/JSON downloads for incidents, speeds, and counts.
+Bulk data export views — CSV/JSON downloads for incidents and detections.
 
 Features:
 - Automatic tier selection: hires (<48h), 1m (48h-90d), 1h (>90d)
@@ -174,8 +174,8 @@ class ExportIncidentsView(APIView):
         return response
 
 
-class ExportSpeedsView(APIView):
-    """GET /api/export/speeds — export speed data with automatic tier selection."""
+class ExportDetectionsView(APIView):
+    """GET /api/export/detections — export detection data with automatic tier selection."""
     permission_classes = [IsActiveUser]
     throttle_classes = [ExportThrottle]
 
@@ -198,8 +198,10 @@ class ExportSpeedsView(APIView):
             if tier == 'hires':
                 result = client.query(
                     """
-                    SELECT toString(ts) as ts, fiber_id, ch as channel, speed, lng, lat
-                    FROM sequoia.speed_hires
+                    SELECT toString(ts) as ts, fiber_id, ch as channel,
+                           direction, speed, vehicle_count, n_cars, n_trucks,
+                           lng, lat
+                    FROM sequoia.detection_hires
                     WHERE fiber_id = {fid:String}
                       AND ts >= {start:DateTime64(3)}
                       AND ts <= {end:DateTime64(3)}
@@ -212,13 +214,17 @@ class ExportSpeedsView(APIView):
                 result = client.query(
                     """
                     SELECT toString(ts) as ts, fiber_id, ch as channel,
+                           direction,
                            avgMerge(speed_avg_state) as speed_avg,
-                           countMerge(sample_count_state) as sample_count
-                    FROM sequoia.speed_1m
+                           sumMerge(count_sum_state) as vehicle_count,
+                           sumMerge(cars_sum_state) as n_cars,
+                           sumMerge(trucks_sum_state) as n_trucks,
+                           sumMerge(samples_state) as sample_count
+                    FROM sequoia.detection_1m
                     WHERE fiber_id = {fid:String}
                       AND ts >= {start:DateTime64(3)}
                       AND ts <= {end:DateTime64(3)}
-                    GROUP BY ts, fiber_id, ch
+                    GROUP BY ts, fiber_id, ch, direction
                     ORDER BY ts
                     LIMIT 500000
                     """,
@@ -228,13 +234,17 @@ class ExportSpeedsView(APIView):
                 result = client.query(
                     """
                     SELECT toString(ts) as ts, fiber_id, ch as channel,
+                           direction,
                            avgMerge(speed_avg_state) as speed_avg,
-                           countMerge(sample_count_state) as sample_count
-                    FROM sequoia.speed_1h
+                           sumMerge(count_sum_state) as vehicle_count,
+                           sumMerge(cars_sum_state) as n_cars,
+                           sumMerge(trucks_sum_state) as n_trucks,
+                           sumMerge(samples_state) as sample_count
+                    FROM sequoia.detection_1h
                     WHERE fiber_id = {fid:String}
                       AND ts >= {start:DateTime64(3)}
                       AND ts <= {end:DateTime64(3)}
-                    GROUP BY ts, fiber_id, ch
+                    GROUP BY ts, fiber_id, ch, direction
                     ORDER BY ts
                     LIMIT 500000
                     """,
@@ -254,51 +264,5 @@ class ExportSpeedsView(APIView):
             _stream_csv(columns, rows),
             content_type='text/csv',
         )
-        response['Content-Disposition'] = 'attachment; filename="speeds.csv"'
-        return response
-
-
-class ExportCountsView(APIView):
-    """GET /api/export/counts — export vehicle count data."""
-    permission_classes = [IsActiveUser]
-    throttle_classes = [ExportThrottle]
-
-    def get(self, request):
-        fiber_id, start, end, fmt, errors = _parse_params(request)
-        if errors:
-            return Response({'detail': '; '.join(errors)}, status=400)
-
-        if not _check_fiber_access(request.user, fiber_id):
-            return Response({'detail': 'Access denied for this fiber'}, status=403)
-
-        try:
-            client = get_client()
-            result = client.query(
-                """
-                SELECT toString(ts) as ts, fiber_id,
-                       channel_start, channel_end, vehicle_count
-                FROM sequoia.vehicle_counts
-                WHERE fiber_id = {fid:String}
-                  AND ts >= {start:DateTime64(3)}
-                  AND ts <= {end:DateTime64(3)}
-                ORDER BY ts
-                LIMIT 500000
-                """,
-                parameters={'fid': fiber_id, 'start': start, 'end': end},
-            )
-        except ClickHouseUnavailableError:
-            return Response({'detail': 'Analytics service temporarily unavailable'}, status=503)
-
-        columns = result.column_names
-        rows = result.result_rows
-
-        if fmt == 'json':
-            data = [dict(zip(columns, row)) for row in rows]
-            return JsonResponse(data, safe=False)
-
-        response = StreamingHttpResponse(
-            _stream_csv(columns, rows),
-            content_type='text/csv',
-        )
-        response['Content-Disposition'] = 'attachment; filename="counts.csv"'
+        response['Content-Disposition'] = 'attachment; filename="detections.csv"'
         return response

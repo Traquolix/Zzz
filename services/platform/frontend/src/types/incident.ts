@@ -6,9 +6,13 @@ export type Incident = {
     severity: 'low' | 'medium' | 'high' | 'critical'
     fiberLine: string      // which fiber
     channel: number        // which channel (array index)
+    channelEnd?: number
     detectedAt: string
     status: IncidentStatus
     duration?: number      // ms, for temporary incidents
+    speedBefore?: number | null
+    speedDuring?: number | null
+    speedDropPercent?: number | null
 }
 
 export type IncidentAction = {

@@ -179,8 +179,12 @@ class TestDASProcessorTransform:
             processor = DASProcessor()
             processor.logger = MagicMock()
             processor.tracer = MagicMock()
+            span_mock = MagicMock()
             processor.tracer.start_as_current_span = MagicMock(
-                return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock())
+                return_value=MagicMock(
+                    __enter__=MagicMock(return_value=span_mock),
+                    __exit__=MagicMock(return_value=False),
+                )
             )
 
             # Message overlaps section1 (channels 0-100)
@@ -228,8 +232,12 @@ class TestDASProcessorTransform:
             processor = DASProcessor()
             processor.logger = MagicMock()
             processor.tracer = MagicMock()
+            span_mock = MagicMock()
             processor.tracer.start_as_current_span = MagicMock(
-                return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock())
+                return_value=MagicMock(
+                    __enter__=MagicMock(return_value=span_mock),
+                    __exit__=MagicMock(return_value=False),
+                )
             )
 
             # Message channels 500-600 don't overlap any section (section1: 0-100, section2: 100-200)
@@ -300,8 +308,12 @@ class TestDASProcessorTransform:
             processor = DASProcessor()
             processor.logger = MagicMock()
             processor.tracer = MagicMock()
+            span_mock = MagicMock()
             processor.tracer.start_as_current_span = MagicMock(
-                return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock())
+                return_value=MagicMock(
+                    __enter__=MagicMock(return_value=span_mock),
+                    __exit__=MagicMock(return_value=False),
+                )
             )
 
             # Create a KafkaMessage with a mock Kafka message

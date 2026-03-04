@@ -25,14 +25,6 @@ function withErrorBoundary(element: React.ReactNode) {
 
 export const router = createBrowserRouter([
     {
-        path: '/prototype',
-        element: (
-            <Suspense fallback={<div className="w-screen h-screen bg-[#1a1a2e]" />}>
-                <Prototype />
-            </Suspense>
-        ),
-    },
-    {
         path: '/login',
         element: <Login />,
     },
@@ -51,6 +43,14 @@ export const router = createBrowserRouter([
                     { path: 'settings', element: withErrorBoundary(<Settings />) },
                     { path: 'admin', element: withErrorBoundary(<Admin />) },
                 ],
+            },
+            {
+                path: '/prototype',
+                element: (
+                    <Suspense fallback={<div className="w-screen h-screen bg-[#1a1a2e]" />}>
+                        <Prototype />
+                    </Suspense>
+                ),
             },
         ],
     },

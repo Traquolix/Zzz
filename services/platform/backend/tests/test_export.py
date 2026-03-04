@@ -1,7 +1,7 @@
 """
 Tests for bulk data export endpoints.
 
-Export endpoints provide CSV/JSON downloads of incidents, speeds, and counts
+Export endpoints provide CSV/JSON downloads of incidents and detections
 with automatic tier selection based on time range.
 """
 
@@ -84,17 +84,17 @@ class TestExportValidation(TestCase):
         self.client.force_authenticate(user=self.admin)
 
     def test_export_requires_fiber_id(self):
-        response = self.client.get('/api/export/speeds?start=2026-01-01&end=2026-01-02')
+        response = self.client.get('/api/export/detections?start=2026-01-01&end=2026-01-02')
         assert response.status_code == 400
 
     def test_export_requires_time_range(self):
-        response = self.client.get('/api/export/speeds?fiber_id=carros:0')
+        response = self.client.get('/api/export/detections?fiber_id=carros:0')
         assert response.status_code == 400
 
     def test_export_rejects_excessive_hires_range(self):
         """Hires export >7 days should be rejected."""
         response = self.client.get(
-            '/api/export/speeds?fiber_id=carros:0&start=2026-01-01&end=2026-01-20&tier=hires'
+            '/api/export/detections?fiber_id=carros:0&start=2026-01-01&end=2026-01-20&tier=hires'
         )
         assert response.status_code == 400
 
@@ -112,8 +112,8 @@ class TestExportTierSelection(TestCase):
         self.client = APIClient()
         self.client.force_authenticate(user=self.admin)
 
-    def test_export_speeds_uses_hires_for_short_range(self):
-        """Time range <=48h should query speed_hires table."""
+    def test_export_detections_uses_hires_for_short_range(self):
+        """Time range <=48h should query the detection_hires table."""
         mock_result = MagicMock()
         mock_result.column_names = ['ts', 'fiber_id', 'channel', 'speed']
         mock_result.result_rows = []
@@ -122,13 +122,13 @@ class TestExportTierSelection(TestCase):
 
         with patch('apps.monitoring.export_views.get_client', return_value=mock_client):
             self.client.get(
-                '/api/export/speeds?fiber_id=carros:0&start=2026-01-01T00:00:00&end=2026-01-01T12:00:00'
+                '/api/export/detections?fiber_id=carros:0&start=2026-01-01T00:00:00&end=2026-01-01T12:00:00'
             )
         query = mock_client.query.call_args[0][0]
-        assert 'speed_hires' in query
+        assert 'detection_hires' in query
 
-    def test_export_speeds_uses_1m_for_medium_range(self):
-        """Time range >48h <=90d should query speed_1m table."""
+    def test_export_detections_uses_1m_for_medium_range(self):
+        """Time range >48h <=90d should query detection_1m table."""
         mock_result = MagicMock()
         mock_result.column_names = ['ts', 'fiber_id', 'channel', 'speed_avg']
         mock_result.result_rows = []
@@ -137,13 +137,13 @@ class TestExportTierSelection(TestCase):
 
         with patch('apps.monitoring.export_views.get_client', return_value=mock_client):
             self.client.get(
-                '/api/export/speeds?fiber_id=carros:0&start=2026-01-01&end=2026-02-01'
+                '/api/export/detections?fiber_id=carros:0&start=2026-01-01&end=2026-02-01'
             )
         query = mock_client.query.call_args[0][0]
-        assert 'speed_1m' in query
+        assert 'detection_1m' in query
 
-    def test_export_speeds_uses_1h_for_long_range(self):
-        """Time range >90d should query speed_1h table."""
+    def test_export_detections_uses_1h_for_long_range(self):
+        """Time range >90d should query detection_1h table."""
         mock_result = MagicMock()
         mock_result.column_names = ['ts', 'fiber_id', 'channel', 'speed_avg']
         mock_result.result_rows = []
@@ -152,10 +152,10 @@ class TestExportTierSelection(TestCase):
 
         with patch('apps.monitoring.export_views.get_client', return_value=mock_client):
             self.client.get(
-                '/api/export/speeds?fiber_id=carros:0&start=2025-01-01&end=2026-01-01'
+                '/api/export/detections?fiber_id=carros:0&start=2025-01-01&end=2026-01-01'
             )
         query = mock_client.query.call_args[0][0]
-        assert 'speed_1h' in query
+        assert 'detection_1h' in query
 
 
 @pytest.mark.django_db
@@ -174,7 +174,7 @@ class TestExportOrgScoping(TestCase):
     def test_export_rejects_foreign_fiber(self):
         """Cannot export data for a fiber not assigned to your org."""
         response = self.client.get(
-            '/api/export/speeds?fiber_id=other-org-fiber:0&start=2026-01-01&end=2026-01-02'
+            '/api/export/detections?fiber_id=other-org-fiber:0&start=2026-01-01&end=2026-01-02'
         )
         assert response.status_code == 403
 

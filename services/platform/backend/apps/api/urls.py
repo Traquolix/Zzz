@@ -33,6 +33,9 @@ urlpatterns = [
     path('incidents/<str:incident_id>/snapshot', monitoring_views.IncidentSnapshotView.as_view(), name='incident-snapshot'),
     path('incidents/<str:incident_id>/actions', monitoring_views.IncidentActionView.as_view(), name='incident-actions'),
     path('infrastructure', monitoring_views.InfrastructureListView.as_view(), name='infrastructure'),
+    path('sections', monitoring_views.SectionListView.as_view(), name='sections'),
+    path('sections/<path:section_id>/history', monitoring_views.SectionHistoryView.as_view(), name='section-history'),
+    path('sections/<path:section_id>', monitoring_views.SectionDeleteView.as_view(), name='section-delete'),
     path('stats', monitoring_views.StatsView.as_view(), name='stats'),
     path('user/preferences', pref_views.UserPreferencesView.as_view(), name='user-preferences'),
 
@@ -52,8 +55,7 @@ urlpatterns = [
 
     # Export endpoints
     path('export/incidents', export_views.ExportIncidentsView.as_view(), name='export-incidents'),
-    path('export/speeds', export_views.ExportSpeedsView.as_view(), name='export-speeds'),
-    path('export/counts', export_views.ExportCountsView.as_view(), name='export-counts'),
+    path('export/detections', export_views.ExportDetectionsView.as_view(), name='export-detections'),
 
     # Admin endpoints
     path('admin/organizations', admin_views.OrganizationListView.as_view(), name='admin-organizations'),

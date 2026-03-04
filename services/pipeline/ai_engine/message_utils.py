@@ -6,7 +6,6 @@ and can be tested without mocking.
 
 from __future__ import annotations
 
-from collections import deque
 from dataclasses import dataclass, field
 from typing import List
 
@@ -14,7 +13,7 @@ import numpy as np
 
 # Version constants
 ENGINE_VERSION = "1.0"
-MODEL_TYPE_PEAK_DETECTION = "peak_detection"
+MODEL_TYPE_NEURAL_NETWORK = "neural_network"
 
 
 @dataclass
@@ -24,7 +23,6 @@ class ProcessingContext:
     channel_start: int = 0
     channel_step: int = 1
     timestamps_ns: List[int] = field(default_factory=list)
-    counting_buffer: deque = field(default_factory=lambda: deque(maxlen=1))
     logged_channel_example: bool = False
 
 
@@ -107,96 +105,42 @@ def messages_to_arrays(
 
 def create_speed_messages(
     fiber_id: str,
-    filtered_speeds: np.ndarray,
-    timestamps_ns: List[int],
+    detections: list[dict],
     ctx: ProcessingContext,
-    min_speed_kmh: float,
-    max_speed_kmh: float,
-    sampling_rate_hz: float,
     service_name: str,
     log_fn=None,
-    direction_mask: np.ndarray = None,
 ) -> List:
-    """Create speed messages from filtered speeds array."""
+    """Create speed messages from detection dicts.
+
+    Each detection produces one message with a single speed entry,
+    matching the notebook's interval-based detection extraction.
+
+    Args:
+        detections: List of dicts with keys:
+            section_idx, speed_kmh, direction, timestamp_ns, glrt_max
+        ctx: ProcessingContext with channel_start and channel_step
+    """
     from shared.message import Message
-    from shared.time_utils import current_time_nanoseconds, sample_duration_nanoseconds
+    from shared.time_utils import current_time_nanoseconds
 
     messages = []
-
-    if len(filtered_speeds.shape) == 3:
-        num_sections, num_channels, num_time_points = filtered_speeds.shape
-        total_spatial_points = num_sections * num_channels
-    else:
-        num_sections, num_time_points = filtered_speeds.shape
-        num_channels = 1
-        total_spatial_points = num_sections
-
     channel_start = ctx.channel_start
     channel_step = ctx.channel_step
-    total_measurements = 0
-    non_zero_measurements = 0
 
-    if not ctx.logged_channel_example:
-        ctx.logged_channel_example = True
-        example_channels = [
-            channel_start + (i * channel_step) for i in range(min(10, total_spatial_points))
-        ]
-        if log_fn:
-            log_fn(
-                f"Speed channel output example: first 10 channels = {example_channels} (step={channel_step})"
-            )
-
-    for time_idx in range(num_time_points):
-        if len(filtered_speeds.shape) == 3:
-            speeds_at_time = filtered_speeds[:, :, time_idx].flatten()
-        else:
-            speeds_at_time = filtered_speeds[:, time_idx]
-
-        speeds = []
-        for channel_idx, speed in enumerate(speeds_at_time):
-            total_measurements += 1
-            # Preserve sign for direction, but validate using absolute value
-            abs_speed = abs(speed) if not np.isnan(speed) else float("nan")
-            if not np.isnan(abs_speed) and min_speed_kmh <= abs_speed <= max_speed_kmh:
-                actual_channel = channel_start + (channel_idx * channel_step)
-                # Store signed speed to preserve direction
-                speeds.append({"channel_number": actual_channel, "speed": float(speed)})
-                non_zero_measurements += 1
-
-        if not speeds:
-            continue
-
-        if timestamps_ns and time_idx < len(timestamps_ns):
-            timestamp_ns = timestamps_ns[time_idx]
-        elif timestamps_ns:
-            last_ts = timestamps_ns[-1]
-            sample_duration = sample_duration_nanoseconds(sampling_rate_hz)
-            timestamp_ns = last_ts + ((time_idx - len(timestamps_ns) + 1) * sample_duration)
-        else:
-            timestamp_ns = current_time_nanoseconds()
-
-        # Compute dominant direction for this time index
-        direction = 0
-        if direction_mask is not None:
-            if len(direction_mask.shape) == 2:
-                dir_col = direction_mask[:, time_idx] if time_idx < direction_mask.shape[1] else np.zeros(direction_mask.shape[0])
-            else:
-                dir_col = direction_mask
-            # Most common non-zero direction
-            nonzero = dir_col[dir_col > 0]
-            if len(nonzero) > 0:
-                direction = int(np.median(nonzero))
+    for det in detections:
+        actual_channel = channel_start + (det["section_idx"] * channel_step)
+        timestamp_ns = det.get("timestamp_ns") or current_time_nanoseconds()
 
         payload = {
             "fiber_id": fiber_id,
             "timestamp_ns": timestamp_ns,
-            "speeds": speeds,
+            "speeds": [{"channel_number": actual_channel, "speed": det["speed_kmh"]}],
             "channel_start": channel_start,
-            "direction": direction,
+            "direction": det["direction"],
             "ai_metadata": {
                 "engine_version": ENGINE_VERSION,
-                "spatial_points": total_spatial_points,
-                "time_index": time_idx,
+                "spatial_points": 0,
+                "time_index": 0,
             },
         }
 
@@ -207,16 +151,81 @@ def create_speed_messages(
                 headers={
                     "source": "ai_engine",
                     "fiber_id": fiber_id,
-                    "time_idx": str(time_idx),
                     "engine_id": service_name,
                 },
             )
         )
 
-    if total_measurements > 0 and log_fn:
-        compression = (1 - non_zero_measurements / total_measurements) * 100
+    if log_fn:
+        n_fwd = sum(1 for d in detections if d["direction"] == 1)
+        n_rev = sum(1 for d in detections if d["direction"] == 2)
+        log_fn(f"Speed detections: {len(detections)} total ({n_fwd} fwd, {n_rev} rev)")
+
+    return messages
+
+
+def create_detection_messages(
+    fiber_id: str,
+    detections: list[dict],
+    ctx: ProcessingContext,
+    service_name: str,
+    log_fn=None,
+) -> List:
+    """Create unified detection messages (speed + count + vehicle type).
+
+    Each detection produces one message with speed, vehicle count, and
+    car/truck classification — all in a single Kafka record.
+
+    Args:
+        detections: List of dicts with keys:
+            section_idx, speed_kmh, direction, timestamp_ns, glrt_max,
+            vehicle_count, n_cars, n_trucks
+        ctx: ProcessingContext with channel_start and channel_step
+    """
+    from shared.message import Message
+    from shared.time_utils import current_time_nanoseconds
+
+    messages = []
+    channel_start = ctx.channel_start
+    channel_step = ctx.channel_step
+
+    for det in detections:
+        actual_channel = channel_start + (det["section_idx"] * channel_step)
+        timestamp_ns = det.get("timestamp_ns") or current_time_nanoseconds()
+
+        payload = {
+            "fiber_id": fiber_id,
+            "timestamp_ns": timestamp_ns,
+            "channel": actual_channel,
+            "speed_kmh": det["speed_kmh"],
+            "direction": det["direction"],
+            "vehicle_count": det.get("vehicle_count", 1.0),
+            "n_cars": det.get("n_cars", 1.0),
+            "n_trucks": det.get("n_trucks", 0.0),
+            "glrt_max": det.get("glrt_max", 0.0),
+            "engine_version": ENGINE_VERSION,
+        }
+
+        messages.append(
+            Message(
+                id=fiber_id,
+                payload=payload,
+                headers={
+                    "source": "ai_engine",
+                    "fiber_id": fiber_id,
+                    "engine_id": service_name,
+                },
+                output_id="default",
+            )
+        )
+
+    if log_fn:
+        n_fwd = sum(1 for d in detections if d["direction"] == 1)
+        n_rev = sum(1 for d in detections if d["direction"] == 2)
+        total_count = sum(d.get("vehicle_count", 1) for d in detections)
         log_fn(
-            f"Speed filtering: {non_zero_measurements}/{total_measurements} ({compression:.1f}% reduction)"
+            f"Detections: {len(detections)} intervals ({n_fwd} fwd, {n_rev} rev), "
+            f"{total_count:.0f} vehicles total"
         )
 
     return messages
@@ -303,7 +312,7 @@ def create_count_messages(
                         "n_cars": float(n_cars),
                         "n_trucks": float(n_trucks),
                         "engine_version": ENGINE_VERSION,
-                        "model_type": MODEL_TYPE_PEAK_DETECTION,
+                        "model_type": MODEL_TYPE_NEURAL_NETWORK,
                     },
                     headers={
                         "source": "ai_engine_count",

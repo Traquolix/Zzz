@@ -33,6 +33,12 @@ from apps.monitoring.incident_service import (
     _ensure_directional_fiber_id,
     strip_directional_suffix,
 )
+from apps.monitoring.section_service import (
+    query_sections,
+    insert_section,
+    delete_section,
+    query_section_history,
+)
 from apps.monitoring.workflow import (
     validate_transition,
     get_current_status,
@@ -101,7 +107,11 @@ class IncidentListView(APIView):
             # Fetch one extra to detect if there's a next page
             incidents = incident_query_recent(fiber_ids=fiber_ids, hours=24, limit=limit + 1)
         except ClickHouseUnavailableError:
-            # In simulation mode, fall back to simulation cache
+            incidents = None
+
+        # Simulation keeps incidents in memory only — fall back when
+        # ClickHouse is unavailable or returned no results.
+        if not incidents:
             from apps.realtime.simulation_manager import SimulationManager
             if SimulationManager.instance().is_running:
                 try:
@@ -113,10 +123,11 @@ class IncidentListView(APIView):
                         return Response(result)
                 except ImportError:
                     pass
-            return Response(
-                {'detail': 'ClickHouse unavailable', 'code': 'clickhouse_unavailable'},
-                status=503,
-            )
+            if incidents is None:
+                return Response(
+                    {'detail': 'ClickHouse unavailable', 'code': 'clickhouse_unavailable'},
+                    status=503,
+                )
 
         has_more = len(incidents) > limit
         page = incidents[:limit]
@@ -136,7 +147,7 @@ class IncidentSnapshotView(APIView):
     Org-scoped: verifies the incident's fiber belongs to the user's org.
 
     Note: snapshots are empty in simulation mode because the simulation engine
-    does not write to the speed_hires ClickHouse table. Snapshots require live
+    does not write to the detection_hires ClickHouse table. Snapshots require live
     pipeline data flowing through Kafka -> ClickHouse.
     """
     permission_classes = [IsActiveUser]
@@ -179,11 +190,13 @@ class IncidentSnapshotView(APIView):
         ts_ns = incident['timestamp_ns']
 
         try:
-            speed_rows = query(
+            detection_rows = query(
                 """
                 SELECT
-                    fiber_id, ch, speed, toUnixTimestamp64Milli(ts) AS timestamp
-                FROM sequoia.speed_hires
+                    fiber_id, ch, speed, direction,
+                    vehicle_count, n_cars, n_trucks,
+                    toUnixTimestamp64Milli(ts) AS timestamp
+                FROM sequoia.detection_hires
                 WHERE fiber_id = {fid:String}
                   AND ch BETWEEN {ch_min:UInt16} AND {ch_max:UInt16}
                   AND ts BETWEEN fromUnixTimestamp64Nano({ts_start:UInt64})
@@ -203,14 +216,18 @@ class IncidentSnapshotView(APIView):
             return Response({'detail': 'ClickHouse unavailable', 'code': 'clickhouse_unavailable'}, status=503)
 
         detections = []
-        for row in speed_rows:
-            speed = row['speed']
+        for row in detection_rows:
+            # Map AI engine direction (1=fwd, 2=rev) to frontend (0, 1)
+            raw_direction = row.get('direction', 0)
+            direction = max(0, raw_direction - 1)  # 1->0, 2->1, 0->0
             detections.append({
-                'fiberLine': _ensure_directional_fiber_id(row['fiber_id']),
+                'fiberLine': f"{row['fiber_id']}:{direction}",
                 'channel': row['ch'],
-                'speed': abs(speed),
-                'count': 1,
-                'direction': 0 if speed >= 0 else 1,
+                'speed': abs(row['speed']),
+                'count': row.get('vehicle_count', 1),
+                'nCars': row.get('n_cars', 0),
+                'nTrucks': row.get('n_trucks', 0),
+                'direction': direction,
                 'timestamp': row['timestamp'],
             })
 
@@ -432,7 +449,7 @@ class StatsView(APIView):
                     recent_rows = query_scalar(
                         """
                         SELECT count() / 10
-                        FROM sequoia.speed_hires
+                        FROM sequoia.detection_hires
                         WHERE ts >= now() - INTERVAL 10 SECOND
                           AND fiber_id IN {fids:Array(String)}
                         """,
@@ -441,8 +458,8 @@ class StatsView(APIView):
 
                     active_vehicles = query_scalar(
                         """
-                        SELECT coalesce(sum(count), 0)
-                        FROM sequoia.count_hires
+                        SELECT coalesce(sum(vehicle_count), 0)
+                        FROM sequoia.detection_hires
                         WHERE ts >= (now() - toIntervalSecond(30))
                           AND fiber_id IN {fids:Array(String)}
                         """,
@@ -463,13 +480,13 @@ class StatsView(APIView):
 
                 recent_rows = query_scalar("""
                     SELECT count() / 10
-                    FROM sequoia.speed_hires
+                    FROM sequoia.detection_hires
                     WHERE ts >= now() - INTERVAL 10 SECOND
                 """) or 0
 
                 active_vehicles = query_scalar("""
-                    SELECT coalesce(sum(count), 0)
-                    FROM sequoia.count_hires
+                    SELECT coalesce(sum(vehicle_count), 0)
+                    FROM sequoia.detection_hires
                     WHERE ts >= (now() - toIntervalSecond(30))
                 """) or 0
 
@@ -492,6 +509,182 @@ class StatsView(APIView):
         }
         django_cache.set(cache_key, data, STATS_CACHE_TTL)
         return Response(data)
+
+
+class SectionListView(APIView):
+    """
+    GET  /api/sections — list active monitored sections.
+    POST /api/sections — create a new monitored section.
+
+    Org-scoped via fiber assignment.
+    """
+    permission_classes = [IsActiveUser]
+
+    def get(self, request):
+        fiber_ids = _get_fiber_ids_or_none(request.user)
+        if fiber_ids is not None and not fiber_ids:
+            return Response({'results': []})
+
+        try:
+            sections = query_sections(fiber_ids=fiber_ids)
+        except ClickHouseUnavailableError:
+            return Response(
+                {'detail': 'ClickHouse unavailable', 'code': 'clickhouse_unavailable'},
+                status=503,
+            )
+
+        return Response({'results': sections})
+
+    def post(self, request):
+        fiber_id = request.data.get('fiberId')
+        name = request.data.get('name')
+        channel_start = request.data.get('channelStart')
+        channel_end = request.data.get('channelEnd')
+
+        if not all([fiber_id, name, channel_start is not None, channel_end is not None]):
+            return Response(
+                {'detail': 'Missing required fields: fiberId, name, channelStart, channelEnd', 'code': 'validation_error'},
+                status=400,
+            )
+
+        try:
+            channel_start = int(channel_start)
+            channel_end = int(channel_end)
+        except (ValueError, TypeError):
+            return Response(
+                {'detail': 'channelStart and channelEnd must be integers', 'code': 'validation_error'},
+                status=400,
+            )
+
+        # Org-scoping: verify the fiber belongs to user's org
+        fiber_ids = _get_fiber_ids_or_none(request.user)
+        if fiber_ids is not None:
+            plain_fiber_id = strip_directional_suffix(fiber_id)
+            if plain_fiber_id not in fiber_ids:
+                return Response(
+                    {'detail': 'Fiber not found', 'code': 'not_found'},
+                    status=404,
+                )
+
+        try:
+            section = insert_section(
+                fiber_id=fiber_id,
+                name=name,
+                channel_start=channel_start,
+                channel_end=channel_end,
+                user=str(request.user.id) if hasattr(request.user, 'id') else '',
+            )
+        except ClickHouseUnavailableError:
+            return Response(
+                {'detail': 'ClickHouse unavailable', 'code': 'clickhouse_unavailable'},
+                status=503,
+            )
+
+        return Response(section, status=201)
+
+
+class SectionDeleteView(APIView):
+    """
+    DELETE /api/sections/<id> — soft-delete a monitored section.
+
+    Org-scoped: verifies the section's fiber belongs to the user's org.
+    """
+    permission_classes = [IsActiveUser]
+
+    def delete(self, request, section_id):
+        # Look up the section to get its fiber_id for org-scoping
+        try:
+            sections = query_sections()
+        except ClickHouseUnavailableError:
+            return Response(
+                {'detail': 'ClickHouse unavailable', 'code': 'clickhouse_unavailable'},
+                status=503,
+            )
+
+        section = next((s for s in sections if s['id'] == section_id), None)
+        if not section:
+            return Response(
+                {'detail': 'Section not found', 'code': 'not_found'},
+                status=404,
+            )
+
+        # Org-scoping
+        fiber_ids = _get_fiber_ids_or_none(request.user)
+        if fiber_ids is not None:
+            if strip_directional_suffix(section['fiberId']) not in fiber_ids:
+                return Response(
+                    {'detail': 'Section not found', 'code': 'not_found'},
+                    status=404,
+                )
+
+        try:
+            delete_section(section_id, section['fiberId'])
+        except ClickHouseUnavailableError:
+            return Response(
+                {'detail': 'ClickHouse unavailable', 'code': 'clickhouse_unavailable'},
+                status=503,
+            )
+
+        return Response(status=204)
+
+
+class SectionHistoryView(APIView):
+    """
+    GET /api/sections/<id>/history?minutes=60 — speed time-series for a section.
+
+    Aggregates speed_1m data over the section's channel range.
+    """
+    permission_classes = [IsActiveUser]
+
+    def get(self, request, section_id):
+        try:
+            minutes = min(int(request.query_params.get('minutes', 60)), 1440)
+        except (ValueError, TypeError):
+            minutes = 60
+
+        # Look up the section
+        try:
+            sections = query_sections()
+        except ClickHouseUnavailableError:
+            return Response(
+                {'detail': 'ClickHouse unavailable', 'code': 'clickhouse_unavailable'},
+                status=503,
+            )
+
+        section = next((s for s in sections if s['id'] == section_id), None)
+        if not section:
+            return Response(
+                {'detail': 'Section not found', 'code': 'not_found'},
+                status=404,
+            )
+
+        # Org-scoping
+        fiber_ids = _get_fiber_ids_or_none(request.user)
+        if fiber_ids is not None:
+            if strip_directional_suffix(section['fiberId']) not in fiber_ids:
+                return Response(
+                    {'detail': 'Section not found', 'code': 'not_found'},
+                    status=404,
+                )
+
+        try:
+            history = query_section_history(
+                fiber_id=section['fiberId'],
+                channel_start=section['channelStart'],
+                channel_end=section['channelEnd'],
+                minutes=minutes,
+            )
+        except ClickHouseUnavailableError:
+            return Response(
+                {'detail': 'ClickHouse unavailable', 'code': 'clickhouse_unavailable'},
+                status=503,
+            )
+
+        return Response({
+            'sectionId': section_id,
+            'minutes': minutes,
+            'points': history,
+        })
 
 
 class SpectralDataView(APIView):

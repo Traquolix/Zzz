@@ -13,9 +13,14 @@ interface Props {
     data: TimeSeriesPoint[]
     metric: 'speed' | 'flow' | 'occupancy'
     config: { label: string; unit: string; color: string }
+    timeRange?: string
 }
 
-export default function TimeSeriesChartInner({ data, metric, config }: Props) {
+export default function TimeSeriesChartInner({ data, metric, config, timeRange }: Props) {
+    const stripSeconds = timeRange === '15m' || timeRange === '1h'
+    const tickFormatter = stripSeconds
+        ? (value: string) => value?.slice(0, 5) // "HH:MM:SS" → "HH:MM"
+        : undefined
     return (
         <div className="h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
@@ -26,7 +31,8 @@ export default function TimeSeriesChartInner({ data, metric, config }: Props) {
                         tick={{ fill: '#64748b', fontSize: 10 }}
                         tickLine={false}
                         axisLine={false}
-                        interval="preserveStartEnd"
+                        interval={Math.max(0, Math.floor(data.length / 6) - 1)}
+                        tickFormatter={tickFormatter}
                     />
                     <YAxis
                         tick={{ fill: '#64748b', fontSize: 10 }}
@@ -52,6 +58,7 @@ export default function TimeSeriesChartInner({ data, metric, config }: Props) {
                         strokeWidth={1.5}
                         dot={false}
                         activeDot={{ r: 2.5, fill: config.color }}
+                        isAnimationActive={false}
                     />
                 </LineChart>
             </ResponsiveContainer>
