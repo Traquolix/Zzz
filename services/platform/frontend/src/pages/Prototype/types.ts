@@ -120,6 +120,7 @@ export interface ProtoState {
     showStructureLabels: boolean
     showIncidentsOnMap: boolean
     hideFibersInOverview: boolean
+    show3DBuildings: boolean
     selectedChannel: SelectedChannel | null
 }
 
@@ -153,3 +154,4 @@ export type ProtoAction =
     | { type: 'TOGGLE_HIDE_RESOLVED' }
     | { type: 'TOGGLE_INCIDENTS_ON_MAP' }
     | { type: 'TOGGLE_HIDE_FIBERS_OVERVIEW' }
+    | { type: 'TOGGLE_3D_BUILDINGS' }

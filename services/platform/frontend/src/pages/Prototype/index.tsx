@@ -1,5 +1,5 @@
 import { useReducer, useEffect, useCallback, useRef, useState, useMemo } from 'react'
-import type { ProtoState, ProtoAction, Incident } from './types'
+import type { ProtoState, ProtoAction, Incident, PendingPoint } from './types'
 import { fibers, defaultSpeedThresholds, buildThresholdLookup, resolveDirectionalFiber, channelToCoord } from './data'
 import { PrototypeMap, type PrototypeMapHandle } from './components/PrototypeMap'
 import { StatusBar } from './components/StatusBar'
@@ -75,6 +75,7 @@ const initialState: ProtoState = {
     showStructureLabels: false,
     showIncidentsOnMap: true,
     hideFibersInOverview: false,
+    show3DBuildings: false,
     selectedChannel: null,
 }
 
@@ -243,6 +244,8 @@ function reducer(state: ProtoState, action: ProtoAction): ProtoState {
             return { ...state, showIncidentsOnMap: !state.showIncidentsOnMap }
         case 'TOGGLE_HIDE_FIBERS_OVERVIEW':
             return { ...state, hideFibersInOverview: !state.hideFibersInOverview }
+        case 'TOGGLE_3D_BUILDINGS':
+            return { ...state, show3DBuildings: !state.show3DBuildings }
         default:
             return state
     }
@@ -291,6 +294,29 @@ export function Prototype() {
     const handleIncidentClick = useCallback((id: string) => {
         dispatch({ type: 'SELECT_INCIDENT', id })
     }, [])
+
+    const handleMapClick = useCallback(() => {
+        dispatch({ type: 'CLEAR_SELECTION' })
+    }, [])
+
+    const handleFiberClick = useCallback((point: PendingPoint) => {
+        dispatch({ type: 'SET_PENDING_POINT', point })
+    }, [])
+
+    const handleSectionComplete = useCallback((fiberId: string, startChannel: number, endChannel: number) => {
+        dispatch({ type: 'OPEN_NAMING_DIALOG', fiberId, startChannel, endChannel })
+    }, [])
+
+    const handleStructureClick = useCallback((id: string) => {
+        dispatch({ type: 'SELECT_STRUCTURE', id })
+    }, [])
+
+    const handleChannelClick = useCallback((point: PendingPoint) => {
+        dispatch({ type: 'SELECT_CHANNEL', channel: point })
+    }, [])
+
+    const emptyIncidents = useMemo(() => [] as Incident[], [])
+    const visibleIncidents = state.showIncidentsOnMap ? state.incidents : emptyIncidents
 
     // FlyTo on incident selection
     useEffect(() => {
@@ -387,17 +413,15 @@ export function Prototype() {
             <div className="absolute inset-0">
                 <PrototypeMap
                     ref={mapRef}
-                    incidents={state.showIncidentsOnMap ? state.incidents : []}
+                    incidents={visibleIncidents}
                     onIncidentClick={handleIncidentClick}
-                    onMapClick={() => dispatch({ type: 'CLEAR_SELECTION' })}
+                    onMapClick={handleMapClick}
                     sectionCreationMode={state.sectionCreationMode}
                     pendingPoint={state.pendingPoint}
                     sections={state.sections}
                     selectedSectionId={state.selectedSectionId}
-                    onFiberClick={(point) => dispatch({ type: 'SET_PENDING_POINT', point })}
-                    onSectionComplete={(fiberId, startChannel, endChannel) =>
-                        dispatch({ type: 'OPEN_NAMING_DIALOG', fiberId, startChannel, endChannel })
-                    }
+                    onFiberClick={handleFiberClick}
+                    onSectionComplete={handleSectionComplete}
                     buildVehicleGeoJSON={buildGeoJSON}
                     tickAndCollect={tickAndCollect}
                     displayMode={state.displayMode}
@@ -410,10 +434,11 @@ export function Prototype() {
                     showStructuresOnMap={state.showStructuresOnMap}
                     showStructureLabels={state.showStructureLabels}
                     selectedStructureId={state.selectedStructureId}
-                    onStructureClick={(id) => dispatch({ type: 'SELECT_STRUCTURE', id })}
-                    onChannelClick={(point) => dispatch({ type: 'SELECT_CHANNEL', channel: point })}
+                    onStructureClick={handleStructureClick}
+                    onChannelClick={handleChannelClick}
                     sidebarOpen={state.sidebarOpen}
                     hideFibersInOverview={state.hideFibersInOverview}
+                    show3DBuildings={state.show3DBuildings}
                 />
 
                 {/* Section creation banner */}

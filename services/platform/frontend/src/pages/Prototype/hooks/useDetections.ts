@@ -26,26 +26,42 @@ export function useDetections() {
     const lastBuildRef = useRef(0)
 
     useEffect(() => {
+        // Pre-allocate a reusable key buffer to avoid per-detection string allocation
+        const keyParts: string[] = ['', ':', '']
+
         const unsub = subscribe('detections', (data: unknown) => {
             const detections = parseDetections(data)
+            if (detections.length === 0) return
             const now = Date.now()
 
             for (const d of detections) {
                 const coord = channelToCoord(d.fiberLine, d.channel)
                 if (!coord) continue
 
-                const key = `${d.fiberLine}:${d.channel}`
-                dotsRef.current.set(key, {
-                    lng: coord[0],
-                    lat: coord[1],
-                    speed: d.speed,
-                    ts: now,
-                    fiberLine: d.fiberLine,
-                    channel: d.channel,
-                })
+                keyParts[0] = d.fiberLine
+                keyParts[2] = String(d.channel)
+                const key = keyParts.join('')
+
+                const existing = dotsRef.current.get(key)
+                if (existing) {
+                    // Reuse existing object to avoid allocation
+                    existing.lng = coord[0]
+                    existing.lat = coord[1]
+                    existing.speed = d.speed
+                    existing.ts = now
+                } else {
+                    dotsRef.current.set(key, {
+                        lng: coord[0],
+                        lat: coord[1],
+                        speed: d.speed,
+                        ts: now,
+                        fiberLine: d.fiberLine,
+                        channel: d.channel,
+                    })
+                }
             }
 
-            if (detections.length > 0) dirtyRef.current = true
+            dirtyRef.current = true
         })
 
         return unsub

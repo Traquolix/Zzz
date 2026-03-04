@@ -339,7 +339,7 @@ export function SidePanel({ state, dispatch, connected, liveStats, liveSeriesDat
                             : <SectionList sections={sections} dispatch={dispatch} liveStats={liveStats} liveSeriesData={liveSeriesData} metric={sectionMetric} fiberColors={fiberColors} onHighlightSection={onHighlightSection} onClearHighlight={onClearHighlight} />
                     )}
                     {activeTab === 'settings' && (
-                        <SettingsPanel fiberThresholds={state.fiberThresholds} fiberColors={fiberColors} dispatch={dispatch} onHighlightFiber={onHighlightFiber} onClearHighlight={onClearHighlight} />
+                        <SettingsPanel fiberThresholds={state.fiberThresholds} fiberColors={fiberColors} dispatch={dispatch} onHighlightFiber={onHighlightFiber} onClearHighlight={onClearHighlight} show3DBuildings={state.show3DBuildings} />
                     )}
                     {activeTab === 'channel' && selectedChannel && (
                         <ChannelDetail
@@ -1201,12 +1201,13 @@ function FiberColorDot({ direction, color, isPickerOpen, onTogglePicker, onSelec
     )
 }
 
-function SettingsPanel({ fiberThresholds, fiberColors, dispatch, onHighlightFiber, onClearHighlight }: {
+function SettingsPanel({ fiberThresholds, fiberColors, dispatch, onHighlightFiber, onClearHighlight, show3DBuildings }: {
     fiberThresholds: Record<string, SpeedThresholds>
     fiberColors: Record<string, string>
     dispatch: React.Dispatch<ProtoAction>
     onHighlightFiber?: (fiberId: string) => void
     onClearHighlight?: () => void
+    show3DBuildings: boolean
 }) {
     const [colorPickerOpen, setColorPickerOpen] = useState<string | null>(null)
 
@@ -1223,6 +1224,22 @@ function SettingsPanel({ fiberThresholds, fiberColors, dispatch, onHighlightFibe
 
     return (
         <div className="px-4 py-4 flex flex-col gap-5">
+            {/* Map display toggles */}
+            <div className="flex flex-col gap-2">
+                <span className="text-xs text-[var(--proto-text-secondary)]">Map</span>
+                <label className="flex items-center justify-between cursor-pointer group">
+                    <span className="text-sm text-[var(--proto-text)]">3D Buildings</span>
+                    <button
+                        onClick={() => dispatch({ type: 'TOGGLE_3D_BUILDINGS' })}
+                        className={`relative w-8 h-[18px] rounded-full transition-colors ${show3DBuildings ? 'bg-[var(--proto-accent)]' : 'bg-[var(--proto-border)]'}`}
+                    >
+                        <span className={`absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform ${show3DBuildings ? 'translate-x-[14px]' : ''}`} />
+                    </button>
+                </label>
+            </div>
+
+            <div className="h-px bg-[var(--proto-border)]" />
+
             <div className="text-xs text-[var(--proto-text-secondary)]">
                 Default speed thresholds per fiber. Sections inherit these unless overridden.
             </div>

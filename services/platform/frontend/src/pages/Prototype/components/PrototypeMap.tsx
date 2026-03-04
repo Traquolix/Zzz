@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react'
+import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle, memo } from 'react'
 import mapboxgl from 'mapbox-gl'
 import { MapboxOverlay } from '@deck.gl/mapbox'
 import { SimpleMeshLayer } from '@deck.gl/mesh-layers'
@@ -45,6 +45,7 @@ interface PrototypeMapProps {
     onChannelClick?: (point: PendingPoint) => void
     sidebarOpen?: boolean
     hideFibersInOverview?: boolean
+    show3DBuildings?: boolean
 }
 
 function findNearestFiberPoint(lngLat: [number, number], maxDistDeg = 0.003) {
@@ -77,7 +78,7 @@ const getOrientation = (d: VehiclePosition): [number, number, number] => [0, -d.
 const getScale = (): [number, number, number] => [3, 6, 2]
 
 
-export const PrototypeMap = forwardRef<PrototypeMapHandle, PrototypeMapProps>(function PrototypeMap({
+export const PrototypeMap = memo(forwardRef<PrototypeMapHandle, PrototypeMapProps>(function PrototypeMap({
     incidents,
     onIncidentClick,
     onMapClick,
@@ -103,6 +104,7 @@ export const PrototypeMap = forwardRef<PrototypeMapHandle, PrototypeMapProps>(fu
     onChannelClick,
     sidebarOpen,
     hideFibersInOverview,
+    show3DBuildings,
 }, ref) {
     const containerRef = useRef<HTMLDivElement>(null)
     const mapRef = useRef<mapboxgl.Map | null>(null)
@@ -323,7 +325,8 @@ export const PrototypeMap = forwardRef<PrototypeMapHandle, PrototypeMapProps>(fu
             center: MAP_CENTER,
             zoom: MAP_ZOOM,
             pitch: 30,
-            antialias: true,
+            antialias: false,
+            fadeDuration: 0,
         })
 
         mapRef.current = map
@@ -506,6 +509,48 @@ export const PrototypeMap = forwardRef<PrototypeMapHandle, PrototypeMapProps>(fu
                 },
             })
 
+            // ── 3D buildings layer (initially hidden) ─────────────────
+            // Find the first symbol layer to insert buildings beneath labels
+            const layers = map.getStyle().layers ?? []
+            let labelLayerId: string | undefined
+            for (const layer of layers) {
+                if (layer.type === 'symbol' && (layer as { layout?: { 'text-field'?: unknown } }).layout?.['text-field']) {
+                    labelLayerId = layer.id
+                    break
+                }
+            }
+
+            map.addLayer({
+                id: '3d-buildings',
+                source: 'composite',
+                'source-layer': 'building',
+                filter: ['==', 'extrude', 'true'],
+                type: 'fill-extrusion',
+                minzoom: 12.5,
+                paint: {
+                    'fill-extrusion-color': '#aaa',
+                    'fill-extrusion-height': [
+                        'interpolate', ['linear'], ['zoom'],
+                        12.5, 0,
+                        13, ['get', 'height'],
+                    ],
+                    'fill-extrusion-base': [
+                        'interpolate', ['linear'], ['zoom'],
+                        12.5, 0,
+                        13, ['get', 'min_height'],
+                    ],
+                    'fill-extrusion-opacity': [
+                        'interpolate', ['linear'], ['zoom'],
+                        12.5, 0,
+                        13, 0.4,
+                        15, 0.6,
+                    ],
+                },
+                layout: {
+                    visibility: 'none',
+                },
+            }, labelLayerId)
+
             // ── Zoom listener for overview mode (logical only, visuals are zoom-interpolated) ──
             const OVERVIEW_ZOOM_THRESHOLD = 12.5
 
@@ -523,6 +568,17 @@ export const PrototypeMap = forwardRef<PrototypeMapHandle, PrototypeMapProps>(fu
                     if (deckOverlayRef.current) {
                         try { deckOverlayRef.current.setProps({ layers: [] }) } catch { /* not ready */ }
                     }
+                }
+
+                // Hide/show markers in overview mode
+                const vis = shouldOverview ? 'none' : ''
+                markersRef.current.forEach(m => { m.getElement().style.display = vis })
+                structureMarkersRef.current.forEach(m => { m.getElement().style.display = vis })
+
+                // Hide/show map layers in overview mode
+                const layerVis = shouldOverview ? 'none' : 'visible'
+                for (const lid of ['vehicle-dots', 'pending-section-layer', 'pending-point-layer']) {
+                    if (map.getLayer(lid)) map.setLayoutProperty(lid, 'visibility', layerVis)
                 }
 
                 // Toggle fiber visibility based on overview + hideFibers setting
@@ -608,33 +664,61 @@ export const PrototypeMap = forwardRef<PrototypeMapHandle, PrototypeMapProps>(fu
                 })
             })
 
-            // ── deck.gl overlay ──────────────────────────────────────
-            const deckOverlay = new MapboxOverlay({
-                interleaved: true,
-                layers: [],
-            })
-            map.addControl(deckOverlay as unknown as mapboxgl.IControl)
-            deckOverlayRef.current = deckOverlay
+            // ── deck.gl overlay (lazily added only in vehicles mode) ──
+            let deckOverlay: MapboxOverlay | null = null
+            let deckAdded = false
+
+            function ensureDeckOverlay() {
+                if (!deckOverlay) {
+                    deckOverlay = new MapboxOverlay({ interleaved: true, layers: [] })
+                    deckOverlayRef.current = deckOverlay
+                }
+                if (!deckAdded) {
+                    map.addControl(deckOverlay as unknown as mapboxgl.IControl)
+                    deckAdded = true
+                }
+            }
+
+            function removeDeckOverlay() {
+                if (deckOverlay && deckAdded) {
+                    try { deckOverlay.setProps({ layers: [] }) } catch { /* not ready */ }
+                    map.removeControl(deckOverlay as unknown as mapboxgl.IControl)
+                    deckAdded = false
+                }
+            }
 
             // Create cube geometry once
             if (!cubeRef.current) {
                 cubeRef.current = new CubeGeometry()
             }
 
-            // ── Start rAF render loop ────────────────────────────────
-            let rafId: number
+            // ── Start render loop ─────────────────────────────────────
             let lastFrameTime = performance.now()
             let deckHasLayers = false
-            let lastDeckUpdate = 0
-            const DECK_THROTTLE_MS = 33 // ~30fps
             let lastOverviewUpdate = 0
-            const OVERVIEW_THROTTLE_MS = 500
+            const OVERVIEW_THROTTLE_MS = 2000 // speed-section colors update every 2s
             let lastGeoJSON: GeoJSON.FeatureCollection | null = null
             let vehiclesCleared = false
+            let rafId: number | null = null
+            let slowInterval: ReturnType<typeof setInterval> | null = null
+            let loopStopped = false
+            // Cache for speed-section GeoJSON to avoid GC pressure
+            let lastSpeedSectionsKey = ''
+            let lastSpeedSectionsData: GeoJSON.FeatureCollection | null = null
 
             function updateSpeedSections() {
                 const secs = sectionsRef.current ?? []
                 const stats = liveStatsRef.current
+                // Build a lightweight key to detect actual data changes
+                let key = ''
+                for (const sec of secs) {
+                    const live = stats?.get(sec.id)
+                    const speed = live?.avgSpeed != null ? live.avgSpeed : sec.avgSpeed
+                    key += `${sec.id}:${speed ?? ''}|`
+                }
+                if (key === lastSpeedSectionsKey) return // no change, skip allocation
+                lastSpeedSectionsKey = key
+
                 const features = secs.map(sec => {
                     const coords = getSectionCoords(sec.fiberId, sec.startChannel, sec.endChannel)
                     if (coords.length < 2) return null
@@ -646,28 +730,29 @@ export const PrototypeMap = forwardRef<PrototypeMapHandle, PrototypeMapProps>(fu
                         geometry: { type: 'LineString' as const, coordinates: coords },
                     }
                 }).filter(Boolean)
+                lastSpeedSectionsData = { type: 'FeatureCollection', features: features as GeoJSON.Feature[] }
                 const source = map.getSource('speed-sections') as mapboxgl.GeoJSONSource | undefined
-                source?.setData({ type: 'FeatureCollection', features: features as GeoJSON.Feature[] })
+                source?.setData(lastSpeedSectionsData)
+                map.triggerRepaint()
             }
 
-            function renderLoop() {
+            function renderTick() {
                 const now = performance.now()
                 const deltaMs = Math.min(now - lastFrameTime, 100) // cap to avoid huge jumps
                 lastFrameTime = now
 
-                // Always update speed-section lines (they're zoom-faded, not toggled)
+                // Update speed-section lines periodically
                 if (now - lastOverviewUpdate >= OVERVIEW_THROTTLE_MS) {
                     lastOverviewUpdate = now
                     updateSpeedSections()
                 }
 
                 if (overviewRef.current) {
-                    // Overview mode: skip vehicle rendering
-                    if (deckHasLayers) {
-                        try { deckOverlay.setProps({ layers: [] }) } catch { /* not ready */ }
+                    // Overview mode: remove deck.gl overlay entirely to stop repaints
+                    if (deckHasLayers || deckAdded) {
+                        removeDeckOverlay()
                         deckHasLayers = false
                     }
-                    rafId = requestAnimationFrame(renderLoop)
                     return
                 }
 
@@ -695,15 +780,16 @@ export const PrototypeMap = forwardRef<PrototypeMapHandle, PrototypeMapProps>(fu
                             }
                             const source = map.getSource('vehicles') as mapboxgl.GeoJSONSource | undefined
                             source?.setData(geojson)
+                            map.triggerRepaint()
                         }
                     }
-                    // Clear deck.gl layers (only once)
-                    if (deckHasLayers) {
-                        try { deckOverlay.setProps({ layers: [] }) } catch { /* not ready */ }
+                    // Remove deck.gl overlay entirely in dots mode to stop repaints
+                    if (deckHasLayers || deckAdded) {
+                        removeDeckOverlay()
                         deckHasLayers = false
                     }
                 } else {
-                    // Vehicles mode: clear circle source once, render 3D cubes
+                    // Vehicles mode: clear circle source once, render 3D cubes at 60fps
                     if (!vehiclesCleared) {
                         const source = map.getSource('vehicles') as mapboxgl.GeoJSONSource | undefined
                         source?.setData({ type: 'FeatureCollection', features: [] })
@@ -730,20 +816,58 @@ export const PrototypeMap = forwardRef<PrototypeMapHandle, PrototypeMapProps>(fu
                             pickable: false,
                             autoHighlight: false,
                         })
-                        if (now - lastDeckUpdate >= DECK_THROTTLE_MS) {
-                            lastDeckUpdate = now
-                            try { deckOverlay.setProps({ layers: [layer] }) } catch { /* not ready */ }
-                            deckHasLayers = true
-                        }
+                        ensureDeckOverlay()
+                        try { deckOverlay!.setProps({ layers: [layer] }) } catch { /* not ready */ }
+                        deckHasLayers = true
                     }
                 }
-
-                rafId = requestAnimationFrame(renderLoop)
             }
-            rafId = requestAnimationFrame(renderLoop)
 
-            // Store cleanup for rAF
-            map.once('remove', () => cancelAnimationFrame(rafId))
+            // Adaptive loop: 60fps rAF for vehicles, 10Hz for dots, 2Hz for overview
+            let currentLoopMode: 'raf' | 'fast' | 'slow' | null = null
+
+            function rafLoop() {
+                if (loopStopped) return
+                renderTick()
+                rafId = requestAnimationFrame(rafLoop)
+            }
+
+            function stopCurrentLoop() {
+                if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
+                if (slowInterval !== null) { clearInterval(slowInterval); slowInterval = null }
+                currentLoopMode = null
+            }
+
+            function syncLoop() {
+                let target: 'raf' | 'fast' | 'slow'
+                if (overviewRef.current) {
+                    target = 'slow'
+                } else if (displayModeRef.current === 'vehicles') {
+                    target = 'raf'
+                } else {
+                    target = 'fast'
+                }
+                if (target === currentLoopMode) return
+                stopCurrentLoop()
+                currentLoopMode = target
+                if (target === 'raf') {
+                    rafLoop()
+                } else {
+                    slowInterval = setInterval(renderTick, target === 'fast' ? 100 : 500)
+                }
+            }
+
+            // Start with a sync and re-check every 500ms
+            syncLoop()
+            const loopSyncInterval = setInterval(syncLoop, 500)
+
+            // Store cleanup
+            map.once('remove', () => {
+                loopStopped = true
+                if (rafId !== null) cancelAnimationFrame(rafId)
+                if (slowInterval !== null) clearInterval(slowInterval)
+                clearInterval(loopSyncInterval)
+            })
         })
 
         // ── ResizeObserver ──────────────────────────────────────
@@ -1018,6 +1142,15 @@ export const PrototypeMap = forwardRef<PrototypeMapHandle, PrototypeMapProps>(fu
         })
     }, [hideFibersInOverview])
 
+    // ── Toggle 3D buildings layer ─────────────────────────────────
+    useEffect(() => {
+        const map = mapRef.current
+        if (!map || !map.isStyleLoaded()) return
+        if (map.getLayer('3d-buildings')) {
+            map.setLayoutProperty('3d-buildings', 'visibility', show3DBuildings ? 'visible' : 'none')
+        }
+    }, [show3DBuildings])
+
     // ── Map cursor in creation mode ──────────────────────────────
     useEffect(() => {
         const map = mapRef.current
@@ -1031,4 +1164,4 @@ export const PrototypeMap = forwardRef<PrototypeMapHandle, PrototypeMapProps>(fu
 
         </div>
     )
-})
+}))
