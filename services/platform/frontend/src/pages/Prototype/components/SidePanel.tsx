@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
+import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { severityColor, fibers, getSpeedColor, chartColors, defaultSpeedThresholds, resolveDirectionalFiber } from '../data'
 import { fetchIncidentSnapshot } from '@/api/incidents'
@@ -9,6 +10,7 @@ import type { ProtoState, ProtoAction, Severity, MetricKey, Section, LiveSection
 import type { Infrastructure, SHMStatus, SpectralTimeSeries, PeakFrequencyData, SpectralSummary } from '@/types/infrastructure'
 import { fetchPeakFrequencies } from '@/api/infrastructure'
 import { useRealtime } from '@/hooks/useRealtime'
+import { useAuth } from '@/hooks/useAuth'
 import { parseDetections } from '@/lib/parseMessage'
 import { TimeSeriesChart } from './TimeSeriesChart'
 import { Sparkline } from './Sparkline'
@@ -576,18 +578,13 @@ function ChannelDetail({ channel, sections, dispatch, fiberColors }: {
                 const age = (now - dot.time) / WINDOW_MS
                 const alpha = 1 - age * 0.7
 
-                // Color by speed
-                let color: string
-                if (dot.speed >= 80) color = `rgba(34, 197, 94, ${alpha})`
-                else if (dot.speed >= 50) color = `rgba(234, 179, 8, ${alpha})`
-                else if (dot.speed >= 30) color = `rgba(249, 115, 22, ${alpha})`
-                else color = `rgba(239, 68, 68, ${alpha})`
-
+                ctx.globalAlpha = alpha
                 ctx.beginPath()
                 ctx.arc(x, y, 2.5, 0, Math.PI * 2)
-                ctx.fillStyle = color
+                ctx.fillStyle = getSpeedColor(dot.speed)
                 ctx.fill()
             }
+            ctx.globalAlpha = 1
 
             rafId = requestAnimationFrame(render)
         }
@@ -866,7 +863,7 @@ function IncidentDetail({ incident, sections, dispatch, onBack }: {
                 const byMinute = new Map<string, { speeds: number[]; count: number }>()
                 for (const d of snapshot.detections) {
                     const t = new Date(d.timestamp)
-                    const key = t.toISOString().slice(11, 16)
+                    const key = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
                     let bucket = byMinute.get(key)
                     if (!bucket) { bucket = { speeds: [], count: 0 }; byMinute.set(key, bucket) }
                     bucket.speeds.push(d.speed)
@@ -1279,6 +1276,34 @@ function SettingsPanel({ fiberThresholds, fiberColors, dispatch, onHighlightFibe
                     </div>
                 )
             })}
+
+            <div className="h-px bg-[var(--proto-border)]" />
+
+            <LogoutButton />
+        </div>
+    )
+}
+
+function LogoutButton() {
+    const { logout, username } = useAuth()
+    const navigate = useNavigate()
+
+    const handleLogout = async () => {
+        await logout()
+        navigate('/login')
+    }
+
+    return (
+        <div className="flex flex-col gap-2">
+            {username && (
+                <span className="text-xs text-[var(--proto-text-muted)]">Signed in as <span className="text-[var(--proto-text-secondary)]">{username}</span></span>
+            )}
+            <button
+                onClick={handleLogout}
+                className="w-full px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-md transition-colors cursor-pointer text-left"
+            >
+                Sign out
+            </button>
         </div>
     )
 }
@@ -1336,7 +1361,7 @@ function SectionDetail({ section, onBack, liveStats, liveSeriesData, dispatch, f
             .then(res => {
                 if (!mounted) return
                 const points = res.points.map(p => ({
-                    time: new Date(p.time).toISOString().slice(11, 16),
+                    time: new Date(p.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
                     speed: p.speed,
                     flow: p.samples,
                     occupancy: 0,

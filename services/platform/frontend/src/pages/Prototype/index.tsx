@@ -1,4 +1,5 @@
 import { useReducer, useEffect, useCallback, useRef, useState, useMemo } from 'react'
+import { toast } from 'sonner'
 import type { ProtoState, ProtoAction, Incident, PendingPoint } from './types'
 import { fibers, defaultSpeedThresholds, buildThresholdLookup, resolveDirectionalFiber, channelToCoord } from './data'
 import { PrototypeMap, type PrototypeMapHandle } from './components/PrototypeMap'
@@ -286,7 +287,7 @@ export function Prototype() {
     // Wrapped dispatch that intercepts DELETE_SECTION to also call the API
     const wrappedDispatch = useCallback((action: ProtoAction) => {
         if (action.type === 'DELETE_SECTION') {
-            removeSection(action.id).catch(() => { /* API error — ignore, already removed from UI */ })
+            removeSection(action.id).catch(() => { toast.error('Failed to delete section') })
         }
         dispatch(action)
     }, [removeSection])
@@ -509,7 +510,7 @@ export function Prototype() {
                             const section = await addSection(ps.fiberId, name, ps.startChannel, ps.endChannel)
                             dispatch({ type: 'CREATE_SECTION', section })
                         } catch {
-                            // API error — section not created
+                            toast.error('Failed to create section')
                         }
                     }}
                     onCancel={() => dispatch({ type: 'CLOSE_NAMING_DIALOG' })}
