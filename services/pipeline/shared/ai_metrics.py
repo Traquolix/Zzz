@@ -85,6 +85,25 @@ class AIMetrics:
             unit="km/h",
         )
 
+        # Model cache metrics
+        self.model_cache_hits = meter.create_counter(
+            name="ai.model_cache.hits",
+            description="Model cache hits (reused loaded model)",
+            unit="1",
+        )
+
+        self.model_cache_misses = meter.create_counter(
+            name="ai.model_cache.misses",
+            description="Model cache misses (loaded new model)",
+            unit="1",
+        )
+
+        self.model_cache_evictions = meter.create_counter(
+            name="ai.model_cache.evictions",
+            description="Model cache LRU evictions",
+            unit="1",
+        )
+
     def record_inference(
         self,
         duration_seconds: float,
@@ -149,6 +168,18 @@ class AIMetrics:
             "section": section,
         }
         self.glrt_peak_values.record(peak_value, attributes)
+
+    def record_cache_hit(self, model_hint: str):
+        """Record a model cache hit."""
+        self.model_cache_hits.add(1, {"service_name": self.service_name, "model": model_hint})
+
+    def record_cache_miss(self, model_hint: str):
+        """Record a model cache miss (new model loaded)."""
+        self.model_cache_misses.add(1, {"service_name": self.service_name, "model": model_hint})
+
+    def record_cache_eviction(self, model_hint: str):
+        """Record a model cache LRU eviction."""
+        self.model_cache_evictions.add(1, {"service_name": self.service_name, "model": model_hint})
 
     def set_calibration_status(self, fiber_id: str, enabled: bool):
         """Update calibration status gauge.

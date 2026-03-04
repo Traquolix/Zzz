@@ -65,8 +65,32 @@ services:
     max_active_buffers: 10
 
 # =============================================================================
+# Defaults
+# =============================================================================
+# Applied to all sections unless overridden per-section.
+# Processing pipeline order: bandpass → temporal decimation → spatial decimation
+
+defaults:
+  model: dtan_unified
+
+  pipeline:
+    - step: bandpass_filter
+      params:
+        low_freq_hz: 0.3
+        high_freq_hz: 2.0
+        order: 4
+    - step: temporal_decimation
+      params:
+        factor: 12    # 125Hz -> 10.4167Hz
+    - step: spatial_decimation
+      params:
+        factor: 3     # Keep every 3rd channel
+
+# =============================================================================
 # Fibers Configuration
 # =============================================================================
+# Sections inherit model and pipeline from defaults above.
+# Override per-section only when a section needs different processing.
 
 fibers:
   carros:
@@ -77,25 +101,6 @@ fibers:
     sections:
       - name: default
         channels: [1200, 2748]
-        model: dtan_unified
-
-        # Processing pipeline - steps executed in order
-        # Order: bandpass → temporal decimation → spatial decimation
-        pipeline:
-          - step: bandpass_filter
-            params:
-              low_freq_hz: 0.3
-              high_freq_hz: 2.0
-              order: 4
-
-
-          - step: temporal_decimation
-            params:
-              factor: 12  # 125Hz -> 10.4167Hz
-
-          - step: spatial_decimation
-            params:
-              factor: 3  # Keep every 3rd channel
 
   mathis:
     input_topic: das.raw.mathis
@@ -103,74 +108,14 @@ fibers:
     sampling_rate_hz: 125.0
 
     sections:
-      # 4 notebook segments (channel offsets relative to Mathis ROI start)
       - name: seg1
         channels: [800, 870]
-        model: dtan_unified
-        pipeline:
-          - step: bandpass_filter
-            params:
-              low_freq_hz: 0.3
-              high_freq_hz: 2.0
-              order: 4
-
-          - step: temporal_decimation
-            params:
-              factor: 12
-          - step: spatial_decimation
-            params:
-              factor: 3
-
       - name: seg2
         channels: [971, 1441]
-        model: dtan_unified
-        pipeline:
-          - step: bandpass_filter
-            params:
-              low_freq_hz: 0.3
-              high_freq_hz: 2.0
-              order: 4
-
-          - step: temporal_decimation
-            params:
-              factor: 12
-          - step: spatial_decimation
-            params:
-              factor: 3
-
       - name: seg3
         channels: [1794, 1981]
-        model: dtan_unified
-        pipeline:
-          - step: bandpass_filter
-            params:
-              low_freq_hz: 0.3
-              high_freq_hz: 2.0
-              order: 4
-
-          - step: temporal_decimation
-            params:
-              factor: 12
-          - step: spatial_decimation
-            params:
-              factor: 3
-
       - name: seg4
         channels: [2096, 2251]
-        model: dtan_unified
-        pipeline:
-          - step: bandpass_filter
-            params:
-              low_freq_hz: 0.3
-              high_freq_hz: 2.0
-              order: 4
-
-          - step: temporal_decimation
-            params:
-              factor: 12
-          - step: spatial_decimation
-            params:
-              factor: 3
 
   promenade:
     input_topic: das.raw.promenade
@@ -178,108 +123,18 @@ fibers:
     sampling_rate_hz: 125.0
 
     sections:
-      # 6 notebook segments (channel offsets relative to Promenade ROI start)
       - name: seg1
         channels: [1762, 1822]
-        model: dtan_unified
-        pipeline:
-          - step: bandpass_filter
-            params:
-              low_freq_hz: 0.3
-              high_freq_hz: 2.0
-              order: 4
-
-          - step: temporal_decimation
-            params:
-              factor: 12
-          - step: spatial_decimation
-            params:
-              factor: 3
-
       - name: seg2
         channels: [2392, 2582]
-        model: dtan_unified
-        pipeline:
-          - step: bandpass_filter
-            params:
-              low_freq_hz: 0.3
-              high_freq_hz: 2.0
-              order: 4
-
-          - step: temporal_decimation
-            params:
-              factor: 12
-          - step: spatial_decimation
-            params:
-              factor: 3
-
       - name: seg3
         channels: [2937, 3002]
-        model: dtan_unified
-        pipeline:
-          - step: bandpass_filter
-            params:
-              low_freq_hz: 0.3
-              high_freq_hz: 2.0
-              order: 4
-
-          - step: temporal_decimation
-            params:
-              factor: 12
-          - step: spatial_decimation
-            params:
-              factor: 3
-
       - name: seg4
         channels: [3132, 3217]
-        model: dtan_unified
-        pipeline:
-          - step: bandpass_filter
-            params:
-              low_freq_hz: 0.3
-              high_freq_hz: 2.0
-              order: 4
-
-          - step: temporal_decimation
-            params:
-              factor: 12
-          - step: spatial_decimation
-            params:
-              factor: 3
-
       - name: seg5
         channels: [3362, 3612]
-        model: dtan_unified
-        pipeline:
-          - step: bandpass_filter
-            params:
-              low_freq_hz: 0.3
-              high_freq_hz: 2.0
-              order: 4
-
-          - step: temporal_decimation
-            params:
-              factor: 12
-          - step: spatial_decimation
-            params:
-              factor: 3
-
       - name: seg6
         channels: [3682, 3912]
-        model: dtan_unified
-        pipeline:
-          - step: bandpass_filter
-            params:
-              low_freq_hz: 0.3
-              high_freq_hz: 2.0
-              order: 4
-
-          - step: temporal_decimation
-            params:
-              factor: 12
-          - step: spatial_decimation
-            params:
-              factor: 3
 
 # =============================================================================
 # Model Defaults
@@ -336,24 +191,3 @@ model_defaults:
 models:
   dtan_unified:
     fiber_id: null  # Works for all fibers
-
-# =============================================================================
-# Defaults
-# =============================================================================
-# Applied when not specified per-section
-
-defaults:
-  pipeline:
-    - step: bandpass_filter
-      params:
-        low_freq_hz: 0.3
-        high_freq_hz: 2.0
-        order: 4
-    - step: temporal_decimation
-      params:
-        factor: 12
-    - step: spatial_decimation
-      params:
-        factor: 3
-
-  model: dtan_unified

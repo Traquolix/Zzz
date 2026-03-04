@@ -21,7 +21,7 @@ class KafkaSetupMixin:
 
     async def _setup_kafka_clients(self: "ServiceBase") -> None:
         """Initialize Kafka consumer/producer based on pattern type."""
-        from .service_base import ServiceType
+        from .service_base import _NEEDS_CONSUMER, _NEEDS_PRODUCER
 
         if self.config.schema_registry_url:
             self.schema_registry_client = SchemaRegistryClient(
@@ -31,21 +31,11 @@ class KafkaSetupMixin:
         security_config = self._build_security_config()
 
         # Create consumer for consuming services
-        if self.service_type in [
-            ServiceType.CONSUMER,
-            ServiceType.TRANSFORMER,
-            ServiceType.MULTI_TRANSFORMER,
-            ServiceType.BUFFERED_TRANSFORMER,
-        ]:
+        if self.service_type in _NEEDS_CONSUMER:
             self._setup_consumer(security_config)
 
         # Create producer for producing services
-        if self.service_type in [
-            ServiceType.PRODUCER,
-            ServiceType.TRANSFORMER,
-            ServiceType.MULTI_TRANSFORMER,
-            ServiceType.BUFFERED_TRANSFORMER,
-        ]:
+        if self.service_type in _NEEDS_PRODUCER:
             self._setup_producer(security_config)
 
     def _setup_consumer(self: "ServiceBase", security_config: dict) -> None:

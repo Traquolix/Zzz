@@ -1,6 +1,25 @@
 #!/bin/sh
 set -e
 
+# Block startup if placeholder passwords are still set in production
+if [ "${ENVIRONMENT}" = "production" ]; then
+    FAIL=0
+    for VAR_NAME in POSTGRES_PASSWORD CLICKHOUSE_PASSWORD REDIS_PASSWORD DJANGO_SECRET_KEY; do
+        VAL=$(eval echo "\$$VAR_NAME")
+        case "$VAL" in
+            ""|CHANGE_ME*|changeme)
+                echo "FATAL: $VAR_NAME is not set or still contains a placeholder value." >&2
+                FAIL=1
+                ;;
+        esac
+    done
+    if [ "$FAIL" -eq 1 ]; then
+        echo "FATAL: Refusing to start with default credentials in production." >&2
+        echo "       Generate real secrets — see .env.example for instructions." >&2
+        exit 1
+    fi
+fi
+
 echo "Running database migrations..."
 python manage.py migrate --noinput
 

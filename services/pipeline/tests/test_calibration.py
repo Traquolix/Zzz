@@ -1,6 +1,5 @@
 """Unit tests for CalibrationManager and CalibrationData."""
 
-import pickle
 import tempfile
 from pathlib import Path
 
@@ -112,31 +111,29 @@ class TestCalibrationManager:
             fiber_dir = tmpdir / "test_fiber"
             fiber_dir.mkdir()
 
-            # Create threshold calibration
-            threshold_data = {
-                "fiber_id": "test_fiber",
-                "date": "20260101",
-                "n_sections": 3,
-                "threshold_curve": [100.0, 150.0, 200.0],
-                "baseline": [50.0, 75.0, 100.0],
-                "noise_estimate": [10.0, 15.0, 20.0],
-                "method": "MAD",
-            }
-            threshold_file = fiber_dir / "test_fiber_20260101_threshold.pkl"
-            with open(threshold_file, "wb") as f:
-                pickle.dump(threshold_data, f)
+            # Create threshold calibration (.npz format)
+            threshold_file = fiber_dir / "test_fiber_20260101_threshold.npz"
+            np.savez(
+                str(threshold_file),
+                fiber_id="test_fiber",
+                date="20260101",
+                n_sections=np.array(3),
+                threshold_curve=np.array([100.0, 150.0, 200.0]),
+                baseline=np.array([50.0, 75.0, 100.0]),
+                noise_estimate=np.array([10.0, 15.0, 20.0]),
+                method="MAD",
+            )
 
-            # Create coupling calibration
-            coupling_data = {
-                "fiber_id": "test_fiber",
-                "date": "20260101",
-                "correction_factors": [1.0, 0.95, 1.05],
-                "median_glrt": 200.0,
-                "n_sections": 3,
-            }
-            coupling_file = fiber_dir / "test_fiber_20260101_coupling.pkl"
-            with open(coupling_file, "wb") as f:
-                pickle.dump(coupling_data, f)
+            # Create coupling calibration (.npz format)
+            coupling_file = fiber_dir / "test_fiber_20260101_coupling.npz"
+            np.savez(
+                str(coupling_file),
+                fiber_id="test_fiber",
+                date="20260101",
+                correction_factors=np.array([1.0, 0.95, 1.05]),
+                median_glrt=np.array(200.0),
+                n_sections=np.array(3),
+            )
 
             yield tmpdir
 
@@ -149,18 +146,17 @@ class TestCalibrationManager:
             fiber_dir = tmpdir / "threshold_only_fiber"
             fiber_dir.mkdir()
 
-            threshold_data = {
-                "fiber_id": "threshold_only_fiber",
-                "date": "20260101",
-                "n_sections": 2,
-                "threshold_curve": [80.0, 120.0],
-                "baseline": [40.0, 60.0],
-                "noise_estimate": [8.0, 12.0],
-                "method": "MAD",
-            }
-            threshold_file = fiber_dir / "threshold_only_fiber_20260101_threshold.pkl"
-            with open(threshold_file, "wb") as f:
-                pickle.dump(threshold_data, f)
+            threshold_file = fiber_dir / "threshold_only_fiber_20260101_threshold.npz"
+            np.savez(
+                str(threshold_file),
+                fiber_id="threshold_only_fiber",
+                date="20260101",
+                n_sections=np.array(2),
+                threshold_curve=np.array([80.0, 120.0]),
+                baseline=np.array([40.0, 60.0]),
+                noise_estimate=np.array([8.0, 12.0]),
+                method="MAD",
+            )
 
             yield tmpdir
 
@@ -238,36 +234,34 @@ class TestCalibrationManager:
             fiber_dir.mkdir()
 
             # Create old calibration
-            old_data = {
-                "fiber_id": "versioned_fiber",
-                "date": "20250101",
-                "n_sections": 1,
-                "threshold_curve": [100.0],
-                "baseline": [50.0],
-                "noise_estimate": [10.0],
-                "method": "MAD",
-            }
-            old_file = fiber_dir / "versioned_fiber_20250101_threshold.pkl"
-            with open(old_file, "wb") as f:
-                pickle.dump(old_data, f)
+            old_file = fiber_dir / "versioned_fiber_20250101_threshold.npz"
+            np.savez(
+                str(old_file),
+                fiber_id="versioned_fiber",
+                date="20250101",
+                n_sections=np.array(1),
+                threshold_curve=np.array([100.0]),
+                baseline=np.array([50.0]),
+                noise_estimate=np.array([10.0]),
+                method="MAD",
+            )
 
             # Create new calibration (modify after old to ensure later mtime)
             import time
 
             time.sleep(0.01)
 
-            new_data = {
-                "fiber_id": "versioned_fiber",
-                "date": "20260101",
-                "n_sections": 1,
-                "threshold_curve": [150.0],
-                "baseline": [75.0],
-                "noise_estimate": [15.0],
-                "method": "MAD",
-            }
-            new_file = fiber_dir / "versioned_fiber_20260101_threshold.pkl"
-            with open(new_file, "wb") as f:
-                pickle.dump(new_data, f)
+            new_file = fiber_dir / "versioned_fiber_20260101_threshold.npz"
+            np.savez(
+                str(new_file),
+                fiber_id="versioned_fiber",
+                date="20260101",
+                n_sections=np.array(1),
+                threshold_curve=np.array([150.0]),
+                baseline=np.array([75.0]),
+                noise_estimate=np.array([15.0]),
+                method="MAD",
+            )
 
             manager = CalibrationManager(str(tmpdir))
             calib = manager.load_calibration("versioned_fiber")

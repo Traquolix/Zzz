@@ -199,9 +199,10 @@ class DASProcessor(MultiTransformer):
     def _adapt_message(self, raw: dict, fiber_id: str, sampling_rate_hz: float) -> dict:
         """Convert raw DAS format (floatData/longData) to internal format."""
         if "floatData" not in raw and "longData" not in raw:
-            # Already in internal format, just update fiber_id
-            raw["fiber_id"] = fiber_id
-            return raw
+            # Already in internal format, return copy with fiber_id set
+            result = raw.copy()
+            result["fiber_id"] = fiber_id
+            return result
         return {
             "fiber_id": fiber_id,
             "values": list(raw.get("floatData") or raw.get("longData") or []),

@@ -171,14 +171,11 @@ export const PrototypeMap = memo(forwardRef<PrototypeMapHandle, PrototypeMapProp
             clearInterval(highlightTimerRef.current)
             highlightTimerRef.current = null
         }
-        // Restore fibers to zoom-driven expressions
-        fibers.forEach(f => {
-            const layerId = `fiber-line-${f.id}`
-            if (map.getLayer(layerId)) {
-                map.setPaintProperty(layerId, 'line-width', fiberWidthExpr)
-                map.setPaintProperty(layerId, 'line-opacity', fiberOpacityExpr)
-            }
-        })
+        // Restore fiber layer to default zoom-driven expressions
+        if (map.getLayer('fiber-lines')) {
+            map.setPaintProperty('fiber-lines', 'line-width', fiberWidthExpr)
+            map.setPaintProperty('fiber-lines', 'line-opacity', fiberOpacityExpr)
+        }
         // Clear hover-highlight source
         const src = map.getSource('hover-highlight') as mapboxgl.GeoJSONSource | undefined
         src?.setData({ type: 'FeatureCollection', features: [] })
@@ -210,25 +207,18 @@ export const PrototypeMap = memo(forwardRef<PrototypeMapHandle, PrototypeMapProp
         },
         highlightFiber: (fiberId: string) => {
             const map = mapRef.current
-            if (!map) return
+            if (!map || !map.getLayer('fiber-lines')) return
             clearHighlightImpl()
-            fibers.forEach(f => {
-                const layerId = `fiber-line-${f.id}`
-                if (map.getLayer(layerId)) {
-                    if (f.id === fiberId) {
-                        map.setPaintProperty(layerId, 'line-width', 5)
-                        map.setPaintProperty(layerId, 'line-opacity', 1)
-                    } else {
-                        map.setPaintProperty(layerId, 'line-opacity', 0.15)
-                    }
-                }
-            })
+            // Data-driven: highlighted fiber gets full width/opacity, others dimmed
+            map.setPaintProperty('fiber-lines', 'line-width',
+                ['case', ['==', ['get', 'id'], fiberId], 5, ['interpolate', ['linear'], ['zoom'], 10, 1.5, 12, 2, 14, 2.5]])
+            map.setPaintProperty('fiber-lines', 'line-opacity',
+                ['case', ['==', ['get', 'id'], fiberId], 1, 0.15])
             let tick = 0
             highlightTimerRef.current = window.setInterval(() => {
-                const layerId = `fiber-line-${fiberId}`
-                if (map.getLayer(layerId)) {
-                    map.setPaintProperty(layerId, 'line-opacity', 0.5 + 0.5 * Math.abs(Math.sin(tick * 0.15)))
-                }
+                if (!map.getLayer('fiber-lines')) return
+                map.setPaintProperty('fiber-lines', 'line-opacity',
+                    ['case', ['==', ['get', 'id'], fiberId], 0.5 + 0.5 * Math.abs(Math.sin(tick * 0.15)), 0.15])
                 tick++
             }, 50)
         },
@@ -332,36 +322,33 @@ export const PrototypeMap = memo(forwardRef<PrototypeMapHandle, PrototypeMapProp
         mapRef.current = map
 
         map.on('load', () => {
-            // ── Fiber route layers ──────────────────────────────────
-            fibers.forEach((fiber) => {
-                map.addSource(`fiber-${fiber.id}`, {
-                    type: 'geojson',
-                    data: {
-                        type: 'Feature',
-                        properties: { name: fiber.name },
-                        geometry: { type: 'LineString', coordinates: fiberOffsetCache.get(fiber.id)! },
-                    },
-                })
-
-                map.addLayer({
-                    id: `fiber-line-${fiber.id}`,
-                    type: 'line',
-                    source: `fiber-${fiber.id}`,
-                    paint: {
-                        'line-color': fiber.color,
-                        'line-width': ['interpolate', ['linear'], ['zoom'],
-                            10, 1.5,
-                            12, 2,
-                            14, 2.5,
-                        ],
-                        'line-opacity': ['interpolate', ['linear'], ['zoom'],
-                            10, 0.5,
-                            12.5, 0.7,
-                            14, 0.8,
-                        ],
-                    },
-                })
-
+            // ── Fiber route layers (single merged source) ────────────
+            const fiberFeatures = fibers.map(fiber => ({
+                type: 'Feature' as const,
+                properties: { id: fiber.id, name: fiber.name, color: fiber.color },
+                geometry: { type: 'LineString' as const, coordinates: fiberOffsetCache.get(fiber.id)! },
+            }))
+            map.addSource('fibers', {
+                type: 'geojson',
+                data: { type: 'FeatureCollection', features: fiberFeatures },
+            })
+            map.addLayer({
+                id: 'fiber-lines',
+                type: 'line',
+                source: 'fibers',
+                paint: {
+                    'line-color': ['get', 'color'],
+                    'line-width': ['interpolate', ['linear'], ['zoom'],
+                        10, 1.5,
+                        12, 2,
+                        14, 2.5,
+                    ],
+                    'line-opacity': ['interpolate', ['linear'], ['zoom'],
+                        10, 0.5,
+                        12.5, 0.7,
+                        14, 0.8,
+                    ],
+                },
             })
 
             // ── Vehicle dots source (layer added later, after sections) ──
@@ -510,13 +497,17 @@ export const PrototypeMap = memo(forwardRef<PrototypeMapHandle, PrototypeMapProp
             })
 
             // ── 3D buildings layer (initially hidden) ─────────────────
-            // Find the first symbol layer to insert buildings beneath labels
+            // Find the first symbol layer to insert buildings beneath labels,
+            // and hide any default building layers from the style
             const layers = map.getStyle().layers ?? []
             let labelLayerId: string | undefined
             for (const layer of layers) {
                 if (layer.type === 'symbol' && (layer as { layout?: { 'text-field'?: unknown } }).layout?.['text-field']) {
-                    labelLayerId = layer.id
-                    break
+                    if (!labelLayerId) labelLayerId = layer.id
+                }
+                // Hide default building layers from the base style
+                if ((layer['source-layer'] === 'building' || layer.id.includes('building')) && layer.id !== '3d-buildings') {
+                    map.setLayoutProperty(layer.id, 'visibility', 'none')
                 }
             }
 
@@ -570,25 +561,15 @@ export const PrototypeMap = memo(forwardRef<PrototypeMapHandle, PrototypeMapProp
                     }
                 }
 
-                // Hide/show markers in overview mode
-                const vis = shouldOverview ? 'none' : ''
-                markersRef.current.forEach(m => { m.getElement().style.display = vis })
-                structureMarkersRef.current.forEach(m => { m.getElement().style.display = vis })
-
-                // Hide/show map layers in overview mode
+                // Hide/show vehicle & creation layers in overview mode
                 const layerVis = shouldOverview ? 'none' : 'visible'
                 for (const lid of ['vehicle-dots', 'pending-section-layer', 'pending-point-layer']) {
                     if (map.getLayer(lid)) map.setLayoutProperty(lid, 'visibility', layerVis)
                 }
 
                 // Toggle fiber visibility based on overview + hideFibers setting
-                if (hideFibersRef.current) {
-                    fibers.forEach(f => {
-                        const layerId = `fiber-line-${f.id}`
-                        if (map.getLayer(layerId)) {
-                            map.setLayoutProperty(layerId, 'visibility', shouldOverview ? 'none' : 'visible')
-                        }
-                    })
+                if (hideFibersRef.current && map.getLayer('fiber-lines')) {
+                    map.setLayoutProperty('fiber-lines', 'visibility', shouldOverview ? 'none' : 'visible')
                 }
 
                 handlersRef.current.onOverviewChange?.(shouldOverview)
@@ -971,12 +952,14 @@ export const PrototypeMap = memo(forwardRef<PrototypeMapHandle, PrototypeMapProp
     useEffect(() => {
         const map = mapRef.current
         if (!map || !fiberColors) return
-        for (const fiber of fibers) {
-            const color = fiberColors[fiber.id]
-            if (color && map.getLayer(`fiber-line-${fiber.id}`)) {
-                map.setPaintProperty(`fiber-line-${fiber.id}`, 'line-color', color)
-            }
-        }
+        const src = map.getSource('fibers') as mapboxgl.GeoJSONSource | undefined
+        if (!src) return
+        const features = fibers.map(fiber => ({
+            type: 'Feature' as const,
+            properties: { id: fiber.id, name: fiber.name, color: fiberColors[fiber.id] ?? fiber.color },
+            geometry: { type: 'LineString' as const, coordinates: fiberOffsetCache.get(fiber.id)! },
+        }))
+        src.setData({ type: 'FeatureCollection', features })
     }, [fiberColors])
 
     // ── Update structure lines when structures/showStructuresOnMap change ──
@@ -1122,7 +1105,7 @@ export const PrototypeMap = memo(forwardRef<PrototypeMapHandle, PrototypeMapProp
                 handlersRef.current.onIncidentClick?.(inc.id)
             })
 
-            const marker = new mapboxgl.Marker({ element: el })
+            const marker = new mapboxgl.Marker({ element: el, anchor: 'center' })
                 .setLngLat(lngLat)
                 .addTo(map)
             markersRef.current.set(inc.id, marker)
@@ -1134,12 +1117,9 @@ export const PrototypeMap = memo(forwardRef<PrototypeMapHandle, PrototypeMapProp
         const map = mapRef.current
         if (!map || !map.isStyleLoaded()) return
         const hide = hideFibersInOverview && overviewRef.current
-        fibers.forEach(f => {
-            const layerId = `fiber-line-${f.id}`
-            if (map.getLayer(layerId)) {
-                map.setLayoutProperty(layerId, 'visibility', hide ? 'none' : 'visible')
-            }
-        })
+        if (map.getLayer('fiber-lines')) {
+            map.setLayoutProperty('fiber-lines', 'visibility', hide ? 'none' : 'visible')
+        }
     }, [hideFibersInOverview])
 
     // ── Toggle 3D buildings layer ─────────────────────────────────

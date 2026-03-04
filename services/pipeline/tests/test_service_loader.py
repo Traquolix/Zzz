@@ -29,21 +29,19 @@ class TestBuildOutputs:
         assert outputs["default"].value_schema_file == "value.avsc"
 
     def test_ai_engine_outputs(self):
-        """AI engine should have 'speed' and 'counting' outputs."""
-        topics = {"speeds": "das.speeds", "counts": "das.counts"}
+        """AI engine should have unified 'default' output for detections."""
+        topics = {"detections": "das.detections"}
         schemas = {
-            "speed_key": "speed_key.avsc",
-            "speed_value": "speed_value.avsc",
-            "count_key": "count_key.avsc",
-            "count_value": "count_value.avsc",
+            "detection_key": "detection_key.avsc",
+            "detection_value": "detection_value.avsc",
         }
 
         outputs = _build_outputs("ai_engine", topics, schemas)
 
-        assert "speed" in outputs
-        assert "counting" in outputs
-        assert outputs["speed"].topic == "das.speeds"
-        assert outputs["counting"].topic == "das.counts"
+        assert "default" in outputs
+        assert outputs["default"].topic == "das.detections"
+        assert outputs["default"].key_schema_file == "detection_key.avsc"
+        assert outputs["default"].value_schema_file == "detection_value.avsc"
 
     def test_unknown_service_type_raises(self):
         """Unknown service type should raise ValueError."""
@@ -198,15 +196,12 @@ class TestLoadServiceConfig:
             "service_defaults": {
                 "topics": {
                     "processed": "das.processed",
-                    "speeds": "das.speeds",
-                    "counts": "das.counts",
+                    "detections": "das.detections",
                 },
                 "schemas": {
                     "ai_engine": {
-                        "speed_key": "sk.avsc",
-                        "speed_value": "sv.avsc",
-                        "count_key": "ck.avsc",
-                        "count_value": "cv.avsc",
+                        "detection_key": "dk.avsc",
+                        "detection_value": "dv.avsc",
                     }
                 },
             },
@@ -224,5 +219,5 @@ class TestLoadServiceConfig:
         assert config.input_topic == "das.processed"
         assert config.buffer_timeout == 120.0
         assert config.max_active_buffers == 20
-        assert "speed" in config.outputs
-        assert "counting" in config.outputs
+        assert "default" in config.outputs
+        assert config.outputs["default"].topic == "das.detections"

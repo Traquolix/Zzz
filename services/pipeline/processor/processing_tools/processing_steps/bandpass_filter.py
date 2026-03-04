@@ -56,6 +56,9 @@ class BandpassFilter(ProcessingStep):
         values_array = np.array(values, dtype=np.float64)
         filtered_values = self.filter.filter(values_array, fiber_state["state"])
 
+        # Bound filter state growth (each fiber_id gets its own state)
+        self.cleanup_fiber_states()
+
         result = measurement_data.copy()
         result["values"] = filtered_values.tolist()
         return result

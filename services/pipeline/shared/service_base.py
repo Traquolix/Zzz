@@ -22,7 +22,7 @@ import time
 from abc import ABC
 from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
-from typing import List
+from typing import Any, List, Optional
 
 from opentelemetry import trace
 
@@ -45,6 +45,21 @@ class ServiceType(Enum):
     MULTI_TRANSFORMER = "multi_transformer"
     BUFFERED_TRANSFORMER = "buffered_transformer"
     CONSUMER = "consumer"
+
+
+_NEEDS_CONSUMER = frozenset({
+    ServiceType.CONSUMER,
+    ServiceType.TRANSFORMER,
+    ServiceType.MULTI_TRANSFORMER,
+    ServiceType.BUFFERED_TRANSFORMER,
+})
+
+_NEEDS_PRODUCER = frozenset({
+    ServiceType.PRODUCER,
+    ServiceType.TRANSFORMER,
+    ServiceType.MULTI_TRANSFORMER,
+    ServiceType.BUFFERED_TRANSFORMER,
+})
 
 
 class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
@@ -134,26 +149,22 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
     def _initialize_components(self) -> None:
         """Initialize infrastructure components based on service type."""
         # Circuit breakers
-        if self.service_type in [
-            ServiceType.CONSUMER,
-            ServiceType.TRANSFORMER,
-            ServiceType.MULTI_TRANSFORMER,
-            ServiceType.BUFFERED_TRANSFORMER,
-        ]:
+        if self.service_type in _NEEDS_CONSUMER:
             self.consumer_circuit_breaker = CircuitBreaker(
                 self.config.circuit_breaker_failure_threshold,
                 self.config.circuit_breaker_recovery_timeout,
+                on_state_change=lambda old, new: self.metrics.update_circuit_breaker_state(
+                    "consumer", new
+                ),
             )
 
-        if self.service_type in [
-            ServiceType.PRODUCER,
-            ServiceType.TRANSFORMER,
-            ServiceType.MULTI_TRANSFORMER,
-            ServiceType.BUFFERED_TRANSFORMER,
-        ]:
+        if self.service_type in _NEEDS_PRODUCER:
             self.producer_circuit_breaker = CircuitBreaker(
                 self.config.circuit_breaker_failure_threshold,
                 self.config.circuit_breaker_recovery_timeout,
+                on_state_change=lambda old, new: self.metrics.update_circuit_breaker_state(
+                    "producer", new
+                ),
             )
 
         # Retry handler and DLQ
@@ -198,22 +209,12 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
 
         try:
             # Load input schemas
-            if self.service_type in [
-                ServiceType.CONSUMER,
-                ServiceType.TRANSFORMER,
-                ServiceType.MULTI_TRANSFORMER,
-                ServiceType.BUFFERED_TRANSFORMER,
-            ]:
+            if self.service_type in _NEEDS_CONSUMER:
                 self.input_key_schema = self._load_schema(self.config.input_key_schema_file)
                 self.input_value_schema = self._load_schema(self.config.input_value_schema_file)
 
             # Load output schemas
-            if self.service_type in [
-                ServiceType.PRODUCER,
-                ServiceType.TRANSFORMER,
-                ServiceType.MULTI_TRANSFORMER,
-                ServiceType.BUFFERED_TRANSFORMER,
-            ]:
+            if self.service_type in _NEEDS_PRODUCER:
                 self._setup_output_schemas()
 
         except FileNotFoundError as e:
@@ -271,12 +272,7 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
 
     def _initialize_service_infrastructure(self) -> None:
         """Initialize pattern-specific infrastructure."""
-        if self.service_type in [
-            ServiceType.PRODUCER,
-            ServiceType.TRANSFORMER,
-            ServiceType.MULTI_TRANSFORMER,
-            ServiceType.BUFFERED_TRANSFORMER,
-        ]:
+        if self.service_type in _NEEDS_PRODUCER:
             self._message_batch = []
             self._last_flush_time = time.time()
 
@@ -308,6 +304,9 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
         """Start the service and wait for shutdown signal."""
         self.logger.info(f"Starting {self.service_type.value} service: {self.service_name}")
 
+        # Store reference to event loop for cross-thread callbacks (e.g., Kafka delivery)
+        self._loop = asyncio.get_running_loop()
+
         self._setup_signal_handlers()
 
         self.logger.info("Setting up Kafka clients...")
@@ -322,12 +321,7 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
 
         self._tasks.append(asyncio.create_task(self._health_check_loop()))
 
-        if self.service_type in [
-            ServiceType.CONSUMER,
-            ServiceType.TRANSFORMER,
-            ServiceType.MULTI_TRANSFORMER,
-            ServiceType.BUFFERED_TRANSFORMER,
-        ]:
+        if self.service_type in _NEEDS_CONSUMER:
             self.logger.info("Starting consumer lag monitoring...")
             self._tasks.append(asyncio.create_task(self._monitor_consumer_lag()))
 
@@ -419,3 +413,57 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
 
         self.logger.info(f"Service {self.service_name} shut down")
         await self._log_final_metrics()
+
+    async def _poll_loop(self, loop_name: str) -> None:
+        """Shared poll-dispatch-error loop for all consuming service patterns."""
+        while self._running:
+            try:
+                message = await self._get_next_message()
+                if message:
+                    await self._dispatch(message)
+                else:
+                    await asyncio.sleep(self.config.consumer_idle_delay)
+            except Exception as e:
+                self.logger.error(f"Error in {loop_name} loop: {e}")
+                self.metrics.record_error(f"{loop_name}_loop")
+                await asyncio.sleep(self.config.error_backoff_delay)
+
+    async def _dispatch(self, message: Any) -> None:
+        """Override in pattern classes to handle a single polled message."""
+        raise NotImplementedError
+
+    async def _execute_with_protection(
+        self, func, message: Any, *args
+    ) -> Optional[Any]:
+        """Shared semaphore + timeout + circuit-breaker + retry + DLQ wrapper."""
+        from shared.message import KafkaMessage
+
+        async with self._semaphore:
+            start_time = time.time()
+            try:
+                result = await asyncio.wait_for(
+                    self.consumer_circuit_breaker.call(
+                        self.retry_handler.retry_with_backoff, func, *args
+                    ),
+                    timeout=self.config.message_timeout,
+                )
+                processing_time = time.time() - start_time
+                self.metrics.record_message_processed(processing_time)
+                if isinstance(message, KafkaMessage):
+                    await self._commit_message(message)
+                return result
+            except asyncio.TimeoutError:
+                self.logger.error(
+                    f"Message {message.id} timed out after {self.config.message_timeout}s"
+                )
+                self.metrics.record_error("message_timeout")
+                if self.config.enable_dlq:
+                    await self.handle_dead_letter(
+                        message, f"Timeout after {self.config.message_timeout}s"
+                    )
+            except Exception as e:
+                self.logger.error(f"Failed to process message {message.id}: {e}")
+                self.metrics.record_error("message_processing")
+                if self.config.enable_dlq:
+                    await self.handle_dead_letter(message, str(e))
+        return None

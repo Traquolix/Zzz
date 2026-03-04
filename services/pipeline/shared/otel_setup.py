@@ -79,12 +79,14 @@ def setup_otel(service_name: str, service_version: str = "1.0.0") -> None:
     Environment Variables:
         LOG_LEVEL: Logging level - DEBUG, INFO, WARNING, ERROR (default: INFO)
         OTEL_EXPORTER_OTLP_ENDPOINT: OTEL collector endpoint (default: http://otel-lgtm:4317)
+        OTEL_EXPORTER_OTLP_INSECURE: Use insecure connection (default: true). Set to "false" for TLS in production.
         ENVIRONMENT: Deployment environment (default: development)
     """
     global tracer
 
     # Get configuration from environment
     otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-lgtm:4317")
+    otlp_insecure = os.getenv("OTEL_EXPORTER_OTLP_INSECURE", "true").lower() == "true"
     environment = os.getenv("ENVIRONMENT", "development")
 
     # Create resource with service metadata
@@ -102,7 +104,7 @@ def setup_otel(service_name: str, service_version: str = "1.0.0") -> None:
 
     # Configure OTLP span exporter
     span_exporter = OTLPSpanExporter(
-        endpoint=otlp_endpoint, insecure=True  # For local dev, use TLS in production
+        endpoint=otlp_endpoint, insecure=otlp_insecure
     )
 
     # Use batch processor for better performance
@@ -118,7 +120,7 @@ def setup_otel(service_name: str, service_version: str = "1.0.0") -> None:
     trace.set_tracer_provider(trace_provider)
 
     # Setup metrics provider
-    metric_exporter = OTLPMetricExporter(endpoint=otlp_endpoint, insecure=True)
+    metric_exporter = OTLPMetricExporter(endpoint=otlp_endpoint, insecure=otlp_insecure)
 
     metric_reader = PeriodicExportingMetricReader(
         exporter=metric_exporter, export_interval_millis=10000  # Export every 10 seconds

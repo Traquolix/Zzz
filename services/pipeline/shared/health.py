@@ -50,17 +50,17 @@ class HealthMixin:
         }
 
         if hasattr(self, "consumer_circuit_breaker"):
-            from shared.circuit_breaker import CircuitState
+            from shared.circuit_breaker import CircuitBreakerState
 
             checks["consumer_circuit_breaker"] = (
-                self.consumer_circuit_breaker.state != CircuitState.OPEN
+                self.consumer_circuit_breaker.state != CircuitBreakerState.OPEN
             )
 
         if hasattr(self, "producer_circuit_breaker"):
-            from shared.circuit_breaker import CircuitState
+            from shared.circuit_breaker import CircuitBreakerState
 
             checks["producer_circuit_breaker"] = (
-                self.producer_circuit_breaker.state != CircuitState.OPEN
+                self.producer_circuit_breaker.state != CircuitBreakerState.OPEN
             )
 
         is_ready = all(checks.values())
@@ -123,7 +123,7 @@ class HealthMixin:
                     low, high = self.consumer.get_watermark_offsets(partition)
                     lag = high - committed.offset
 
-                    self.metrics.record_consumer_lag(partition.topic, partition.partition, lag)
+                    self.metrics.update_consumer_lag(partition.topic, partition.partition, lag)
 
                     if lag > 1000:
                         self.logger.warning(
@@ -132,7 +132,7 @@ class HealthMixin:
                         )
 
             except Exception as e:
-                self.logger.debug(f"Error monitoring lag: {e}")
+                self.logger.warning(f"Error monitoring consumer lag: {e}")
 
     async def _log_final_metrics(self: "ServiceBase") -> None:
         """Log final stats on shutdown."""

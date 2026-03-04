@@ -5,6 +5,7 @@ Tests standalone functions (no mocking) and ModelRegistry (with mocking).
 
 import sys
 import threading
+from collections import OrderedDict
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -13,8 +14,6 @@ import pytest
 # Import standalone functions directly - no mocking needed
 from ai_engine.message_utils import (
     ProcessingContext,
-    create_count_messages,
-    create_speed_messages,
     extract_channel_metadata,
     messages_to_arrays,
     validate_sampling_rate,
@@ -36,12 +35,26 @@ mock_model_vehicle.calibration = calibration_module
 sys.modules["ai_engine.model_vehicle"] = mock_model_vehicle
 sys.modules["ai_engine.model_vehicle.DTAN"] = MagicMock()
 
-# Mock simple_interval_counter sub-module so main.py can import SimpleIntervalCounter
+# Mock simple_interval_counter sub-module so main.py can import VehicleCounter
 mock_simple_counter_module = MagicMock()
-mock_simple_counter_module.SimpleIntervalCounter = MagicMock
+mock_simple_counter_module.VehicleCounter = MagicMock
 sys.modules["ai_engine.model_vehicle.simple_interval_counter"] = mock_simple_counter_module
 
 from ai_engine.main import ModelRegistry  # noqa: E402
+
+
+def _make_registry(default_model, default_counter=None, max_models=20):
+    """Create a ModelRegistry with pre-set defaults, bypassing config loading."""
+    registry = object.__new__(ModelRegistry)
+    registry._default_model = default_model
+    registry._default_counter = default_counter
+    registry._calibration_manager = None
+    registry._max_models = max_models
+    registry._loaded_models = OrderedDict()
+    registry._loaded_counters = {}
+    registry._lock = threading.Lock()
+    registry._ai_metrics = None
+    return registry
 
 
 class TestModelRegistry:
@@ -57,7 +70,7 @@ class TestModelRegistry:
 
     @pytest.fixture
     def registry(self, mock_speed_estimator, mock_counter):
-        return ModelRegistry(
+        return _make_registry(
             default_model=mock_speed_estimator,
             default_counter=mock_counter,
             max_models=3,
@@ -94,7 +107,7 @@ class TestModelRegistry:
 
     def test_lru_access_order_tracking(self, mock_speed_estimator, mock_counter):
         """Accessing a model should update LRU order."""
-        registry = ModelRegistry(
+        registry = _make_registry(
             default_model=mock_speed_estimator,
             default_counter=mock_counter,
             max_models=5,
@@ -116,7 +129,7 @@ class TestModelRegistry:
     @patch("ai_engine.main.get_model_spec")
     def test_lru_eviction_when_max_reached(self, mock_get_spec, mock_speed_estimator, mock_counter):
         """Should evict oldest model when max_models reached."""
-        registry = ModelRegistry(
+        registry = _make_registry(
             default_model=mock_speed_estimator,
             default_counter=mock_counter,
             max_models=2,
@@ -147,7 +160,7 @@ class TestModelRegistry:
 
     def test_thread_safe_access(self, mock_speed_estimator, mock_counter):
         """Concurrent access should be thread-safe."""
-        registry = ModelRegistry(
+        registry = _make_registry(
             default_model=mock_speed_estimator,
             default_counter=mock_counter,
             max_models=10,
@@ -269,207 +282,3 @@ class TestMessagesToArrays:
             messages_to_arrays(messages, ctx, 10.0)
 
 
-class TestCreateSpeedMessages:
-    """Test speed message creation from detection dicts."""
-
-    def test_creates_one_message_per_detection(self):
-        """Each detection dict should produce one message."""
-        ctx = ProcessingContext(channel_start=0, channel_step=1)
-        detections = [
-            {"section_idx": 0, "speed_kmh": 50.0, "direction": 1, "timestamp_ns": 1000000000000, "glrt_max": 5000.0},
-            {"section_idx": 1, "speed_kmh": 60.0, "direction": 1, "timestamp_ns": 2000000000000, "glrt_max": 6000.0},
-        ]
-
-        messages = create_speed_messages(
-            fiber_id="test",
-            detections=detections,
-            ctx=ctx,
-            service_name="test",
-        )
-
-        assert len(messages) == 2
-        assert messages[0].payload["speeds"][0]["speed"] == 50.0
-        assert messages[1].payload["speeds"][0]["speed"] == 60.0
-
-    def test_maps_channels_with_step(self):
-        """Should map section_idx to channel using channel_step."""
-        ctx = ProcessingContext(channel_start=100, channel_step=2)
-        detections = [
-            {"section_idx": 0, "speed_kmh": 50.0, "direction": 1, "timestamp_ns": 1000000000000, "glrt_max": 5000.0},
-            {"section_idx": 1, "speed_kmh": 60.0, "direction": 1, "timestamp_ns": 1000000000000, "glrt_max": 5000.0},
-            {"section_idx": 2, "speed_kmh": 70.0, "direction": 1, "timestamp_ns": 1000000000000, "glrt_max": 5000.0},
-        ]
-
-        messages = create_speed_messages(
-            fiber_id="test",
-            detections=detections,
-            ctx=ctx,
-            service_name="test",
-        )
-
-        assert messages[0].payload["speeds"][0]["channel_number"] == 100
-        assert messages[1].payload["speeds"][0]["channel_number"] == 102
-        assert messages[2].payload["speeds"][0]["channel_number"] == 104
-
-    def test_preserves_direction(self):
-        """Should preserve direction from detection dict."""
-        ctx = ProcessingContext(channel_start=0, channel_step=1)
-        detections = [
-            {"section_idx": 0, "speed_kmh": 50.0, "direction": 1, "timestamp_ns": 1000000000000, "glrt_max": 5000.0},
-            {"section_idx": 0, "speed_kmh": 60.0, "direction": 2, "timestamp_ns": 2000000000000, "glrt_max": 5000.0},
-        ]
-
-        messages = create_speed_messages(
-            fiber_id="test",
-            detections=detections,
-            ctx=ctx,
-            service_name="test",
-        )
-
-        assert messages[0].payload["direction"] == 1
-        assert messages[1].payload["direction"] == 2
-
-    def test_empty_detections(self):
-        """No detections should produce no messages."""
-        ctx = ProcessingContext(channel_start=0, channel_step=1)
-
-        messages = create_speed_messages(
-            fiber_id="test",
-            detections=[],
-            ctx=ctx,
-            service_name="test",
-        )
-
-        assert len(messages) == 0
-
-    def test_timestamp_from_detection(self):
-        """Should use timestamp_ns from detection dict."""
-        ctx = ProcessingContext(channel_start=0, channel_step=1)
-        detections = [
-            {"section_idx": 0, "speed_kmh": 90.0, "direction": 1, "timestamp_ns": 1234567890000, "glrt_max": 5000.0},
-        ]
-
-        messages = create_speed_messages(
-            fiber_id="test",
-            detections=detections,
-            ctx=ctx,
-            service_name="test",
-        )
-
-        assert messages[0].payload["timestamp_ns"] == 1234567890000
-
-
-class TestCreateCountMessages:
-    """Test count message creation."""
-
-    def test_creates_messages_from_count_results(self):
-        """Should create messages from count results."""
-        ctx = ProcessingContext(channel_start=0, channel_step=1)
-        count_results = (
-            [[1.0]],
-            [([250], [260])],
-            [i * 100000000000 for i in range(300)],
-        )
-
-        messages = create_count_messages(
-            fiber_id="test_fiber",
-            count_results=count_results,
-            ctx=ctx,
-            sampling_rate_hz=10.0,
-            channels_per_section=9,
-            counting_samples=300,
-            step_samples=100,
-            service_name="test_engine",
-        )
-
-        assert len(messages) == 1
-        assert messages[0].payload["vehicle_count"] == 1.0
-
-    def test_filters_old_data(self):
-        """Should filter out detections in old data."""
-        ctx = ProcessingContext(channel_start=0, channel_step=1)
-        count_results = (
-            [[1.0]],
-            [([50], [60])],  # start=50 < new_data_start=200
-            [i * 100000000000 for i in range(300)],
-        )
-
-        messages = create_count_messages(
-            fiber_id="test",
-            count_results=count_results,
-            ctx=ctx,
-            sampling_rate_hz=10.0,
-            channels_per_section=9,
-            counting_samples=300,
-            step_samples=100,
-            service_name="test",
-        )
-
-        assert len(messages) == 0
-
-    def test_maps_channels_with_step(self):
-        """Should map section to actual channels using step."""
-        ctx = ProcessingContext(channel_start=100, channel_step=2)
-        count_results = (
-            [[1.0]],
-            [([250], [260])],
-            [i * 100000000000 for i in range(300)],
-        )
-
-        messages = create_count_messages(
-            fiber_id="test",
-            count_results=count_results,
-            ctx=ctx,
-            sampling_rate_hz=10.0,
-            channels_per_section=9,
-            counting_samples=300,
-            step_samples=100,
-            service_name="test",
-        )
-
-        assert messages[0].payload["channel_start"] == 100
-        assert messages[0].payload["channel_end"] == 116
-
-    def test_rounds_timestamp_to_second(self):
-        """Should round count timestamp to nearest second."""
-        ctx = ProcessingContext(channel_start=0, channel_step=1)
-        count_results = (
-            [[1.0]],
-            [([250], [260])],
-            [1704110400123456789 + i * 100000000 for i in range(300)],
-        )
-
-        messages = create_count_messages(
-            fiber_id="test",
-            count_results=count_results,
-            ctx=ctx,
-            sampling_rate_hz=10.0,
-            channels_per_section=9,
-            counting_samples=300,
-            step_samples=100,
-            service_name="test",
-        )
-
-        assert messages[0].payload["count_timestamp_ns"] % 1_000_000_000 == 0
-
-    def test_handles_none_section_counts(self):
-        """Should handle None section counts."""
-        ctx = ProcessingContext(channel_start=0, channel_step=1)
-        count_results = (
-            [None],
-            [([250], [260])],
-            [i * 100000000000 for i in range(300)],
-        )
-
-        messages = create_count_messages(
-            fiber_id="test",
-            count_results=count_results,
-            ctx=ctx,
-            sampling_rate_hz=10.0,
-            channels_per_section=9,
-            counting_samples=300,
-            step_samples=100,
-            service_name="test",
-        )
-
-        assert len(messages) == 0

@@ -163,7 +163,7 @@ def build_pipeline_from_config(
 
     for step_config in pipeline_config:
         step_name = step_config.get("step")
-        params = step_config.get("params", {})
+        params = dict(step_config.get("params", {}))  # Copy to avoid mutating config
 
         if not step_name:
             raise ValueError(f"Pipeline step missing 'step' field: {step_config}")

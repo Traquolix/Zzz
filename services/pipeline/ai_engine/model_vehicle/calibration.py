@@ -6,7 +6,6 @@ to GLRT results before thresholding.
 """
 
 import logging
-import pickle
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional
@@ -17,27 +16,26 @@ logger = logging.getLogger(__name__)
 
 
 def _load_data_file(filepath: Path) -> dict:
-    """Load calibration data from .npz (preferred) or .pkl (legacy fallback).
+    """Load calibration data from .npz file.
 
     Args:
-        filepath: Path to calibration file (.pkl or .npz)
+        filepath: Path to calibration file (.npz)
 
     Returns:
         Dictionary of calibration data
+
+    Raises:
+        FileNotFoundError: If no .npz file found
     """
     npz_path = filepath.with_suffix('.npz')
     if npz_path.exists():
         data = np.load(str(npz_path), allow_pickle=False)
         return dict(data)
-    # Fallback to pickle with deprecation warning
-    logger.warning(
-        "Loading calibration from pickle file %s. "
-        "Convert to .npz format for security. "
-        "Pickle files will be unsupported in a future release.",
-        filepath,
+
+    raise FileNotFoundError(
+        f"No .npz calibration file found at {npz_path}. "
+        f"Convert calibration data to .npz format."
     )
-    with open(filepath, 'rb') as f:
-        return pickle.load(f)
 
 
 @dataclass
@@ -134,8 +132,8 @@ class CalibrationManager:
     - Graceful handling of missing calibration data
 
     Calibration files are expected in this structure:
-        {calibration_base_path}/{fiber_id}/{fiber_id}_{YYYYMMDD}_threshold.pkl
-        {calibration_base_path}/{fiber_id}/{fiber_id}_{YYYYMMDD}_coupling.pkl
+        {calibration_base_path}/{fiber_id}/{fiber_id}_{YYYYMMDD}_threshold.npz
+        {calibration_base_path}/{fiber_id}/{fiber_id}_{YYYYMMDD}_coupling.npz
 
     The manager automatically selects the most recent files by modification time.
 
@@ -179,8 +177,8 @@ class CalibrationManager:
             return None
 
         # Find latest calibration files
-        threshold_file = self._find_latest_file(fiber_dir, "*_threshold.pkl")
-        coupling_file = self._find_latest_file(fiber_dir, "*_coupling.pkl")
+        threshold_file = self._find_latest_file(fiber_dir, "*_threshold.npz")
+        coupling_file = self._find_latest_file(fiber_dir, "*_coupling.npz")
 
         if threshold_file is None:
             logger.warning(
@@ -205,8 +203,8 @@ class CalibrationManager:
             # Build CalibrationData
             calibration = CalibrationData(
                 fiber_id=fiber_id,
-                date=threshold_data.get("date", "unknown"),
-                n_sections=threshold_data["n_sections"],
+                date=str(threshold_data.get("date", "unknown")),
+                n_sections=int(threshold_data["n_sections"]),
                 threshold_curve=np.array(
                     threshold_data["threshold_curve"], dtype=np.float64
                 ),
@@ -214,7 +212,7 @@ class CalibrationManager:
                 noise_estimate=np.array(
                     threshold_data["noise_estimate"], dtype=np.float64
                 ),
-                threshold_method=threshold_data.get("method", "unknown"),
+                threshold_method=str(threshold_data.get("method", "unknown")),
                 correction_factors=(
                     np.array(coupling_data["correction_factors"], dtype=np.float64)
                     if coupling_data

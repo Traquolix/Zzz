@@ -47,7 +47,7 @@ class TestStats:
         response = authenticated_client.get(self.url)
         assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
         data = response.json()
-        assert data['code'] == 'clickhouse_unavailable'
+        assert data['code'] == 'analytics_unavailable'
 
     def test_stats_no_fiber_assignments_returns_zeros(self, authenticated_client):
         """User with no fiber assignments gets zero stats."""

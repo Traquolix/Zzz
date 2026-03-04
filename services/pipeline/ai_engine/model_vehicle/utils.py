@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+from scipy.signal import find_peaks
 
 from .constants import DEFAULT_EPSILON
 
@@ -105,6 +106,55 @@ def correlation_threshold(correlations_window: np.ndarray, corr_threshold: float
     out = np.zeros_like(correlations_window, dtype=np.float64)
     out[correlations_window >= corr_threshold] = 1
     return out
+
+
+def count_peaks_in_segment(
+    glrt_segment: np.ndarray,
+    detect_threshold: float,
+    classify_threshold: float,
+    sampling_rate_hz: float,
+    min_peak_distance_s: float = 0.25,
+) -> tuple[int, int, int]:
+    """Count vehicles and classify car/truck from a GLRT segment.
+
+    Uses scipy.signal.find_peaks on the GLRT signal within one detection
+    interval. Peaks above classify_threshold are trucks, the rest are cars.
+
+    Args:
+        glrt_segment: 1D array of summed GLRT values for one interval
+        detect_threshold: Minimum GLRT height to count as a vehicle
+        classify_threshold: GLRT height above which a peak is a truck
+        sampling_rate_hz: Sampling rate for min peak distance conversion
+        min_peak_distance_s: Minimum time between peaks in seconds
+
+    Returns:
+        (n_vehicles, n_cars, n_trucks)
+    """
+    if len(glrt_segment) == 0:
+        return 0, 0, 0
+
+    min_peak_distance = max(1, int(min_peak_distance_s * sampling_rate_hz))
+    min_prominence = max(1.0, 0.1 * detect_threshold)
+
+    peaks, props = find_peaks(
+        glrt_segment,
+        height=detect_threshold,
+        distance=min_peak_distance,
+        prominence=min_prominence,
+    )
+
+    if len(peaks) == 0:
+        if np.nanmax(glrt_segment) >= detect_threshold:
+            if np.nanmax(glrt_segment) >= classify_threshold:
+                return 1, 0, 1
+            return 1, 1, 0
+        return 0, 0, 0
+
+    n_vehicles = len(peaks)
+    peak_heights = props.get("peak_heights", np.array([]))
+    n_trucks = int(np.sum(peak_heights >= classify_threshold))
+    n_cars = n_vehicles - n_trucks
+    return n_vehicles, n_cars, n_trucks
 
 
 def find_ind(binary_mask: np.ndarray) -> list:

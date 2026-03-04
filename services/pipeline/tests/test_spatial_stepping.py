@@ -25,11 +25,18 @@ class TestSplitChannelOverlapStep:
         sys.modules.setdefault("matplotlib", MagicMock())
         sys.modules.setdefault("matplotlib.pyplot", MagicMock())
 
+        from ai_engine.model_vehicle.dtan_inference import DTANInference
         from ai_engine.model_vehicle.vehicle_speed import VehicleSpeedEstimator
 
         e = VehicleSpeedEstimator.__new__(VehicleSpeedEstimator)
         e.Nch = 9
         e.overlap_space = 8  # Nch - 1 → step = 1
+
+        # Create minimal DTANInference for split_channel_overlap
+        dtan = DTANInference.__new__(DTANInference)
+        dtan.Nch = 9
+        dtan.overlap_space = 8
+        e._dtan = dtan
         return e
 
     def test_step_1_window_count(self, estimator):
@@ -70,9 +77,15 @@ class TestSplitChannelOverlapStep:
 
     def test_old_step_8_would_give_fewer_windows(self, estimator):
         """Verify the old N_channels=1 (step=8) gives far fewer windows."""
+        from ai_engine.model_vehicle.dtan_inference import DTANInference
+
         estimator_old = type(estimator).__new__(type(estimator))
         estimator_old.Nch = 9
         estimator_old.overlap_space = 1  # OLD: N_channels=1 → step=8
+        dtan_old = DTANInference.__new__(DTANInference)
+        dtan_old.Nch = 9
+        dtan_old.overlap_space = 1
+        estimator_old._dtan = dtan_old
 
         C = 100
         data = np.random.randn(C, 300)

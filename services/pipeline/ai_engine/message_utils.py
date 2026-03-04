@@ -13,7 +13,6 @@ import numpy as np
 
 # Version constants
 ENGINE_VERSION = "1.0"
-MODEL_TYPE_NEURAL_NETWORK = "neural_network"
 
 
 @dataclass
@@ -103,67 +102,6 @@ def messages_to_arrays(
     return data_array, timestamp_list, timestamp_ns_list
 
 
-def create_speed_messages(
-    fiber_id: str,
-    detections: list[dict],
-    ctx: ProcessingContext,
-    service_name: str,
-    log_fn=None,
-) -> List:
-    """Create speed messages from detection dicts.
-
-    Each detection produces one message with a single speed entry,
-    matching the notebook's interval-based detection extraction.
-
-    Args:
-        detections: List of dicts with keys:
-            section_idx, speed_kmh, direction, timestamp_ns, glrt_max
-        ctx: ProcessingContext with channel_start and channel_step
-    """
-    from shared.message import Message
-    from shared.time_utils import current_time_nanoseconds
-
-    messages = []
-    channel_start = ctx.channel_start
-    channel_step = ctx.channel_step
-
-    for det in detections:
-        actual_channel = channel_start + (det["section_idx"] * channel_step)
-        timestamp_ns = det.get("timestamp_ns") or current_time_nanoseconds()
-
-        payload = {
-            "fiber_id": fiber_id,
-            "timestamp_ns": timestamp_ns,
-            "speeds": [{"channel_number": actual_channel, "speed": det["speed_kmh"]}],
-            "channel_start": channel_start,
-            "direction": det["direction"],
-            "ai_metadata": {
-                "engine_version": ENGINE_VERSION,
-                "spatial_points": 0,
-                "time_index": 0,
-            },
-        }
-
-        messages.append(
-            Message(
-                id=fiber_id,
-                payload=payload,
-                headers={
-                    "source": "ai_engine",
-                    "fiber_id": fiber_id,
-                    "engine_id": service_name,
-                },
-            )
-        )
-
-    if log_fn:
-        n_fwd = sum(1 for d in detections if d["direction"] == 1)
-        n_rev = sum(1 for d in detections if d["direction"] == 2)
-        log_fn(f"Speed detections: {len(detections)} total ({n_fwd} fwd, {n_rev} rev)")
-
-    return messages
-
-
 def create_detection_messages(
     fiber_id: str,
     detections: list[dict],
@@ -227,110 +165,5 @@ def create_detection_messages(
             f"Detections: {len(detections)} intervals ({n_fwd} fwd, {n_rev} rev), "
             f"{total_count:.0f} vehicles total"
         )
-
-    return messages
-
-
-def create_count_messages(
-    fiber_id: str,
-    count_results: tuple,
-    ctx: ProcessingContext,
-    sampling_rate_hz: float,
-    channels_per_section: int,
-    counting_samples: int,
-    step_samples: int,
-    service_name: str,
-    log_fn=None,
-    edge_trim: int = 0,
-) -> List:
-    """Create count messages from counting results."""
-    from shared.message import Message
-    from shared.time_utils import current_time_nanoseconds, sample_duration_nanoseconds
-
-    messages = []
-    counts, intervals, window_timestamps = count_results
-
-    # Intervals are in trimmed space (edge_trim samples removed from each side).
-    # The overlap region in trimmed space is [0, step_samples - edge_trim).
-    # Only count detections starting at or after this boundary as "new".
-    new_data_start = max(0, step_samples - edge_trim)
-    window_start_ns = window_timestamps[0] if window_timestamps else current_time_nanoseconds()
-
-    base_channel_start = ctx.channel_start
-    channel_step = ctx.channel_step
-
-    total_intervals = sum(len(c) if c is not None else 0 for c in counts)
-    total_filtered_out = 0
-
-    for section_idx, (section_counts, section_intervals) in enumerate(zip(counts, intervals)):
-        if section_counts is None or len(section_counts) == 0:
-            continue
-
-        if len(section_intervals) != 2:
-            continue
-
-        starts, ends = section_intervals
-
-        for count, start, end in zip(section_counts, starts, ends):
-            if start < new_data_start:
-                total_filtered_out += 1
-                continue
-            if count <= 0:
-                total_filtered_out += 1
-                continue
-
-            if start < len(window_timestamps):
-                count_timestamp_ns = window_timestamps[start]
-            else:
-                sample_duration = sample_duration_nanoseconds(sampling_rate_hz)
-                count_timestamp_ns = window_start_ns + int(start * sample_duration)
-
-            count_timestamp_ns = round(count_timestamp_ns / 1_000_000_000) * 1_000_000_000
-
-            section_array_start = section_idx * channels_per_section
-            section_array_end = section_array_start + (channels_per_section - 1)
-            actual_channel_start = base_channel_start + (section_array_start * channel_step)
-            actual_channel_end = base_channel_start + (section_array_end * channel_step)
-
-            # Extract car/truck classification if count is a tuple (n_vehicles, n_cars, n_trucks)
-            if isinstance(count, (tuple, list)) and len(count) == 3:
-                n_vehicles, n_cars, n_trucks = count
-            else:
-                n_vehicles = float(count)
-                n_cars = float(count)
-                n_trucks = 0.0
-
-            messages.append(
-                Message(
-                    id=fiber_id,
-                    payload={
-                        "fiber_id": fiber_id,
-                        "channel_start": int(actual_channel_start),
-                        "channel_end": int(actual_channel_end),
-                        "count_timestamp_ns": count_timestamp_ns,
-                        "vehicle_count": float(n_vehicles),
-                        "n_cars": float(n_cars),
-                        "n_trucks": float(n_trucks),
-                        "engine_version": ENGINE_VERSION,
-                        "model_type": MODEL_TYPE_NEURAL_NETWORK,
-                    },
-                    headers={
-                        "source": "ai_engine_count",
-                        "fiber_id": fiber_id,
-                        "channel_start": str(actual_channel_start),
-                        "channel_end": str(actual_channel_end),
-                        "engine_id": service_name,
-                    },
-                    output_id="counting",
-                )
-            )
-
-    if log_fn:
-        log_fn(
-            f"Count message creation: {total_intervals} total intervals → {total_filtered_out} filtered out → {len(messages)} messages sent"
-        )
-
-    if messages and log_fn:
-        log_fn(f"Created {len(messages)} vehicle count messages")
 
     return messages

@@ -1,18 +1,12 @@
-FROM python:3.9-slim
+FROM python:3.10-slim
 
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir \
-    "confluent-kafka[avro]" \
-    aiohttp==3.9.1 \
-    opentelemetry-api==1.24.0 \
-    opentelemetry-sdk==1.24.0 \
-    opentelemetry-exporter-otlp==1.24.0 \
-    opentelemetry-instrumentation-logging==0.45b0 \
-    opentelemetry-propagator-b3==1.24.0 \
-    scipy numpy pyyaml
+# Install dependencies from pyproject.toml (single source of truth)
+COPY pyproject.toml .
+RUN pip install --no-cache-dir .
 
 ENV PYTHONPATH=/app
 

@@ -162,3 +162,121 @@ class TestCircuitBreakerConfiguration:
 
         await cb.call(success)
         assert cb.failure_count == 0
+
+
+class TestHalfOpenRacePrevention:
+    """Test that only one trial call is allowed in HALF_OPEN state."""
+
+    @pytest.mark.asyncio
+    async def test_only_one_trial_call_allowed(self):
+        """Second concurrent call in HALF_OPEN should be rejected."""
+        cb = CircuitBreaker(failure_threshold=1, recovery_timeout=0.05)
+
+        async def fail():
+            raise ValueError("boom")
+
+        with pytest.raises(ValueError):
+            await cb.call(fail)
+
+        assert cb.state == CircuitBreakerState.OPEN
+        await asyncio.sleep(0.1)
+
+        trial_started = asyncio.Event()
+        trial_continue = asyncio.Event()
+
+        async def slow_trial():
+            trial_started.set()
+            await trial_continue.wait()
+            return "ok"
+
+        task1 = asyncio.create_task(cb.call(slow_trial))
+        await trial_started.wait()
+
+        with pytest.raises(Exception, match="trial in progress"):
+            await cb.call(slow_trial)
+
+        trial_continue.set()
+        result = await task1
+        assert result == "ok"
+        assert cb.state == CircuitBreakerState.CLOSED
+
+    @pytest.mark.asyncio
+    async def test_trial_flag_cleared_on_failure(self):
+        """Trial flag should clear even if the trial call fails."""
+        cb = CircuitBreaker(failure_threshold=1, recovery_timeout=0.05)
+
+        async def fail():
+            raise ValueError("boom")
+
+        with pytest.raises(ValueError):
+            await cb.call(fail)
+
+        await asyncio.sleep(0.1)
+
+        # Trial fails — flag should be cleared
+        with pytest.raises(ValueError):
+            await cb.call(fail)
+
+        assert not cb._half_open_trial_active
+
+
+class TestStateChangeCallback:
+    """Test on_state_change callback firing."""
+
+    @pytest.mark.asyncio
+    async def test_callback_on_open(self):
+        transitions = []
+        cb = CircuitBreaker(
+            failure_threshold=2,
+            recovery_timeout=0.1,
+            on_state_change=lambda old, new: transitions.append((old, new)),
+        )
+
+        async def fail():
+            raise ValueError("boom")
+
+        for _ in range(2):
+            with pytest.raises(ValueError):
+                await cb.call(fail)
+
+        assert transitions == [("closed", "open")]
+
+    @pytest.mark.asyncio
+    async def test_callback_on_recovery(self):
+        transitions = []
+        cb = CircuitBreaker(
+            failure_threshold=1,
+            recovery_timeout=0.05,
+            on_state_change=lambda old, new: transitions.append((old, new)),
+        )
+
+        async def fail():
+            raise ValueError("boom")
+
+        async def ok():
+            return True
+
+        with pytest.raises(ValueError):
+            await cb.call(fail)
+
+        await asyncio.sleep(0.1)
+        await cb.call(ok)
+
+        assert ("closed", "open") in transitions
+        assert ("half_open", "closed") in transitions
+
+    @pytest.mark.asyncio
+    async def test_no_callback_when_state_unchanged(self):
+        transitions = []
+        cb = CircuitBreaker(
+            failure_threshold=3,
+            on_state_change=lambda old, new: transitions.append((old, new)),
+        )
+
+        async def fail():
+            raise ValueError("boom")
+
+        with pytest.raises(ValueError):
+            await cb.call(fail)
+
+        assert transitions == []

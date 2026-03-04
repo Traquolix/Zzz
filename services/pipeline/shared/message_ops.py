@@ -39,7 +39,7 @@ class MessageOpsMixin:
                 elif self.config.input_topic_pattern:
                     span.set_attribute("kafka.topic_pattern", self.config.input_topic_pattern)
 
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 raw_message = await loop.run_in_executor(
                     self._kafka_executor, self.consumer.poll, self.config.consumer_poll_timeout
                 )
@@ -103,7 +103,7 @@ class MessageOpsMixin:
             # Use actual message topic (not config.input_topic which may be None for patterns)
             topic = raw_message.topic() or self.config.input_topic
             ctx = SerializationContext(topic, MessageField.KEY)
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             return await loop.run_in_executor(
                 self._serialization_executor, lambda: self.key_deserializer(raw_message.key(), ctx)
             )
@@ -118,7 +118,7 @@ class MessageOpsMixin:
             # Use actual message topic (not config.input_topic which may be None for patterns)
             topic = raw_message.topic() or self.config.input_topic
             ctx = SerializationContext(topic, MessageField.VALUE)
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             return await loop.run_in_executor(
                 self._serialization_executor,
                 lambda: self.value_deserializer(raw_message.value(), ctx),
@@ -246,7 +246,7 @@ class MessageOpsMixin:
 
         if serializer:
             ctx = SerializationContext(topic, MessageField.KEY)
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             return await loop.run_in_executor(None, serializer, key, ctx)
         return str(key).encode("utf-8")
 
@@ -259,7 +259,7 @@ class MessageOpsMixin:
 
         if serializer:
             ctx = SerializationContext(topic, MessageField.VALUE)
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             return await loop.run_in_executor(None, serializer, payload, ctx)
         return json.dumps(payload).encode("utf-8")
 
@@ -274,7 +274,7 @@ class MessageOpsMixin:
 
         if should_flush and self._message_batch:
             try:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 await loop.run_in_executor(
                     self._kafka_executor,
                     self.producer.flush,
@@ -315,7 +315,18 @@ class MessageOpsMixin:
             self.metrics.record_error("message_delivery_failed")
 
             if self.config.enable_dlq and original_message:
-                asyncio.create_task(self.handle_dead_letter(original_message, error_msg))
+                # This callback runs on librdkafka's internal thread, not the asyncio
+                # event loop thread. Use call_soon_threadsafe to safely schedule the
+                # coroutine on the event loop.
+                loop = getattr(self, "_loop", None)
+                if loop is not None and loop.is_running():
+                    loop.call_soon_threadsafe(
+                        loop.create_task, self.handle_dead_letter(original_message, error_msg)
+                    )
+                else:
+                    self.logger.error(
+                        f"Cannot send message {message_id} to DLQ: event loop not available"
+                    )
         else:
             self.logger.debug(f"Successfully delivered message {message_id}")
 

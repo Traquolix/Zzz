@@ -69,8 +69,7 @@ services:
         kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.raw.mathis --partitions 20 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=1073741824 --config compression.type=lz4 --config max.message.bytes=2097152 &&
         kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.raw.promenade --partitions 20 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=1073741824 --config compression.type=lz4 --config max.message.bytes=2097152 &&
         kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.processed --partitions 20 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=1073741824 --config compression.type=lz4 --config max.message.bytes=2097152 &&
-        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.speeds --partitions 20 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=1073741824 --config compression.type=lz4 --config max.message.bytes=2097152 &&
-        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.counts --partitions 20 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=1073741824 --config compression.type=lz4 --config max.message.bytes=2097152 &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.detections --partitions 20 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=1073741824 --config compression.type=lz4 --config max.message.bytes=2097152 &&
         kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.dlq --partitions 3 --replication-factor 1 --config retention.ms=604800000 --config retention.bytes=1073741824 --config compression.type=lz4 --config max.message.bytes=2097152 &&
         echo 'All Kafka topics created successfully'
       "
@@ -296,6 +295,7 @@ services:
       - ENABLE_METRICS_GRAFANA=true
       - ENABLE_TRACES_GRAFANA=true
       - GF_INSTALL_PLUGINS=grafana-clickhouse-datasource
+      - CLICKHOUSE_GRAFANA_PASSWORD=${CLICKHOUSE_GRAFANA_PASSWORD:-CHANGE_ME_GRAFANA}
       - HTTP_PROXY=${HTTP_PROXY:-}
       - HTTPS_PROXY=${HTTPS_PROXY:-}
       - NO_PROXY=localhost,127.0.0.1,kafka,clickhouse,redis,schema-registry,platform-backend,otel-lgtm
@@ -326,7 +326,7 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - "8001:8001"
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:8001:8001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]
       interval: 10s

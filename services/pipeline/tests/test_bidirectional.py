@@ -139,6 +139,5 @@ class TestBidirectionalDetection:
         dates_ns = np.arange(100) * 100_000_000
 
         for result in e.process_file(data, dates, dates_ns):
-            direction_mask = result[6]
             # Both forward and reverse should be detected -> mask = 3
-            assert np.all((direction_mask >= 0) & (direction_mask <= 3))
+            assert np.all((result.direction_mask >= 0) & (result.direction_mask <= 3))

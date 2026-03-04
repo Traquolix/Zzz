@@ -17,13 +17,13 @@ for mod_key in [
 
 import torch  # noqa: E402, F401
 
-from ai_engine.model_vehicle.simple_interval_counter import SimpleIntervalCounter  # noqa: E402
+from ai_engine.model_vehicle.simple_interval_counter import VehicleCounter  # noqa: E402
 
 
 @pytest.fixture
 def counter():
     """Create a counter with default settings."""
-    return SimpleIntervalCounter(
+    return VehicleCounter(
         fiber_id="test",
         sampling_rate_hz=10.0,
         correlation_threshold=500.0,

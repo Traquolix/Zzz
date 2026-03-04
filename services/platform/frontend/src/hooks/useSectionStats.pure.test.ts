@@ -94,6 +94,8 @@ function makeDetection(overrides: Partial<Detection> = {}): Detection {
         channel: 150,
         speed: 80,
         count: 1,
+        nCars: 1,
+        nTrucks: 0,
         direction: 0,
         timestamp: Date.now(),
         ...overrides,

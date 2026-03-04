@@ -21,6 +21,7 @@ sys.modules["matplotlib.pyplot"] = MagicMock()
 
 import torch  # noqa: E402
 
+from ai_engine.model_vehicle.glrt_detector import GLRTDetector  # noqa: E402
 from ai_engine.model_vehicle.vehicle_speed import VehicleSpeedEstimator  # noqa: E402
 
 
@@ -32,6 +33,11 @@ class TestApplyGlrtPerPair:
         """Create a minimal estimator with just glrt_win set."""
         e = VehicleSpeedEstimator.__new__(VehicleSpeedEstimator)
         e.glrt_win = 20
+
+        # Create minimal GLRTDetector for apply_glrt
+        glrt = GLRTDetector.__new__(GLRTDetector)
+        glrt.glrt_win = 20
+        e._glrt = glrt
         return e
 
     def test_output_shape_is_3d(self, estimator):

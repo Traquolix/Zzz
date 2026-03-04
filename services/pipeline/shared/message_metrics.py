@@ -138,8 +138,9 @@ class MessageMetrics:
     def _setup_local_provider(self):
         """Setup local OTEL provider if global not configured."""
         otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-lgtm:4317")
+        otlp_insecure = os.getenv("OTEL_EXPORTER_OTLP_INSECURE", "true").lower() == "true"
 
-        metric_exporter = OTLPMetricExporter(endpoint=otlp_endpoint, insecure=True)
+        metric_exporter = OTLPMetricExporter(endpoint=otlp_endpoint, insecure=otlp_insecure)
 
         metric_reader = PeriodicExportingMetricReader(
             exporter=metric_exporter, export_interval_millis=10000

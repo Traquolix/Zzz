@@ -101,7 +101,7 @@ class PersistentDLQ:
             key_context = SerializationContext(self.dlq_topic, MessageField.KEY)
             serialized_key = self.key_serializer(self.service_name, key_context)
 
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(
                 None, self._produce_message, serialized_key, serialized_value
             )
@@ -139,7 +139,7 @@ class PersistentDLQ:
         """Flush pending messages and close producer."""
         try:
             self.logger.info("Shutting down DLQ...")
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, self.producer.flush, 10.0)
 
             self.logger.info(

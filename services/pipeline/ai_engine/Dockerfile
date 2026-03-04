@@ -1,5 +1,5 @@
 # CUDA-enabled image for GPU inference
-# Using NVIDIA PyTorch base image with CUDA 12.4 support
+# Using NVIDIA CUDA runtime with Python installed manually (Ubuntu 22.04 = Python 3.10)
 FROM nvidia/cuda:12.4.0-runtime-ubuntu22.04
 
 WORKDIR /app
@@ -15,24 +15,14 @@ RUN apt-get update && apt-get install -y \
     && ln -sf /usr/bin/python3 /usr/bin/python
 
 # Install PyTorch with CUDA support first (specific version for CUDA 12.4)
+# Must be separate from pyproject.toml because it requires a custom index URL
 RUN pip install --no-cache-dir \
     torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124
 
-# Install remaining Python dependencies for AI engine
-RUN pip install --no-cache-dir \
-    confluent-kafka[avro] \
-    aiohttp==3.9.1 \
-    opentelemetry-api==1.24.0 \
-    opentelemetry-sdk==1.24.0 \
-    opentelemetry-exporter-otlp==1.24.0 \
-    opentelemetry-instrumentation-logging==0.45b0 \
-    opentelemetry-propagator-b3==1.24.0 \
-    numpy>=1.21.0 \
-    scipy>=1.7.0 \
-    matplotlib>=3.5.0 \
-    pandas \
-    pyyaml \
-    tqdm
+# Install remaining dependencies from pyproject.toml (single source of truth)
+# Uses the [ai] extra for torch-adjacent deps (matplotlib, pandas)
+COPY pyproject.toml .
+RUN pip install --no-cache-dir ".[ai]"
 
 # Set Python path and suppress NNPACK warning (CPU-only optimization not available)
 ENV PYTHONPATH=/app

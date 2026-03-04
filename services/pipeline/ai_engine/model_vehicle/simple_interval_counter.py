@@ -16,10 +16,9 @@ from pathlib import Path
 from typing import List, Tuple
 
 import numpy as np
-from scipy.signal import find_peaks
 
 from .constants import COUNTING_STEP_SAMPLES
-from .utils import correlation_threshold, find_ind
+from .utils import correlation_threshold, count_peaks_in_segment, find_ind
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +30,26 @@ except ImportError:
     torch = None
 
 
-class SimpleIntervalCounter:
+def build_counting_network() -> "torch.nn.Sequential":
+    """Build the counting MLP architecture (must match trained model).
+
+    Architecture: 5 → 10 → 5 → 1 with ReLU activations.
+    This function defines the network structure so that state_dict
+    can be loaded with weights_only=True (no pickle needed).
+    """
+    if not TORCH_AVAILABLE:
+        raise RuntimeError("PyTorch is required to build counting network")
+    return torch.nn.Sequential(
+        torch.nn.Linear(5, 10),
+        torch.nn.ReLU(),
+        torch.nn.Linear(10, 5),
+        torch.nn.ReLU(),
+        torch.nn.Linear(5, 1),
+        torch.nn.ReLU(),
+    )
+
+
+class VehicleCounter:
     """Counts vehicles using NN inference on accumulated data windows.
 
     Accumulates aligned_speed, correlations, and aligned_data across calls.
@@ -245,25 +263,12 @@ class SimpleIntervalCounter:
     def _count_peaks_in_segment(
         self, glrt_segment: np.ndarray, threshold: float, fs: float
     ) -> Tuple[int, int, int]:
-        if len(glrt_segment) == 0:
-            return 0, 0, 0
-        min_peak_distance = max(1, int(0.25 * fs))
-        min_prominence = max(1.0, 0.1 * threshold)
-        classify_threshold = threshold * 2.0
-        peaks, props = find_peaks(
-            glrt_segment, height=threshold, distance=min_peak_distance, prominence=min_prominence
+        return count_peaks_in_segment(
+            glrt_segment,
+            detect_threshold=threshold,
+            classify_threshold=threshold * 2.0,
+            sampling_rate_hz=fs,
         )
-        if len(peaks) == 0:
-            if len(glrt_segment) > 0 and np.nanmax(glrt_segment) >= threshold:
-                if np.nanmax(glrt_segment) >= classify_threshold:
-                    return 1, 0, 1
-                return 1, 1, 0
-            return 0, 0, 0
-        n_vehicles = len(peaks)
-        peak_heights = props.get("peak_heights", np.array([]))
-        n_trucks = int(np.sum(peak_heights >= classify_threshold))
-        n_cars = n_vehicles - n_trucks
-        return n_vehicles, n_cars, n_trucks
 
     # ------------------------------------------------------------------
     # Core: process_window_data (matches notebook)
@@ -415,8 +420,6 @@ class SimpleIntervalCounter:
     def _lambda_peak_count(self, threshold, intervals, corr_section):
         """Count vehicles using peak detection in GLRT signal.
 
-        Uses 0.25s min peak distance (hardcoded to match notebook).
-
         Args:
             threshold: (2,) array [detect_thr, classify_thr]
             intervals: (2, n_interv) array of [starts, ends]
@@ -437,31 +440,14 @@ class SimpleIntervalCounter:
             else 2.0 * detect_thr
         )
 
-        min_peak_distance = max(1, int(0.25 * self.fs))  # 0.25s hardcoded (matches notebook)
-        min_prominence = max(1.0, 0.1 * detect_thr)
-
         for j in range(n_interv):
             start, stop = int(intervals[0, j]), int(intervals[1, j])
             seg = corr_section[start:stop]
-            if seg.size == 0:
-                section_count[j] = 0
-                continue
-
-            peaks, props = find_peaks(
-                seg, height=detect_thr, distance=min_peak_distance, prominence=min_prominence
+            n_v, n_c, n_t = count_peaks_in_segment(
+                seg, detect_thr, classify_thr, self.fs,
             )
-
-            if len(peaks) == 0 and np.nanmax(seg) >= detect_thr:
-                section_count[j] = 1
-                if np.nanmax(seg) >= classify_thr:
-                    trucks_count[j] = 1
-                else:
-                    cars_count[j] = 1
-            else:
-                section_count[j] = float(len(peaks))
-                if len(peaks) > 0:
-                    peak_heights = props.get("peak_heights", np.array([]))
-                    trucks_count[j] = float(np.sum(peak_heights >= classify_thr))
-                    cars_count[j] = float(len(peaks) - trucks_count[j])
+            section_count[j] = float(n_v)
+            cars_count[j] = float(n_c)
+            trucks_count[j] = float(n_t)
 
         return section_count, cars_count, trucks_count

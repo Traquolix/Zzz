@@ -10,10 +10,10 @@ datasources:
       defaultDatabase: sequoia
       port: 9000
       server: clickhouse
-      username: sequoia
+      username: grafana_readonly
       tlsSkipVerify: true
     secureJsonData:
-      password: ${CLICKHOUSE_PASSWORD}
+      password: ${CLICKHOUSE_GRAFANA_PASSWORD}
     editable: true
 
   - name: Prometheus

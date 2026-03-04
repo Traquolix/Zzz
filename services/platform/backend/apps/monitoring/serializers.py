@@ -80,3 +80,56 @@ class IncidentActionInputSerializer(serializers.Serializer):
         choices=['acknowledged', 'investigating', 'resolved'],
     )
     note = serializers.CharField(required=False, default='', allow_blank=True)
+
+
+class SectionInputSerializer(serializers.Serializer):
+    """Validates incoming section creation requests."""
+    fiberId = serializers.CharField()
+    name = serializers.CharField()
+    channelStart = serializers.IntegerField()
+    channelEnd = serializers.IntegerField()
+
+
+class SectionSerializer(serializers.Serializer):
+    """Response serializer for a monitored section."""
+    id = serializers.CharField()
+    fiberId = serializers.CharField()
+    name = serializers.CharField()
+    channelStart = serializers.IntegerField()
+    channelEnd = serializers.IntegerField()
+    expectedTravelTime = serializers.FloatField(allow_null=True)
+    isActive = serializers.BooleanField()
+    createdAt = serializers.CharField()
+
+
+class SectionHistoryPointSerializer(serializers.Serializer):
+    """A single point in a section speed time-series."""
+    time = serializers.IntegerField()
+    speed = serializers.FloatField()
+    speedMax = serializers.FloatField()
+    samples = serializers.IntegerField()
+
+
+class SectionHistorySerializer(serializers.Serializer):
+    """Response serializer for section history endpoint."""
+    sectionId = serializers.CharField()
+    minutes = serializers.IntegerField()
+    points = SectionHistoryPointSerializer(many=True)
+
+
+class SpectralDataSerializer(serializers.Serializer):
+    """Response serializer for spectral heatmap data."""
+    t0 = serializers.CharField()
+    dt = serializers.ListField(child=serializers.FloatField())
+    frequencies = serializers.ListField(child=serializers.FloatField())
+    power = serializers.ListField()
+    freqRange = serializers.ListField(child=serializers.FloatField())
+
+
+class SpectralPeaksSerializer(serializers.Serializer):
+    """Response serializer for spectral peak frequencies."""
+    t0 = serializers.CharField()
+    dt = serializers.ListField(child=serializers.FloatField())
+    peakFrequencies = serializers.ListField(child=serializers.FloatField())
+    peakPowers = serializers.ListField(child=serializers.FloatField())
+    freqRange = serializers.ListField(child=serializers.FloatField())

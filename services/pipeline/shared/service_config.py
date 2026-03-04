@@ -11,15 +11,10 @@ class OutputConfig:
 
     Example:
         outputs = {
-            'speed': OutputConfig(
-                topic='das.speeds',
+            'default': OutputConfig(
+                topic='das.detections',
                 key_schema_file='schema/string_key.avsc',
-                value_schema_file='schema/das_speed_analysis.avsc'
-            ),
-            'counting': OutputConfig(
-                topic='das.counts',
-                key_schema_file='schema/string_key.avsc',
-                value_schema_file='schema/das_vehicle_counts.avsc'
+                value_schema_file='ai_engine/schema/das_detection.avsc'
             )
         }
     """
@@ -134,7 +129,6 @@ class ServiceConfig:
     consumer_session_timeout_ms: int = 10000  # 10 seconds
     consumer_heartbeat_interval_ms: int = 3000  # 3 seconds
     consumer_max_poll_interval_ms: int = 300000  # 5 minutes
-    consumer_max_poll_records: int = 500
     consumer_fetch_min_bytes: int = 1
     consumer_fetch_max_wait_ms: int = 500
     consumer_isolation_level: str = "read_uncommitted"  # 'read_committed', 'read_uncommitted'

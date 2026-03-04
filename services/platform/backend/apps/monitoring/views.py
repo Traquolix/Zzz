@@ -26,6 +26,11 @@ from apps.monitoring.serializers import (
     IncidentActionInputSerializer,
     InfrastructureSerializer,
     StatsSerializer,
+    SectionInputSerializer,
+    SectionSerializer,
+    SectionHistorySerializer,
+    SpectralDataSerializer,
+    SpectralPeaksSerializer,
 )
 from apps.monitoring.incident_service import (
     query_recent as incident_query_recent,
@@ -44,7 +49,7 @@ from apps.monitoring.workflow import (
     get_current_status,
     InvalidTransitionError,
 )
-from apps.shared.clickhouse import query, query_scalar
+from apps.shared.clickhouse import clickhouse_fallback, query, query_scalar
 from apps.shared.exceptions import ClickHouseUnavailableError
 from apps.shared.permissions import IsActiveUser, IsNotViewer
 
@@ -72,6 +77,21 @@ def _stats_cache_key(user):
     if user.is_superuser:
         return 'stats:all'
     return f'stats:org:{user.organization_id}'
+
+
+def _verify_infrastructure_access(user, infrastructure_id):
+    """Verify the user's org owns the infrastructure. Returns error Response or None."""
+    if not infrastructure_id or user.is_superuser:
+        return None
+    if not Infrastructure.objects.filter(
+        id=infrastructure_id,
+        organization=user.organization,
+    ).exists():
+        return Response(
+            {'detail': 'Infrastructure not found', 'code': 'not_found'},
+            status=404,
+        )
+    return None
 
 
 class IncidentListView(APIView):
@@ -414,6 +434,7 @@ class StatsView(APIView):
         responses={200: StatsSerializer},
         tags=['stats'],
     )
+    @clickhouse_fallback()
     def get(self, request):
         cache_key = _stats_cache_key(request.user)
         cached = django_cache.get(cache_key)
@@ -422,82 +443,72 @@ class StatsView(APIView):
 
         fiber_ids = _get_fiber_ids_or_none(request.user)
 
-        try:
-            if fiber_ids is not None:
-                if not fiber_ids:
-                    fiber_count = 0
-                    total_channels = 0
-                    active_incidents = 0
-                    recent_rows = 0
-                    active_vehicles = 0
-                else:
-                    fiber_count = query_scalar(
-                        "SELECT count(DISTINCT fiber_id) FROM sequoia.fiber_cables WHERE fiber_id IN {fids:Array(String)}",
-                        parameters={'fids': fiber_ids},
-                    ) or 0
-
-                    total_channels = query_scalar(
-                        "SELECT sum(length(channel_coordinates)) FROM sequoia.fiber_cables WHERE fiber_id IN {fids:Array(String)}",
-                        parameters={'fids': fiber_ids},
-                    ) or 0
-
-                    active_incidents = query_scalar(
-                        "SELECT count() FROM sequoia.fiber_incidents FINAL WHERE status = 'active' AND fiber_id IN {fids:Array(String)}",
-                        parameters={'fids': fiber_ids},
-                    ) or 0
-
-                    recent_rows = query_scalar(
-                        """
-                        SELECT count() / 10
-                        FROM sequoia.detection_hires
-                        WHERE ts >= now() - INTERVAL 10 SECOND
-                          AND fiber_id IN {fids:Array(String)}
-                        """,
-                        parameters={'fids': fiber_ids},
-                    ) or 0
-
-                    active_vehicles = query_scalar(
-                        """
-                        SELECT coalesce(sum(vehicle_count), 0)
-                        FROM sequoia.detection_hires
-                        WHERE ts >= (now() - toIntervalSecond(30))
-                          AND fiber_id IN {fids:Array(String)}
-                        """,
-                        parameters={'fids': fiber_ids},
-                    ) or 0
+        if fiber_ids is not None:
+            if not fiber_ids:
+                fiber_count = 0
+                total_channels = 0
+                active_incidents = 0
+                recent_rows = 0
+                active_vehicles = 0
             else:
                 fiber_count = query_scalar(
-                    "SELECT count(DISTINCT fiber_id) FROM sequoia.fiber_cables"
+                    "SELECT count(DISTINCT fiber_id) FROM sequoia.fiber_cables WHERE fiber_id IN {fids:Array(String)}",
+                    parameters={'fids': fiber_ids},
                 ) or 0
 
                 total_channels = query_scalar(
-                    "SELECT sum(length(channel_coordinates)) FROM sequoia.fiber_cables"
+                    "SELECT sum(length(channel_coordinates)) FROM sequoia.fiber_cables WHERE fiber_id IN {fids:Array(String)}",
+                    parameters={'fids': fiber_ids},
                 ) or 0
 
                 active_incidents = query_scalar(
-                    "SELECT count() FROM sequoia.fiber_incidents FINAL WHERE status = 'active'"
+                    "SELECT count() FROM sequoia.fiber_incidents FINAL WHERE status = 'active' AND fiber_id IN {fids:Array(String)}",
+                    parameters={'fids': fiber_ids},
                 ) or 0
 
-                recent_rows = query_scalar("""
+                recent_rows = query_scalar(
+                    """
                     SELECT count() / 10
                     FROM sequoia.detection_hires
                     WHERE ts >= now() - INTERVAL 10 SECOND
-                """) or 0
+                      AND fiber_id IN {fids:Array(String)}
+                    """,
+                    parameters={'fids': fiber_ids},
+                ) or 0
 
-                active_vehicles = query_scalar("""
+                active_vehicles = query_scalar(
+                    """
                     SELECT coalesce(sum(vehicle_count), 0)
                     FROM sequoia.detection_hires
                     WHERE ts >= (now() - toIntervalSecond(30))
-                """) or 0
+                      AND fiber_id IN {fids:Array(String)}
+                    """,
+                    parameters={'fids': fiber_ids},
+                ) or 0
+        else:
+            fiber_count = query_scalar(
+                "SELECT count(DISTINCT fiber_id) FROM sequoia.fiber_cables"
+            ) or 0
 
-        except ClickHouseUnavailableError:
-            return Response(
-                {
-                    'detail': 'ClickHouse unavailable',
-                    'code': 'clickhouse_unavailable',
-                },
-                status=503,
-            )
+            total_channels = query_scalar(
+                "SELECT sum(length(channel_coordinates)) FROM sequoia.fiber_cables"
+            ) or 0
+
+            active_incidents = query_scalar(
+                "SELECT count() FROM sequoia.fiber_incidents FINAL WHERE status = 'active'"
+            ) or 0
+
+            recent_rows = query_scalar("""
+                SELECT count() / 10
+                FROM sequoia.detection_hires
+                WHERE ts >= now() - INTERVAL 10 SECOND
+            """) or 0
+
+            active_vehicles = query_scalar("""
+                SELECT coalesce(sum(vehicle_count), 0)
+                FROM sequoia.detection_hires
+                WHERE ts >= (now() - toIntervalSecond(30))
+            """) or 0
 
         data = {
             'fiberCount': fiber_count,
@@ -520,41 +531,33 @@ class SectionListView(APIView):
     """
     permission_classes = [IsActiveUser]
 
+    @extend_schema(
+        responses={200: SectionSerializer(many=True)},
+        tags=['sections'],
+    )
+    @clickhouse_fallback()
     def get(self, request):
         fiber_ids = _get_fiber_ids_or_none(request.user)
         if fiber_ids is not None and not fiber_ids:
             return Response({'results': []})
 
-        try:
-            sections = query_sections(fiber_ids=fiber_ids)
-        except ClickHouseUnavailableError:
-            return Response(
-                {'detail': 'ClickHouse unavailable', 'code': 'clickhouse_unavailable'},
-                status=503,
-            )
-
+        sections = query_sections(fiber_ids=fiber_ids)
         return Response({'results': sections})
 
+    @extend_schema(
+        request=SectionInputSerializer,
+        responses={201: SectionSerializer},
+        tags=['sections'],
+    )
+    @clickhouse_fallback()
     def post(self, request):
-        fiber_id = request.data.get('fiberId')
-        name = request.data.get('name')
-        channel_start = request.data.get('channelStart')
-        channel_end = request.data.get('channelEnd')
+        serializer = SectionInputSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-        if not all([fiber_id, name, channel_start is not None, channel_end is not None]):
-            return Response(
-                {'detail': 'Missing required fields: fiberId, name, channelStart, channelEnd', 'code': 'validation_error'},
-                status=400,
-            )
-
-        try:
-            channel_start = int(channel_start)
-            channel_end = int(channel_end)
-        except (ValueError, TypeError):
-            return Response(
-                {'detail': 'channelStart and channelEnd must be integers', 'code': 'validation_error'},
-                status=400,
-            )
+        fiber_id = serializer.validated_data['fiberId']
+        name = serializer.validated_data['name']
+        channel_start = serializer.validated_data['channelStart']
+        channel_end = serializer.validated_data['channelEnd']
 
         # Org-scoping: verify the fiber belongs to user's org
         fiber_ids = _get_fiber_ids_or_none(request.user)
@@ -566,20 +569,13 @@ class SectionListView(APIView):
                     status=404,
                 )
 
-        try:
-            section = insert_section(
-                fiber_id=fiber_id,
-                name=name,
-                channel_start=channel_start,
-                channel_end=channel_end,
-                user=str(request.user.id) if hasattr(request.user, 'id') else '',
-            )
-        except ClickHouseUnavailableError:
-            return Response(
-                {'detail': 'ClickHouse unavailable', 'code': 'clickhouse_unavailable'},
-                status=503,
-            )
-
+        section = insert_section(
+            fiber_id=fiber_id,
+            name=name,
+            channel_start=channel_start,
+            channel_end=channel_end,
+            user=str(request.user.id) if hasattr(request.user, 'id') else '',
+        )
         return Response(section, status=201)
 
 
@@ -591,15 +587,9 @@ class SectionDeleteView(APIView):
     """
     permission_classes = [IsActiveUser]
 
+    @clickhouse_fallback()
     def delete(self, request, section_id):
-        # Look up the section to get its fiber_id for org-scoping
-        try:
-            sections = query_sections()
-        except ClickHouseUnavailableError:
-            return Response(
-                {'detail': 'ClickHouse unavailable', 'code': 'clickhouse_unavailable'},
-                status=503,
-            )
+        sections = query_sections()
 
         section = next((s for s in sections if s['id'] == section_id), None)
         if not section:
@@ -617,14 +607,7 @@ class SectionDeleteView(APIView):
                     status=404,
                 )
 
-        try:
-            delete_section(section_id, section['fiberId'])
-        except ClickHouseUnavailableError:
-            return Response(
-                {'detail': 'ClickHouse unavailable', 'code': 'clickhouse_unavailable'},
-                status=503,
-            )
-
+        delete_section(section_id, section['fiberId'])
         return Response(status=204)
 
 
@@ -636,20 +619,21 @@ class SectionHistoryView(APIView):
     """
     permission_classes = [IsActiveUser]
 
+    @extend_schema(
+        responses={200: SectionHistorySerializer},
+        parameters=[
+            OpenApiParameter(name='minutes', type=int, description='History window in minutes (max 1440)'),
+        ],
+        tags=['sections'],
+    )
+    @clickhouse_fallback()
     def get(self, request, section_id):
         try:
             minutes = min(int(request.query_params.get('minutes', 60)), 1440)
         except (ValueError, TypeError):
             minutes = 60
 
-        # Look up the section
-        try:
-            sections = query_sections()
-        except ClickHouseUnavailableError:
-            return Response(
-                {'detail': 'ClickHouse unavailable', 'code': 'clickhouse_unavailable'},
-                status=503,
-            )
+        sections = query_sections()
 
         section = next((s for s in sections if s['id'] == section_id), None)
         if not section:
@@ -667,18 +651,12 @@ class SectionHistoryView(APIView):
                     status=404,
                 )
 
-        try:
-            history = query_section_history(
-                fiber_id=section['fiberId'],
-                channel_start=section['channelStart'],
-                channel_end=section['channelEnd'],
-                minutes=minutes,
-            )
-        except ClickHouseUnavailableError:
-            return Response(
-                {'detail': 'ClickHouse unavailable', 'code': 'clickhouse_unavailable'},
-                status=503,
-            )
+        history = query_section_history(
+            fiber_id=section['fiberId'],
+            channel_start=section['channelStart'],
+            channel_end=section['channelEnd'],
+            minutes=minutes,
+        )
 
         return Response({
             'sectionId': section_id,
@@ -715,29 +693,18 @@ class SpectralDataView(APIView):
             OpenApiParameter(name='startTime', type=str, description='Start time (ISO format)'),
             OpenApiParameter(name='endTime', type=str, description='End time (ISO format)'),
         ],
+        responses={200: SpectralDataSerializer},
         tags=['shm'],
     )
-    def _validate_infrastructure_access(self, request):
-        """If infrastructureId is provided, validate org access. Returns error Response or None."""
-        infrastructure_id = request.query_params.get('infrastructureId')
-        if infrastructure_id and not request.user.is_superuser:
-            if not Infrastructure.objects.filter(
-                id=infrastructure_id,
-                organization=request.user.organization,
-            ).exists():
-                return Response(
-                    {'detail': 'Infrastructure not found', 'code': 'not_found'},
-                    status=404,
-                )
-        return None
-
     def get(self, request):
         from datetime import datetime
         import numpy as np
         from apps.monitoring.hdf5_reader import load_spectral_data, sample_file_exists
 
         # Org-scoping: validate infrastructure access if specified
-        error_resp = self._validate_infrastructure_access(request)
+        error_resp = _verify_infrastructure_access(
+            request.user, request.query_params.get('infrastructureId'),
+        )
         if error_resp:
             return error_resp
 
@@ -820,6 +787,7 @@ class SpectralPeaksView(APIView):
             OpenApiParameter(name='startTime', type=str, description='Start time (ISO format)'),
             OpenApiParameter(name='endTime', type=str, description='End time (ISO format)'),
         ],
+        responses={200: SpectralPeaksSerializer},
         tags=['shm'],
     )
     def get(self, request):
@@ -828,16 +796,11 @@ class SpectralPeaksView(APIView):
         from apps.monitoring.hdf5_reader import load_spectral_data, sample_file_exists
 
         # Org-scoping: validate infrastructure access if specified
-        infrastructure_id = request.query_params.get('infrastructureId')
-        if infrastructure_id and not request.user.is_superuser:
-            if not Infrastructure.objects.filter(
-                id=infrastructure_id,
-                organization=request.user.organization,
-            ).exists():
-                return Response(
-                    {'detail': 'Infrastructure not found', 'code': 'not_found'},
-                    status=404,
-                )
+        error_resp = _verify_infrastructure_access(
+            request.user, request.query_params.get('infrastructureId'),
+        )
+        if error_resp:
+            return error_resp
 
         # Demo mode: return sample data from HDF5 file
         if not sample_file_exists():
@@ -944,15 +907,9 @@ class SHMStatusView(APIView):
         import numpy as np
 
         # Org-scoping: verify infrastructure belongs to user's org
-        if not request.user.is_superuser:
-            if not Infrastructure.objects.filter(
-                id=infrastructure_id,
-                organization=request.user.organization,
-            ).exists():
-                return Response(
-                    {'detail': 'Infrastructure not found', 'code': 'not_found'},
-                    status=404,
-                )
+        error_resp = _verify_infrastructure_access(request.user, infrastructure_id)
+        if error_resp:
+            return error_resp
 
         # Seed RNG with infrastructure_id for deterministic demo responses
         rng = random.Random(infrastructure_id)

@@ -21,61 +21,12 @@ class Transformer(ServiceBase, Generic[T, U]):
         pass
 
     async def _start_service_loops(self):
-        self._tasks.append(asyncio.create_task(self._transformer_loop()))
+        self._tasks.append(asyncio.create_task(self._poll_loop("transformer")))
 
-    async def _transformer_loop(self):
-        while self._running:
-            try:
-                message = await self._get_next_message()
-                if message:
-                    await self._process_transformer_message(message)
-                else:
-                    await asyncio.sleep(self.config.consumer_idle_delay)
-
-            except Exception as e:
-                self.logger.error(f"Error in transformer loop: {e}")
-                self.metrics.record_error("transformer_loop")
-                await asyncio.sleep(self.config.error_backoff_delay)
-
-    async def _process_transformer_message(self, message: Message) -> None:
-        async with self._semaphore:
-            start_time = time.time()
-
-            try:
-                result = await asyncio.wait_for(
-                    self.consumer_circuit_breaker.call(
-                        self.retry_handler.retry_with_backoff, self.transform, message
-                    ),
-                    timeout=self.config.message_timeout,
-                )
-
-                if result is not None:
-                    await self._internal_send(result)
-
-                processing_time = time.time() - start_time
-                self.metrics.record_message_processed(processing_time)
-                self.logger.debug(f"Message {message.id} processed in {processing_time:.3f}s")
-
-                if isinstance(message, KafkaMessage):
-                    await self._commit_message(message)
-
-            except asyncio.TimeoutError:
-                self.logger.error(
-                    f"Message {message.id} processing timed out after {self.config.message_timeout}s"
-                )
-                self.metrics.record_error("message_timeout")
-
-                if self.config.enable_dlq:
-                    await self.handle_dead_letter(
-                        message, f"Processing timeout after {self.config.message_timeout}s"
-                    )
-
-            except Exception as e:
-                self.logger.error(f"Failed to process message {message.id} after all retries: {e}")
-                self.metrics.record_error("message_processing")
-
-                if self.config.enable_dlq:
-                    await self.handle_dead_letter(message, str(e))
+    async def _dispatch(self, message: Message) -> None:
+        result = await self._execute_with_protection(self.transform, message, message)
+        if result is not None:
+            await self._internal_send(result)
 
 
 class MultiTransformer(ServiceBase, Generic[T, U]):
@@ -87,63 +38,13 @@ class MultiTransformer(ServiceBase, Generic[T, U]):
         pass
 
     async def _start_service_loops(self):
-        self._tasks.append(asyncio.create_task(self._multi_transformer_loop()))
+        self._tasks.append(asyncio.create_task(self._poll_loop("multi_transformer")))
 
-    async def _multi_transformer_loop(self):
-        while self._running:
-            try:
-                message = await self._get_next_message()
-                if message:
-                    await self._process_multi_transformer_message(message)
-                else:
-                    await asyncio.sleep(self.config.consumer_idle_delay)
-
-            except Exception as e:
-                self.logger.error(f"Error in multi-transformer loop: {e}")
-                self.metrics.record_error("multi_transformer_loop")
-                await asyncio.sleep(self.config.error_backoff_delay)
-
-    async def _process_multi_transformer_message(self, message: Message) -> None:
-        async with self._semaphore:
-            start_time = time.time()
-
-            try:
-                results = await asyncio.wait_for(
-                    self.consumer_circuit_breaker.call(
-                        self.retry_handler.retry_with_backoff, self.transform, message
-                    ),
-                    timeout=self.config.message_timeout,
-                )
-
-                for result in results:
-                    await self._internal_send(result)
-
-                processing_time = time.time() - start_time
-                self.metrics.record_message_processed(processing_time)
-                self.logger.debug(
-                    f"Message {message.id} processed into {len(results)} outputs in {processing_time:.3f}s"
-                )
-
-                if isinstance(message, KafkaMessage):
-                    await self._commit_message(message)
-
-            except asyncio.TimeoutError:
-                self.logger.error(
-                    f"Message {message.id} processing timed out after {self.config.message_timeout}s"
-                )
-                self.metrics.record_error("message_timeout")
-
-                if self.config.enable_dlq:
-                    await self.handle_dead_letter(
-                        message, f"Processing timeout after {self.config.message_timeout}s"
-                    )
-
-            except Exception as e:
-                self.logger.error(f"Failed to process message {message.id} after all retries: {e}")
-                self.metrics.record_error("message_processing")
-
-                if self.config.enable_dlq:
-                    await self.handle_dead_letter(message, str(e))
+    async def _dispatch(self, message: Message) -> None:
+        results = await self._execute_with_protection(self.transform, message, message)
+        if results is not None:
+            for result in results:
+                await self._internal_send(result)
 
 
 class BufferedTransformer(ServiceBase, Generic[T, U]):
