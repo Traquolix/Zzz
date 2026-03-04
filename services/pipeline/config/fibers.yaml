@@ -102,39 +102,39 @@ fibers:
       - name: default
         channels: [1200, 2748]
 
-  mathis:
-    input_topic: das.raw.mathis
-    total_channels: 5427
-    sampling_rate_hz: 125.0
+  # mathis:
+  #   input_topic: das.raw.mathis
+  #   total_channels: 5427
+  #   sampling_rate_hz: 125.0
+  #
+  #   sections:
+  #     - name: seg1
+  #       channels: [800, 870]
+  #     - name: seg2
+  #       channels: [971, 1441]
+  #     - name: seg3
+  #       channels: [1794, 1981]
+  #     - name: seg4
+  #       channels: [2096, 2251]
 
-    sections:
-      - name: seg1
-        channels: [800, 870]
-      - name: seg2
-        channels: [971, 1441]
-      - name: seg3
-        channels: [1794, 1981]
-      - name: seg4
-        channels: [2096, 2251]
-
-  promenade:
-    input_topic: das.raw.promenade
-    total_channels: 7694
-    sampling_rate_hz: 125.0
-
-    sections:
-      - name: seg1
-        channels: [1762, 1822]
-      - name: seg2
-        channels: [2392, 2582]
-      - name: seg3
-        channels: [2937, 3002]
-      - name: seg4
-        channels: [3132, 3217]
-      - name: seg5
-        channels: [3362, 3612]
-      - name: seg6
-        channels: [3682, 3912]
+  # promenade:
+  #   input_topic: das.raw.promenade
+  #   total_channels: 7694
+  #   sampling_rate_hz: 125.0
+  #
+  #   sections:
+  #     - name: seg1
+  #       channels: [1762, 1822]
+  #     - name: seg2
+  #       channels: [2392, 2582]
+  #     - name: seg3
+  #       channels: [2937, 3002]
+  #     - name: seg4
+  #       channels: [3132, 3217]
+  #     - name: seg5
+  #       channels: [3362, 3612]
+  #     - name: seg6
+  #       channels: [3682, 3912]
 
 # =============================================================================
 # Model Defaults

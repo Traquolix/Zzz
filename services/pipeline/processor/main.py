@@ -144,6 +144,39 @@ class DASProcessor(MultiTransformer):
                 msg_start = measurement.get("channel_start", 0)
                 msg_end = msg_start + len(values)
 
+                # Data capture: save raw Kafka samples (before any processing)
+                if not hasattr(self, "_raw_capture_count"):
+                    self._raw_capture_count = 0
+                    self._raw_capture_buffer = []
+                    import os
+                    os.makedirs("/app/data_captures", exist_ok=True)
+                if self._raw_capture_count < 1 and fiber_id == "carros" and len(values) > 0:
+                    import numpy as _np
+                    self._raw_capture_buffer.append(
+                        _np.array(values, dtype=_np.float64).copy()
+                    )
+                    # 1250 samples = 10s at 125Hz
+                    if len(self._raw_capture_buffer) >= 1250:
+                        raw_data = _np.stack(self._raw_capture_buffer[:1250])  # (1250, channels)
+                        _np.savez(
+                            "/app/data_captures/raw_carros_from_kafka.npz",
+                            data=raw_data,
+                            shape=raw_data.shape,
+                            sampling_rate_hz=sampling_rate_hz,
+                            fiber_id=fiber_id,
+                            note="Raw data from das.raw.carros topic, before any processing",
+                        )
+                        self.logger.info(
+                            f"CAPTURE: raw carros from Kafka: shape={raw_data.shape}, "
+                            f"dtype={raw_data.dtype}, "
+                            f"min={float(_np.min(raw_data)):.2f}, "
+                            f"max={float(_np.max(raw_data)):.2f}, "
+                            f"absmax={float(_np.max(_np.abs(raw_data))):.2f}, "
+                            f"std={float(_np.std(raw_data)):.2f}, "
+                            f"mean={float(_np.mean(raw_data)):.2f}"
+                        )
+                        self._raw_capture_count += 1
+
                 span.set_attribute("fiber_id", fiber_id)
                 span.set_attribute("message.channel_count", len(values))
 

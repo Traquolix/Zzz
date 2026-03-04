@@ -410,6 +410,25 @@ class AIEngineService(RollingBufferedTransformer):
                     f"all_zero={data_absmax < 1e-10}"
                 )
 
+                # Data capture: save first few buffers to disk for offline comparison
+                capture_dir = "/app/data_captures"
+                capture_count_attr = "_capture_count"
+                if not hasattr(self, capture_count_attr):
+                    self._capture_count = 0
+                    import os
+                    os.makedirs(capture_dir, exist_ok=True)
+                if self._capture_count < 5:
+                    capture_path = f"{capture_dir}/{buffer_key.replace(':', '_')}_{self._capture_count}.npz"
+                    np.savez(
+                        capture_path,
+                        data=data_array,
+                        timestamps_ns=np.array(timestamps_ns),
+                        buffer_key=buffer_key,
+                        shape=data_array.shape,
+                    )
+                    self._capture_count += 1
+                    self.logger.info(f"Captured data to {capture_path}")
+
                 # Set section name for visualization filename uniqueness
                 if hasattr(speed_processor, "set_section"):
                     speed_processor.set_section(section)
