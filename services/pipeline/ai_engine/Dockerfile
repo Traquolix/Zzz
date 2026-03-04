@@ -20,6 +20,10 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/bin/python3 /usr/bin/python
 
+# Upgrade pip/setuptools so pyproject.toml [project] metadata is parsed correctly
+# (Ubuntu 22.04 ships setuptools too old to handle PEP 621)
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
 # Install PyTorch with CUDA support first (specific version for CUDA 12.4)
 # Must be separate from pyproject.toml because it requires a custom index URL
 RUN pip install --no-cache-dir \
