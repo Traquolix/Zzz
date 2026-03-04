@@ -322,7 +322,14 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
                 last_map_refresh = loop_start
 
             # --- Poll Kafka (non-blocking) ---
-            msg = consumer.poll(timeout=0.05)
+            try:
+                msg = consumer.poll(timeout=0.05)
+            except Exception as poll_err:
+                # Transient deserialization errors (e.g. Schema Registry
+                # temporarily unreachable) should not kill the bridge.
+                logger.warning('Kafka poll error (will retry): %s', poll_err)
+                await asyncio.sleep(2)
+                continue
             if msg is not None:
                 if msg.error():
                     if msg.error().code() != KafkaError._PARTITION_EOF:

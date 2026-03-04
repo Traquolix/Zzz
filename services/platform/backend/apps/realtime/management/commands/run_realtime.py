@@ -165,7 +165,8 @@ class Command(BaseCommand):
             return 'sim'
 
     def _run_kafka(self):
-        """Run the Kafka bridge in a background thread."""
+        """Run the Kafka bridge in a background thread with auto-restart."""
+        import time as _time
         from apps.realtime.kafka_bridge import run_kafka_bridge_loop
 
         infrastructure = self._load_infrastructure()
@@ -174,10 +175,17 @@ class Command(BaseCommand):
             f'Starting Kafka bridge with {len(infrastructure)} infrastructure items.'
         ))
 
-        try:
-            asyncio.run(run_kafka_bridge_loop(infrastructure))
-        except KeyboardInterrupt:
-            pass
+        while True:
+            try:
+                asyncio.run(run_kafka_bridge_loop(infrastructure))
+                break  # Clean exit
+            except KeyboardInterrupt:
+                break
+            except Exception as exc:
+                self.stderr.write(self.style.ERROR(
+                    f'Kafka bridge crashed: {exc}. Restarting in 5s...'
+                ))
+                _time.sleep(5)
 
     def _run_simulation(self):
         """Run the simulation engine in a background thread."""

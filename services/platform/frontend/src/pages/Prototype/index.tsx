@@ -20,8 +20,9 @@ import './prototype.css'
 /** Map an API incident to the prototype Incident shape. */
 function toProtoIncident(api: ApiIncident): Incident {
     const fiberId = api.fiberLine
-    const loc = channelToCoord(fiberId, api.channel)
-    const fiberName = fibers.find(f => f.id === fiberId)?.name ?? fiberId
+    const dirFiber = resolveDirectionalFiber(fiberId)
+    const loc = channelToCoord(dirFiber, api.channel)
+    const fiberName = fibers.find(f => f.id === dirFiber)?.name ?? fibers.find(f => f.id === fiberId)?.name ?? fiberId
     const typeLabel = api.type.charAt(0).toUpperCase() + api.type.slice(1)
     const title = `${typeLabel} — ${fiberName}`
 

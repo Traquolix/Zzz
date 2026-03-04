@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle, memo } from 'react'
 import mapboxgl from 'mapbox-gl'
+import 'mapbox-gl/dist/mapbox-gl.css'
 import { MapboxOverlay } from '@deck.gl/mapbox'
 import { SimpleMeshLayer } from '@deck.gl/mesh-layers'
 import { CubeGeometry } from '@luma.gl/engine'
