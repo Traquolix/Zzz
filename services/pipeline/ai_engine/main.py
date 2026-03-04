@@ -550,6 +550,22 @@ class AIEngineService(RollingBufferedTransformer):
             yield_count += 1
 
             direction = int(result.direction_mask[0, 0])
+
+            # Diagnostic: log GLRT statistics to understand detection threshold behavior
+            glrt = result.glrt_summed
+            glrt_max = float(np.max(glrt)) if glrt.size > 0 else 0.0
+            glrt_mean = float(np.mean(glrt)) if glrt.size > 0 else 0.0
+            summed_threshold = speed_processor.corr_threshold * (speed_processor.Nch - 1)
+            above_count = int(np.sum(glrt >= summed_threshold)) if glrt.size > 0 else 0
+            dir_label = "fwd" if direction == 1 else "rev"
+            self.logger.info(
+                f"GLRT diag [{buffer_key} {dir_label}]: "
+                f"max={glrt_max:.0f}, mean={glrt_mean:.0f}, "
+                f"threshold={summed_threshold:.0f}, "
+                f"samples_above={above_count}/{glrt.shape[-1] if glrt.ndim > 1 else len(glrt)}, "
+                f"shape={glrt.shape}"
+            )
+
             detections = speed_processor.extract_detections(
                 glrt_summed=result.glrt_summed,
                 aligned_speed_pairs=result.aligned_speed_per_pair,
