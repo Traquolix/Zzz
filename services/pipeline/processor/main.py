@@ -148,6 +148,7 @@ class DASProcessor(MultiTransformer):
                 if not hasattr(self, "_raw_capture_count"):
                     self._raw_capture_count = 0
                     self._raw_capture_buffer = []
+                    self._raw_capture_ts = []
                     import os
                     os.makedirs("/app/data_captures", exist_ok=True)
                 if self._raw_capture_count < 1 and fiber_id == "carros" and len(values) > 0:
@@ -155,12 +156,17 @@ class DASProcessor(MultiTransformer):
                     self._raw_capture_buffer.append(
                         _np.array(values, dtype=_np.float64).copy()
                     )
+                    self._raw_capture_ts.append(
+                        measurement.get("timestamp_ns", 0)
+                    )
                     # 1250 samples = 10s at 125Hz
                     if len(self._raw_capture_buffer) >= 1250:
                         raw_data = _np.stack(self._raw_capture_buffer[:1250])  # (1250, channels)
+                        raw_ts = _np.array(self._raw_capture_ts[:1250], dtype=_np.int64)
                         _np.savez(
                             "/app/data_captures/raw_carros_from_kafka.npz",
                             data=raw_data,
+                            timestamps_ns=raw_ts,
                             shape=raw_data.shape,
                             sampling_rate_hz=sampling_rate_hz,
                             fiber_id=fiber_id,
