@@ -29,6 +29,7 @@ from processor.processing_tools.processing_steps.base_step import ProcessingStep
 from processor.processing_tools.processing_steps.common_mode_removal import (
     CommonModeRemoval,
 )
+from processor.processing_tools.processing_steps.scale import Scale
 from processor.processing_tools.processing_steps.spatial_decimation import (
     SpatialDecimation,
 )
@@ -64,6 +65,15 @@ _STEP_REGISTRY: Dict[str, Dict[str, Any]] = {
         "defaults": {
             "warmup_seconds": 5.0,
             "method": "median",
+        },
+    },
+    "scale": {
+        "class": Scale,
+        "param_map": {
+            "factor": "factor",
+        },
+        "defaults": {
+            "factor": 1.0,
         },
     },
     "temporal_decimation": {

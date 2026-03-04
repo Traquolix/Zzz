@@ -68,12 +68,15 @@ services:
 # Defaults
 # =============================================================================
 # Applied to all sections unless overridden per-section.
-# Processing pipeline order: bandpass → temporal decimation → spatial decimation
+# Processing pipeline order: scale → bandpass → temporal decimation → spatial decimation
 
 defaults:
   model: dtan_unified
 
   pipeline:
+    - step: scale
+      params:
+        factor: 213.05   # 1/dataScale — convert physical units (rad/(s*m)) to ADC counts
     - step: bandpass_filter
       params:
         low_freq_hz: 0.3
