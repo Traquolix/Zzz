@@ -214,9 +214,13 @@ class ModelRegistry:
                     )
                 if model_path.exists():
                     nn_model = build_counting_network()
-                    nn_model.load_state_dict(
-                        torch.load(model_path, map_location="cpu", weights_only=True)
-                    )
+                    # Model file may be full-object (legacy) or state_dict.
+                    # Try state_dict first; fall back to full-object load.
+                    try:
+                        state = torch.load(model_path, map_location="cpu", weights_only=True)
+                    except Exception:
+                        state = torch.load(model_path, map_location="cpu", weights_only=False).state_dict()
+                    nn_model.load_state_dict(state)
                     nn_model.eval()
 
             thresholds = None
