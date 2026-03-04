@@ -25,6 +25,7 @@ ai = [
     "torch>=2.0.0",
     "matplotlib>=3.5.0",
     "pandas",
+    "tqdm",
 ]
 dev = [
     "pytest>=7.0.0",
