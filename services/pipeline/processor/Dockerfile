@@ -2,6 +2,12 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
+# Proxy settings for corporate/restricted networks
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+ENV http_proxy=${HTTP_PROXY} https_proxy=${HTTPS_PROXY} no_proxy=${NO_PROXY}
+
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies from pyproject.toml (single source of truth)

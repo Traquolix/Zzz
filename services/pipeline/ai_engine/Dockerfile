@@ -4,6 +4,12 @@ FROM nvidia/cuda:12.4.0-runtime-ubuntu22.04
 
 WORKDIR /app
 
+# Proxy settings for corporate/restricted networks
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+ENV http_proxy=${HTTP_PROXY} https_proxy=${HTTPS_PROXY} no_proxy=${NO_PROXY}
+
 # Install Python 3.10 (default in Ubuntu 22.04) and system dependencies
 RUN apt-get update && apt-get install -y \
     python3 \
