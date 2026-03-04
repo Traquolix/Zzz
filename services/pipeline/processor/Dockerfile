@@ -11,8 +11,11 @@ ENV http_proxy=${HTTP_PROXY} https_proxy=${HTTPS_PROXY} no_proxy=${NO_PROXY}
 RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies from pyproject.toml (single source of truth)
+# Create stub packages so setuptools can resolve the package structure
 COPY pyproject.toml .
-RUN pip install --no-cache-dir .
+RUN mkdir -p shared config processor ai_engine \
+    && touch shared/__init__.py config/__init__.py processor/__init__.py ai_engine/__init__.py \
+    && pip install --no-cache-dir .
 
 ENV PYTHONPATH=/app
 

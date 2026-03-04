@@ -25,10 +25,13 @@ RUN apt-get update && apt-get install -y \
 RUN pip install --no-cache-dir \
     torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124
 
-# Install remaining dependencies from pyproject.toml (single source of truth)
-# Uses the [ai] extra for torch-adjacent deps (matplotlib, pandas)
+# Install dependencies from pyproject.toml (single source of truth)
+# Create stub packages so setuptools can resolve the package structure,
+# then install with [ai] extras for torch-adjacent deps (matplotlib, pandas)
 COPY pyproject.toml .
-RUN pip install --no-cache-dir ".[ai]"
+RUN mkdir -p shared config processor ai_engine \
+    && touch shared/__init__.py config/__init__.py processor/__init__.py ai_engine/__init__.py \
+    && pip install --no-cache-dir ".[ai]"
 
 # Set Python path and suppress NNPACK warning (CPU-only optimization not available)
 ENV PYTHONPATH=/app
