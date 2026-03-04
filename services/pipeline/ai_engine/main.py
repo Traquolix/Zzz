@@ -399,6 +399,17 @@ class AIEngineService(RollingBufferedTransformer):
                     span.set_attribute("skipped.reason", "insufficient_channels")
                     return []
 
+                # Diagnostic: log input data statistics to debug zero GLRT
+                data_min = float(np.min(data_array))
+                data_max = float(np.max(data_array))
+                data_std = float(np.std(data_array))
+                data_absmax = max(abs(data_min), abs(data_max))
+                self.logger.info(
+                    f"Input diag [{buffer_key}]: shape={data_array.shape}, "
+                    f"absmax={data_absmax:.6f}, std={data_std:.6f}, "
+                    f"all_zero={data_absmax < 1e-10}"
+                )
+
                 # Set section name for visualization filename uniqueness
                 if hasattr(speed_processor, "set_section"):
                     speed_processor.set_section(section)
