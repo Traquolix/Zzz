@@ -451,6 +451,8 @@ class AIEngineService(RollingBufferedTransformer):
             start_time = time.time()
 
             try:
+                if torch is not None and torch.cuda.is_available():
+                    torch.cuda.empty_cache()
                 # Prepare data arrays for each section
                 section_inputs = []
                 section_meta = []
