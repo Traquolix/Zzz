@@ -370,6 +370,8 @@ services:
       SCHEMA_REGISTRY_URL: http://schema-registry:8081
     volumes:
       - ./infrastructure:/infrastructure:ro
+      - ./services/platform/backend/data/shm:/app/data/shm:ro
+      - ./services/platform/backend/media:/app/media:ro
     networks:
       - internal
       - default
