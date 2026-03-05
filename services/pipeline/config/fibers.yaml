@@ -62,7 +62,7 @@ services:
     max_concurrent_messages: 10
     message_timeout_seconds: 120.0
     buffer_timeout_seconds: 60.0
-    max_active_buffers: 10
+    max_active_buffers: 15
 
 # =============================================================================
 # Defaults
