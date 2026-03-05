@@ -408,7 +408,7 @@ class InfrastructureListView(APIView):
         for item in qs:
             image_url = None
             if item.image:
-                image_url = f'/media/infrastructure/{item.image}'
+                image_url = f'/infrastructure/{item.image}'
             data.append({
                 'id': item.id,
                 'type': item.type,

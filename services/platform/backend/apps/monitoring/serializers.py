@@ -49,7 +49,7 @@ class InfrastructureSerializer(serializers.Serializer):
         """Return URL for infrastructure image, or None if not set."""
         if not obj.image:
             return None
-        return f'/media/infrastructure/{obj.image}'
+        return f'/infrastructure/{obj.image}'
 
 
 class StatsSerializer(serializers.Serializer):
