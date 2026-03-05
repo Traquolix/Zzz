@@ -418,7 +418,12 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
 
 
 def _handle_detection_message(value: dict, replay_buffer) -> None:
-    """Parse detection message, transform, and ingest into replay buffer."""
+    """Parse detection message, transform, and ingest into replay buffer.
+
+    Each detection is ingested individually with its own timestamp so that
+    the replay buffer spreads them over the original time window instead of
+    dumping them all at once.
+    """
     data = _parse_detection_message(value)
     if data is None:
         return
@@ -426,16 +431,10 @@ def _handle_detection_message(value: dict, replay_buffer) -> None:
     fiber_id = data.get('fiber_id', '')
     detections = transform_detection_message(data)
 
-    # Group by section_key (fiber:channel) for the replay buffer
-    by_section: dict[str, list[dict]] = {}
     for det in detections:
         section_key = f"{fiber_id}:{det['channel']}"
-        by_section.setdefault(section_key, []).append(det)
-
-    for section_key, section_dets in by_section.items():
-        # Use the first detection's timestamp for ordering
-        timestamp_ns = section_dets[0]['timestamp'] * 1_000_000
-        replay_buffer.ingest_detection(section_key, timestamp_ns, section_dets)
+        timestamp_ns = det['timestamp'] * 1_000_000
+        replay_buffer.ingest_detection(section_key, timestamp_ns, [det])
 
 
 async def _poll_incidents(channel_layer, known_incidents: dict, fiber_org_map: dict[str, list[str]]):

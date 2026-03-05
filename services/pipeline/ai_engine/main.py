@@ -41,6 +41,7 @@ from config import (
 from shared import RollingBufferedTransformer
 from shared.ai_metrics import AIMetrics
 from shared.message import KafkaMessage, Message
+from shared.gpu_lock import gpu_lock
 from shared.otel_setup import get_correlation_id, setup_otel
 
 warnings.filterwarnings("ignore", message=".*torch.meshgrid.*")
@@ -451,8 +452,6 @@ class AIEngineService(RollingBufferedTransformer):
             start_time = time.time()
 
             try:
-                if torch is not None and torch.cuda.is_available():
-                    torch.cuda.empty_cache()
                 # Prepare data arrays for each section
                 section_inputs = []
                 section_meta = []
@@ -564,8 +563,9 @@ class AIEngineService(RollingBufferedTransformer):
         min_vehicle_duration_s = self._model_spec.speed_detection.min_vehicle_duration_s
         classify_threshold_factor = self._model_spec.counting.truck_ratio_for_split
 
-        # Use process_batch for batched GPU pass
-        batch_results = speed_processor.process_batch(section_inputs)
+        # Use process_batch for batched GPU pass (exclusive GPU access)
+        with gpu_lock():
+            batch_results = speed_processor.process_batch(section_inputs)
 
         results = []
         for i, (section_results, meta) in enumerate(zip(batch_results, section_meta)):
@@ -815,7 +815,10 @@ class AIEngineService(RollingBufferedTransformer):
         classify_threshold_factor = self._model_spec.counting.truck_ratio_for_split
         yield_count = 0
 
-        for result in speed_processor.process_file(data, timestamps, timestamps_ns_array):
+        with gpu_lock():
+            inference_results = list(speed_processor.process_file(data, timestamps, timestamps_ns_array))
+
+        for result in inference_results:
             yield_count += 1
 
             direction = int(result.direction_mask[0, 0])
