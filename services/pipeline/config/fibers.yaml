@@ -166,7 +166,7 @@ model_defaults:
     max_speed_kmh: 120.0
     correlation_threshold: 1100.0   # Per-pair threshold
     use_calibration: false
-    time_overlap_ratio: 0.5
+    time_overlap_ratio: 0.25
     glrt_window: 20
     bidirectional_detection: true
     speed_glrt_factor: 1.0

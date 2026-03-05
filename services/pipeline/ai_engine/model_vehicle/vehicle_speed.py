@@ -42,9 +42,22 @@ class DirectionResult(NamedTuple):
     intervals: list = []             # Per-section [(starts, ends), ...] for counting
 
 
-def compute_edge_trim(glrt_window: int = GLRT_DEFAULT_WINDOW, safety: int = GLRT_EDGE_SAFETY_SAMPLES) -> int:
-    """Compute edge trim size based on GLRT parameters."""
-    return safety
+def compute_edge_trim(
+    window_size: int,
+    overlap_ratio: float,
+    safety: int = GLRT_EDGE_SAFETY_SAMPLES,
+) -> int:
+    """Compute edge trim so consecutive windows tile without overlap or gaps.
+
+    With overlap_ratio, step_size = window_size * (1 - overlap_ratio).
+    Trimming (window_size - step_size) / 2 from each side means each window
+    emits detections for exactly step_size samples — no duplicates.
+
+    The trim is always at least ``safety`` samples to avoid GLRT edge artifacts.
+    """
+    step_size = int(window_size * (1 - overlap_ratio))
+    overlap_trim = (window_size - step_size) // 2
+    return max(overlap_trim, safety)
 
 
 class VehicleSpeedEstimator:
@@ -89,7 +102,7 @@ class VehicleSpeedEstimator:
         self.Nch = model_args.Nch
         self.fs = model_args.fs
         self.glrt_win = glrt_win
-        self.edge_trim = compute_edge_trim(glrt_win, GLRT_EDGE_SAFETY_SAMPLES)
+        self.edge_trim = compute_edge_trim(model_args.signal_length, ovr_time)
         self.model_args = model_args
 
         self.corr_threshold = corr_threshold
