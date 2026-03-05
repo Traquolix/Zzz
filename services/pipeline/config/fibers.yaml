@@ -29,10 +29,10 @@ service_defaults:
   # Schema paths (relative to pipeline root / PYTHONPATH).
   schemas:
     processor:
-      output_key: schema/string_key.avsc
+      output_key: shared/schema/string_key.avsc
       output_value: processor/schema/das_processed_measurement.avsc
     ai_engine:
-      detection_key: schema/string_key.avsc
+      detection_key: shared/schema/string_key.avsc
       detection_value: ai_engine/schema/das_detection.avsc
 
   # Producer settings (shared across services)

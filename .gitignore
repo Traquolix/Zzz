@@ -15,9 +15,9 @@ training_env/
 
 data/
 
-# Script generated outputs
-scripts/**/*.png
-scripts/**/*.csv
+# Tools generated outputs
+tools/**/*.png
+tools/**/*.csv
 
 # Python
 __pycache__/
@@ -122,6 +122,7 @@ node_modules/
 dist/
 dist-ssr/
 *.local
+*.tsbuildinfo
 
 # Backend (Django)
 staticfiles/

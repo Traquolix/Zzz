@@ -9,7 +9,6 @@ __pycache__/
 .benchmarks/
 *.egg-info/
 experiments/
-ai_engine/training/
 tests/
 docs/
 .DS_Store
