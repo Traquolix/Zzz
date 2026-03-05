@@ -356,14 +356,26 @@ class AIEngineService(RollingBufferedTransformer):
     def get_buffer_timeout_seconds(self) -> float:
         return self.config.buffer_timeout
 
+    async def _start_service_loops(self):
+        """Override to initialize batch collection state before starting loops."""
+        self._pending_ready: dict = {}
+        self._msgs_since_first_ready = 0
+        await super()._start_service_loops()
+
     async def _handle_rolling_message(self, message: Message) -> None:
-        """Filter by FIBER_ID, buffer, and batch-process ready sections together."""
+        """Filter by FIBER_ID, buffer, and batch-process ready sections together.
+
+        Instead of dispatching immediately when one section is ready, we collect
+        ready sections and dispatch after all sections in the fiber have had a
+        chance to become ready. Since messages arrive interleaved (seg1, seg2,
+        seg3, seg4, seg1, ...), all sections become ready within num_sections
+        messages of each other.
+        """
         if self._fiber_filter:
             msg_fiber = message.payload.get("fiber_id", "")
             if msg_fiber != self._fiber_filter:
                 return
 
-        # Buffer the message (reuse base class logic minus the dispatch)
         try:
             buffer_key = self.get_buffer_key(message)
 
@@ -399,22 +411,34 @@ class AIEngineService(RollingBufferedTransformer):
             buffer_info["new_count"] += 1
             buffer_info["last_update"] = time.time()
 
-            # Collect ALL ready sections for batched processing
-            ready_sections = {}
-            for key, info in self._rolling_buffers.items():
-                if len(info["deque"]) >= self._window_size and info["new_count"] >= self._step_size:
-                    ready_sections[key] = list(info["deque"])
-                    info["new_count"] = 0
+            # Mark section as ready if threshold reached
+            if (
+                len(buffer_info["deque"]) >= self._window_size
+                and buffer_info["new_count"] >= self._step_size
+            ):
+                self._pending_ready[buffer_key] = list(buffer_info["deque"])
+                buffer_info["new_count"] = 0
 
-            if ready_sections:
-                self.logger.debug(
-                    f"Batch processing {len(ready_sections)} ready sections: "
-                    f"{list(ready_sections.keys())}"
-                )
-                task = asyncio.create_task(
-                    self._process_sections_batch(ready_sections)
-                )
-                self._processing_tasks.add(task)
+            # Track messages since first section became ready
+            if self._pending_ready:
+                self._msgs_since_first_ready += 1
+
+                # Dispatch when we've waited long enough for all sections.
+                # num_buffers = total sections for this fiber. After processing
+                # num_buffers more messages, all sections have had a chance.
+                num_buffers = len(self._rolling_buffers)
+                if self._msgs_since_first_ready >= num_buffers:
+                    ready = dict(self._pending_ready)
+                    self._pending_ready.clear()
+                    self._msgs_since_first_ready = 0
+                    self.logger.info(
+                        f"Dispatching batch: {len(ready)} sections: "
+                        f"{list(ready.keys())}"
+                    )
+                    task = asyncio.create_task(
+                        self._process_sections_batch(ready)
+                    )
+                    self._processing_tasks.add(task)
 
         except Exception as e:
             self.logger.error(f"Error handling rolling message {message.id}: {e}")
