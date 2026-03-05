@@ -147,10 +147,12 @@ class VehicleVisualizer:
                 t_s = []
                 speeds = []
                 for det in detections:
-                    section_ch = det["section_idx"] * channel_step
-                    if section_ch >= n_channels:
+                    # section_idx maps 1:1 to spatial position (Nch with overlap=Nch-1)
+                    # No need to multiply by channel_step — that's for Kafka channel mapping
+                    section_idx = det["section_idx"]
+                    if section_idx >= n_channels:
                         continue
-                    d_km.append(section_ch * gauge / 1000)
+                    d_km.append(section_idx * gauge / 1000)
                     # Time: use the detection's interval midpoint within the window
                     # timestamp_ns points into the trimmed window; convert to seconds
                     if det.get("_t_mid_sample") is not None:

@@ -17,6 +17,7 @@ const LABEL_COLOR = '#64748b'
 const DOT_SIZE = 3
 const TARGET_FPS = 30
 const FRAME_INTERVAL = 1000 / TARGET_FPS
+const REPLAY_DELAY_MS = 60_000 // Backend replays detections 60s after their original timestamp
 
 export function WaterfallCanvas({ dotsRef, dirtyRef, prune, windowMs, minChannel, maxChannel }: WaterfallCanvasProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -54,9 +55,10 @@ export function WaterfallCanvas({ dotsRef, dirtyRef, prune, windowMs, minChannel
         ctx.fillStyle = BG
         ctx.fillRect(0, 0, width, height)
 
-        const now = Date.now()
-        const tMin = now - windowMs
-        const tMax = now
+        // Shift view window back by replay delay so the "live edge" matches
+        // where replayed detections actually appear (their original timestamps)
+        const tMax = Date.now() - REPLAY_DELAY_MS
+        const tMin = tMax - windowMs
         const chRange = maxChannel - minChannel || 1
 
         // Grid lines

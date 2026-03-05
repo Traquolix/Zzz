@@ -628,6 +628,16 @@ class AIEngineService(RollingBufferedTransformer):
         # Generate notebook-style waterfall visualization every window
         if speed_processor.visualizer is not None:
             try:
+                # Use actual fiber_id from buffer_key (e.g. "carros:default" -> "carros")
+                # instead of model_hint which may be "dtan_unified"
+                actual_fiber_id = buffer_key.split(":")[0] if ":" in buffer_key else buffer_key
+                if actual_fiber_id != speed_processor.visualizer.fiber_id:
+                    speed_processor.visualizer.fiber_id = actual_fiber_id
+                    speed_processor.visualizer.output_dir = (
+                        Path(speed_processor.visualizer.output_dir).parent / actual_fiber_id
+                    )
+                    speed_processor.visualizer.output_dir.mkdir(parents=True, exist_ok=True)
+
                 # Offset _t_mid_sample from trimmed window to full window
                 edge_trim = speed_processor.edge_trim
                 for d in all_detections:
