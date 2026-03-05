@@ -41,7 +41,7 @@ RATE_LIMIT_MESSAGES = 100
 RATE_LIMIT_WINDOW_SECONDS = 10
 
 # Seconds to wait for auth message before closing connection
-AUTH_TIMEOUT_SECONDS = 5
+AUTH_TIMEOUT_SECONDS = 15
 
 
 def _org_group_name(channel: str, org_id: str) -> str:
@@ -240,7 +240,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
                     'channel': event['channel'],
                     'data': event['data'],
                 }),
-                timeout=5.0,
+                timeout=15.0,
             )
             from apps.shared.metrics import WEBSOCKET_MESSAGES_SENT
             WEBSOCKET_MESSAGES_SENT.labels(channel=event['channel']).inc()

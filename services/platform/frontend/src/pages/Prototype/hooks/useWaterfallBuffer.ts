@@ -10,7 +10,6 @@ export interface WaterfallDot {
 }
 
 const DEFAULT_WINDOW_MS = 120_000
-const REPLAY_DELAY_MS = 60_000
 
 export function useWaterfallBuffer(fiberFilter: string, windowMs = DEFAULT_WINDOW_MS) {
     const { subscribe } = useRealtime()
@@ -42,9 +41,11 @@ export function useWaterfallBuffer(fiberFilter: string, windowMs = DEFAULT_WINDO
         return unsub
     }, [subscribe, fiberFilter])
 
-    /** Prune dots older than the window. Call during render. */
+    /** Prune dots older than the visible window. Call during render. */
     function prune() {
-        const cutoff = Date.now() - REPLAY_DELAY_MS - windowMs
+        // Keep dots within windowMs of the latest detection
+        const latest = lastTsRef.current || Date.now()
+        const cutoff = latest - windowMs
         const dots = dotsRef.current
         const before = dots.length
         dotsRef.current = dots.filter(d => d.timestamp >= cutoff)

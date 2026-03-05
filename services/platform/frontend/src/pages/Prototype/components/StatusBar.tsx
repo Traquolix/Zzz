@@ -115,7 +115,7 @@ export function StatusBar({ connected, sectionCount, incidentCount, lastDetectio
                                             {new Date(lastDetectionTsRef.current).toLocaleTimeString()}
                                             {' '}
                                             <span className="opacity-60">
-                                                ({Math.round((Date.now() - lastDetectionTsRef.current) / 1000)}s ago)
+                                                (data delay: ~{Math.round((Date.now() - lastDetectionTsRef.current) / 1000)}s)
                                             </span>
                                         </div>
                                     </div>

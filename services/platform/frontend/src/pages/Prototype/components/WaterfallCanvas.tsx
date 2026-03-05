@@ -5,6 +5,7 @@ import type { WaterfallDot } from '../hooks/useWaterfallBuffer'
 interface WaterfallCanvasProps {
     dotsRef: React.RefObject<WaterfallDot[]>
     dirtyRef: React.MutableRefObject<boolean>
+    lastTsRef: React.RefObject<number>
     prune: () => void
     windowMs: number
     minChannel: number
@@ -17,9 +18,9 @@ const LABEL_COLOR = '#64748b'
 const DOT_SIZE = 3
 const TARGET_FPS = 30
 const FRAME_INTERVAL = 1000 / TARGET_FPS
-const REPLAY_DELAY_MS = 60_000 // Backend replays detections 60s after their original timestamp
+const HEADROOM_MS = 5_000 // Show 5s ahead of latest detection
 
-export function WaterfallCanvas({ dotsRef, dirtyRef, prune, windowMs, minChannel, maxChannel }: WaterfallCanvasProps) {
+export function WaterfallCanvas({ dotsRef, dirtyRef, lastTsRef, prune, windowMs, minChannel, maxChannel }: WaterfallCanvasProps) {
     const canvasRef = useRef<HTMLCanvasElement>(null)
     const containerRef = useRef<HTMLDivElement>(null)
     const rafRef = useRef(0)
@@ -47,7 +48,7 @@ export function WaterfallCanvas({ dotsRef, dirtyRef, prune, windowMs, minChannel
         // Prune old dots
         prune()
 
-        const margin = { top: 28, right: 12, bottom: 8, left: 44 }
+        const margin = { top: 28, right: 12, bottom: 8, left: 56 }
         const plotW = width - margin.left - margin.right
         const plotH = height - margin.top - margin.bottom
 
@@ -55,9 +56,10 @@ export function WaterfallCanvas({ dotsRef, dirtyRef, prune, windowMs, minChannel
         ctx.fillStyle = BG
         ctx.fillRect(0, 0, width, height)
 
-        // Shift view window back by replay delay so the "live edge" matches
-        // where replayed detections actually appear (their original timestamps)
-        const tMax = Date.now() - REPLAY_DELAY_MS
+        // Top of waterfall = latest detection timestamp + small headroom
+        // Falls back to wall clock - 90s if no detections yet
+        const latestTs = lastTsRef.current || (Date.now() - 90_000)
+        const tMax = latestTs + HEADROOM_MS
         const tMin = tMax - windowMs
         const chRange = maxChannel - minChannel || 1
 
@@ -116,18 +118,19 @@ export function WaterfallCanvas({ dotsRef, dirtyRef, prune, windowMs, minChannel
             ctx.fillText(String(ch), x, margin.top - 4)
         }
 
-        // Y-axis (left): time-ago labels — fixed positions, now at top, past at bottom
+        // Y-axis (left): wall-clock labels — fixed positions, most recent at top
         ctx.textAlign = 'right'
         ctx.textBaseline = 'middle'
+        const topTime = new Date(tMax)
         for (let ago = 0; ago <= windowMs; ago += timeStep) {
             const y = margin.top + (ago / windowMs) * plotH
-            const agoSec = Math.round(ago / 1000)
-            const label = agoSec === 0 ? 'now' : `-${agoSec}s`
+            const t = new Date(topTime.getTime() - ago)
+            const label = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}:${String(t.getSeconds()).padStart(2, '0')}`
             ctx.fillText(label, margin.left - 4, y)
         }
 
         dirtyRef.current = false
-    }, [dotsRef, dirtyRef, prune, windowMs, minChannel, maxChannel])
+    }, [dotsRef, dirtyRef, lastTsRef, prune, windowMs, minChannel, maxChannel])
 
     useEffect(() => {
         let running = true

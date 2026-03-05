@@ -1,29 +1,37 @@
 """
-Time-shifted replay buffer for AI engine detection results.
+Self-tuning replay buffer for AI engine detection results.
 
-Detections arrive in bursts (30-second inference windows). Instead of
-forwarding them immediately, we replay each detection exactly 60 seconds
-after its original timestamp_ns. This produces a continuous, smooth
-stream on the frontend where vehicle traces form proper oblique lines
-in the waterfall view.
+Detections arrive in bursts (inference windows). Instead of forwarding
+them immediately, we replay each detection at:
+    detection.timestamp + estimated_pipeline_delay
 
-Each detection is scheduled for broadcast at:
-    detection.timestamp_ns / 1e6 + REPLAY_DELAY_MS  (in wall-clock ms)
+The pipeline delay is measured dynamically: when a detection arrives,
+we observe (wall_clock - detection_timestamp) and maintain a rolling
+estimate. A safety margin (default 15s) is added so detections never
+appear "from the future" on the frontend.
 
-The drain loop pops due items and flushes accumulated detections at ~10 Hz.
+If detections arrive late (pipeline hiccup), they are already overdue
+and flush immediately — this provides automatic catch-up.
+
+The drain loop pops due items and flushes at ~10 Hz.
 """
 
 import asyncio
 import heapq
 import logging
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Callable, Coroutine
 
 logger = logging.getLogger('sequoia.replay_buffer')
 
-# Fixed delay: detections are sent 60 seconds after their original timestamp
-REPLAY_DELAY_S = 60.0
+# Safety margin above observed pipeline delay
+SAFETY_MARGIN_S = 15.0
+# Initial estimate before we have observations
+INITIAL_DELAY_S = 90.0
+# Rolling window size for delay estimation
+DELAY_WINDOW_SIZE = 50
 
 # Type alias for the broadcast callback
 BroadcastFn = Callable[[str, Any], Coroutine[Any, Any, None]]
@@ -40,11 +48,9 @@ class ReplayItem:
 
 class ReplayBuffer:
     """
-    Buffers incoming detection messages and replays them 60 seconds after
-    their original timestamp.
-
-    Messages are individually scheduled based on their timestamp_ns,
-    producing a smooth continuous stream on the frontend.
+    Self-tuning replay buffer that measures pipeline delay and schedules
+    detections for smooth, in-order playback as close to real-time as
+    the pipeline permits.
     """
 
     def __init__(self):
@@ -52,7 +58,10 @@ class ReplayBuffer:
         self._sequence: int = 0
         self._event = asyncio.Event()
         self._running: bool = False
-        self._last_sent_timestamp_ms: int = 0   # track for frontend display
+        self._last_sent_timestamp_ms: int = 0
+        # Self-tuning delay estimation
+        self._observed_delays: deque[float] = deque(maxlen=DELAY_WINDOW_SIZE)
+        self._estimated_delay_s: float = INITIAL_DELAY_S
 
     @property
     def queue_size(self) -> int:
@@ -68,13 +77,44 @@ class ReplayBuffer:
         """Timestamp (ms) of the most recently sent detection."""
         return self._last_sent_timestamp_ms
 
+    @property
+    def estimated_delay_s(self) -> float:
+        """Current estimated pipeline delay (including safety margin)."""
+        return self._estimated_delay_s
+
+    def _update_delay_estimate(self, timestamp_ns: int) -> None:
+        """Update pipeline delay estimate from an observed detection."""
+        now = time.time()
+        original_time_s = timestamp_ns / 1e9
+        observed_delay = now - original_time_s
+
+        if observed_delay < 0:
+            return  # Clock skew — ignore
+
+        self._observed_delays.append(observed_delay)
+
+        # Use the 90th percentile of recent observations + safety margin
+        sorted_delays = sorted(self._observed_delays)
+        p90_idx = int(len(sorted_delays) * 0.9)
+        p90_delay = sorted_delays[min(p90_idx, len(sorted_delays) - 1)]
+        new_estimate = p90_delay + SAFETY_MARGIN_S
+
+        if abs(new_estimate - self._estimated_delay_s) > 5.0:
+            logger.info(
+                'Replay delay adjusted: %.1fs -> %.1fs (p90=%.1fs, margin=%.1fs, samples=%d)',
+                self._estimated_delay_s, new_estimate, p90_delay,
+                SAFETY_MARGIN_S, len(self._observed_delays),
+            )
+        self._estimated_delay_s = new_estimate
+
     def ingest_detection(self, section_key: str, timestamp_ns: int,
                          detections: list[dict]) -> None:
         """
-        Add a detection message to the replay queue.
+        Add a detection to the replay queue.
 
-        Each detection is scheduled for replay at its original timestamp
-        plus the fixed 60-second delay.
+        Scheduled for: detection_timestamp + estimated_pipeline_delay.
+        If already overdue (pipeline was slow), it will flush immediately
+        on the next drain cycle.
 
         Args:
             section_key: "{fiber_id}:{channel}" identifying the section
@@ -84,9 +124,10 @@ class ReplayBuffer:
         if not detections:
             return
 
-        # Schedule at: original_time + 60 seconds
+        self._update_delay_estimate(timestamp_ns)
+
         original_time_s = timestamp_ns / 1e9
-        replay_time = original_time_s + REPLAY_DELAY_S
+        replay_time = original_time_s + self._estimated_delay_s
 
         self._sequence += 1
         heapq.heappush(self._queue, ReplayItem(
@@ -111,7 +152,8 @@ class ReplayBuffer:
         detection_accumulator: list[dict] = []
         last_detection_flush = time.time()
 
-        logger.info('Replay buffer drain started (delay=%.0fs)', REPLAY_DELAY_S)
+        logger.info('Replay buffer drain started (initial delay=%.0fs, margin=%.0fs)',
+                    INITIAL_DELAY_S, SAFETY_MARGIN_S)
 
         while self._running:
             # Wait for items if queue is empty

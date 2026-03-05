@@ -331,8 +331,11 @@ export function SidePanel({ state, dispatch, connected, liveStats, liveSeriesDat
                 {/* Connection status */}
                 {!connected && (
                     <div className="px-4 py-1.5 text-xs text-amber-300 bg-amber-500/10 border-b border-amber-500/20 flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                        WebSocket disconnected
+                        <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 16 16" fill="none">
+                            <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" opacity="0.3" />
+                            <path d="M14 8a6 6 0 0 0-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                        </svg>
+                        Reconnecting...
                     </div>
                 )}
 
@@ -494,7 +497,7 @@ function WaterfallPanel() {
     const minChannel = 0
     const maxChannel = (fiber?.totalChannels ?? 500) - 1
 
-    const { dotsRef, dirtyRef, prune } = useWaterfallBuffer(fiberId, windowMs)
+    const { dotsRef, dirtyRef, prune, lastTsRef } = useWaterfallBuffer(fiberId, windowMs)
 
     return (
         <div className="flex flex-col h-full">
@@ -532,6 +535,7 @@ function WaterfallPanel() {
                 <WaterfallCanvas
                     dotsRef={dotsRef as unknown as RefObject<import('../hooks/useWaterfallBuffer').WaterfallDot[]>}
                     dirtyRef={dirtyRef}
+                    lastTsRef={lastTsRef as unknown as RefObject<number>}
                     prune={prune}
                     windowMs={windowMs}
                     minChannel={minChannel}
