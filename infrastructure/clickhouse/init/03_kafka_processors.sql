@@ -40,23 +40,24 @@ DROP VIEW IF EXISTS sequoia.detection_kafka_mv;
 DROP TABLE IF EXISTS sequoia.detection_kafka;
 
 -- ============================================================================
--- UNIFIED DETECTION - Kafka Consumer
+-- UNIFIED DETECTION - Kafka Consumer (Batched format)
 -- ============================================================================
--- Single consumer for all fibers. Each message = one detection interval with
--- speed, vehicle count, car/truck classification.
+-- Single consumer for all fibers. Each message = one batch of detections
+-- per section per analysis window. The 'detections' array is flattened
+-- via ARRAY JOIN in the materialized view.
 
 CREATE TABLE sequoia.detection_kafka
 (
     fiber_id String,
-    timestamp_ns UInt64,
-    channel UInt32,
-    speed_kmh Float32,
-    direction UInt8 DEFAULT 0,
-    vehicle_count Float32 DEFAULT 1,
-    n_cars Float32 DEFAULT 0,
-    n_trucks Float32 DEFAULT 0,
-    glrt_max Float32 DEFAULT 0,
-    engine_version String DEFAULT '1.0'
+    engine_version String DEFAULT '1.0',
+    `detections.timestamp_ns` Array(UInt64),
+    `detections.channel` Array(UInt32),
+    `detections.speed_kmh` Array(Float32),
+    `detections.direction` Array(UInt8),
+    `detections.vehicle_count` Array(Float32),
+    `detections.n_cars` Array(Float32),
+    `detections.n_trucks` Array(Float32),
+    `detections.glrt_max` Array(Float32)
 )
 ENGINE = Kafka()
 SETTINGS
@@ -68,20 +69,29 @@ SETTINGS
     kafka_num_consumers = 3;
 
 -- MV: Kafka → detection_hires
--- LEFT JOIN adds coordinates from fiber_cables configuration
+-- ARRAY JOIN flattens the batched detections array into individual rows.
+-- LEFT JOIN adds coordinates from fiber_cables configuration.
 CREATE MATERIALIZED VIEW sequoia.detection_kafka_mv TO sequoia.detection_hires AS
 SELECT
     d.fiber_id AS fiber_id,
-    fromUnixTimestamp64Nano(d.timestamp_ns) AS ts,
-    toUInt16(d.channel) AS ch,
-    d.direction AS direction,
-    d.speed_kmh AS speed,
-    d.vehicle_count AS vehicle_count,
-    d.n_cars AS n_cars,
-    d.n_trucks AS n_trucks,
-    CAST(arrayElement(c.channel_coordinates, d.channel + 1).1 AS Nullable(Float64)) AS lng,
-    CAST(arrayElement(c.channel_coordinates, d.channel + 1).2 AS Nullable(Float64)) AS lat
+    fromUnixTimestamp64Nano(det_ts) AS ts,
+    toUInt16(det_ch) AS ch,
+    det_dir AS direction,
+    det_speed AS speed,
+    det_vcount AS vehicle_count,
+    det_ncars AS n_cars,
+    det_ntrucks AS n_trucks,
+    CAST(arrayElement(c.channel_coordinates, det_ch + 1).1 AS Nullable(Float64)) AS lng,
+    CAST(arrayElement(c.channel_coordinates, det_ch + 1).2 AS Nullable(Float64)) AS lat
 FROM sequoia.detection_kafka d
+ARRAY JOIN
+    `detections.timestamp_ns` AS det_ts,
+    `detections.channel` AS det_ch,
+    `detections.speed_kmh` AS det_speed,
+    `detections.direction` AS det_dir,
+    `detections.vehicle_count` AS det_vcount,
+    `detections.n_cars` AS det_ncars,
+    `detections.n_trucks` AS det_ntrucks
 LEFT JOIN sequoia.fiber_cables c ON d.fiber_id = c.fiber_id;
 
 -- ============================================================================

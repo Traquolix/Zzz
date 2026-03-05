@@ -109,10 +109,10 @@ def create_detection_messages(
     service_name: str,
     log_fn=None,
 ) -> List:
-    """Create unified detection messages (speed + count + vehicle type).
+    """Create a single batched detection message per call.
 
-    Each detection produces one message with speed, vehicle count, and
-    car/truck classification — all in a single Kafka record.
+    All detections for a section/window are packed into one Kafka message
+    with a ``detections`` array, reducing message rate from ~500/s to ~11/s.
 
     Args:
         detections: List of dicts with keys:
@@ -123,16 +123,18 @@ def create_detection_messages(
     from shared.message import Message
     from shared.time_utils import current_time_nanoseconds
 
-    messages = []
+    if not detections:
+        return []
+
     channel_start = ctx.channel_start
     channel_step = ctx.channel_step
 
+    det_records = []
     for det in detections:
         actual_channel = channel_start + (det["section_idx"] * channel_step)
         timestamp_ns = det.get("timestamp_ns") or current_time_nanoseconds()
 
-        payload = {
-            "fiber_id": fiber_id,
+        det_records.append({
             "timestamp_ns": timestamp_ns,
             "channel": actual_channel,
             "speed_kmh": det["speed_kmh"],
@@ -141,28 +143,33 @@ def create_detection_messages(
             "n_cars": det.get("n_cars", 1.0),
             "n_trucks": det.get("n_trucks", 0.0),
             "glrt_max": det.get("glrt_max", 0.0),
-            "engine_version": ENGINE_VERSION,
-        }
+        })
 
-        messages.append(
-            Message(
-                id=fiber_id,
-                payload=payload,
-                headers={
-                    "source": "ai_engine",
-                    "fiber_id": fiber_id,
-                    "engine_id": service_name,
-                },
-                output_id="default",
-            )
+    payload = {
+        "fiber_id": fiber_id,
+        "engine_version": ENGINE_VERSION,
+        "detections": det_records,
+    }
+
+    messages = [
+        Message(
+            id=fiber_id,
+            payload=payload,
+            headers={
+                "source": "ai_engine",
+                "fiber_id": fiber_id,
+                "engine_id": service_name,
+            },
+            output_id="default",
         )
+    ]
 
     if log_fn:
         n_fwd = sum(1 for d in detections if d["direction"] == 1)
         n_rev = sum(1 for d in detections if d["direction"] == 2)
         total_count = sum(d.get("vehicle_count", 1) for d in detections)
         log_fn(
-            f"Detections: {len(detections)} intervals ({n_fwd} fwd, {n_rev} rev), "
+            f"Detections: {len(det_records)} intervals ({n_fwd} fwd, {n_rev} rev), "
             f"{total_count:.0f} vehicles total"
         )
 

@@ -70,9 +70,11 @@ def transform_detection_message(data: dict) -> list[dict]:
     """
     Transform a parsed das.detections message into frontend Detection[] shape.
 
-    Kafka Avro schema (das.detections):
-        { fiber_id, timestamp_ns, channel, speed_kmh, direction,
-          vehicle_count, n_cars, n_trucks, glrt_max, engine_version }
+    Kafka Avro schema (das.detections) — batched format:
+        { fiber_id, engine_version, detections: [
+            { timestamp_ns, channel, speed_kmh, direction,
+              vehicle_count, n_cars, n_trucks, glrt_max }, ...
+        ]}
 
     Frontend Detection:
         { fiberLine, channel, speed, count, nCars, nTrucks, direction, timestamp }
@@ -83,28 +85,36 @@ def transform_detection_message(data: dict) -> list[dict]:
         Mapping: 1 -> 0, 2 -> 1, 0 -> 0 (unknown treated as forward).
     """
     fiber_id = data.get('fiber_id', '')
-    timestamp_ns = data.get('timestamp_ns', 0)
-    channel = data.get('channel', 0)
-    speed = data.get('speed_kmh', 0.0)
-    vehicle_count = data.get('vehicle_count', 1.0)
-    n_cars = data.get('n_cars', 0.0)
-    n_trucks = data.get('n_trucks', 0.0)
-    timestamp_ms = timestamp_ns // 1_000_000
+    det_list = data.get('detections', [])
 
-    # Map AI engine direction (1=fwd, 2=rev) to frontend (0, 1)
-    raw_direction = data.get('direction', 0)
-    direction = max(0, raw_direction - 1)  # 1->0, 2->1, 0->0
+    # Fallback for legacy single-detection format (no 'detections' array)
+    if not det_list and 'timestamp_ns' in data:
+        det_list = [data]
 
-    return [{
-        'fiberLine': f'{fiber_id}:{direction}',
-        'channel': int(channel),
-        'speed': round(abs(speed), 1),
-        'count': round(float(vehicle_count), 1),
-        'nCars': round(float(n_cars), 1),
-        'nTrucks': round(float(n_trucks), 1),
-        'direction': direction,
-        'timestamp': timestamp_ms,
-    }]
+    results = []
+    for det in det_list:
+        timestamp_ns = det.get('timestamp_ns', 0)
+        channel = det.get('channel', 0)
+        speed = det.get('speed_kmh', 0.0)
+        vehicle_count = det.get('vehicle_count', 1.0)
+        n_cars = det.get('n_cars', 0.0)
+        n_trucks = det.get('n_trucks', 0.0)
+        timestamp_ms = timestamp_ns // 1_000_000
+
+        raw_direction = det.get('direction', 0)
+        direction = max(0, raw_direction - 1)  # 1->0, 2->1, 0->0
+
+        results.append({
+            'fiberLine': f'{fiber_id}:{direction}',
+            'channel': int(channel),
+            'speed': round(abs(speed), 1),
+            'count': round(float(vehicle_count), 1),
+            'nCars': round(float(n_cars), 1),
+            'nTrucks': round(float(n_trucks), 1),
+            'direction': direction,
+            'timestamp': timestamp_ms,
+        })
+    return results
 
 
 def transform_incident_row(row: dict) -> dict:
@@ -414,14 +424,18 @@ def _handle_detection_message(value: dict, replay_buffer) -> None:
         return
 
     fiber_id = data.get('fiber_id', '')
-    timestamp_ns = data.get('timestamp_ns', 0)
-    channel = data.get('channel', 0)
-
-    section_key = f'{fiber_id}:{channel}'
-
     detections = transform_detection_message(data)
-    if detections:
-        replay_buffer.ingest_detection(section_key, timestamp_ns, detections)
+
+    # Group by section_key (fiber:channel) for the replay buffer
+    by_section: dict[str, list[dict]] = {}
+    for det in detections:
+        section_key = f"{fiber_id}:{det['channel']}"
+        by_section.setdefault(section_key, []).append(det)
+
+    for section_key, section_dets in by_section.items():
+        # Use the first detection's timestamp for ordering
+        timestamp_ns = section_dets[0]['timestamp'] * 1_000_000
+        replay_buffer.ingest_detection(section_key, timestamp_ns, section_dets)
 
 
 async def _poll_incidents(channel_layer, known_incidents: dict, fiber_org_map: dict[str, list[str]]):
