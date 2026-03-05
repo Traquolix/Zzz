@@ -294,12 +294,26 @@ class RollingBufferedTransformer(ServiceBase, Generic[T, U]):
         self._tasks.append(asyncio.create_task(self._rolling_buffer_timeout_loop()))
 
     async def _rolling_transformer_loop(self):
-        """Poll, buffer by key with rolling FIFO, process at step intervals."""
+        """Poll, buffer by key with rolling FIFO, process at step intervals.
+
+        Buffer processing is dispatched as background tasks so the poll loop
+        can continue ingesting messages while inference runs (e.g., GPU work
+        in the AI engine).
+        """
         self.logger.info("Rolling buffered transformer loop starting")
         message_count = 0
+        self._processing_tasks: set[asyncio.Task] = set()
 
         while self._running:
             try:
+                # Clean up completed tasks
+                done = {t for t in self._processing_tasks if t.done()}
+                for t in done:
+                    self._processing_tasks.discard(t)
+                    if t.exception():
+                        self.logger.error(f"Error in buffer processing: {t.exception()}")
+                        self.metrics.record_error("rolling_transformer_loop")
+
                 message = await self._get_next_message()
                 if message:
                     message_count += 1
@@ -395,7 +409,11 @@ class RollingBufferedTransformer(ServiceBase, Generic[T, U]):
                     f"Rolling buffer '{buffer_key}' ready: {buffer_len} messages, "
                     f"processing window"
                 )
-                await self._process_rolling_buffer(messages, buffer_key, partial=False)
+                # Dispatch as background task so poll loop continues
+                task = asyncio.create_task(
+                    self._process_rolling_buffer(messages, buffer_key, partial=False)
+                )
+                self._processing_tasks.add(task)
 
         except Exception as e:
             self.logger.error(f"Error handling rolling message {message.id}: {e}")

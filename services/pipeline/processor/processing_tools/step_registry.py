@@ -171,7 +171,21 @@ def build_pipeline_from_config(
     """
     steps = []
 
+    # Optimization: move spatial_decimation before signal processing steps
+    # (scale, bandpass) so they operate on the section's channels only
+    # (e.g., 70 channels) instead of the full fiber (e.g., 5427 channels).
+    # This is safe because spatial_decimation is a pure channel selection/slice
+    # with no dependency on the signal processing steps.
+    spatial_first = []
+    other_steps = []
     for step_config in pipeline_config:
+        if step_config.get("step") == "spatial_decimation":
+            spatial_first.append(step_config)
+        else:
+            other_steps.append(step_config)
+    reordered_config = spatial_first + other_steps
+
+    for step_config in reordered_config:
         step_name = step_config.get("step")
         params = dict(step_config.get("params", {}))  # Copy to avoid mutating config
 
