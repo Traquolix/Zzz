@@ -285,29 +285,6 @@ class VehicleSpeedEstimator:
         if self.calibration_data is not None:
             fwd_summed = self.calibration_data.apply_coupling_correction(fwd_summed)
 
-        # Generate visualization using forward results
-        if self.visualizer is not None:
-            current_time = time.time()
-            if current_time - self.last_visualization_time >= self.visualization_interval:
-                try:
-                    viz_speed = np.nanmedian(fwd_filtered, axis=1, keepdims=True)
-                    summed_threshold = self.corr_threshold * (self.Nch - 1)
-                    det_mask = (fwd_summed >= summed_threshold).astype(float)
-                    viz_intervals = find_ind(det_mask)
-                    self.visualizer.generate_waterfall(
-                        glrt_res=fwd_summed,
-                        filtered_speed=viz_speed,
-                        intervals_list=viz_intervals,
-                        date_window=date_window,
-                        calibration_data=self.calibration_data,
-                        min_speed_kmh=self.min_speed,
-                        max_speed_kmh=self.max_speed,
-                        count_data=self.count_data_for_viz,
-                    )
-                    self.last_visualization_time = current_time
-                except Exception as e:
-                    logger.error(f"Visualization generation failed: {e}")
-
         yield from self._trim_and_yield(
             fwd_summed, fwd_filtered, fwd_aligned,
             date_window, date_window_ns, direction_value=1,

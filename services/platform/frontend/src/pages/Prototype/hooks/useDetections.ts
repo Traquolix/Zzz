@@ -24,6 +24,7 @@ export function useDetections() {
         features: [],
     })
     const lastBuildRef = useRef(0)
+    const lastDetectionTsRef = useRef(0)
 
     useEffect(() => {
         // Pre-allocate a reusable key buffer to avoid per-detection string allocation
@@ -35,6 +36,9 @@ export function useDetections() {
             const now = Date.now()
 
             for (const d of detections) {
+                if (d.timestamp > lastDetectionTsRef.current) {
+                    lastDetectionTsRef.current = d.timestamp
+                }
                 const coord = channelToCoord(d.fiberLine, d.channel)
                 if (!coord) continue
 
@@ -105,5 +109,5 @@ export function useDetections() {
         return cachedGeoJSON.current
     }, [])
 
-    return { dotsRef, buildGeoJSON, connected }
+    return { dotsRef, buildGeoJSON, connected, lastDetectionTsRef }
 }

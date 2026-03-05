@@ -1,18 +1,16 @@
 """
-Time-shifted replay buffer for AI engine inference results.
+Time-shifted replay buffer for AI engine detection results.
 
-The AI engine produces 30-second windows of detection data as bursts.
-This buffer replays them at the original ~10 Hz rate with a fixed time
-offset, creating continuous flow to the frontend instead of bursts
-followed by silence.
+Detections arrive in bursts (30-second inference windows). Instead of
+forwarding them immediately, we replay each detection exactly 60 seconds
+after its original timestamp_ns. This produces a continuous, smooth
+stream on the frontend where vehicle traces form proper oblique lines
+in the waterfall view.
 
-Each detection message carries timestamp_ns (original sample time, ~96ms apart).
-New batches are detected via timestamp gaps (>35s from first timestamp
-in current batch). The buffer schedules each message for replay at:
-    wall_start + (msg.timestamp_ns - batch_first_ts_ns) / 1e9
+Each detection is scheduled for broadcast at:
+    detection.timestamp_ns / 1e6 + REPLAY_DELAY_MS  (in wall-clock ms)
 
-Multiple concurrent inference batches from different fiber sections
-naturally interleave in the priority queue.
+The drain loop pops due items and flushes accumulated detections at ~10 Hz.
 """
 
 import asyncio
@@ -24,6 +22,12 @@ from typing import Any, Callable, Coroutine
 
 logger = logging.getLogger('sequoia.replay_buffer')
 
+# Fixed delay: detections are sent 60 seconds after their original timestamp
+REPLAY_DELAY_S = 60.0
+
+# Type alias for the broadcast callback
+BroadcastFn = Callable[[str, Any], Coroutine[Any, Any, None]]
+
 
 @dataclass(order=True)
 class ReplayItem:
@@ -34,35 +38,21 @@ class ReplayItem:
     data: Any = field(compare=False)        # transformed message payload
 
 
-class BatchTracker:
-    """Timing anchors for an active inference batch on a section."""
-    __slots__ = ('wall_start', 'first_ts_ns', 'last_seen')
-
-    def __init__(self, wall_start: float, first_ts_ns: int):
-        self.wall_start = wall_start
-        self.first_ts_ns = first_ts_ns
-        self.last_seen = wall_start
-
-
-# Type alias for the broadcast callback
-BroadcastFn = Callable[[str, Any], Coroutine[Any, Any, None]]
-
-
 class ReplayBuffer:
     """
-    Buffers incoming burst messages and replays them at the original rate.
+    Buffers incoming detection messages and replays them 60 seconds after
+    their original timestamp.
 
-    Messages are assigned wall-clock replay times based on their original
-    timestamp_ns offsets within each inference batch, then drained by
-    an asyncio task that sleeps until each message is due.
+    Messages are individually scheduled based on their timestamp_ns,
+    producing a smooth continuous stream on the frontend.
     """
 
     def __init__(self):
         self._queue: list[ReplayItem] = []      # heapq min-heap
         self._sequence: int = 0
-        self._batches: dict[str, BatchTracker] = {}
         self._event = asyncio.Event()
         self._running: bool = False
+        self._last_sent_timestamp_ms: int = 0   # track for frontend display
 
     @property
     def queue_size(self) -> int:
@@ -70,12 +60,21 @@ class ReplayBuffer:
 
     @property
     def active_batches(self) -> int:
-        return len(self._batches)
+        """Kept for compatibility with cleanup_stale_batches calls."""
+        return 0
+
+    @property
+    def last_sent_timestamp_ms(self) -> int:
+        """Timestamp (ms) of the most recently sent detection."""
+        return self._last_sent_timestamp_ms
 
     def ingest_detection(self, section_key: str, timestamp_ns: int,
                          detections: list[dict]) -> None:
         """
         Add a detection message to the replay queue.
+
+        Each detection is scheduled for replay at its original timestamp
+        plus the fixed 60-second delay.
 
         Args:
             section_key: "{fiber_id}:{channel}" identifying the section
@@ -85,24 +84,9 @@ class ReplayBuffer:
         if not detections:
             return
 
-        now = time.time()
-        batch = self._batches.get(section_key)
-
-        # Detect new batch: no existing batch or large timestamp gap (>35s)
-        if (batch is None
-                or (timestamp_ns - batch.first_ts_ns) > 35_000_000_000):
-            batch = BatchTracker(wall_start=now, first_ts_ns=timestamp_ns)
-            self._batches[section_key] = batch
-            logger.debug(
-                'New batch for %s: wall_start=%.3f, first_ts_ns=%d',
-                section_key, now, timestamp_ns,
-            )
-
-        batch.last_seen = now
-
-        # Compute replay time: wall_start + offset from batch start
-        offset_s = (timestamp_ns - batch.first_ts_ns) / 1e9
-        replay_time = batch.wall_start + offset_s
+        # Schedule at: original_time + 60 seconds
+        original_time_s = timestamp_ns / 1e9
+        replay_time = original_time_s + REPLAY_DELAY_S
 
         self._sequence += 1
         heapq.heappush(self._queue, ReplayItem(
@@ -127,7 +111,7 @@ class ReplayBuffer:
         detection_accumulator: list[dict] = []
         last_detection_flush = time.time()
 
-        logger.info('Replay buffer drain started')
+        logger.info('Replay buffer drain started (delay=%.0fs)', REPLAY_DELAY_S)
 
         while self._running:
             # Wait for items if queue is empty
@@ -158,6 +142,11 @@ class ReplayBuffer:
 
                 if item.channel == 'detections':
                     detection_accumulator.extend(item.data)
+                    # Track the latest original detection timestamp
+                    for det in item.data:
+                        ts = det.get('timestamp', 0)
+                        if ts > self._last_sent_timestamp_ms:
+                            self._last_sent_timestamp_ms = ts
 
             # Flush detections at ~10 Hz
             now = time.time()
@@ -181,11 +170,5 @@ class ReplayBuffer:
         self._event.set()
 
     def cleanup_stale_batches(self, max_age_s: float = 60) -> None:
-        """Remove batch trackers older than max_age_s."""
-        now = time.time()
-        stale = [k for k, v in self._batches.items()
-                 if now - v.last_seen > max_age_s]
-        for k in stale:
-            del self._batches[k]
-        if stale:
-            logger.debug('Cleaned up %d stale batch trackers', len(stale))
+        """No-op: batch tracking removed. Kept for API compatibility."""
+        pass

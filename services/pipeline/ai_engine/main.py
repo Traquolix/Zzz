@@ -625,6 +625,31 @@ class AIEngineService(RollingBufferedTransformer):
         if yield_count == 0:
             raise RuntimeError(f"AI model did not yield results for {buffer_key}")
 
+        # Generate notebook-style waterfall visualization every window
+        if speed_processor.visualizer is not None:
+            try:
+                # Offset _t_mid_sample from trimmed window to full window
+                edge_trim = speed_processor.edge_trim
+                for d in all_detections:
+                    if d.get("_t_mid_sample") is not None:
+                        d["_t_mid_sample"] += edge_trim
+                fwd_dets = [d for d in all_detections if d["direction"] == 1]
+                rev_dets = [d for d in all_detections if d["direction"] == 2]
+                speed_processor.visualizer.generate_notebook_waterfall(
+                    raw_data=data,
+                    fwd_detections=fwd_dets,
+                    rev_detections=rev_dets,
+                    date_window=timestamps,
+                    fs=speed_processor.fs,
+                    channel_start=ctx.channel_start,
+                    channel_step=ctx.channel_step,
+                    gauge=speed_processor.model_args.gauge,
+                    min_speed_kmh=speed_processor.min_speed,
+                    max_speed_kmh=speed_processor.max_speed,
+                )
+            except Exception as e:
+                self.logger.error(f"Notebook waterfall generation failed: {e}")
+
         return all_detections
 
     def _create_detection_messages(

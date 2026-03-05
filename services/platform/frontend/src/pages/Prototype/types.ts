@@ -1,6 +1,6 @@
 export type Severity = 'critical' | 'high' | 'medium' | 'low'
 export type IncidentType = 'accident' | 'congestion' | 'slowdown' | 'anomaly'
-export type SidebarTab = 'incidents' | 'sections' | 'settings' | 'shm' | 'channel'
+export type SidebarTab = 'incidents' | 'sections' | 'settings' | 'shm' | 'channel' | 'waterfall'
 
 export interface Fiber {
     id: string

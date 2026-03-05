@@ -95,6 +95,167 @@ class VehicleVisualizer:
         self.static_threshold = static_threshold
         logger.info(f"VehicleVisualizer initialized: output_dir={self.output_dir}")
 
+    def generate_notebook_waterfall(
+        self,
+        raw_data: np.ndarray,
+        fwd_detections: list[dict],
+        rev_detections: list[dict],
+        date_window: np.ndarray,
+        fs: float,
+        channel_start: int = 0,
+        channel_step: int = 1,
+        gauge: float = 15.3846,
+        min_speed_kmh: float = 20.0,
+        max_speed_kmh: float = 120.0,
+    ) -> str:
+        """Generate notebook-style 3-panel waterfall with raw DAS background.
+
+        Produces the same visualization as notebook cell 38:
+        - Viridis raw DAS data as background (imshow)
+        - Detection scatter overlay colored by direction or speed
+        - 3 panels: Forward (lime), Reverse (red), All (speed-colored)
+
+        Args:
+            raw_data: Raw sensor data (channels, time_samples) before splitting
+            fwd_detections: Forward detection dicts with section_idx, speed_kmh, timestamp_ns
+            rev_detections: Reverse detection dicts (same format)
+            date_window: Timestamps for each time sample
+            fs: Sampling rate in Hz
+            channel_start: First channel index in the raw fiber
+            channel_step: Channel step for section_idx -> actual channel mapping
+            gauge: Sensor gauge distance in meters
+            min_speed_kmh: Minimum speed for colorbar
+            max_speed_kmh: Maximum speed for colorbar
+
+        Returns:
+            Path to saved image file
+        """
+        try:
+            n_channels, n_samples = raw_data.shape
+            duration_s = n_samples / fs
+
+            # Distance axis: channel index -> km
+            dist_km = np.arange(n_channels) * gauge / 1000
+
+            vmax_data = 2 * raw_data.std()
+
+            # Build detection arrays
+            def _build_det_arrays(detections):
+                if not detections:
+                    return np.array([]), np.array([]), np.array([])
+                d_km = []
+                t_s = []
+                speeds = []
+                for det in detections:
+                    section_ch = det["section_idx"] * channel_step
+                    if section_ch >= n_channels:
+                        continue
+                    d_km.append(section_ch * gauge / 1000)
+                    # Time: use the detection's interval midpoint within the window
+                    # timestamp_ns points into the trimmed window; convert to seconds
+                    if det.get("_t_mid_sample") is not None:
+                        t_s.append(det["_t_mid_sample"] / fs)
+                    elif det.get("timestamp_ns") is not None and len(date_window) > 0:
+                        # Find closest time index
+                        ts_ns = det["timestamp_ns"]
+                        if hasattr(date_window[0], 'timestamp'):
+                            # datetime objects
+                            window_start_ns = int(date_window[0].timestamp() * 1e9)
+                        else:
+                            window_start_ns = int(date_window[0] * 1e9) if date_window[0] > 1e15 else int(date_window[0])
+                        offset_s = (ts_ns - window_start_ns) / 1e9
+                        t_s.append(max(0, min(offset_s, duration_s)))
+                    else:
+                        t_s.append(duration_s / 2)
+                    speeds.append(abs(det["speed_kmh"]))
+                return np.array(d_km), np.array(t_s), np.array(speeds)
+
+            fwd_d, fwd_t, fwd_spd = _build_det_arrays(fwd_detections)
+            rev_d, rev_t, rev_spd = _build_det_arrays(rev_detections)
+
+            n_fwd = len(fwd_spd)
+            n_rev = len(rev_spd)
+
+            has_bidir = n_rev > 0
+            n_panels = 3 if has_bidir else 1
+            fig, axes = plt.subplots(1, n_panels, figsize=(7 * n_panels, 10), squeeze=False)
+            axes = axes[0]
+
+            def _plot_panel(ax, title, d_km_arr, t_s_arr, spd_arr, color_mode='speed', marker_color=None):
+                """Plot one waterfall panel with raw DAS background + detection scatter."""
+                ax.imshow(
+                    raw_data.T, aspect='auto', cmap='viridis',
+                    vmin=-vmax_data, vmax=vmax_data,
+                    extent=[dist_km[0], dist_km[-1], duration_s, 0],
+                )
+                if len(spd_arr) > 0:
+                    if color_mode == 'speed':
+                        speed_min = max(min_speed_kmh, spd_arr.min()) if len(spd_arr) > 0 else min_speed_kmh
+                        speed_max = min(max_speed_kmh, spd_arr.max()) if len(spd_arr) > 0 else max_speed_kmh
+                        if speed_min >= speed_max:
+                            speed_min, speed_max = min_speed_kmh, max_speed_kmh
+                        sc = ax.scatter(
+                            d_km_arr, t_s_arr, c=spd_arr, cmap='jet',
+                            vmin=speed_min, vmax=speed_max,
+                            s=8, edgecolors='none', zorder=5,
+                        )
+                        plt.colorbar(sc, ax=ax, label='Speed (km/h)', shrink=0.5, pad=0.02)
+                    else:
+                        ax.scatter(
+                            d_km_arr, t_s_arr, c=marker_color,
+                            s=8, edgecolors='none', zorder=5,
+                        )
+                ax.set_xlabel('Distance (km)', fontsize=11)
+                ax.set_ylabel('Time (s)', fontsize=11)
+                ax.set_title(f'{title} ({len(spd_arr)} det)', fontsize=12)
+
+            if has_bidir:
+                _plot_panel(axes[0], 'Forward', fwd_d, fwd_t, fwd_spd,
+                            color_mode='fixed', marker_color='lime')
+                _plot_panel(axes[1], 'Reverse', rev_d, rev_t, rev_spd,
+                            color_mode='fixed', marker_color='red')
+                all_d = np.concatenate([fwd_d, rev_d]) if n_fwd + n_rev > 0 else np.array([])
+                all_t = np.concatenate([fwd_t, rev_t]) if n_fwd + n_rev > 0 else np.array([])
+                all_spd = np.concatenate([fwd_spd, rev_spd]) if n_fwd + n_rev > 0 else np.array([])
+                _plot_panel(axes[2], 'All detections', all_d, all_t, all_spd,
+                            color_mode='speed')
+            else:
+                _plot_panel(axes[0], 'Detections', fwd_d, fwd_t, fwd_spd,
+                            color_mode='speed')
+
+            # Timestamp annotation
+            if hasattr(date_window[0], "strftime"):
+                timestamp_str = date_window[0].strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                timestamp_str = datetime.fromtimestamp(date_window[0]).strftime("%Y-%m-%d %H:%M:%S")
+
+            fig.suptitle(
+                f"DAS Vehicle Detection — {self.fiber_id} — {timestamp_str}",
+                fontsize=14, y=0.98,
+            )
+            plt.tight_layout(rect=[0, 0, 1, 0.96])
+
+            # Save
+            ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"waterfall_{self.section}_{ts}.png"
+            filepath = self.output_dir / filename
+            plt.savefig(filepath, dpi=120, bbox_inches="tight")
+            plt.close(fig)
+
+            try:
+                os.chmod(filepath, 0o644)
+            except Exception as e:
+                logger.warning(f"Could not set permissions on {filepath}: {e}")
+
+            logger.info(f"Saved notebook-style waterfall: {filepath} (fwd={n_fwd}, rev={n_rev})")
+            return str(filepath)
+
+        except Exception as e:
+            logger.error(f"Failed to generate notebook waterfall: {e}", exc_info=True)
+            if "fig" in locals():
+                plt.close(fig)
+            raise
+
     def generate_waterfall(
         self,
         glrt_res: np.ndarray,
@@ -106,7 +267,7 @@ class VehicleVisualizer:
         max_speed_kmh: float = 120.0,
         count_data: Optional[Tuple[List, List, List]] = None,
     ) -> str:
-        """Generate six-panel waterfall visualization.
+        """Generate six-panel waterfall visualization (legacy format).
 
         Creates six plots:
         1. Original GLRT data (viridis colormap, time on y-axis)

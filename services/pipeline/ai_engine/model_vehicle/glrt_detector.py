@@ -147,6 +147,7 @@ class GLRTDetector:
                     "vehicle_count": n_vehicles,
                     "n_cars": n_cars,
                     "n_trucks": n_trucks,
+                    "_t_mid_sample": t_mid,
                 })
 
         return detections

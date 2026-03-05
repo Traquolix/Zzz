@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
+import { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
@@ -14,6 +14,8 @@ import { useAuth } from '@/hooks/useAuth'
 import { parseDetections } from '@/lib/parseMessage'
 import { TimeSeriesChart } from './TimeSeriesChart'
 import { Sparkline } from './Sparkline'
+import { useWaterfallBuffer } from '../hooks/useWaterfallBuffer'
+import { WaterfallCanvas } from './WaterfallCanvas'
 
 interface StructureDataProp {
     structures: Infrastructure[]
@@ -137,6 +139,12 @@ export function SidePanel({ state, dispatch, connected, liveStats, liveSeriesDat
                             icon={<BridgeIcon />}
                             active={activeTab === 'shm'}
                             onClick={() => dispatch({ type: 'SET_TAB', tab: 'shm' })}
+                        />
+                        <TabButton
+                            label="Waterfall"
+                            icon={<WaterfallIcon />}
+                            active={activeTab === 'waterfall'}
+                            onClick={() => dispatch({ type: 'SET_TAB', tab: 'waterfall' })}
                         />
                     </div>
                     <div className="flex flex-col gap-1.5">
@@ -373,6 +381,9 @@ export function SidePanel({ state, dispatch, connected, liveStats, liveSeriesDat
                                 onClearHighlight={onClearHighlight}
                             />
                     )}
+                    {activeTab === 'waterfall' && (
+                        <WaterfallPanel />
+                    )}
                 </div>
             </div>
         </div>
@@ -455,6 +466,98 @@ const ChannelIcon = () => (
         <line x1="12" y1="8" x2="15" y2="8" />
     </svg>
 )
+
+const WaterfallIcon = () => (
+    <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="2" width="12" height="12" rx="1" />
+        <line x1="2" y1="6" x2="14" y2="6" opacity="0.3" />
+        <line x1="2" y1="10" x2="14" y2="10" opacity="0.3" />
+        <circle cx="5" cy="5" r="0.8" fill="#22c55e" stroke="none" />
+        <circle cx="8" cy="7" r="0.8" fill="#eab308" stroke="none" />
+        <circle cx="11" cy="4" r="0.8" fill="#ef4444" stroke="none" />
+        <circle cx="6" cy="9" r="0.8" fill="#22c55e" stroke="none" />
+        <circle cx="10" cy="11" r="0.8" fill="#f97316" stroke="none" />
+    </svg>
+)
+
+// ── Waterfall panel ─────────────────────────────────────────────────────
+
+const FIBER_OPTIONS = fibers
+    .filter((_, i, arr) => i === arr.findIndex(f2 => f2.id.split(':')[0] === _.id.split(':')[0] && f2.direction === _.direction))
+    .map(f => ({ id: f.id, label: `${f.name}:${f.direction}` }))
+
+function WaterfallPanel() {
+    const [fiberId, setFiberId] = useState(FIBER_OPTIONS[0]?.id ?? '')
+    const [windowMs, setWindowMs] = useState(120_000)
+
+    const fiber = fibers.find(f => f.id === fiberId)
+    const minChannel = 0
+    const maxChannel = (fiber?.totalChannels ?? 500) - 1
+
+    const { dotsRef, dirtyRef, prune } = useWaterfallBuffer(fiberId, windowMs)
+
+    return (
+        <div className="flex flex-col h-full">
+            {/* Controls */}
+            <div className="flex items-center gap-2 px-4 py-2 border-b border-[var(--proto-border)]">
+                <select
+                    value={fiberId}
+                    onChange={e => setFiberId(e.target.value)}
+                    className="text-xs px-2 py-1 rounded bg-[var(--proto-base)] border border-[var(--proto-border)] text-[var(--proto-text)] outline-none"
+                >
+                    {FIBER_OPTIONS.map(f => (
+                        <option key={f.id} value={f.id}>{f.label}</option>
+                    ))}
+                </select>
+                <div className="flex rounded overflow-hidden border border-[var(--proto-border)]">
+                    {[60_000, 120_000].map(ms => (
+                        <button
+                            key={ms}
+                            onClick={() => setWindowMs(ms)}
+                            className={cn(
+                                'text-xs px-2 py-1 transition-colors cursor-pointer',
+                                windowMs === ms
+                                    ? 'bg-[var(--proto-accent)] text-white'
+                                    : 'bg-[var(--proto-base)] text-[var(--proto-text-muted)] hover:text-[var(--proto-text)]',
+                            )}
+                        >
+                            {ms / 1000}s
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* Canvas */}
+            <div className="flex-1 min-h-0 p-2">
+                <WaterfallCanvas
+                    dotsRef={dotsRef as unknown as RefObject<import('../hooks/useWaterfallBuffer').WaterfallDot[]>}
+                    dirtyRef={dirtyRef}
+                    prune={prune}
+                    windowMs={windowMs}
+                    minChannel={minChannel}
+                    maxChannel={maxChannel}
+                />
+            </div>
+
+            {/* Speed color legend */}
+            <div className="flex items-center gap-3 px-4 py-2 border-t border-[var(--proto-border)]">
+                <span className="text-[10px] text-[var(--proto-text-muted)]">Speed:</span>
+                {[
+                    { color: '#22c55e', label: '≥80' },
+                    { color: '#eab308', label: '≥60' },
+                    { color: '#f97316', label: '≥30' },
+                    { color: '#ef4444', label: '<30' },
+                ].map(({ color, label }) => (
+                    <div key={label} className="flex items-center gap-1">
+                        <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: color }} />
+                        <span className="text-[10px] text-[var(--proto-text-muted)]">{label}</span>
+                    </div>
+                ))}
+                <span className="text-[10px] text-[var(--proto-text-muted)] ml-auto">km/h</span>
+            </div>
+        </div>
+    )
+}
 
 // ── Channel detail ──────────────────────────────────────────────────────
 

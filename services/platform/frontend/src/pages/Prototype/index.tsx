@@ -257,7 +257,7 @@ export function Prototype() {
     const [state, dispatch] = useReducer(reducer, initialState)
     const [isOverview, setIsOverview] = useState(false)
     const mapRef = useRef<PrototypeMapHandle>(null)
-    const { buildGeoJSON, connected } = useDetections()
+    const { buildGeoJSON, connected, lastDetectionTsRef } = useDetections()
     const { tickAndCollect } = useVehicleSim()
     const { stats: liveStats, seriesData: liveSeriesData } = useLiveStats(state.sections)
     const structureData = useStructures(state.selectedStructureId)
@@ -394,6 +394,8 @@ export function Prototype() {
                 }
             } else if (e.key === 'h') {
                 dispatch({ type: 'OPEN_SIDEBAR', tab: 'shm' })
+            } else if (e.key === 'w') {
+                dispatch({ type: 'OPEN_SIDEBAR', tab: 'waterfall' })
             } else if (e.key === 'Escape') {
                 if (state.showNamingDialog) {
                     dispatch({ type: 'CLOSE_NAMING_DIALOG' })
@@ -465,6 +467,7 @@ export function Prototype() {
                     connected={connected}
                     sectionCount={state.sections.length}
                     incidentCount={state.incidents.filter(i => !i.resolved).length}
+                    lastDetectionTsRef={lastDetectionTsRef}
                 />
             </div>
 

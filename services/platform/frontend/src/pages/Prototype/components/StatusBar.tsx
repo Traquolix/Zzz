@@ -1,16 +1,17 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, type RefObject } from 'react'
 import { Sparkline } from './Sparkline'
 
 interface StatusBarProps {
     connected: boolean
     sectionCount: number
     incidentCount: number
+    lastDetectionTsRef?: RefObject<number>
 }
 
 const PING_HISTORY_LENGTH = 30
 const PING_INTERVAL_MS = 2000
 
-export function StatusBar({ connected, sectionCount, incidentCount }: StatusBarProps) {
+export function StatusBar({ connected, sectionCount, incidentCount, lastDetectionTsRef }: StatusBarProps) {
     const [showTooltip, setShowTooltip] = useState(false)
     const [pingHistory, setPingHistory] = useState<number[]>([])
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -101,6 +102,25 @@ export function StatusBar({ connected, sectionCount, incidentCount }: StatusBarP
                                     {sectionCount} section{sectionCount !== 1 ? 's' : ''} · {incidentCount} incident{incidentCount !== 1 ? 's' : ''}
                                 </div>
                             </div>
+
+                            {lastDetectionTsRef?.current ? (
+                                <>
+                                    <div className="w-full h-px bg-[var(--proto-border)]" />
+                                    <div>
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-[var(--proto-accent)]" />
+                                            <span className="text-[var(--proto-text)] font-medium">Last detection</span>
+                                        </div>
+                                        <div className="text-[var(--proto-text-muted)] mt-0.5 tabular-nums">
+                                            {new Date(lastDetectionTsRef.current).toLocaleTimeString()}
+                                            {' '}
+                                            <span className="opacity-60">
+                                                ({Math.round((Date.now() - lastDetectionTsRef.current) / 1000)}s ago)
+                                            </span>
+                                        </div>
+                                    </div>
+                                </>
+                            ) : null}
                         </div>
                     </div>
                 )}
