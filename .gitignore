@@ -6,8 +6,6 @@ training_data/
 experiments/
 diagnostic_output/
 docs/research/
-
-
 secrets/
 # Training environment (large, reproducible)
 training_env/

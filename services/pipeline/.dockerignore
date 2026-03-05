@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.git/
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+.benchmarks/
+*.egg-info/
+experiments/
+ai_engine/training/
+tests/
+docs/
+.DS_Store
+*.md
+pyproject.toml
