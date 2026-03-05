@@ -197,15 +197,18 @@ services:
     networks: [ internal ]
 
 
-  ai-engine:
-    build:
+  # Per-fiber AI engines for horizontal scaling.
+  # Each filters messages by FIBER_ID from the shared das.processed topic.
+  # Separate consumer groups ensure parallel processing.
+  ai-engine-carros:
+    build: &ai-engine-build
       context: services/pipeline
       dockerfile: ai_engine/Dockerfile
       args:
         HTTP_PROXY: ${HTTP_PROXY:-}
         HTTPS_PROXY: ${HTTPS_PROXY:-}
         NO_PROXY: ${NO_PROXY:-}
-    container_name: ai-engine
+    container_name: ai-engine-carros
     restart: unless-stopped
     depends_on:
       kafka:
@@ -214,8 +217,7 @@ services:
         condition: service_healthy
       processor-carros:
         condition: service_started
-    # GPU access for CUDA-accelerated inference
-    deploy:
+    deploy: &ai-engine-deploy
       resources:
         limits:
           memory: 8G
@@ -226,8 +228,7 @@ services:
               count: 1
               capabilities: [gpu]
     env_file: .env
-    environment:
-      # AI-specific settings that need Docker paths
+    environment: &ai-engine-env
       AI_MODEL_BASE_PATH: /app/ai_engine/model_vehicle/models_parameters
       CALIBRATION_PATH: /app/calibration
       VISUALIZATION_OUTPUT: /app/visualizations
@@ -235,11 +236,48 @@ services:
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
       OMP_NUM_THREADS: "2"
       MKL_NUM_THREADS: "2"
-    volumes:
-      # Mount calibration data as read-only
+      FIBER_ID: carros
+    volumes: &ai-engine-volumes
       - ${CALIBRATION_DATA_PATH:-./data/calibration}:/app/calibration:ro
-      # Mount visualization output directory as read-write
       - ${VISUALIZATION_OUTPUT_PATH:-./data/visualizations}:/app/visualizations:rw
+    networks: [ internal ]
+
+  ai-engine-mathis:
+    build: *ai-engine-build
+    container_name: ai-engine-mathis
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+      processor-mathis:
+        condition: service_started
+    deploy: *ai-engine-deploy
+    env_file: .env
+    environment:
+      <<: *ai-engine-env
+      FIBER_ID: mathis
+    volumes: *ai-engine-volumes
+    networks: [ internal ]
+
+  ai-engine-promenade:
+    build: *ai-engine-build
+    container_name: ai-engine-promenade
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+      processor-promenade:
+        condition: service_started
+    deploy: *ai-engine-deploy
+    env_file: .env
+    environment:
+      <<: *ai-engine-env
+      FIBER_ID: promenade
+    volumes: *ai-engine-volumes
     networks: [ internal ]
 
   # PostgreSQL for Django (multi-tenant user/org/fiber data)

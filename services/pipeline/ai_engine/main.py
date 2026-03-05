@@ -8,7 +8,7 @@ import time
 
 # Suppress PyTorch deprecation warnings
 import warnings
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -32,6 +32,7 @@ from ai_engine.model_vehicle.calibration import CalibrationManager
 
 # Unified config loader
 from config import (
+    get_ai_engine_fiber_id,
     get_default_model_name,
     get_model_spec,
     get_service_name,
@@ -39,7 +40,7 @@ from config import (
 )
 from shared import RollingBufferedTransformer
 from shared.ai_metrics import AIMetrics
-from shared.message import Message
+from shared.message import KafkaMessage, Message
 from shared.otel_setup import get_correlation_id, setup_otel
 
 warnings.filterwarnings("ignore", message=".*torch.meshgrid.*")
@@ -312,6 +313,11 @@ class AIEngineService(RollingBufferedTransformer):
         self.speed_processor = self.model_registry._default_model
         self.count_processor = self.model_registry._default_counter
 
+        # Per-fiber filtering: if FIBER_ID is set, only process that fiber's messages
+        self._fiber_filter = get_ai_engine_fiber_id()
+        if self._fiber_filter:
+            self.logger.info(f"Fiber filter active: processing only fiber '{self._fiber_filter}'")
+
         self._log_init()
 
     def _log_init(self) -> None:
@@ -349,6 +355,243 @@ class AIEngineService(RollingBufferedTransformer):
 
     def get_buffer_timeout_seconds(self) -> float:
         return self.config.buffer_timeout
+
+    async def _handle_rolling_message(self, message: Message) -> None:
+        """Filter by FIBER_ID, buffer, and batch-process ready sections together."""
+        if self._fiber_filter:
+            msg_fiber = message.payload.get("fiber_id", "")
+            if msg_fiber != self._fiber_filter:
+                return
+
+        # Buffer the message (reuse base class logic minus the dispatch)
+        try:
+            buffer_key = self.get_buffer_key(message)
+
+            # Evict LRU buffer if at capacity
+            if (
+                buffer_key not in self._rolling_buffers
+                and len(self._rolling_buffers) >= self._max_active_buffers
+            ):
+                lru_key, lru_buffer = self._rolling_buffers.popitem(last=False)
+                self._buffers_evicted += 1
+                self.metrics.record_buffer_eviction(lru_key)
+                messages = list(lru_buffer["deque"])
+                if messages:
+                    self.logger.warning(
+                        f"Buffer limit ({self._max_active_buffers}) reached, "
+                        f"evicting LRU buffer '{lru_key}' with {len(messages)} messages"
+                    )
+                    await self._process_rolling_buffer(messages, lru_key, partial=True)
+
+            is_new_buffer = buffer_key not in self._rolling_buffers
+            if is_new_buffer:
+                self._rolling_buffers[buffer_key] = {
+                    "deque": deque(maxlen=self._window_size),
+                    "new_count": 0,
+                    "last_update": time.time(),
+                }
+                self.metrics.update_buffer_count(len(self._rolling_buffers))
+            else:
+                self._rolling_buffers.move_to_end(buffer_key)
+
+            buffer_info = self._rolling_buffers[buffer_key]
+            buffer_info["deque"].append(message)
+            buffer_info["new_count"] += 1
+            buffer_info["last_update"] = time.time()
+
+            # Collect ALL ready sections for batched processing
+            ready_sections = {}
+            for key, info in self._rolling_buffers.items():
+                if len(info["deque"]) >= self._window_size and info["new_count"] >= self._step_size:
+                    ready_sections[key] = list(info["deque"])
+                    info["new_count"] = 0
+
+            if ready_sections:
+                self.logger.debug(
+                    f"Batch processing {len(ready_sections)} ready sections: "
+                    f"{list(ready_sections.keys())}"
+                )
+                task = asyncio.create_task(
+                    self._process_sections_batch(ready_sections)
+                )
+                self._processing_tasks.add(task)
+
+        except Exception as e:
+            self.logger.error(f"Error handling rolling message {message.id}: {e}")
+            self.metrics.record_error("rolling_buffer_management")
+            raise
+
+    async def _process_sections_batch(self, ready_sections: dict) -> None:
+        """Process multiple sections in a single batched GPU pass."""
+        async with self._semaphore:
+            start_time = time.time()
+
+            try:
+                # Prepare data arrays for each section
+                section_inputs = []
+                section_meta = []
+                for buffer_key, messages in ready_sections.items():
+                    first_payload = messages[0].payload
+                    fiber_id = first_payload.get("fiber_id", "unknown")
+                    section = first_payload.get("section", "default")
+                    model_hint = first_payload.get("model_hint", "default")
+
+                    ctx = self._get_or_create_context(buffer_key)
+                    data_array, timestamps, timestamps_ns = self._messages_to_arrays(messages, ctx)
+
+                    num_channels = data_array.shape[0] if len(data_array.shape) > 0 else 0
+                    expected_min = self._model_spec.inference.channels_per_section
+                    if num_channels < expected_min:
+                        self.logger.warning(
+                            f"Skipping {buffer_key}: insufficient channels "
+                            f"({num_channels} < {expected_min})"
+                        )
+                        continue
+
+                    section_inputs.append((
+                        data_array,
+                        np.array(timestamps),
+                        np.array(timestamps_ns),
+                    ))
+                    section_meta.append({
+                        "buffer_key": buffer_key,
+                        "fiber_id": fiber_id,
+                        "section": section,
+                        "model_hint": model_hint,
+                        "messages": messages,
+                        "ctx": ctx,
+                    })
+
+                if not section_inputs:
+                    return
+
+                speed_processor = self.model_registry.get_speed_estimator(
+                    section_meta[0]["model_hint"]
+                )
+
+                # Run batched inference
+                batch_results = await asyncio.to_thread(
+                    self._sync_batch_inference,
+                    section_inputs,
+                    section_meta,
+                    speed_processor,
+                )
+
+                processing_time = (time.time() - start_time) * 1000
+
+                # Send outputs and record metrics for each section
+                total_outputs = 0
+                for meta, (detections, output_messages) in zip(section_meta, batch_results):
+                    for msg in output_messages:
+                        await self._internal_send(msg)
+                    total_outputs += len(output_messages)
+
+                    self._analyses_completed += 1
+                    self.ai_metrics.record_inference(
+                        duration_seconds=processing_time / 1000.0 / len(section_meta),
+                        fiber_id=meta["fiber_id"],
+                        section=meta["section"],
+                        num_detections=len(detections),
+                    )
+                    for det in detections:
+                        self.ai_metrics.record_vehicle(
+                            fiber_id=meta["fiber_id"],
+                            section=meta["section"],
+                            direction=det["direction"],
+                            speed_kmh=det["speed_kmh"],
+                        )
+
+                self.logger.info(
+                    f"Batched analysis complete: {len(section_meta)} sections, "
+                    f"{total_outputs} total outputs in {processing_time:.1f}ms"
+                )
+
+                processing_time_s = processing_time / 1000.0
+                self.metrics.record_message_processed(processing_time_s)
+                for meta in section_meta:
+                    self.metrics.record_buffer_processed(
+                        len(meta["messages"]), meta["buffer_key"], partial=False
+                    )
+
+                # Commit last message per section
+                for meta in section_meta:
+                    messages = meta["messages"]
+                    if messages:
+                        last_msg = messages[-1]
+                        if isinstance(last_msg, KafkaMessage):
+                            await self._commit_message(last_msg)
+
+                if self._analyses_completed % self._STATS_INTERVAL == 0:
+                    self._show_stats()
+
+            except Exception as e:
+                self.logger.error(f"Error in batched AI analysis: {e}")
+                self.metrics.record_error("batch_processing")
+
+    def _sync_batch_inference(
+        self,
+        section_inputs: list,
+        section_meta: list,
+        speed_processor: VehicleSpeedEstimator,
+    ) -> list:
+        """Run batched inference across multiple sections."""
+        min_vehicle_duration_s = self._model_spec.speed_detection.min_vehicle_duration_s
+        classify_threshold_factor = self._model_spec.counting.truck_ratio_for_split
+
+        # Use process_batch for batched GPU pass
+        batch_results = speed_processor.process_batch(section_inputs)
+
+        results = []
+        for i, (section_results, meta) in enumerate(zip(batch_results, section_meta)):
+            all_detections = []
+            for result in section_results:
+                direction = int(result.direction_mask[0, 0])
+                detections = speed_processor.extract_detections(
+                    glrt_summed=result.glrt_summed,
+                    aligned_speed_pairs=result.aligned_speed_per_pair,
+                    direction=direction,
+                    timestamps_ns=result.timestamps_ns,
+                    min_vehicle_duration_s=min_vehicle_duration_s,
+                    classify_threshold_factor=classify_threshold_factor,
+                )
+                all_detections.extend(detections)
+
+            # Count processing (visualization only)
+            buffer_key = meta["buffer_key"]
+            ctx = meta["ctx"]
+            count_processor = self.model_registry.get_counter(
+                meta["model_hint"], buffer_key
+            )
+            if self._model_spec.counting.enabled and count_processor is not None:
+                for result in section_results:
+                    try:
+                        chunk_start_ns = (
+                            int(result.timestamps_ns[0])
+                            if result.timestamps_ns is not None else None
+                        )
+                        for chunk_result in count_processor.process_data_chunk(
+                            aligned_speed=result.aligned_speed_per_pair,
+                            correlations=result.glrt_summed,
+                            aligned_data=result.aligned_data,
+                            timestamp_ns=chunk_start_ns,
+                        ):
+                            counts, intervals, window_start_ns = chunk_result
+                            count_timestamps = (
+                                [window_start_ns] if window_start_ns is not None
+                                else ctx.timestamps_ns
+                            )
+                            speed_processor.set_count_data(
+                                (counts, intervals, count_timestamps)
+                            )
+                    except Exception as e:
+                        logger.error(f"Error in vehicle counting: {e}")
+
+            output_messages = self._create_detection_messages(
+                meta["fiber_id"], all_detections, ctx,
+            )
+            results.append((all_detections, output_messages))
+
+        return results
 
     async def process_buffer(self, messages: List[Message]) -> List[Message]:
         with self.tracer.start_as_current_span("process_buffer") as span:

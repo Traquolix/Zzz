@@ -113,6 +113,11 @@ def _get_input_config(service_type: str, topics: dict) -> Tuple[Optional[str], O
         raise ValueError(f"Unknown service type: {service_type}")
 
 
+def get_ai_engine_fiber_id() -> Optional[str]:
+    """Get FIBER_ID for AI engine filtering, if set."""
+    return os.getenv("FIBER_ID")
+
+
 def get_service_name(service_type: str) -> str:
     """Get service name from config.
 
@@ -131,7 +136,7 @@ def get_service_name(service_type: str) -> str:
 
     name = service_cfg.get("name", defaults.get(service_type, service_type))
 
-    if service_type == "processor":
+    if service_type in ("processor", "ai_engine"):
         fiber_id = os.getenv("FIBER_ID")
         if fiber_id:
             name = f"{name}-{fiber_id}"

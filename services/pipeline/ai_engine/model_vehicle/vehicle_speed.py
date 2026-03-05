@@ -9,6 +9,7 @@ Thin orchestrator that delegates to:
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from typing import NamedTuple, Optional
 
@@ -128,6 +129,7 @@ class VehicleSpeedEstimator:
         self.last_visualization_time = 0
         self.visualization_interval = 0
         self.count_data_for_viz = None
+        self._inference_lock = threading.Lock()
 
         if visualization_config and visualization_config.get("enabled", False):
             from .visualization import VehicleVisualizer
@@ -250,6 +252,123 @@ class VehicleSpeedEstimator:
             intervals=trimmed_intervals,
         )
 
+    def process_batch(self, sections: list[tuple[np.ndarray, np.ndarray, np.ndarray | None]]):
+        """Process multiple sections in a single batched GPU pass.
+
+        Args:
+            sections: List of (data, timestamps, timestamps_ns) tuples,
+                      one per section. data shape: (channels, time_samples).
+
+        Returns:
+            List of lists of DirectionResult, one inner list per section.
+        """
+        with self._inference_lock:
+            return self._process_batch_unlocked(sections)
+
+    def _process_batch_unlocked(self, sections):
+        # Validate and prepare per-section data windows
+        prepared = []
+        for x, d, d_ns in sections:
+            _, L = x.shape
+            if L < self.window_size:
+                logger.warning(f"Batch: {L} samples < {self.window_size}. Skipping section.")
+                prepared.append(None)
+                continue
+            data_window = x[:, :self.window_size]
+            date_window = d[:self.window_size]
+            date_window_ns = d_ns[:self.window_size] if d_ns is not None else None
+            prepared.append((data_window, date_window, date_window_ns))
+
+        # Collect space_split arrays for all valid sections
+        valid_indices = []
+        space_splits = []
+        window_counts = []
+        for i, p in enumerate(prepared):
+            if p is None:
+                continue
+            data_window = p[0]
+            ss = self._dtan.split_channel_overlap(data_window)
+            for j in range(ss.shape[0]):
+                ss[j] = normalize_channel_energy(ss[j])
+            space_splits.append(ss)
+            window_counts.append(ss.shape[0])
+            valid_indices.append(i)
+
+        if not space_splits:
+            return [[] for _ in sections]
+
+        # --- Batched forward pass ---
+        combined = np.concatenate(space_splits, axis=0)
+        fwd_results = self._batched_direction(combined, window_counts)
+
+        # --- Batched reverse pass ---
+        rev_results_list = None
+        if self.bidirectional_detection:
+            rev_splits = []
+            for i, idx in enumerate(valid_indices):
+                data_window = prepared[idx][0]
+                data_flipped = data_window[::-1, :].copy()
+                ss = self._dtan.split_channel_overlap(data_flipped)
+                for j in range(ss.shape[0]):
+                    ss[j] = normalize_channel_energy(ss[j])
+                rev_splits.append(ss)
+            combined_rev = np.concatenate(rev_splits, axis=0)
+            rev_results_list = self._batched_direction(combined_rev, window_counts)
+
+        # Build per-section results
+        all_results = [[] for _ in sections]
+        for list_idx, section_idx in enumerate(valid_indices):
+            data_window, date_window, date_window_ns = prepared[section_idx]
+            fwd_glrt_summed, fwd_filtered, fwd_aligned = fwd_results[list_idx]
+
+            if self.calibration_data is not None:
+                fwd_glrt_summed = self.calibration_data.apply_coupling_correction(fwd_glrt_summed)
+
+            for dr in self._trim_and_yield(fwd_glrt_summed, fwd_filtered, fwd_aligned,
+                                           date_window, date_window_ns, direction_value=1):
+                all_results[section_idx].append(dr)
+
+            if self.bidirectional_detection and rev_results_list is not None:
+                rev_glrt_summed, rev_filtered, rev_aligned = rev_results_list[list_idx]
+                rev_glrt_summed = rev_glrt_summed[::-1, :].copy()
+                rev_filtered = rev_filtered[::-1, :, :].copy()
+                for dr in self._trim_and_yield(rev_glrt_summed, rev_filtered, rev_aligned,
+                                               date_window, date_window_ns, direction_value=2):
+                    all_results[section_idx].append(dr)
+
+        return all_results
+
+    def _batched_direction(self, combined_space_split, window_counts):
+        """Run DTAN + GLRT on concatenated space_split, return per-section results."""
+        align_channel_idx = (self.Nch - 1) // 2
+
+        thetas, grid_t = self._dtan.predict_theta(combined_space_split)
+        aligned = self._dtan.align_window(combined_space_split, thetas, self.Nch, align_channel_idx)
+
+        all_speed = self._dtan.comp_speed(grid_t)
+        aligned_speed = self._dtan.align_window(
+            all_speed, thetas[:, :-1, :], self.Nch - 1, align_channel_idx
+        ).detach().cpu().numpy()
+
+        glrt_per_pair = self._glrt.apply_glrt(aligned).detach().cpu().numpy()
+
+        # Split back per section
+        results = []
+        offset = 0
+        for count in window_counts:
+            sec_glrt = glrt_per_pair[offset:offset + count]
+            sec_speed = aligned_speed[offset:offset + count]
+            sec_aligned = aligned[offset:offset + count]
+
+            binary_filter = correlation_threshold(sec_glrt, corr_threshold=self.corr_threshold)
+            filtered_speed, _ = self._speed_filter.filtering_speed(sec_speed, binary_filter)
+            glrt_summed = np.sum(sec_glrt, axis=1)
+
+            results.append((glrt_summed, filtered_speed, sec_aligned))
+            offset += count
+
+        return results
+
     def process_file(self, x: np.ndarray, d: np.ndarray, d_ns: np.ndarray | None = None):
         """Processes a single window of sensor data through the DTAN pipeline.
 
@@ -261,6 +380,10 @@ class VehicleSpeedEstimator:
         Yields:
             DirectionResult named tuple with trimmed arrays.
         """
+        with self._inference_lock:
+            yield from self._process_file_unlocked(x, d, d_ns)
+
+    def _process_file_unlocked(self, x: np.ndarray, d: np.ndarray, d_ns: np.ndarray | None = None):
         _, L = x.shape
 
         if L < self.window_size:

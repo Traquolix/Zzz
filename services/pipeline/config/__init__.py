@@ -40,6 +40,7 @@ from config.fiber_config import (
     get_raw_config,
 )
 from config.service_loader import (
+    get_ai_engine_fiber_id,
     get_service_name,
     load_service_config,
 )
@@ -48,6 +49,7 @@ __all__ = [
     # Service configuration
     "load_service_config",
     "get_service_name",
+    "get_ai_engine_fiber_id",
     # Fiber configuration
     "CountingConfig",
     "FiberConfig",
