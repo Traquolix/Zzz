@@ -15,6 +15,3 @@ services:
             - driver: nvidia
               device_ids: ['1']
               capabilities: [gpu]
-  processor:
-    volumes:
-      - ./data/captures:/app/data_captures:rw

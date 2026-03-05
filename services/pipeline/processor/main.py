@@ -140,14 +140,6 @@ class DASProcessor(MultiTransformer):
                 except KeyError:
                     sampling_rate_hz = 50.0  # Default DAS hardware sampling rate.
 
-                measurement = self._adapt_message(message.payload, fiber_id, sampling_rate_hz)
-                values = measurement.get("values", [])
-                msg_start = measurement.get("channel_start", 0)
-                msg_end = msg_start + len(values)
-
-                span.set_attribute("fiber_id", fiber_id)
-                span.set_attribute("message.channel_count", len(values))
-
                 # Get fiber-specific pipelines and sections from fibers.yaml.
                 pipelines = self._get_fiber_pipelines(fiber_id)
                 fiber_cfg = self._fiber_configs.get(fiber_id)
@@ -155,39 +147,53 @@ class DASProcessor(MultiTransformer):
                 if not pipelines or not fiber_cfg:
                     raise ValueError(f"No config for fiber '{fiber_id}'. Add to fibers.yaml.")
 
+                span.set_attribute("fiber_id", fiber_id)
+
+                # Unbatch: split batched DAS message (Package Size > 1) into
+                # individual per-timestamp measurements
+                measurements = self._unbatch_raw_message(
+                    message.payload, fiber_id, sampling_rate_hz, fiber_cfg.total_channels
+                )
+                span.set_attribute("batch.size", len(measurements))
+
                 output_messages = []
-                for section in fiber_cfg.sections:
-                    section_id = section.name
-                    if msg_end <= section.channel_start or msg_start >= section.channel_stop:
-                        continue
+                for measurement in measurements:
+                    values = measurement.get("values", [])
+                    msg_start = measurement.get("channel_start", 0)
+                    msg_end = msg_start + len(values)
 
-                    if section_id not in pipelines:
-                        continue
+                    for section in fiber_cfg.sections:
+                        section_id = section.name
+                        if msg_end <= section.channel_start or msg_start >= section.channel_stop:
+                            continue
 
-                    processed = await pipelines[section_id].process(measurement)
-                    if processed is None:
-                        continue
+                        if section_id not in pipelines:
+                            continue
 
-                    output = self._build_output(
-                        measurement, processed, correlation_id, start_time, fiber_cfg, section
-                    )
-                    output_messages.append(
-                        Message(
-                            id=f"{fiber_id}:{section_id}",  # Kafka key for partitioning
-                            payload=output,
-                            headers={
-                                "source": self.service_name,
-                                "fiber_id": fiber_id,
-                                "section": section_id,
-                                "model_hint": section.model,
-                                "timestamp": str(output["timestamp_ns"]),
-                                "original_message_id": message.id,
-                                **(message.headers or {}),
-                            },
-                            output_id="default",  # Single unified output topic
+                        processed = await pipelines[section_id].process(measurement)
+                        if processed is None:
+                            continue
+
+                        output = self._build_output(
+                            measurement, processed, correlation_id, start_time, fiber_cfg, section
                         )
-                    )
-                    span.set_attribute(f"section.{section_id}", True)
+                        output_messages.append(
+                            Message(
+                                id=f"{fiber_id}:{section_id}",
+                                payload=output,
+                                headers={
+                                    "source": self.service_name,
+                                    "fiber_id": fiber_id,
+                                    "section": section_id,
+                                    "model_hint": section.model,
+                                    "timestamp": str(output["timestamp_ns"]),
+                                    "original_message_id": message.id,
+                                    **(message.headers or {}),
+                                },
+                                output_id="default",
+                            )
+                        )
+                        span.set_attribute(f"section.{section_id}", True)
 
                 span.set_attribute("sections_produced", len(output_messages))
                 return output_messages
@@ -196,6 +202,48 @@ class DASProcessor(MultiTransformer):
                 span.record_exception(e)
                 self.logger.error(f"Error processing message {message.id}: {e}")
                 raise
+
+    def _unbatch_raw_message(
+        self, raw: dict, fiber_id: str, sampling_rate_hz: float, total_channels: int
+    ) -> list:
+        """Split a batched DAS message into per-timestamp measurements.
+
+        The DAS Package Size setting controls how many timestamps are concatenated
+        in floatData. With Package Size=25 and 5427 channels:
+          floatData has 5427*25 = 135,675 floats
+          Layout: [ch0_t0, ch1_t0, ..., ch5426_t0, ch0_t1, ..., ch5426_t24]
+        """
+        raw_values = raw.get("floatData") or raw.get("longData") or []
+        n_values = len(raw_values)
+
+        # Single timestamp (Package Size=1) — existing path
+        if n_values <= total_channels:
+            return [self._adapt_message(raw, fiber_id, sampling_rate_hz)]
+
+        if n_values % total_channels != 0:
+            self.logger.warning(
+                f"floatData length {n_values} not divisible by total_channels "
+                f"{total_channels} for fiber '{fiber_id}'. Using single-sample fallback."
+            )
+            return [self._adapt_message(raw, fiber_id, sampling_rate_hz)]
+
+        batch_size = n_values // total_channels
+        all_values = np.asarray(raw_values, dtype=np.float64)
+        data_2d = all_values.reshape(batch_size, total_channels)
+
+        first_ts = raw.get("timeStampNanoSec", int(time.time() * 1e9))
+        sample_interval_ns = int(1e9 / sampling_rate_hz)
+
+        measurements = []
+        for i in range(batch_size):
+            measurements.append({
+                "fiber_id": fiber_id,
+                "values": data_2d[i],
+                "timestamp_ns": first_ts + i * sample_interval_ns,
+                "channel_start": 0,
+                "sampling_rate_hz": sampling_rate_hz,
+            })
+        return measurements
 
     def _adapt_message(self, raw: dict, fiber_id: str, sampling_rate_hz: float) -> dict:
         """Convert raw DAS format (floatData/longData) to internal format."""

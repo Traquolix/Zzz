@@ -637,8 +637,11 @@ class AIEngineService(RollingBufferedTransformer):
         if not hasattr(self, "_last_viz_time"):
             self._last_viz_time: Dict[str, float] = {}
         now = time.time()
-        last = self._last_viz_time.get(buffer_key, 0.0)
         interval = self._model_spec.visualization.interval_seconds
+        if buffer_key not in self._last_viz_time:
+            self._last_viz_time[buffer_key] = now
+            return False  # Skip first window
+        last = self._last_viz_time[buffer_key]
         if now - last >= interval:
             self._last_viz_time[buffer_key] = now
             return True

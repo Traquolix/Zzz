@@ -448,12 +448,12 @@ class RollingBufferedTransformer(ServiceBase, Generic[T, U]):
                     f"{len(messages)} messages → {len(results)} outputs in {processing_time:.3f}s"
                 )
 
-                # Commit all messages in the window
-                # Note: For rolling buffers, some messages may be committed multiple times
-                # across overlapping windows - Kafka handles this gracefully
-                for message in messages:
-                    if isinstance(message, KafkaMessage):
-                        await self._commit_message(message)
+                # Commit only the last message — Kafka offsets are cumulative,
+                # so committing offset N acknowledges all offsets <= N
+                if messages:
+                    last_msg = messages[-1]
+                    if isinstance(last_msg, KafkaMessage):
+                        await self._commit_message(last_msg)
 
             except asyncio.TimeoutError:
                 self.logger.error(
