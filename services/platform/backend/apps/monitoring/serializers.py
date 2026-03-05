@@ -46,12 +46,9 @@ class InfrastructureSerializer(serializers.Serializer):
     imageUrl = serializers.SerializerMethodField()
 
     def get_imageUrl(self, obj):
-        """Return full URL for infrastructure image, or None if not set."""
+        """Return URL for infrastructure image, or None if not set."""
         if not obj.image:
             return None
-        request = self.context.get('request')
-        if request:
-            return request.build_absolute_uri(f'/media/infrastructure/{obj.image}')
         return f'/media/infrastructure/{obj.image}'
 
 
