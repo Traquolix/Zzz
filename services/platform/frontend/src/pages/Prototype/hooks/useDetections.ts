@@ -12,7 +12,7 @@ interface LiveDot {
     channel: number
 }
 
-const DOT_TTL = 500 // ms
+const DOT_TTL = 2000 // ms
 const GEOJSON_THROTTLE_MS = 100 // rebuild GeoJSON at most 10Hz (not 60fps)
 
 export function useDetections() {

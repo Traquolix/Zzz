@@ -472,11 +472,11 @@ const WaterfallIcon = () => (
         <rect x="2" y="2" width="12" height="12" rx="1" />
         <line x1="2" y1="6" x2="14" y2="6" opacity="0.3" />
         <line x1="2" y1="10" x2="14" y2="10" opacity="0.3" />
-        <circle cx="5" cy="5" r="0.8" fill="#22c55e" stroke="none" />
-        <circle cx="8" cy="7" r="0.8" fill="#eab308" stroke="none" />
-        <circle cx="11" cy="4" r="0.8" fill="#ef4444" stroke="none" />
-        <circle cx="6" cy="9" r="0.8" fill="#22c55e" stroke="none" />
-        <circle cx="10" cy="11" r="0.8" fill="#f97316" stroke="none" />
+        <circle cx="5" cy="5" r="0.8" fill="currentColor" stroke="none" />
+        <circle cx="8" cy="7" r="0.8" fill="currentColor" stroke="none" />
+        <circle cx="11" cy="4" r="0.8" fill="currentColor" stroke="none" />
+        <circle cx="6" cy="9" r="0.8" fill="currentColor" stroke="none" />
+        <circle cx="10" cy="11" r="0.8" fill="currentColor" stroke="none" />
     </svg>
 )
 

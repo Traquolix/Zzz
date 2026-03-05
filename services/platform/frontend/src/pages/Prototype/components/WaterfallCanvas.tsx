@@ -75,11 +75,10 @@ export function WaterfallCanvas({ dotsRef, dirtyRef, prune, windowMs, minChannel
             ctx.stroke()
         }
 
-        // Horizontal grid (time on Y-axis)
+        // Horizontal grid (time on Y-axis) — fixed positions relative to "now"
         const timeStep = windowMs <= 60_000 ? 10_000 : 30_000
-        for (let t = Math.ceil(tMin / timeStep) * timeStep; t <= tMax; t += timeStep) {
-            // now at top (y=0), past at bottom (y=plotH)
-            const y = margin.top + ((tMax - t) / (tMax - tMin)) * plotH
+        for (let ago = 0; ago <= windowMs; ago += timeStep) {
+            const y = margin.top + (ago / windowMs) * plotH
             ctx.beginPath()
             ctx.moveTo(margin.left, y)
             ctx.lineTo(margin.left + plotW, y)
@@ -117,13 +116,13 @@ export function WaterfallCanvas({ dotsRef, dirtyRef, prune, windowMs, minChannel
             ctx.fillText(String(ch), x, margin.top - 4)
         }
 
-        // Y-axis (left): time-ago labels — now at top, past at bottom
+        // Y-axis (left): time-ago labels — fixed positions, now at top, past at bottom
         ctx.textAlign = 'right'
         ctx.textBaseline = 'middle'
-        for (let t = Math.ceil(tMin / timeStep) * timeStep; t <= tMax; t += timeStep) {
-            const y = margin.top + ((tMax - t) / (tMax - tMin)) * plotH
-            const ago = Math.round((tMax - t) / 1000)
-            const label = ago === 0 ? 'now' : `-${ago}s`
+        for (let ago = 0; ago <= windowMs; ago += timeStep) {
+            const y = margin.top + (ago / windowMs) * plotH
+            const agoSec = Math.round(ago / 1000)
+            const label = agoSec === 0 ? 'now' : `-${agoSec}s`
             ctx.fillText(label, margin.left - 4, y)
         }
 

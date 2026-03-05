@@ -66,8 +66,8 @@ services:
         cub kafka-ready -b kafka:29092 1 30 &&
         echo 'Creating Kafka topics (1 partition — DAS streams require strict ordering)...' &&
         kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.raw.carros --partitions 1 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=10737418240 --config compression.type=lz4 --config max.message.bytes=2097152 &&
-        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.raw.mathis --partitions 1 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=10737418240 --config compression.type=lz4 --config max.message.bytes=2097152 &&
-        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.raw.promenade --partitions 1 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=10737418240 --config compression.type=lz4 --config max.message.bytes=2097152 &&
+        # kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.raw.mathis --partitions 1 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=10737418240 --config compression.type=lz4 --config max.message.bytes=2097152 &&
+        # kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.raw.promenade --partitions 1 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=10737418240 --config compression.type=lz4 --config max.message.bytes=2097152 &&
         kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.processed --partitions 1 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=10737418240 --config compression.type=lz4 --config max.message.bytes=2097152 &&
         kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.detections --partitions 1 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=10737418240 --config compression.type=lz4 --config max.message.bytes=2097152 &&
         kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.dlq --partitions 1 --replication-factor 1 --config retention.ms=604800000 --config retention.bytes=10737418240 --config compression.type=lz4 --config max.message.bytes=2097152 &&
@@ -146,55 +146,55 @@ services:
     env_file: .env
     networks: [ internal ]
 
-  processor-mathis:
-    build:
-      context: services/pipeline
-      dockerfile: processor/Dockerfile
-      args:
-        HTTP_PROXY: ${HTTP_PROXY:-}
-        HTTPS_PROXY: ${HTTPS_PROXY:-}
-        NO_PROXY: ${NO_PROXY:-}
-    container_name: processor-mathis
-    restart: unless-stopped
-    depends_on:
-      kafka:
-        condition: service_healthy
-      schema-registry:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: '4.0'
-    environment:
-      FIBER_ID: mathis
-    env_file: .env
-    networks: [ internal ]
+  # processor-mathis:
+  #   build:
+  #     context: services/pipeline
+  #     dockerfile: processor/Dockerfile
+  #     args:
+  #       HTTP_PROXY: ${HTTP_PROXY:-}
+  #       HTTPS_PROXY: ${HTTPS_PROXY:-}
+  #       NO_PROXY: ${NO_PROXY:-}
+  #   container_name: processor-mathis
+  #   restart: unless-stopped
+  #   depends_on:
+  #     kafka:
+  #       condition: service_healthy
+  #     schema-registry:
+  #       condition: service_healthy
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 4G
+  #         cpus: '4.0'
+  #   environment:
+  #     FIBER_ID: mathis
+  #   env_file: .env
+  #   networks: [ internal ]
 
-  processor-promenade:
-    build:
-      context: services/pipeline
-      dockerfile: processor/Dockerfile
-      args:
-        HTTP_PROXY: ${HTTP_PROXY:-}
-        HTTPS_PROXY: ${HTTPS_PROXY:-}
-        NO_PROXY: ${NO_PROXY:-}
-    container_name: processor-promenade
-    restart: unless-stopped
-    depends_on:
-      kafka:
-        condition: service_healthy
-      schema-registry:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: '4.0'
-    environment:
-      FIBER_ID: promenade
-    env_file: .env
-    networks: [ internal ]
+  # processor-promenade:
+  #   build:
+  #     context: services/pipeline
+  #     dockerfile: processor/Dockerfile
+  #     args:
+  #       HTTP_PROXY: ${HTTP_PROXY:-}
+  #       HTTPS_PROXY: ${HTTPS_PROXY:-}
+  #       NO_PROXY: ${NO_PROXY:-}
+  #   container_name: processor-promenade
+  #   restart: unless-stopped
+  #   depends_on:
+  #     kafka:
+  #       condition: service_healthy
+  #     schema-registry:
+  #       condition: service_healthy
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         memory: 4G
+  #         cpus: '4.0'
+  #   environment:
+  #     FIBER_ID: promenade
+  #   env_file: .env
+  #   networks: [ internal ]
 
 
   # Per-fiber AI engines for horizontal scaling.
@@ -242,43 +242,43 @@ services:
       - ${VISUALIZATION_OUTPUT_PATH:-./data/visualizations}:/app/visualizations:rw
     networks: [ internal ]
 
-  ai-engine-mathis:
-    build: *ai-engine-build
-    container_name: ai-engine-mathis
-    restart: unless-stopped
-    depends_on:
-      kafka:
-        condition: service_healthy
-      schema-registry:
-        condition: service_healthy
-      processor-mathis:
-        condition: service_started
-    deploy: *ai-engine-deploy
-    env_file: .env
-    environment:
-      <<: *ai-engine-env
-      FIBER_ID: mathis
-    volumes: *ai-engine-volumes
-    networks: [ internal ]
+  # ai-engine-mathis:
+  #   build: *ai-engine-build
+  #   container_name: ai-engine-mathis
+  #   restart: unless-stopped
+  #   depends_on:
+  #     kafka:
+  #       condition: service_healthy
+  #     schema-registry:
+  #       condition: service_healthy
+  #     processor-mathis:
+  #       condition: service_started
+  #   deploy: *ai-engine-deploy
+  #   env_file: .env
+  #   environment:
+  #     <<: *ai-engine-env
+  #     FIBER_ID: mathis
+  #   volumes: *ai-engine-volumes
+  #   networks: [ internal ]
 
-  ai-engine-promenade:
-    build: *ai-engine-build
-    container_name: ai-engine-promenade
-    restart: unless-stopped
-    depends_on:
-      kafka:
-        condition: service_healthy
-      schema-registry:
-        condition: service_healthy
-      processor-promenade:
-        condition: service_started
-    deploy: *ai-engine-deploy
-    env_file: .env
-    environment:
-      <<: *ai-engine-env
-      FIBER_ID: promenade
-    volumes: *ai-engine-volumes
-    networks: [ internal ]
+  # ai-engine-promenade:
+  #   build: *ai-engine-build
+  #   container_name: ai-engine-promenade
+  #   restart: unless-stopped
+  #   depends_on:
+  #     kafka:
+  #       condition: service_healthy
+  #     schema-registry:
+  #       condition: service_healthy
+  #     processor-promenade:
+  #       condition: service_started
+  #   deploy: *ai-engine-deploy
+  #   env_file: .env
+  #   environment:
+  #     <<: *ai-engine-env
+  #     FIBER_ID: promenade
+  #   volumes: *ai-engine-volumes
+  #   networks: [ internal ]
 
   # PostgreSQL for Django (multi-tenant user/org/fiber data)
   postgres:
