@@ -399,36 +399,6 @@ class AIEngineService(RollingBufferedTransformer):
                     span.set_attribute("skipped.reason", "insufficient_channels")
                     return []
 
-                # Diagnostic: log input data statistics to debug zero GLRT
-                data_min = float(np.min(data_array))
-                data_max = float(np.max(data_array))
-                data_std = float(np.std(data_array))
-                data_absmax = max(abs(data_min), abs(data_max))
-                self.logger.info(
-                    f"Input diag [{buffer_key}]: shape={data_array.shape}, "
-                    f"absmax={data_absmax:.6f}, std={data_std:.6f}, "
-                    f"all_zero={data_absmax < 1e-10}"
-                )
-
-                # Data capture: save first few buffers to disk for offline comparison
-                capture_dir = "/app/data_captures"
-                capture_count_attr = "_capture_count"
-                if not hasattr(self, capture_count_attr):
-                    self._capture_count = 0
-                    import os
-                    os.makedirs(capture_dir, exist_ok=True)
-                if self._capture_count < 5:
-                    capture_path = f"{capture_dir}/{buffer_key.replace(':', '_')}_{self._capture_count}.npz"
-                    np.savez(
-                        capture_path,
-                        data=data_array,
-                        timestamps_ns=np.array(timestamps_ns),
-                        buffer_key=buffer_key,
-                        shape=data_array.shape,
-                    )
-                    self._capture_count += 1
-                    self.logger.info(f"Captured data to {capture_path}")
-
                 # Set section name for visualization filename uniqueness
                 if hasattr(speed_processor, "set_section"):
                     speed_processor.set_section(section)
@@ -581,21 +551,6 @@ class AIEngineService(RollingBufferedTransformer):
 
             direction = int(result.direction_mask[0, 0])
 
-            # Diagnostic: log GLRT statistics to understand detection threshold behavior
-            glrt = result.glrt_summed
-            glrt_max = float(np.max(glrt)) if glrt.size > 0 else 0.0
-            glrt_mean = float(np.mean(glrt)) if glrt.size > 0 else 0.0
-            summed_threshold = speed_processor.corr_threshold * (speed_processor.Nch - 1)
-            above_count = int(np.sum(glrt >= summed_threshold)) if glrt.size > 0 else 0
-            dir_label = "fwd" if direction == 1 else "rev"
-            self.logger.info(
-                f"GLRT diag [{buffer_key} {dir_label}]: "
-                f"max={glrt_max:.0f}, mean={glrt_mean:.0f}, "
-                f"threshold={summed_threshold:.0f}, "
-                f"samples_above={above_count}/{glrt.shape[-1] if glrt.ndim > 1 else len(glrt)}, "
-                f"shape={glrt.shape}"
-            )
-
             detections = speed_processor.extract_detections(
                 glrt_summed=result.glrt_summed,
                 aligned_speed_pairs=result.aligned_speed_per_pair,
@@ -625,8 +580,8 @@ class AIEngineService(RollingBufferedTransformer):
         if yield_count == 0:
             raise RuntimeError(f"AI model did not yield results for {buffer_key}")
 
-        # Generate notebook-style waterfall visualization every window
-        if speed_processor.visualizer is not None:
+        # Generate notebook-style waterfall visualization at configured interval
+        if speed_processor.visualizer is not None and self._should_visualize(buffer_key):
             try:
                 # Use actual fiber_id from buffer_key (e.g. "carros:default" -> "carros")
                 # instead of model_hint which may be "dtan_unified"
@@ -676,6 +631,18 @@ class AIEngineService(RollingBufferedTransformer):
             service_name=self.service_name,
             log_fn=self.logger.info,
         )
+
+    def _should_visualize(self, buffer_key: str) -> bool:
+        """Rate-limit visualization to the configured interval per buffer key."""
+        if not hasattr(self, "_last_viz_time"):
+            self._last_viz_time: Dict[str, float] = {}
+        now = time.time()
+        last = self._last_viz_time.get(buffer_key, 0.0)
+        interval = self._model_spec.visualization.interval_seconds
+        if now - last >= interval:
+            self._last_viz_time[buffer_key] = now
+            return True
+        return False
 
     _STATS_INTERVAL = 5  # Log stats every N analyses
 
