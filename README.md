@@ -122,4 +122,7 @@ npm run dev
 
 ## Key Documentation
 
-- [Pipeline Tuning Guide](services/pipeline/experiments/PIPELINE_TUNING_GUIDE.md) — DTAN retraining and calibration workflow
+- [Architecture](ARCHITECTURE.md) — Full system topology and inter-service contracts
+- [Contributing](CONTRIBUTING.md) — Branch strategy, conventional commits, PR workflow
+- [Pipeline Tuning Guide](tools/pipeline/experiments/PIPELINE_TUNING_GUIDE.md) — DTAN retraining and calibration workflow
+- API docs: `/api/docs/` (Swagger UI, available in dev mode)
