@@ -6,6 +6,8 @@ Example: DAS floatData in rad/(s*m) -> int16-equivalent ADC counts.
 
 from typing import Any, Dict, Optional
 
+import numpy as np
+
 from processor.processing_tools.processing_steps.base_step import ProcessingStep
 
 
@@ -26,5 +28,7 @@ class Scale(ProcessingStep):
 
         result = measurement_data.copy()
         values = result.get("values", [])
-        result["values"] = [v * self.factor for v in values]
+        if not isinstance(values, np.ndarray):
+            values = np.asarray(values, dtype=np.float64)
+        result["values"] = values * self.factor
         return result

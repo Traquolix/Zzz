@@ -7,6 +7,7 @@ import time
 import uuid
 from typing import Dict, List
 
+import numpy as np
 from opentelemetry import trace
 
 # Unified config loader
@@ -242,9 +243,10 @@ class DASProcessor(MultiTransformer):
             result = raw.copy()
             result["fiber_id"] = fiber_id
             return result
+        raw_values = raw.get("floatData") or raw.get("longData") or []
         return {
             "fiber_id": fiber_id,
-            "values": list(raw.get("floatData") or raw.get("longData") or []),
+            "values": np.asarray(raw_values, dtype=np.float64),
             "timestamp_ns": raw.get("timeStampNanoSec", int(time.time() * 1e9)),
             "channel_start": 0,
             "sampling_rate_hz": sampling_rate_hz,
@@ -263,14 +265,23 @@ class DASProcessor(MultiTransformer):
         values = processed.get("values", [])
         n = len(values)
 
-        # Signal stats (required by schema)
+        # Signal stats (required by schema) — use numpy for speed
         if n > 0:
-            stats = {
-                "min_value": min(values),
-                "max_value": max(values),
-                "mean_value": sum(values) / n,
-                "rms_value": (sum(v * v for v in values) / n) ** 0.5,
-            }
+            if isinstance(values, np.ndarray):
+                stats = {
+                    "min_value": float(values.min()),
+                    "max_value": float(values.max()),
+                    "mean_value": float(values.mean()),
+                    "rms_value": float(np.sqrt(np.mean(values * values))),
+                }
+                values = values.tolist()  # Convert to list for Avro serialization
+            else:
+                stats = {
+                    "min_value": min(values),
+                    "max_value": max(values),
+                    "mean_value": sum(values) / n,
+                    "rms_value": (sum(v * v for v in values) / n) ** 0.5,
+                }
         else:
             stats = {"min_value": 0.0, "max_value": 0.0, "mean_value": 0.0, "rms_value": 0.0}
 

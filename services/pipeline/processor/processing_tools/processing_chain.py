@@ -13,7 +13,7 @@ class ProcessingChain:
         for step in self.steps:
             if current_data is None:
                 break
-            current_data = await step.process_with_stats(current_data)
+            current_data = await step.process(current_data)
         return current_data
 
     def get_chain_stats(self) -> Dict[str, Any]:

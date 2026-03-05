@@ -53,14 +53,15 @@ class BandpassFilter(ProcessingStep):
             fiber_state["state"] = self.filter.create_state(channel_count)
             fiber_state["channels"] = channel_count
 
-        values_array = np.array(values, dtype=np.float64)
-        filtered_values = self.filter.filter(values_array, fiber_state["state"])
+        if not isinstance(values, np.ndarray):
+            values = np.asarray(values, dtype=np.float64)
+        filtered_values = self.filter.filter(values, fiber_state["state"])
 
         # Bound filter state growth (each fiber_id gets its own state)
         self.cleanup_fiber_states()
 
         result = measurement_data.copy()
-        result["values"] = filtered_values.tolist()
+        result["values"] = filtered_values  # Keep as numpy array
         return result
 
     def cleanup_fiber_states(self, max_fibers: int = 1000):

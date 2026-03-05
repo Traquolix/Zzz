@@ -10,6 +10,8 @@ Example:
 
 from typing import Any, Dict, Optional
 
+import numpy as np
+
 from processor.processing_tools.processing_steps.base_step import ProcessingStep
 
 
@@ -42,7 +44,7 @@ class SpatialDecimation(ProcessingStep):
         values = measurement_data.get("values", [])
         msg_channel_start = measurement_data.get("channel_start", 0)
 
-        if not values:
+        if len(values) == 0:
             return measurement_data
 
         # Determine slice bounds
@@ -63,7 +65,7 @@ class SpatialDecimation(ProcessingStep):
         # Apply spatial decimation (select every Nth channel)
         selected_values = values[local_start : local_stop : self.factor]
 
-        if not selected_values:
+        if len(selected_values) == 0:
             return None
 
         result = measurement_data.copy()
