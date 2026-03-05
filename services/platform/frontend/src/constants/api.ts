@@ -5,6 +5,11 @@ export const API_URL = envUrl !== undefined ? envUrl : 'http://localhost:8001'
 
 // Auto-detect WebSocket protocol from API URL: https -> wss, http -> ws
 function deriveWsUrl(apiUrl: string): string {
+    if (!apiUrl) {
+        // Same-origin: derive from current page location
+        const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+        return `${proto}://${location.host}/ws/`
+    }
     const wsProtocol = apiUrl.startsWith('https') ? 'wss' : 'ws'
     const host = apiUrl.replace(/^https?:\/\//, '')
     return `${wsProtocol}://${host}/ws/`
