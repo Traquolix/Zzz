@@ -119,7 +119,9 @@ services:
       KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
     networks: [ internal ]
 
-  processor:
+  # Per-fiber processors for horizontal scaling.
+  # Each subscribes to a single das.raw.<fiber> topic via FIBER_ID env var.
+  processor-carros:
     build:
       context: services/pipeline
       dockerfile: processor/Dockerfile
@@ -127,7 +129,7 @@ services:
         HTTP_PROXY: ${HTTP_PROXY:-}
         HTTPS_PROXY: ${HTTPS_PROXY:-}
         NO_PROXY: ${NO_PROXY:-}
-    container_name: processor
+    container_name: processor-carros
     restart: unless-stopped
     depends_on:
       kafka:
@@ -137,8 +139,60 @@ services:
     deploy:
       resources:
         limits:
-          memory: 2G
+          memory: 1G
           cpus: '1.0'
+    environment:
+      FIBER_ID: carros
+    env_file: .env
+    networks: [ internal ]
+
+  processor-mathis:
+    build:
+      context: services/pipeline
+      dockerfile: processor/Dockerfile
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+    container_name: processor-mathis
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+    environment:
+      FIBER_ID: mathis
+    env_file: .env
+    networks: [ internal ]
+
+  processor-promenade:
+    build:
+      context: services/pipeline
+      dockerfile: processor/Dockerfile
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+    container_name: processor-promenade
+    restart: unless-stopped
+    depends_on:
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+    environment:
+      FIBER_ID: promenade
     env_file: .env
     networks: [ internal ]
 
@@ -158,7 +212,7 @@ services:
         condition: service_healthy
       schema-registry:
         condition: service_healthy
-      processor:
+      processor-carros:
         condition: service_started
     # GPU access for CUDA-accelerated inference
     deploy:
