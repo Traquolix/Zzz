@@ -361,6 +361,8 @@ services:
       - ./infrastructure/clickhouse/init:/docker-entrypoint-initdb.d:ro
       - ./infrastructure/clickhouse/cables:/opt/fiber_cables:ro
       - ./infrastructure/clickhouse/config/logging.xml:/etc/clickhouse-server/config.d/z_logging.xml:ro
+      - ./infrastructure/clickhouse/config/backup_disk.xml:/etc/clickhouse-server/config.d/backup_disk.xml:ro
+      - clickhouse_backups:/backups
     healthcheck:
       test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
       interval: 10s
@@ -479,6 +481,7 @@ networks:
 volumes:
   kafka_data:
   clickhouse_data:
+  clickhouse_backups:
   redis_data:
   postgres_data:
   otel_data:

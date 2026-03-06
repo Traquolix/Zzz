@@ -9,7 +9,7 @@
         typecheck typecheck-pipeline typecheck-backend typecheck-frontend \
         security security-pipeline security-backend security-frontend \
         ci up down logs rebuild shell clean dev dev-backend dev-frontend \
-        _check-python
+        backup restore _check-python
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
@@ -214,6 +214,15 @@ dev-frontend: ## Start frontend dev server (auto-setup on first run)
 	fi
 	@echo "==> Starting frontend on http://localhost:5173"
 	cd $(FRONTEND_DIR) && npm run dev
+
+# ---------------------------------------------------------------------------
+# Backup & Restore (run on the backend server)
+# ---------------------------------------------------------------------------
+backup: ## Run a manual backup (PostgreSQL + ClickHouse)
+	./scripts/backup.sh
+
+restore: ## Restore from backup (usage: make restore BACKUP=backups/2026-03-06_0300 or make restore BACKUP=--latest)
+	./scripts/restore.sh $(BACKUP)
 
 # ---------------------------------------------------------------------------
 # Utilities
