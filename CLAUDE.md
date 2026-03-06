@@ -61,6 +61,9 @@ Every task follows this pattern:
 5. **Commit** with conventional message: `feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, `test:`
 6. **Push and open a PR**: `git push -u origin <branch> && gh pr create`
 7. **Never merge** — the human reviews and merges PRs
+8. **Address PR feedback** — when asked to fix PR comments, read them with
+   `gh api repos/Traquolix/Sequoia/pulls/<number>/comments` and
+   `gh pr view <number> --comments`, then fix, commit, and push
 
 If the user doesn't specify a branch name, ask for one. Never work directly on main.
 

@@ -24,6 +24,7 @@
 - [ ] **Rewrite tests** — all AI-generated tests removed. Rebuild with meaningful unit, integration, and component tests across pipeline, backend, and frontend. Re-enable `make test` in Makefile/CI/CLAUDE.md when done. See [`TODO/plans/test-strategy.md`](plans/test-strategy.md)
 - [ ] **Fix instant incident resolution in simulation** — incidents created during simulation mode appear to resolve immediately instead of staying open. Likely a timing or threshold issue in the simulation data generation or the incident lifecycle logic.
 - [ ] **Fix incident snapshot data** — snapshot view for incidents currently shows a single data point per metric (speed / flow / occupancy) instead of a time-series window around the incident. Unclear whether the issue is in the backend ClickHouse query (fetching too narrow a window) or the frontend display (not rendering the full series). Needs investigation. Key files: `apps/monitoring/views.py` (`IncidentSnapshotView`, line ~171), `frontend/src/hooks/useIncidentSnapshot.ts`.
+- [ ] **Real-time SHM data** — implement Structural Health Monitoring data flow end-to-end: simulated SHM data in the simulation engine for dev/demo, and actual SHM data ingestion in the pipeline (sensor source → Kafka → backend → WebSocket `shm_readings` channel). The frontend already subscribes to `shm_readings` but receives no real data.
 - [ ] **Rollback strategy** — document manual rollback procedure alongside the deploy workflow's auto-rollback
 - [ ] **Log retention** — config committed (otelcol-config.yaml filelog receiver) but needs deploy verification on production server
 
@@ -37,4 +38,4 @@
 
 ## Low Priority — Documentation
 
-- [ ] **Per-service READMEs** — processor, ai_engine, backend (frontend has one)
+- [x] ~~**Per-service READMEs** — processor, ai_engine, backend, frontend~~

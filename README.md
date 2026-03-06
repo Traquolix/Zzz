@@ -86,15 +86,22 @@ open http://localhost:3002  # Grafana (admin/admin)
 ### Local Development
 
 ```bash
-# Start backend + frontend with auto-setup (creates venv, installs deps, migrates DB, seeds users)
+# First time: create all venvs and install dependencies
+make setup
+
+# Start backend + frontend (auto-setup on first run if you skip make setup)
 make dev
 
 # Or individually:
 make dev-backend   # Backend on http://localhost:8001
 make dev-frontend  # Frontend on http://localhost:5173
+
+# Validate code (uses venvs automatically — no global python3 tools needed)
+make lint && make typecheck
 ```
 
-No manual setup needed — `make dev` handles everything on first run.
+`make setup` creates isolated venvs for pipeline and backend, and installs frontend
+node_modules. `make dev` also auto-creates the backend venv on first run.
 JWT keys are auto-generated in dev mode. Simulation data starts automatically when the frontend connects.
 
 ### Pipeline Development

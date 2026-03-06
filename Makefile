@@ -1,12 +1,23 @@
 # SequoIA Monorepo Makefile
 # Standard targets for humans and Claude Code alike.
-# Usage: make ci  (runs full validation pipeline)
+# Usage: make setup  (first time)
+#        make ci     (runs full validation pipeline)
 
-.PHONY: help lint format typecheck security ci \
+.PHONY: help setup lint format typecheck security ci \
         up down logs rebuild shell clean dev dev-backend dev-frontend
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+PIPELINE_DIR  := services/pipeline
+BACKEND_DIR   := services/platform/backend
+FRONTEND_DIR  := services/platform/frontend
+
+PIPELINE_PY   := $(PIPELINE_DIR)/.venv/bin/python
+BACKEND_PY    := $(BACKEND_DIR)/.venv/bin/python
 
 # ---------------------------------------------------------------------------
 # Help
@@ -16,21 +27,50 @@ help: ## Show this help
 		awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 # ---------------------------------------------------------------------------
+# Setup — creates venvs and installs all dependencies (run once after clone)
+# ---------------------------------------------------------------------------
+setup: setup-pipeline setup-backend setup-frontend ## Set up all dev environments (venvs + node_modules)
+
+setup-pipeline: ## Set up pipeline venv
+	@if [ ! -d "$(PIPELINE_DIR)/.venv" ]; then \
+		echo "==> Creating pipeline venv..."; \
+		python3 -m venv $(PIPELINE_DIR)/.venv; \
+	fi
+	@echo "==> Installing pipeline dependencies..."
+	$(PIPELINE_PY) -m pip install -e "$(PIPELINE_DIR)[dev]" -q
+
+setup-backend: ## Set up backend venv
+	@if [ ! -d "$(BACKEND_DIR)/.venv" ]; then \
+		echo "==> Creating backend venv..."; \
+		python3 -m venv $(BACKEND_DIR)/.venv; \
+	fi
+	@echo "==> Installing backend dependencies..."
+	$(BACKEND_PY) -m pip install -r $(BACKEND_DIR)/requirements-dev.txt -q
+
+setup-frontend: ## Set up frontend (npm install)
+	@if [ ! -d "$(FRONTEND_DIR)/node_modules" ]; then \
+		echo "==> Installing frontend dependencies..."; \
+		cd $(FRONTEND_DIR) && npm install; \
+	else \
+		echo "==> Frontend node_modules already exists (run 'cd $(FRONTEND_DIR) && npm install' to update)"; \
+	fi
+
+# ---------------------------------------------------------------------------
 # Lint
 # ---------------------------------------------------------------------------
 lint: lint-pipeline lint-backend lint-frontend ## Run all linters
 
 lint-pipeline: ## Lint pipeline Python code
-	cd services/pipeline && python3 -m ruff check .
-	cd services/pipeline && python3 -m ruff format --check .
+	$(PIPELINE_PY) -m ruff check $(PIPELINE_DIR)
+	$(PIPELINE_PY) -m ruff format --check $(PIPELINE_DIR)
 
 lint-backend: ## Lint backend Python code
-	cd services/platform/backend && python3 -m ruff check .
-	cd services/platform/backend && python3 -m ruff format --check .
+	$(BACKEND_PY) -m ruff check $(BACKEND_DIR)
+	$(BACKEND_PY) -m ruff format --check $(BACKEND_DIR)
 
 lint-frontend: ## Lint frontend TypeScript code
-	cd services/platform/frontend && npm run lint
-	cd services/platform/frontend && npm run format:check
+	cd $(FRONTEND_DIR) && npm run lint
+	cd $(FRONTEND_DIR) && npm run format:check
 
 # ---------------------------------------------------------------------------
 # Format (auto-fix)
@@ -38,12 +78,12 @@ lint-frontend: ## Lint frontend TypeScript code
 format: format-pipeline format-backend ## Auto-format all code
 
 format-pipeline: ## Format pipeline Python code
-	cd services/pipeline && python3 -m ruff format .
-	cd services/pipeline && python3 -m ruff check --fix .
+	$(PIPELINE_PY) -m ruff format $(PIPELINE_DIR)
+	$(PIPELINE_PY) -m ruff check --fix $(PIPELINE_DIR)
 
 format-backend: ## Format backend Python code
-	cd services/platform/backend && python3 -m ruff format .
-	cd services/platform/backend && python3 -m ruff check --fix .
+	$(BACKEND_PY) -m ruff format $(BACKEND_DIR)
+	$(BACKEND_PY) -m ruff check --fix $(BACKEND_DIR)
 
 # ---------------------------------------------------------------------------
 # Type checking
@@ -51,13 +91,13 @@ format-backend: ## Format backend Python code
 typecheck: typecheck-pipeline typecheck-backend typecheck-frontend ## Run all type checkers
 
 typecheck-pipeline: ## Type-check pipeline
-	cd services/pipeline && python3 -m mypy --config-file pyproject.toml shared/ processor/ ai_engine/ config/
+	cd $(PIPELINE_DIR) && .venv/bin/python -m mypy --config-file pyproject.toml shared/ processor/ ai_engine/ config/
 
 typecheck-backend: ## Type-check backend
-	cd services/platform/backend && python3 -m mypy --config-file pyproject.toml apps/ sequoia/
+	cd $(BACKEND_DIR) && .venv/bin/python -m mypy --config-file pyproject.toml apps/ sequoia/
 
 typecheck-frontend: ## Type-check frontend
-	cd services/platform/frontend && npx tsc -p tsconfig.app.json --noEmit
+	cd $(FRONTEND_DIR) && npx tsc -p tsconfig.app.json --noEmit
 
 # ---------------------------------------------------------------------------
 # Tests (temporarily removed — tests being rewritten, see TODO.md)
@@ -69,15 +109,15 @@ typecheck-frontend: ## Type-check frontend
 security: security-pipeline security-backend security-frontend ## Run all security checks
 
 security-pipeline: ## Security scan pipeline
-	cd services/pipeline && python3 -m pip_audit 2>/dev/null || echo "pip-audit not installed — run: pip install pip-audit"
-	cd services/pipeline && python3 -m bandit -r shared/ processor/ ai_engine/ config/ -q 2>/dev/null || echo "bandit not installed — run: pip install bandit"
+	$(PIPELINE_PY) -m pip_audit 2>/dev/null || echo "pip-audit not installed — run: make setup-pipeline"
+	$(PIPELINE_PY) -m bandit -r $(PIPELINE_DIR)/shared/ $(PIPELINE_DIR)/processor/ $(PIPELINE_DIR)/ai_engine/ $(PIPELINE_DIR)/config/ -q 2>/dev/null || echo "bandit not installed — run: make setup-pipeline"
 
 security-backend: ## Security scan backend
-	cd services/platform/backend && python3 -m pip_audit 2>/dev/null || echo "pip-audit not installed"
-	cd services/platform/backend && python3 -m bandit -r apps/ sequoia/ -q 2>/dev/null || echo "bandit not installed"
+	$(BACKEND_PY) -m pip_audit 2>/dev/null || echo "pip-audit not installed — run: make setup-backend"
+	$(BACKEND_PY) -m bandit -r $(BACKEND_DIR)/apps/ $(BACKEND_DIR)/sequoia/ -q 2>/dev/null || echo "bandit not installed — run: make setup-backend"
 
 security-frontend: ## Security scan frontend
-	cd services/platform/frontend && npm audit --audit-level=high 2>/dev/null || true
+	cd $(FRONTEND_DIR) && npm audit --audit-level=high 2>/dev/null || true
 
 # ---------------------------------------------------------------------------
 # CI (full validation pipeline — run this before any PR)
@@ -105,9 +145,6 @@ shell: ## Open a shell in a service container (usage: make shell SERVICE=platfor
 # ---------------------------------------------------------------------------
 # Local Development
 # ---------------------------------------------------------------------------
-BACKEND_DIR := services/platform/backend
-FRONTEND_DIR := services/platform/frontend
-
 dev: ## Start backend + frontend for local development (auto-setup on first run)
 	@trap 'kill 0' EXIT; \
 	$(MAKE) dev-backend & \
@@ -119,9 +156,9 @@ dev-backend: ## Start backend dev server (auto-setup on first run)
 		echo "==> Creating backend venv..."; \
 		python3 -m venv $(BACKEND_DIR)/.venv; \
 	fi
-	@if ! $(BACKEND_DIR)/.venv/bin/python -c "import django" 2>/dev/null; then \
+	@if ! $(BACKEND_PY) -c "import django" 2>/dev/null; then \
 		echo "==> Installing backend dependencies..."; \
-		$(BACKEND_DIR)/.venv/bin/pip install -r $(BACKEND_DIR)/requirements.txt -q; \
+		$(BACKEND_PY) -m pip install -r $(BACKEND_DIR)/requirements.txt -q; \
 	fi
 	@if [ ! -f "$(BACKEND_DIR)/db.sqlite3" ]; then \
 		echo "==> Running migrations..."; \
