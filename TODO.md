@@ -18,6 +18,7 @@
 - [ ] **Real-time SHM data** — implement Structural Health Monitoring data flow end-to-end: simulated SHM data in the simulation engine for dev/demo, and actual SHM data ingestion in the pipeline (sensor source → Kafka → backend → WebSocket `shm_readings` channel). The frontend already subscribes to `shm_readings` but receives no real data.
 - [x] ~~**Rollback strategy** — documented in `docs/ROLLBACK.md`. Deploy workflow already has auto-rollback; manual procedure covers git reset, single-service rebuild, DB restore, and migration reversal.~~
 - [ ] **Log retention** — config committed (otelcol-config.yaml filelog receiver) but needs deploy verification on production server
+- [ ] **Enable stricter ruff rules** — add `UP`, `B`, `SIM`, `RUF`, `C4` to both `pyproject.toml` configs. Pipeline: 326 violations (230 auto-fixable, mostly `UP` type hint modernization). Backend: 139 violations (75 are `RUF012` Django model false positives — ignore). Ignore `RUF012` and `RUF002` (French text) in backend config. Run `ruff check --fix` for the bulk, then manual fixes for the rest.
 
 ## Low Priority — Observability Roadmap
 
