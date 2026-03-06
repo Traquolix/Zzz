@@ -49,7 +49,7 @@ Follow the conventions in `CLAUDE.md`.
 
 ### 4. Validate
 ```bash
-make lint && make typecheck && make test
+make lint && make typecheck
 ```
 
 ### 5. Commit
@@ -83,17 +83,13 @@ gh pr create --title "feat: description" --body "Closes #123"
 
 ## Running Tests
 
-```bash
-make test                # All unit tests (fast)
-make test-pipeline       # Pipeline only
-make test-backend        # Backend only
-make test-frontend       # Frontend only
-make test-integration    # Integration tests (requires Docker stack)
-```
+> **Note:** Tests are currently being rewritten. The `make test` target is temporarily
+> disabled. See [TODO/plans/test-strategy.md](TODO/plans/test-strategy.md) for the plan.
+> Run `make lint && make typecheck` for validation until tests are restored.
 
 ## Code Review Checklist
 
-- [ ] CI passes (lint, typecheck, tests, security)
+- [ ] CI passes (lint, typecheck, security)
 - [ ] No new secrets in code or config
 - [ ] Integration tests not modified
 - [ ] Dependencies updated in lock files

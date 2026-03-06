@@ -111,11 +111,11 @@
 
 - **Backend server** (IMREDD): Xeon E5-2690 v4, RTX 4000 Ada, 900GB RAM
   - Runs: Kafka, Schema Registry, Processor, AI Engine, ClickHouse, PostgreSQL, Redis, Django backend, Grafana
-  - IP: 192.168.1.100 (internal)
+  - IP: 192.168.99.113 (internal) — `beaujoin@192.168.99.113`
 - **Frontend server** (separate):
   - Runs: nginx serving static frontend build
-  - IP: 192.168.1.200 (internal)
-  - Deploy: `scp -r dist/* frontend@server:/var/www/sequoia/`
+  - IP: 134.59.98.100 — `frontend@134.59.98.100`
+  - Deploy: `scp -r dist/* frontend@134.59.98.100:/var/www/sequoia/`
 
 ## Kafka Topics
 
