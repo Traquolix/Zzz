@@ -1277,50 +1277,73 @@ function IncidentDetail({
     s => s.fiberId === incident.fiberId && incident.channel >= s.startChannel && incident.channel <= s.endChannel,
   )
 
-  // Fetch snapshot data from API
+  // Fetch snapshot data from API — polls every 1s until snapshot is complete
   const [snapshotData, setSnapshotData] = useState<
     { time: string; speed: number; flow: number; occupancy: number }[] | null
   >(null)
   const [snapshotLoading, setSnapshotLoading] = useState(false)
+  const [snapshotComplete, setSnapshotComplete] = useState(false)
 
   useEffect(() => {
     let mounted = true
-    setSnapshotLoading(true)
-    fetchIncidentSnapshot(incident.id)
-      .then(snapshot => {
-        if (!mounted) return
-        // Group detections by minute, compute avg speed and count
-        const byMinute = new Map<string, { speeds: number[]; count: number }>()
-        for (const d of snapshot.detections) {
-          const t = new Date(d.timestamp)
-          const key = t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
-          let bucket = byMinute.get(key)
-          if (!bucket) {
-            bucket = { speeds: [], count: 0 }
-            byMinute.set(key, bucket)
-          }
-          bucket.speeds.push(d.speed)
-          bucket.count += d.count
+    let timer: ReturnType<typeof setTimeout> | null = null
+
+    const processSnapshot = (snapshot: import('@/types/incident').IncidentSnapshot) => {
+      // Group detections by second, compute avg speed and count
+      const bySecond = new Map<string, { speeds: number[]; count: number }>()
+      for (const d of snapshot.detections) {
+        const t = new Date(d.timestamp)
+        const key = t.toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+        })
+        let bucket = bySecond.get(key)
+        if (!bucket) {
+          bucket = { speeds: [], count: 0 }
+          bySecond.set(key, bucket)
         }
-        const points = [...byMinute.entries()]
-          .sort(([a], [b]) => a.localeCompare(b))
-          .map(([time, { speeds, count }]) => ({
-            time,
-            speed: Math.round(speeds.reduce((a, b) => a + b, 0) / speeds.length),
-            flow: count,
-            occupancy: 0,
-          }))
-        setSnapshotData(points.length > 0 ? points : null)
-        setSnapshotLoading(false)
-      })
-      .catch(() => {
-        if (mounted) {
+        bucket.speeds.push(d.speed)
+        bucket.count += d.count
+      }
+      const points = [...bySecond.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([time, { speeds, count }]) => ({
+          time,
+          speed: Math.round(speeds.reduce((a, b) => a + b, 0) / speeds.length),
+          flow: count,
+          occupancy: 0,
+        }))
+      return { points, complete: snapshot.complete }
+    }
+
+    const poll = () => {
+      fetchIncidentSnapshot(incident.id)
+        .then(snapshot => {
+          if (!mounted) return
+          const { points, complete } = processSnapshot(snapshot)
+          setSnapshotData(points.length > 0 ? points : null)
+          setSnapshotComplete(complete)
+          setSnapshotLoading(false)
+          if (!complete) {
+            timer = setTimeout(poll, 1000)
+          }
+        })
+        .catch(() => {
+          if (!mounted) return
           setSnapshotData(null)
           setSnapshotLoading(false)
-        }
-      })
+        })
+    }
+
+    setSnapshotLoading(true)
+    setSnapshotComplete(false)
+    poll()
+
     return () => {
       mounted = false
+      if (timer) clearTimeout(timer)
     }
   }, [incident.id])
 
@@ -1463,7 +1486,12 @@ function IncidentDetail({
         )}
 
         <div>
-          <h3 className="text-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">Snapshot</h3>
+          <h3 className="text-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
+            Snapshot
+            {!snapshotComplete && !snapshotLoading && (
+              <span className="ml-2 text-[var(--proto-accent)] animate-pulse">collecting...</span>
+            )}
+          </h3>
           {snapshotLoading ? (
             <div className="text-xs text-[var(--proto-text-muted)] animate-pulse py-4 text-center">
               Loading snapshot...

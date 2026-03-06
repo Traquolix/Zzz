@@ -44,4 +44,5 @@ export type IncidentSnapshot = {
   centerChannel: number
   capturedAt: number
   detections: BufferedDetection[]
+  complete: boolean
 }

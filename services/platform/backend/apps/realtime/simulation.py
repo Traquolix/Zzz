@@ -32,7 +32,8 @@ _simulation_incidents_cache: list = []
 _simulation_incidents_lock = threading.Lock()
 
 # Global cache for incident snapshots — recorded detections near each incident
-_simulation_snapshots: dict[str, list[dict]] = {}
+# Each entry: {"detections": [...], "complete": bool}
+_simulation_snapshots: dict[str, dict] = {}
 _simulation_snapshots_lock = threading.Lock()
 
 
@@ -42,12 +43,15 @@ def get_simulation_incidents() -> list:
         return list(_simulation_incidents_cache)
 
 
-def get_simulation_snapshot(incident_id: str) -> list[dict] | None:
-    """Get recorded snapshot detections for a simulated incident, or None."""
+def get_simulation_snapshot(incident_id: str) -> dict | None:
+    """Get recorded snapshot for a simulated incident, or None.
+
+    Returns {"detections": [...], "complete": bool} or None.
+    """
     with _simulation_snapshots_lock:
-        detections = _simulation_snapshots.get(incident_id)
-        if detections is not None:
-            return list(detections)
+        entry = _simulation_snapshots.get(incident_id)
+        if entry is not None:
+            return {"detections": list(entry["detections"]), "complete": entry["complete"]}
         return None
 
 
@@ -60,7 +64,7 @@ def _update_simulation_incidents_cache(incidents: list):
         _simulation_incidents_cache = [transform_simulation_incident(i) for i in incidents]
 
 
-def _update_simulation_snapshots(snapshots: dict[str, list[dict]]):
+def _update_simulation_snapshots(snapshots: dict[str, dict]):
     """Replace the global snapshots cache with the engine's current state."""
     global _simulation_snapshots
     with _simulation_snapshots_lock:
@@ -205,7 +209,7 @@ SEVERITIES = ["low", "medium", "high", "critical"]
 
 SNAPSHOT_CHANNEL_RADIUS = 50  # ±50 channels around incident center
 SNAPSHOT_MAX_DETECTIONS = 5000  # Max detections stored per incident
-SNAPSHOT_DURATION_S = 60  # Keep last 60 seconds of detections
+SNAPSHOT_WINDOW_S = 60  # Record ±60s around incident detected_at
 
 INFRA_BASE_FREQ = {"bridge": 5.0, "tunnel": 15.0}
 
@@ -455,9 +459,13 @@ class SimulationEngine:
         self.hour_advance_rate = 30  # 30x speed
         self.tick_count = 0
 
-        # Recorded detections near each incident: incident_id → list[detection_dict]
-        # Capped at SNAPSHOT_MAX_DETECTIONS per incident, keeps ±50 channels around incident
-        self.incident_snapshots: dict[str, list[dict]] = {}
+        # Recorded detections near each incident: incident_id → {detections, complete, start_ms, end_ms}
+        # Fixed window: detected_at ± SNAPSHOT_WINDOW_S, capped at SNAPSHOT_MAX_DETECTIONS
+        self.incident_snapshots: dict[str, dict] = {}
+
+        # Rolling detection buffer per fiber — always keeps last SNAPSHOT_WINDOW_S seconds
+        # Used to seed snapshots with pre-incident data when a new incident spawns
+        self._detection_ring: dict[str, list[dict]] = {f.id: [] for f in fibers}
 
         # SHM state
         self.shm_base_freq = {}
@@ -603,6 +611,7 @@ class SimulationEngine:
                 duration=dur,
             )
             self.incidents.append(inc)
+            self._init_snapshot(inc)  # Seed with pre-incident data from rolling buffer
             new_incidents.append(inc)
 
         # Prune old resolved (keep last 50)
@@ -658,26 +667,92 @@ class SimulationEngine:
             )
         return detections
 
+    def _update_detection_ring(self, detections: list[Detection], now_ms: float):
+        """Maintain a rolling buffer of recent detections per fiber (last SNAPSHOT_WINDOW_S)."""
+        cutoff_ms = now_ms - SNAPSHOT_WINDOW_S * 1000
+
+        for d in detections:
+            ring = self._detection_ring.get(d.fiber_line)
+            if ring is None:
+                continue
+            ring.append(
+                {
+                    "fiberLine": f"{d.fiber_line}:{d.direction}",
+                    "channel": d.channel,
+                    "speed": round(d.speed, 1),
+                    "count": d.count,
+                    "nCars": d.n_cars,
+                    "nTrucks": d.n_trucks,
+                    "direction": d.direction,
+                    "timestamp": d.timestamp,
+                }
+            )
+
+        # Evict old entries from all rings
+        for fid in self._detection_ring:
+            ring = self._detection_ring[fid]
+            if ring and ring[0]["timestamp"] < cutoff_ms:
+                self._detection_ring[fid] = [det for det in ring if det["timestamp"] >= cutoff_ms]
+
+    def _init_snapshot(self, inc: Incident):
+        """Initialize a snapshot for a new incident, seeding with pre-incident data from the ring."""
+        detected_ms = time.mktime(time.strptime(inc.detected_at[:19], "%Y-%m-%dT%H:%M:%S")) * 1000
+        start_ms = detected_ms - SNAPSHOT_WINDOW_S * 1000
+        end_ms = detected_ms + SNAPSHOT_WINDOW_S * 1000
+
+        # Seed from rolling buffer: detections near this incident's channel in the time window
+        ring = self._detection_ring.get(inc.fiber_line, [])
+        seed = [
+            det
+            for det in ring
+            if abs(det["channel"] - inc.channel) <= SNAPSHOT_CHANNEL_RADIUS
+            and det["timestamp"] >= start_ms
+        ]
+
+        self.incident_snapshots[inc.id] = {
+            "detections": seed,
+            "complete": False,
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+            "fiber_line": inc.fiber_line,
+            "channel": inc.channel,
+        }
+
     def _record_incident_detections(self, detections: list[Detection], now_ms: float):
-        """Record detections near active incidents for snapshot queries."""
-        active = [i for i in self.incidents if i.status == "active"]
-        if not active or not detections:
+        """Record detections near active incidents for snapshot queries.
+
+        Each snapshot has a fixed window: detected_at ± SNAPSHOT_WINDOW_S.
+        Pre-incident data is seeded from the rolling detection buffer.
+        Once now_ms exceeds end_ms, the snapshot is marked complete.
+        """
+        # Always update the rolling buffer (needed for pre-incident seeding)
+        self._update_detection_ring(detections, now_ms)
+
+        if not detections:
             return
 
-        cutoff_ms = now_ms - SNAPSHOT_DURATION_S * 1000
+        for inc in self.incidents:
+            snap = self.incident_snapshots.get(inc.id)
+            if snap is None:
+                continue  # Not yet initialized (happens in tick() after creation)
 
-        for inc in active:
-            # Initialize buffer on first encounter
-            if inc.id not in self.incident_snapshots:
-                self.incident_snapshots[inc.id] = []
+            if snap["complete"]:
+                continue
 
-            buf = self.incident_snapshots[inc.id]
+            # Mark complete once we've passed the end of the window
+            if now_ms > snap["end_ms"]:
+                snap["complete"] = True
+                continue
 
-            # Capture detections within ±SNAPSHOT_CHANNEL_RADIUS of this incident
+            buf = snap["detections"]
+
+            # Capture detections within ±SNAPSHOT_CHANNEL_RADIUS and inside the time window
             for d in detections:
-                if d.fiber_line != inc.fiber_line:
+                if d.fiber_line != snap["fiber_line"]:
                     continue
-                if abs(d.channel - inc.channel) > SNAPSHOT_CHANNEL_RADIUS:
+                if abs(d.channel - snap["channel"]) > SNAPSHOT_CHANNEL_RADIUS:
+                    continue
+                if d.timestamp < snap["start_ms"] or d.timestamp > snap["end_ms"]:
                     continue
                 buf.append(
                     {
@@ -692,17 +767,9 @@ class SimulationEngine:
                     }
                 )
 
-            # Evict detections older than SNAPSHOT_DURATION_S
-            if buf and buf[0]["timestamp"] < cutoff_ms:
-                self.incident_snapshots[inc.id] = [
-                    det for det in buf if det["timestamp"] >= cutoff_ms
-                ]
-
             # Cap total size
-            if len(self.incident_snapshots[inc.id]) > SNAPSHOT_MAX_DETECTIONS:
-                self.incident_snapshots[inc.id] = self.incident_snapshots[inc.id][
-                    -SNAPSHOT_MAX_DETECTIONS:
-                ]
+            if len(buf) > SNAPSHOT_MAX_DETECTIONS:
+                snap["detections"] = buf[-SNAPSHOT_MAX_DETECTIONS:]
 
     def generate_shm_readings(self) -> list[SHMReading]:
         """Generate SHM frequency readings for all infrastructure."""
@@ -875,7 +942,12 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
             incident_counter = 0
             # Update caches for REST API fallback
             _update_simulation_incidents_cache(engine.incidents)
-            _update_simulation_snapshots(dict(engine.incident_snapshots))
+            _update_simulation_snapshots(
+                {
+                    iid: {"detections": list(snap["detections"]), "complete": snap["complete"]}
+                    for iid, snap in engine.incident_snapshots.items()
+                }
+            )
             for inc in pending_new_incidents + pending_resolved_incidents:
                 inc_data = transform_simulation_incident(inc)
                 directional_fid = inc_data["fiberLine"]

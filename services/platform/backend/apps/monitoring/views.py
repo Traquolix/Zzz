@@ -282,6 +282,7 @@ class IncidentSnapshotView(APIView):
                 "centerChannel": center_ch,
                 "capturedAt": int(time.time() * 1000),
                 "detections": detections,
+                "complete": True,
             }
         )
 
@@ -302,7 +303,9 @@ class IncidentSnapshotView(APIView):
             if plain_fid not in fiber_ids:
                 return None
 
-        detections = get_simulation_snapshot(incident_id) or []
+        snapshot = get_simulation_snapshot(incident_id)
+        detections = snapshot["detections"] if snapshot else []
+        complete = snapshot["complete"] if snapshot else True
 
         return {
             "incidentId": incident_id,
@@ -310,6 +313,7 @@ class IncidentSnapshotView(APIView):
             "centerChannel": sim_incident["channel"],
             "capturedAt": int(time.time() * 1000),
             "detections": detections,
+            "complete": complete,
         }
 
 
