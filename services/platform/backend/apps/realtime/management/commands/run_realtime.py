@@ -34,14 +34,14 @@ class Command(BaseCommand):
     def add_arguments(self, parser):
         parser.add_argument(
             "--source",
-            choices=["sim", "kafka", "auto"],
+            choices=["sim", "kafka", "both", "auto"],
             default=None,
-            help="Data source: sim (simulation), kafka (Kafka bridge), auto (detect). "
+            help="Data source: sim (simulation), kafka (Kafka bridge), both (sim + kafka), auto (detect). "
             "Default: uses REALTIME_SOURCE setting or auto.",
         )
         parser.add_argument(
             "--host",
-            default="0.0.0.0",
+            default="0.0.0.0",  # nosec B104 — Docker container
             help="Host to bind the ASGI server to (default: 0.0.0.0).",
         )
         parser.add_argument(
@@ -88,25 +88,41 @@ class Command(BaseCommand):
             # Redis or other channel layer - can run in separate thread
             settings.REALTIME_AUTO_START_SIMULATION = False
 
-            if source == "kafka":
+            if source == "both":
+                # Start both simulation and Kafka bridge in separate threads
+                sim_thread = threading.Thread(
+                    target=self._run_simulation,
+                    daemon=True,
+                )
+                kafka_thread = threading.Thread(
+                    target=self._run_kafka,
+                    daemon=True,
+                )
+                sim_thread.start()
+                kafka_thread.start()
+            elif source == "kafka":
                 data_thread = threading.Thread(
                     target=self._run_kafka,
                     daemon=True,
                 )
+                data_thread.start()
             else:
                 data_thread = threading.Thread(
                     target=self._run_simulation,
                     daemon=True,
                 )
-            data_thread.start()
+                data_thread.start()
 
             # Run Daphne in the main thread (it handles signals properly)
             if not no_server:
                 self._run_daphne(host, port)
             else:
-                # Just wait for the data thread if no server
+                # Just wait for data threads if no server
                 try:
-                    data_thread.join()
+                    if source == "both":
+                        sim_thread.join()
+                    else:
+                        data_thread.join()
                 except KeyboardInterrupt:
                     self.stdout.write(self.style.WARNING("Stopped."))
 
@@ -151,9 +167,10 @@ class Command(BaseCommand):
             metadata = admin.list_topics(timeout=3)
             topic_names = list(metadata.topics.keys())
             self.stdout.write(
-                f"Kafka reachable at {kafka_servers} ({len(topic_names)} topics) -> kafka mode"
+                f"Kafka reachable at {kafka_servers} "
+                f"({len(topic_names)} topics) -> both mode (sim + kafka)"
             )
-            return "kafka"
+            return "both"
         except Exception as e:
             self.stdout.write(f"Kafka unreachable ({e}) -> simulation mode")
             return "sim"

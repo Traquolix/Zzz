@@ -1,8 +1,14 @@
 """
 Report builder — queries ClickHouse for time-series data and renders HTML.
+
+Automatically selects the appropriate detection tier based on time range:
+  <= 48h  → detection_hires
+  <= 90d  → detection_1m (AggregatingMergeTree, uses -Merge combinators)
+  > 90d   → detection_1h (AggregatingMergeTree, uses -Merge combinators)
 """
 
 import logging
+from datetime import timedelta
 
 from django.template.loader import render_to_string
 from django.utils.translation import gettext as _
@@ -11,6 +17,19 @@ from apps.shared.clickhouse import query
 from apps.shared.exceptions import ClickHouseUnavailableError
 
 logger = logging.getLogger("sequoia.reporting")
+
+_HIRES_THRESHOLD = timedelta(hours=48)
+_MEDIUM_THRESHOLD = timedelta(days=90)
+
+
+def _select_tier(start, end) -> str:
+    """Select the appropriate data tier based on time range."""
+    duration = end - start
+    if duration <= _HIRES_THRESHOLD:
+        return "hires"
+    elif duration <= _MEDIUM_THRESHOLD:
+        return "1m"
+    return "1h"
 
 
 def build_report_html(report) -> str:
@@ -52,7 +71,7 @@ def build_report_html(report) -> str:
     return render_to_string("reporting/report.html", context)
 
 
-def _query_incidents(report):
+def _query_incidents(report) -> list[dict]:
     """Incident summary grouped by type and severity."""
     try:
         rows = query(
@@ -86,29 +105,54 @@ def _query_incidents(report):
     ]
 
 
-def _query_speed_stats(report):
-    """Average speed per fiber."""
+def _query_speed_stats(report) -> list[dict]:
+    """Average speed per fiber, using the appropriate detection tier."""
+    tier = _select_tier(report.start_time, report.end_time)
+
     try:
-        rows = query(
-            """
-            SELECT
-                fiber_id,
-                round(avg(abs(speed)), 1) AS avg_speed,
-                round(min(abs(speed)), 1) AS min_speed,
-                round(max(abs(speed)), 1) AS max_speed,
-                count() AS sample_count
-            FROM sequoia.speed_hires
-            WHERE fiber_id IN {fids:Array(String)}
-              AND ts BETWEEN {start:DateTime64(3)} AND {end:DateTime64(3)}
-            GROUP BY fiber_id
-            ORDER BY fiber_id
-            """,
-            parameters={
-                "fids": report.fiber_ids,
-                "start": report.start_time,
-                "end": report.end_time,
-            },
-        )
+        if tier == "hires":
+            rows = query(
+                """
+                SELECT
+                    fiber_id,
+                    round(avg(abs(speed)), 1) AS avg_speed,
+                    round(min(abs(speed)), 1) AS min_speed,
+                    round(max(abs(speed)), 1) AS max_speed,
+                    count() AS sample_count
+                FROM sequoia.detection_hires
+                WHERE fiber_id IN {fids:Array(String)}
+                  AND ts BETWEEN {start:DateTime64(3)} AND {end:DateTime64(3)}
+                GROUP BY fiber_id
+                ORDER BY fiber_id
+                """,
+                parameters={
+                    "fids": report.fiber_ids,
+                    "start": report.start_time,
+                    "end": report.end_time,
+                },
+            )
+        else:
+            table = "detection_1m" if tier == "1m" else "detection_1h"  # nosec B608
+            rows = query(
+                f"""
+                SELECT
+                    fiber_id,
+                    round(avgMerge(speed_avg_state), 1) AS avg_speed,
+                    round(minMerge(speed_min_state), 1) AS min_speed,
+                    round(maxMerge(speed_max_state), 1) AS max_speed,
+                    sumMerge(samples_state) AS sample_count
+                FROM sequoia.{table}
+                WHERE fiber_id IN {{fids:Array(String)}}
+                  AND ts BETWEEN {{start:DateTime64(3)}} AND {{end:DateTime64(3)}}
+                GROUP BY fiber_id
+                ORDER BY fiber_id
+                """,
+                parameters={
+                    "fids": report.fiber_ids,
+                    "start": report.start_time,
+                    "end": report.end_time,
+                },
+            )
     except ClickHouseUnavailableError:
         return []
 
@@ -124,27 +168,50 @@ def _query_speed_stats(report):
     ]
 
 
-def _query_volume(report):
-    """Hourly vehicle count per fiber."""
+def _query_volume(report) -> list[dict]:
+    """Hourly vehicle count per fiber, using the appropriate detection tier."""
+    tier = _select_tier(report.start_time, report.end_time)
+
     try:
-        rows = query(
-            """
-            SELECT
-                fiber_id,
-                toStartOfHour(ts) AS hour,
-                sum(count) AS total_vehicles
-            FROM sequoia.count_hires
-            WHERE fiber_id IN {fids:Array(String)}
-              AND ts BETWEEN {start:DateTime64(3)} AND {end:DateTime64(3)}
-            GROUP BY fiber_id, hour
-            ORDER BY fiber_id, hour
-            """,
-            parameters={
-                "fids": report.fiber_ids,
-                "start": report.start_time,
-                "end": report.end_time,
-            },
-        )
+        if tier == "hires":
+            rows = query(
+                """
+                SELECT
+                    fiber_id,
+                    toStartOfHour(ts) AS hour,
+                    sum(vehicle_count) AS total_vehicles
+                FROM sequoia.detection_hires
+                WHERE fiber_id IN {fids:Array(String)}
+                  AND ts BETWEEN {start:DateTime64(3)} AND {end:DateTime64(3)}
+                GROUP BY fiber_id, hour
+                ORDER BY fiber_id, hour
+                """,
+                parameters={
+                    "fids": report.fiber_ids,
+                    "start": report.start_time,
+                    "end": report.end_time,
+                },
+            )
+        else:
+            table = "detection_1m" if tier == "1m" else "detection_1h"  # nosec B608
+            rows = query(
+                f"""
+                SELECT
+                    fiber_id,
+                    toStartOfHour(ts) AS hour,
+                    sumMerge(count_sum_state) AS total_vehicles
+                FROM sequoia.{table}
+                WHERE fiber_id IN {{fids:Array(String)}}
+                  AND ts BETWEEN {{start:DateTime64(3)}} AND {{end:DateTime64(3)}}
+                GROUP BY fiber_id, hour
+                ORDER BY fiber_id, hour
+                """,
+                parameters={
+                    "fids": report.fiber_ids,
+                    "start": report.start_time,
+                    "end": report.end_time,
+                },
+            )
     except ClickHouseUnavailableError:
         return []
 

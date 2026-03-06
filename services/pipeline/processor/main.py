@@ -72,7 +72,7 @@ class DASProcessor(MultiTransformer):
             return {}
 
         # Check if config content changed (not identity — objects may be recreated on reload)
-        config_hash = hashlib.md5(
+        config_hash = hashlib.md5(  # nosec B324 — not security, just change detection
             json.dumps(fiber_cfg.__dict__, default=str, sort_keys=True).encode()
         ).hexdigest()
         cached_hash = self._fiber_config_hashes.get(fiber_id)
