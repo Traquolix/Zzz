@@ -146,7 +146,7 @@ or use a separate CPU golden file.
 
 ### Prerequisites (one-time setup)
 
-Before running `make dev`, developers need Python 3.12+ and Node.js 20+ installed.
+Before running `make dev`, developers need Python 3.10 and Node.js 20+ installed.
 First-time setup:
 
 ```bash

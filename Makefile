@@ -8,13 +8,14 @@
         format format-pipeline format-backend format-frontend \
         typecheck typecheck-pipeline typecheck-backend typecheck-frontend \
         security security-pipeline security-backend security-frontend \
-        ci up down logs rebuild shell clean dev dev-backend dev-frontend
+        ci up down logs rebuild shell clean dev dev-backend dev-frontend \
+        _check-python
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
 
 # ---------------------------------------------------------------------------
-# Paths
+# Paths and Python version enforcement
 # ---------------------------------------------------------------------------
 PIPELINE_DIR  := services/pipeline
 BACKEND_DIR   := services/platform/backend
@@ -22,6 +23,18 @@ FRONTEND_DIR  := services/platform/frontend
 
 PIPELINE_PY   := $(PIPELINE_DIR)/.venv/bin/python
 BACKEND_PY    := $(BACKEND_DIR)/.venv/bin/python
+
+# Required Python version — must match Docker images (3.10 everywhere)
+REQUIRED_PYTHON := 3.10
+SYSTEM_PYTHON   := $(shell \
+  for cmd in python$(REQUIRED_PYTHON) python3; do \
+    if command -v $$cmd >/dev/null 2>&1; then \
+      ver=$$($$cmd -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"); \
+      if [ "$$ver" = "$(REQUIRED_PYTHON)" ]; then echo $$cmd; exit 0; fi; \
+    fi; \
+  done; \
+  echo "PYTHON_NOT_FOUND" \
+)
 
 # ---------------------------------------------------------------------------
 # Help
@@ -33,22 +46,30 @@ help: ## Show this help
 # ---------------------------------------------------------------------------
 # Setup — creates venvs and installs all dependencies (run once after clone)
 # ---------------------------------------------------------------------------
+_check-python:
+	@if echo "$(SYSTEM_PYTHON)" | grep -q NOT_FOUND; then \
+		echo "ERROR: Python $(REQUIRED_PYTHON) not found."; \
+		echo "  macOS:  brew install python@$(REQUIRED_PYTHON)"; \
+		echo "  Ubuntu: sudo apt install python$(REQUIRED_PYTHON) python$(REQUIRED_PYTHON)-venv"; \
+		exit 1; \
+	fi
+
 setup: setup-pipeline setup-backend setup-frontend ## Set up all dev environments (venvs + node_modules)
 
-setup-pipeline: ## Set up pipeline venv
+setup-pipeline: _check-python ## Set up pipeline venv
 	@if [ ! -d "$(PIPELINE_DIR)/.venv" ]; then \
-		echo "==> Creating pipeline venv..."; \
-		python3 -m venv $(PIPELINE_DIR)/.venv; \
+		echo "==> Creating pipeline venv ($(SYSTEM_PYTHON))..."; \
+		$(SYSTEM_PYTHON) -m venv $(PIPELINE_DIR)/.venv; \
 	fi
 	@echo "==> Upgrading pip..."
 	@$(PIPELINE_PY) -m pip install --upgrade pip -q
 	@echo "==> Installing pipeline dependencies..."
 	$(PIPELINE_PY) -m pip install -e "$(PIPELINE_DIR)[dev]" -q
 
-setup-backend: ## Set up backend venv
+setup-backend: _check-python ## Set up backend venv
 	@if [ ! -d "$(BACKEND_DIR)/.venv" ]; then \
-		echo "==> Creating backend venv..."; \
-		python3 -m venv $(BACKEND_DIR)/.venv; \
+		echo "==> Creating backend venv ($(SYSTEM_PYTHON))..."; \
+		$(SYSTEM_PYTHON) -m venv $(BACKEND_DIR)/.venv; \
 	fi
 	@echo "==> Upgrading pip..."
 	@$(BACKEND_PY) -m pip install --upgrade pip -q
@@ -164,8 +185,12 @@ dev: ## Start backend + frontend for local development (auto-setup on first run)
 
 dev-backend: ## Start backend dev server (auto-setup on first run)
 	@if [ ! -d "$(BACKEND_DIR)/.venv" ]; then \
-		echo "==> Creating backend venv..."; \
-		python3 -m venv $(BACKEND_DIR)/.venv; \
+		if echo "$(SYSTEM_PYTHON)" | grep -q NOT_FOUND; then \
+			echo "ERROR: Python $(REQUIRED_PYTHON) not found. Install it: brew install python@$(REQUIRED_PYTHON)"; \
+			exit 1; \
+		fi; \
+		echo "==> Creating backend venv ($(SYSTEM_PYTHON))..."; \
+		$(SYSTEM_PYTHON) -m venv $(BACKEND_DIR)/.venv; \
 	fi
 	@if ! $(BACKEND_PY) -c "import django" 2>/dev/null; then \
 		echo "==> Installing backend dependencies..."; \

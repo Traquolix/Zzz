@@ -103,7 +103,7 @@ backend venv on first run, but `make lint` and `make typecheck` expect venvs to 
 
 ### Python
 - Formatter/linter: `ruff` only (NOT black). Line length 100.
-- Pipeline is Python 3.10. Backend is Python 3.12.
+- Python 3.10 everywhere (pipeline and backend). Must match Docker images.
 - Type hints required on all new code.
 - Import order: stdlib → third-party → local (enforced by ruff isort).
 - Logging: `logging.getLogger(__name__)`. Never `print()`.

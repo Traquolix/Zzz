@@ -39,7 +39,7 @@ Kafka (das.detections) ──► Kafka Bridge ──► Redis Channels ──►
 ```
 backend/
 ├── manage.py
-├── Dockerfile                      # Python 3.12-slim, non-root
+├── Dockerfile                      # Python 3.10-slim, non-root
 ├── entrypoint.sh                   # Migrate, seed, start Daphne
 ├── requirements.txt
 ├── sequoia/
