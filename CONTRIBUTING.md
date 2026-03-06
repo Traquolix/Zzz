@@ -34,6 +34,16 @@ Format: `<type>: <short description>`
 - `docs:` — documentation only
 - `test:` — adding or modifying tests
 
+## First-Time Setup
+
+```bash
+pip install pre-commit
+pre-commit install
+pre-commit install --hook-type pre-push
+```
+
+This installs commit hooks (auto-fix lint) and push hooks (read-only lint check that mirrors CI).
+
 ## Development Workflow
 
 ### 1. Create an issue
