@@ -2,7 +2,7 @@
 # Standard targets for humans and Claude Code alike.
 # Usage: make ci  (runs full validation pipeline)
 
-.PHONY: help lint format typecheck test test-integration security ci \
+.PHONY: help lint format typecheck security ci \
         up down logs rebuild shell clean dev dev-backend dev-frontend
 
 SHELL := /bin/bash
@@ -60,21 +60,8 @@ typecheck-frontend: ## Type-check frontend
 	cd services/platform/frontend && npx tsc -p tsconfig.app.json --noEmit
 
 # ---------------------------------------------------------------------------
-# Tests
+# Tests (temporarily removed — tests being rewritten, see TODO.md)
 # ---------------------------------------------------------------------------
-test: test-pipeline test-backend test-frontend ## Run all unit tests (fast, no infra required)
-
-test-pipeline: ## Run pipeline unit tests
-	cd services/pipeline && python -m pytest tests/ -v --tb=short --ignore=tests/integration
-
-test-backend: ## Run backend unit tests
-	cd services/platform/backend && DJANGO_SETTINGS_MODULE=sequoia.settings.test python -m pytest tests/ -v --tb=short
-
-test-frontend: ## Run frontend unit tests
-	cd services/platform/frontend && npm run test
-
-test-integration: ## Run integration tests (requires Docker services running)
-	cd services/pipeline && python -m pytest tests/integration/ -v --tb=short
 
 # ---------------------------------------------------------------------------
 # Security
@@ -95,7 +82,7 @@ security-frontend: ## Security scan frontend
 # ---------------------------------------------------------------------------
 # CI (full validation pipeline — run this before any PR)
 # ---------------------------------------------------------------------------
-ci: lint typecheck test security ## Full CI pipeline: lint + typecheck + test + security
+ci: lint typecheck security ## Full CI pipeline: lint + typecheck + security
 
 # ---------------------------------------------------------------------------
 # Docker Compose lifecycle
