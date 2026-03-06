@@ -71,7 +71,7 @@ def _fiber_cache_key(user):
 
 
 def _get_cables_dir() -> Path:
-    return settings.DATA_DIR / "clickhouse" / "cables"
+    return Path(settings.DATA_DIR / "clickhouse" / "cables")
 
 
 def _load_directional_paths() -> dict[str, dict]:
@@ -81,7 +81,7 @@ def _load_directional_paths() -> dict[str, dict]:
     Cached in Django cache so we don't re-read files on every request.
     """
     cache_key = "fibers:directional_paths"
-    cached = cache.get(cache_key)
+    cached: dict[str, dict] | None = cache.get(cache_key)
     if cached is not None:
         return cached
 

@@ -74,12 +74,14 @@ def _is_in_cooldown(rule: AlertRule, fiber_id: str, channel: int) -> bool:
         return False
 
     cutoff = timezone.now() - timezone.timedelta(seconds=rule.cooldown_seconds)
-    return AlertLog.objects.filter(
-        rule=rule,
-        fiber_id=fiber_id,
-        channel=channel,
-        dispatched_at__gte=cutoff,
-    ).exists()
+    return bool(
+        AlertLog.objects.filter(
+            rule=rule,
+            fiber_id=fiber_id,
+            channel=channel,
+            dispatched_at__gte=cutoff,
+        ).exists()
+    )
 
 
 def dispatch_alert(

@@ -40,7 +40,7 @@ def _get_cooldown() -> float:
     """Calculate current cooldown with exponential backoff and jitter."""
     base = min(_MAX_COOLDOWN, _MIN_COOLDOWN * (2 ** (_consecutive_failures - 1)))
     jitter = base * _JITTER_FACTOR * (2 * random.random() - 1)
-    return max(0, base + jitter)
+    return float(max(0, base + jitter))
 
 
 def _is_in_cooldown() -> bool:

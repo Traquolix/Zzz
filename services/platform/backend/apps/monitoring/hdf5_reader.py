@@ -32,11 +32,11 @@ class SpectralData:
 
     @property
     def num_time_samples(self) -> int:
-        return self.spectra.shape[0]
+        return int(self.spectra.shape[0])
 
     @property
     def num_freq_bins(self) -> int:
-        return self.spectra.shape[1]
+        return int(self.spectra.shape[1])
 
     @property
     def freq_range(self) -> tuple[float, float]:

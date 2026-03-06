@@ -19,7 +19,7 @@ _FIBER_MAP_TTL = 300
 def get_org_fiber_ids(organization) -> list[str]:
     """Return list of fiber_ids assigned to an organization (cached 5min)."""
     cache_key = f"org_fibers:{organization.pk}"
-    result = cache.get(cache_key)
+    result: list[str] | None = cache.get(cache_key)
     if result is not None:
         return result
 
@@ -39,7 +39,7 @@ def get_fiber_org_map() -> dict[str, list[str]]:
     org-scoped Channels groups.
     """
     cache_key = "fiber_org_map"
-    result = cache.get(cache_key)
+    result: dict[str, list[str]] | None = cache.get(cache_key)
     if result is not None:
         return result
 

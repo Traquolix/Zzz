@@ -56,6 +56,7 @@ python_version = "3.9"
 warn_return_any = true
 warn_unused_configs = true
 ignore_missing_imports = true
+explicit_package_bases = true
 exclude = ["ai_engine/model_vehicle", "experiments", ".venv", "tests"]
 
 [tool.pytest.ini_options]

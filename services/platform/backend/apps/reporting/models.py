@@ -96,9 +96,9 @@ class ReportSchedule(models.Model):
         delta = now - self.last_run_at
 
         if self.frequency == "daily":
-            return delta >= timezone.timedelta(hours=24)
+            return bool(delta >= timezone.timedelta(hours=24))
         elif self.frequency == "weekly":
-            return delta >= timezone.timedelta(days=7)
+            return bool(delta >= timezone.timedelta(days=7))
         elif self.frequency == "monthly":
-            return delta >= timezone.timedelta(days=30)
+            return bool(delta >= timezone.timedelta(days=30))
         return False

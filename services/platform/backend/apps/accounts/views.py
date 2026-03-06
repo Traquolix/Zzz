@@ -6,6 +6,7 @@ account lockout, token refresh, verify, and logout.
 """
 
 import logging
+from typing import Any
 
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
@@ -65,7 +66,7 @@ class LoginView(APIView):
     """
 
     permission_classes = [AllowAny]
-    authentication_classes = []
+    authentication_classes: list[Any] = []
     throttle_classes = [AnonRateThrottle]
 
     @staticmethod
@@ -222,7 +223,7 @@ class CookieTokenRefreshView(APIView):
     """
 
     permission_classes = [AllowAny]
-    authentication_classes = []
+    authentication_classes: list[Any] = []
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "login"  # Same aggressive rate limit as login
 

@@ -241,5 +241,5 @@ def query_active_raw(
     tracking and the transformed shape for broadcast.
     """
     if fiber_ids is not None:
-        return query(_ACTIVE_SQL_SCOPED, parameters={"fids": fiber_ids, "lim": limit})
-    return query(_ACTIVE_SQL_ALL, parameters={"lim": limit})
+        return list(query(_ACTIVE_SQL_SCOPED, parameters={"fids": fiber_ids, "lim": limit}))
+    return list(query(_ACTIVE_SQL_ALL, parameters={"lim": limit}))

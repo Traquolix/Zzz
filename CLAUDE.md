@@ -75,7 +75,29 @@ If the user doesn't specify a branch name, ask for one. Never work directly on m
 make lint && make typecheck
 ```
 
-If any step fails, fix the issue and re-run. Do not report completion until all three pass.
+If any step fails, fix the issue and re-run. Do not report completion until all pass.
+
+## Makefile — Always Use It
+
+The Makefile is the single entry point for all dev operations. **Never run `python3`,
+`ruff`, `mypy`, or `pip` directly** — always use the Makefile targets, which use
+service-local venvs automatically.
+
+| Task | Command |
+|------|---------|
+| First-time setup (venvs + deps) | `make setup` |
+| Start dev servers | `make dev` |
+| Lint all code | `make lint` |
+| Type-check all code | `make typecheck` |
+| Auto-format | `make format` |
+| Security scan | `make security` |
+| Full CI pipeline | `make ci` |
+| Docker stack up/down | `make up` / `make down` |
+| Rebuild one service | `make rebuild SERVICE=<name>` |
+| View logs | `make logs SERVICE=<name>` |
+
+If a venv is missing, run `make setup` first. The `make dev` target auto-creates the
+backend venv on first run, but `make lint` and `make typecheck` expect venvs to exist.
 
 ## Conventions
 

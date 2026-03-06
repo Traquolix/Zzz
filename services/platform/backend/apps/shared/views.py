@@ -2,6 +2,8 @@
 Shared views: health checks and Prometheus metrics.
 """
 
+from typing import Any
+
 from django.http import HttpResponse
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers as s
@@ -14,8 +16,8 @@ class HealthCheckView(APIView):
     """Basic liveness check — returns 200 if the server is running."""
 
     permission_classes = [AllowAny]
-    authentication_classes = []
-    throttle_classes = []  # Exempt from rate limiting (used by Docker healthcheck)
+    authentication_classes: list[Any] = []
+    throttle_classes: list[Any] = []  # Exempt from rate limiting (used by Docker healthcheck)
 
     @extend_schema(
         responses={
@@ -42,8 +44,8 @@ class ReadinessCheckView(APIView):
     """
 
     permission_classes = [AllowAny]
-    authentication_classes = []
-    throttle_classes = []  # Exempt from rate limiting
+    authentication_classes: list[Any] = []
+    throttle_classes: list[Any] = []  # Exempt from rate limiting
 
     @extend_schema(
         responses={
@@ -140,8 +142,8 @@ class MetricsView(APIView):
     """Prometheus metrics endpoint — scraped by monitoring infrastructure."""
 
     permission_classes = [AllowAny]
-    authentication_classes = []
-    throttle_classes = []
+    authentication_classes: list[Any] = []
+    throttle_classes: list[Any] = []
 
     @extend_schema(exclude=True)  # Not part of the public API docs
     def get(self, request):

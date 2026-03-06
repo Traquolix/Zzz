@@ -3,8 +3,12 @@
 # Usage: make setup  (first time)
 #        make ci     (runs full validation pipeline)
 
-.PHONY: help setup lint format typecheck security ci \
-        up down logs rebuild shell clean dev dev-backend dev-frontend
+.PHONY: help setup setup-pipeline setup-backend setup-frontend \
+        lint lint-pipeline lint-backend lint-frontend \
+        format format-pipeline format-backend \
+        typecheck typecheck-pipeline typecheck-backend typecheck-frontend \
+        security security-pipeline security-backend security-frontend \
+        ci up down logs rebuild shell clean dev dev-backend dev-frontend
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
@@ -36,6 +40,8 @@ setup-pipeline: ## Set up pipeline venv
 		echo "==> Creating pipeline venv..."; \
 		python3 -m venv $(PIPELINE_DIR)/.venv; \
 	fi
+	@echo "==> Upgrading pip..."
+	@$(PIPELINE_PY) -m pip install --upgrade pip -q
 	@echo "==> Installing pipeline dependencies..."
 	$(PIPELINE_PY) -m pip install -e "$(PIPELINE_DIR)[dev]" -q
 
@@ -44,6 +50,8 @@ setup-backend: ## Set up backend venv
 		echo "==> Creating backend venv..."; \
 		python3 -m venv $(BACKEND_DIR)/.venv; \
 	fi
+	@echo "==> Upgrading pip..."
+	@$(BACKEND_PY) -m pip install --upgrade pip -q
 	@echo "==> Installing backend dependencies..."
 	$(BACKEND_PY) -m pip install -r $(BACKEND_DIR)/requirements-dev.txt -q
 

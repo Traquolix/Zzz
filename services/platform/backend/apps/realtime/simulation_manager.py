@@ -40,11 +40,11 @@ class SimulationManager:
 
     _instance: Optional["SimulationManager"] = None
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._task: Optional[asyncio.Task] = None
-        self._status = SimulationStatus.IDLE
+        self._status: SimulationStatus = SimulationStatus.IDLE
         self._error: Optional[str] = None
-        self._started = False
+        self._started: bool = False
 
     @classmethod
     def instance(cls) -> "SimulationManager":
