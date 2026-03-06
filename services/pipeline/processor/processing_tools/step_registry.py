@@ -124,7 +124,7 @@ def create_step(
     """
     if step_name not in _STEP_REGISTRY:
         available = get_available_steps()
-        raise ValueError(f"Unknown processing step '{step_name}'. " f"Available: {available}")
+        raise ValueError(f"Unknown processing step '{step_name}'. Available: {available}")
 
     registry_entry = _STEP_REGISTRY[step_name]
     step_class: Type[ProcessingStep] = registry_entry["class"]
@@ -202,7 +202,7 @@ def build_pipeline_from_config(
         step = create_step(step_name, params, fiber_sampling_rate_hz)
         steps.append(step)
 
-    logger.info(f"Built pipeline with {len(steps)} steps: " f"{[s.name for s in steps]}")
+    logger.info(f"Built pipeline with {len(steps)} steps: {[s.name for s in steps]}")
 
     return ProcessingChain(steps)
 

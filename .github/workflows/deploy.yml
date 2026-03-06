@@ -1,0 +1,150 @@
+name: Deploy
+
+# Triggers:
+# 1. Automatically after CI passes on main (push = merged PR)
+# 2. Manual trigger from GitHub UI (workflow_dispatch)
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      skip_frontend:
+        description: "Skip frontend deployment"
+        type: boolean
+        default: false
+      skip_backend:
+        description: "Skip backend deployment"
+        type: boolean
+        default: false
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Backend: runs on the backend server (self-hosted runner labeled "backend")
+  # -------------------------------------------------------------------------
+  deploy-backend:
+    if: >
+      (github.event.inputs.skip_backend != 'true') &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'))
+    runs-on: [self-hosted, backend]
+    environment: production
+    env:
+      DEPLOY_DIR: /opt/Sequoia
+    steps:
+      - name: Pull latest code
+        run: |
+          cd ${{ env.DEPLOY_DIR }}
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+
+      - name: Record pre-deploy state
+        id: pre_deploy
+        run: |
+          cd ${{ env.DEPLOY_DIR }}
+          echo "sha_before=$(git rev-parse HEAD~1)" >> $GITHUB_OUTPUT
+          echo "sha_after=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Rebuild and restart services
+        run: |
+          cd ${{ env.DEPLOY_DIR }}
+          docker compose build --parallel
+          docker compose up -d
+
+      - name: Health check
+        id: health
+        run: |
+          cd ${{ env.DEPLOY_DIR }}
+
+          # Discover services that define a healthcheck
+          SERVICES=$(docker compose ps --format json | jq -r 'select(.Health != "") | .Name')
+          if [ -z "$SERVICES" ]; then
+            echo "WARNING: No services with healthchecks found"
+            echo "healthy=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Waiting for services to become healthy (timeout 120s)..."
+          TIMEOUT=120
+          INTERVAL=5
+          ELAPSED=0
+
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            FAILED=""
+            ALL_HEALTHY=true
+            for SERVICE in $SERVICES; do
+              HEALTH=$(docker inspect --format='{{.State.Health.Status}}' "$SERVICE" 2>/dev/null || echo "not_found")
+              if [ "$HEALTH" != "healthy" ]; then
+                ALL_HEALTHY=false
+                FAILED="$FAILED $SERVICE"
+              fi
+            done
+
+            if [ "$ALL_HEALTHY" = true ]; then
+              echo "All services healthy after ${ELAPSED}s"
+              echo "healthy=true" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+
+            echo "Waiting... (${ELAPSED}s elapsed, unhealthy:$FAILED)"
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+
+          # Timeout reached — report failures
+          echo "TIMEOUT: unhealthy after ${TIMEOUT}s:$FAILED"
+          echo "healthy=false" >> $GITHUB_OUTPUT
+          echo "failed_services=$FAILED" >> $GITHUB_OUTPUT
+
+      - name: Rollback on failure
+        if: steps.health.outputs.healthy == 'false'
+        run: |
+          cd ${{ env.DEPLOY_DIR }}
+          echo "ROLLING BACK to ${{ steps.pre_deploy.outputs.sha_before }}"
+          git reset --hard ${{ steps.pre_deploy.outputs.sha_before }}
+          docker compose build --parallel
+          docker compose up -d
+          echo "Rollback complete. Failed services were: ${{ steps.health.outputs.failed_services }}"
+          exit 1
+
+  # -------------------------------------------------------------------------
+  # Frontend: runs on the frontend server (self-hosted runner labeled "frontend")
+  # Builds locally and copies to nginx document root.
+  # -------------------------------------------------------------------------
+  deploy-frontend:
+    if: >
+      (github.event.inputs.skip_frontend != 'true') &&
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'))
+    runs-on: [self-hosted, frontend]
+    environment: production
+    env:
+      FRONTEND_DIR: /var/www/sequoia
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: services/platform/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: cd services/platform/frontend && npm ci
+
+      - name: Build
+        run: cd services/platform/frontend && npm run build
+        env:
+          VITE_API_URL: ""
+          VITE_MAPBOX_TOKEN: ${{ secrets.VITE_MAPBOX_TOKEN }}
+
+      - name: Deploy to nginx
+        run: |
+          rm -rf ${{ env.FRONTEND_DIR }}/*
+          cp -r services/platform/frontend/dist/* ${{ env.FRONTEND_DIR }}/
+
+      - name: Verify
+        run: |
+          curl -sf http://localhost/ > /dev/null && echo "Frontend is up" || echo "WARNING: Frontend not responding"

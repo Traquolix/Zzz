@@ -13,7 +13,7 @@ class OutputConfig:
         outputs = {
             'default': OutputConfig(
                 topic='das.detections',
-                key_schema_file='schema/string_key.avsc',
+                key_schema_file='shared/schema/string_key.avsc',
                 value_schema_file='ai_engine/schema/das_detection.avsc'
             )
         }

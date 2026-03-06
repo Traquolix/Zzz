@@ -39,7 +39,7 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: absent(up{job=~"das-processor|ai-engine"}) or up{job=~"das-processor|ai-engine"} == 0
+              expr: absent_over_time(messages_processed_total{service_name="das-processor"}[5m]) or absent_over_time(ai_windows_processed_total{service_name="ai-engine"}[5m])
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -47,7 +47,7 @@ groups:
         execErrState: Alerting
         for: 1m
         annotations:
-          summary: Service {{ $labels.job }} is down
+          summary: Service {{ $labels.service_name }} is down
           description: The service has been unreachable for more than 1 minute.
         labels:
           severity: critical

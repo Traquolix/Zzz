@@ -134,16 +134,18 @@ def create_detection_messages(
         actual_channel = channel_start + (det["section_idx"] * channel_step)
         timestamp_ns = det.get("timestamp_ns") or current_time_nanoseconds()
 
-        det_records.append({
-            "timestamp_ns": timestamp_ns,
-            "channel": actual_channel,
-            "speed_kmh": det["speed_kmh"],
-            "direction": det["direction"],
-            "vehicle_count": det.get("vehicle_count", 1.0),
-            "n_cars": det.get("n_cars", 1.0),
-            "n_trucks": det.get("n_trucks", 0.0),
-            "glrt_max": det.get("glrt_max", 0.0),
-        })
+        det_records.append(
+            {
+                "timestamp_ns": timestamp_ns,
+                "channel": actual_channel,
+                "speed_kmh": det["speed_kmh"],
+                "direction": det["direction"],
+                "vehicle_count": det.get("vehicle_count", 1.0),
+                "n_cars": det.get("n_cars", 1.0),
+                "n_trucks": det.get("n_trucks", 0.0),
+                "glrt_max": det.get("glrt_max", 0.0),
+            }
+        )
 
     payload = {
         "fiber_id": fiber_id,

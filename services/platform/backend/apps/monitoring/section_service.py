@@ -10,7 +10,7 @@ from typing import Optional
 
 from apps.shared.clickhouse import query
 
-logger = logging.getLogger('sequoia.sections')
+logger = logging.getLogger("sequoia.sections")
 
 
 def query_sections(fiber_ids: Optional[list[str]] = None) -> list[dict]:
@@ -24,9 +24,9 @@ def query_sections(fiber_ids: Optional[list[str]] = None) -> list[dict]:
         # Expand plain fiber IDs to also match directional variants (e.g. "carros" → "carros", "carros:0", "carros:1")
         expanded = set(fiber_ids)
         for fid in fiber_ids:
-            if ':' not in fid:
-                expanded.add(f'{fid}:0')
-                expanded.add(f'{fid}:1')
+            if ":" not in fid:
+                expanded.add(f"{fid}:0")
+                expanded.add(f"{fid}:1")
         rows = query(
             """
             SELECT section_id, fiber_id, section_name,
@@ -40,7 +40,7 @@ def query_sections(fiber_ids: Optional[list[str]] = None) -> list[dict]:
               AND fiber_id IN {fids:Array(String)}
             ORDER BY fiber_id, channel_start
             """,
-            parameters={'fids': list(expanded)},
+            parameters={"fids": list(expanded)},
         )
     else:
         rows = query(
@@ -65,14 +65,14 @@ def insert_section(
     name: str,
     channel_start: int,
     channel_end: int,
-    user: str = '',
+    user: str = "",
 ) -> dict:
     """
     Insert a new monitored section into ClickHouse.
 
     Returns the transformed section dict.
     """
-    section_id = f'section-{uuid.uuid4().hex[:12]}'
+    section_id = f"section-{uuid.uuid4().hex[:12]}"
     now = datetime.utcnow()
 
     query(
@@ -90,26 +90,26 @@ def insert_section(
         )
         """,
         parameters={
-            'sid': section_id,
-            'fid': fiber_id,
-            'name': name,
-            'cs': channel_start,
-            'ce': channel_end,
-            'now': now,
-            'user': user,
-            'now2': now,
+            "sid": section_id,
+            "fid": fiber_id,
+            "name": name,
+            "cs": channel_start,
+            "ce": channel_end,
+            "now": now,
+            "user": user,
+            "now2": now,
         },
     )
 
     return {
-        'id': section_id,
-        'fiberId': fiber_id,
-        'name': name,
-        'channelStart': channel_start,
-        'channelEnd': channel_end,
-        'expectedTravelTime': None,
-        'isActive': True,
-        'createdAt': now.isoformat(),
+        "id": section_id,
+        "fiberId": fiber_id,
+        "name": name,
+        "channelStart": channel_start,
+        "channelEnd": channel_end,
+        "expectedTravelTime": None,
+        "isActive": True,
+        "createdAt": now.isoformat(),
     }
 
 
@@ -141,7 +141,7 @@ def delete_section(section_id: str, fiber_id: str) -> None:
         WHERE section_id = {sid:String}
         LIMIT 1
         """,
-        parameters={'sid': section_id, 'now': now},
+        parameters={"sid": section_id, "now": now},
     )
 
 
@@ -172,35 +172,35 @@ def query_section_history(
         ORDER BY ts
         """,
         parameters={
-            'fid': fiber_id,
-            'cs': channel_start,
-            'ce': channel_end,
-            'mins': minutes,
+            "fid": fiber_id,
+            "cs": channel_start,
+            "ce": channel_end,
+            "mins": minutes,
         },
     )
 
     return [
         {
-            'time': int(r['time_ms']),
-            'speed': round(float(r['speed']), 1) if r['speed'] is not None else 0,
-            'speedMax': round(float(r['speed_max']), 1) if r['speed_max'] is not None else 0,
-            'samples': int(r['samples']) if r['samples'] is not None else 0,
+            "time": int(r["time_ms"]),
+            "speed": round(float(r["speed"]), 1) if r["speed"] is not None else 0,
+            "speedMax": round(float(r["speed_max"]), 1) if r["speed_max"] is not None else 0,
+            "samples": int(r["samples"]) if r["samples"] is not None else 0,
         }
         for r in rows
     ]
 
 
 def _transform_section(row: dict) -> dict:
-    ca = row['created_at']
-    created = ca.isoformat() if hasattr(ca, 'isoformat') else str(ca)
+    ca = row["created_at"]
+    created = ca.isoformat() if hasattr(ca, "isoformat") else str(ca)
 
     return {
-        'id': row['section_id'],
-        'fiberId': row['fiber_id'],
-        'name': row['section_name'],
-        'channelStart': row['channel_start'],
-        'channelEnd': row['channel_end'],
-        'expectedTravelTime': row.get('expected_travel_time_seconds'),
-        'isActive': bool(row['is_active']),
-        'createdAt': created,
+        "id": row["section_id"],
+        "fiberId": row["fiber_id"],
+        "name": row["section_name"],
+        "channelStart": row["channel_start"],
+        "channelEnd": row["channel_end"],
+        "expectedTravelTime": row.get("expected_travel_time_seconds"),
+        "isActive": bool(row["is_active"]),
+        "createdAt": created,
     }

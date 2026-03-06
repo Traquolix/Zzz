@@ -2,13 +2,10 @@
 airgap-export*
 
 # Research/development artifacts
-scripts/
 training_data/
 experiments/
 diagnostic_output/
 docs/research/
-
-
 secrets/
 # Training environment (large, reproducible)
 training_env/
@@ -18,8 +15,9 @@ training_env/
 
 data/
 
-# Script outputs (keep scripts, ignore generated images)
-scripts/**/*.png
+# Tools generated outputs
+tools/**/*.png
+tools/**/*.csv
 
 # Python
 __pycache__/
@@ -29,7 +27,6 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-dist/
 downloads/
 eggs/
 .eggs/
@@ -45,7 +42,6 @@ wheels/
 MANIFEST
 
 # Virtual environments
-.env
 .venv
 env/
 venv/
@@ -64,6 +60,7 @@ venv.bak/
 
 # Testing
 .pytest_cache/
+pytest-cache-files-*/
 .coverage
 htmlcov/
 .tox/
@@ -82,8 +79,8 @@ tests/test_env/
 .env.*
 !.env.example
 
-# Docker
-.dockerignore
+# Docker (dockerignore files should be tracked)
+# .dockerignore
 
 # Logs
 *.log
@@ -106,6 +103,8 @@ Thumbs.db
 # Data files (adjust as needed)
 *.csv
 *.parquet
+# Exception: AI engine config CSVs required for inference
+!services/pipeline/ai_engine/model_vehicle/models_parameters/*.csv
 
 # SQLite databases
 db.sqlite3
@@ -122,11 +121,19 @@ node_modules/
 dist/
 dist-ssr/
 *.local
+*.tsbuildinfo
 
 # Backend (Django)
 staticfiles/
 media/
 .mypy_cache/
+
+# Model weights — use Git LFS for new models, never commit raw .pth/.pt
+*.pth
+*.pt
+# Exception: active model weights tracked before LFS migration
+!services/pipeline/ai_engine/model_vehicle/models_parameters/allignment_parameters_3_03_2026_30s_windows_parameters_best.pth
+!services/pipeline/ai_engine/model_vehicle/models_parameters/vehicle_counting_model.pt
 
 # libcpab build artifacts
 basis_files/

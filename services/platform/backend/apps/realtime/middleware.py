@@ -19,7 +19,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from rest_framework_simplejwt.tokens import AccessToken
 
-logger = logging.getLogger('sequoia.realtime')
+logger = logging.getLogger("sequoia.realtime")
 User = get_user_model()
 
 
@@ -28,15 +28,15 @@ def get_user_from_token(token_str):
     """Validate JWT access token and return the user, or AnonymousUser."""
     try:
         token = AccessToken(token_str)
-        user_id = token.payload.get('user_id')
+        user_id = token.payload.get("user_id")
         if user_id is None:
             return AnonymousUser()
-        user = User.objects.select_related('organization').get(id=user_id)
+        user = User.objects.select_related("organization").get(id=user_id)
         if not user.is_active:
             return AnonymousUser()
         # Check org is active (mirrors IsActiveUser permission)
         if not user.is_superuser:
-            org = getattr(user, 'organization', None)
+            org = getattr(user, "organization", None)
             if org is None or not org.is_active:
                 return AnonymousUser()
         return user
@@ -53,6 +53,6 @@ class JWTAuthMiddleware(BaseMiddleware):
     """
 
     async def __call__(self, scope, receive, send):
-        scope['user'] = AnonymousUser()
-        scope['_pending_auth'] = True
+        scope["user"] = AnonymousUser()
+        scope["_pending_auth"] = True
         return await super().__call__(scope, receive, send)

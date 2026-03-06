@@ -83,26 +83,33 @@ open http://localhost:3000  # Frontend
 open http://localhost:3002  # Grafana (admin/admin)
 ```
 
-### Local Development (pipeline only)
+### Local Development
+
+```bash
+# First time: create all venvs and install dependencies
+make setup
+
+# Start backend + frontend (auto-setup on first run if you skip make setup)
+make dev
+
+# Or individually:
+make dev-backend   # Backend on http://localhost:8001
+make dev-frontend  # Frontend on http://localhost:5173
+
+# Validate code (uses venvs automatically — no global python3 tools needed)
+make lint && make typecheck
+```
+
+`make setup` creates isolated venvs for pipeline and backend, and installs frontend
+node_modules. `make dev` also auto-creates the backend venv on first run.
+JWT keys are auto-generated in dev mode. Simulation data starts automatically when the frontend connects.
+
+### Pipeline Development
 
 ```bash
 cd services/pipeline
 pip install -e ".[dev]"    # Install with dev dependencies
 pytest tests/ -v           # Run tests
-```
-
-### Local Development (platform only)
-
-```bash
-# Backend
-cd services/platform/backend
-pip install -r requirements.txt
-python manage.py runserver
-
-# Frontend
-cd services/platform/frontend
-npm install
-npm run dev
 ```
 
 ## Configuration
@@ -122,4 +129,7 @@ npm run dev
 
 ## Key Documentation
 
-- [Pipeline Tuning Guide](services/pipeline/experiments/PIPELINE_TUNING_GUIDE.md) — DTAN retraining and calibration workflow
+- [Architecture](ARCHITECTURE.md) — Full system topology and inter-service contracts
+- [Contributing](CONTRIBUTING.md) — Branch strategy, conventional commits, PR workflow
+- [Pipeline Tuning Guide](tools/pipeline/experiments/PIPELINE_TUNING_GUIDE.md) — DTAN retraining and calibration workflow
+- API docs: `/api/docs/` (Swagger UI, available in dev mode)

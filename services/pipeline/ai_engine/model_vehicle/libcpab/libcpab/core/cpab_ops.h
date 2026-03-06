@@ -18,5 +18,5 @@ void cpab_backward_op( float* grad, const float* points, const float* As,
                        const float* Bs, const int* nstepsolver, const int* nc,
                        const int n_theta, const int d,
                        const int ndim, const int nP, const int nC,
-                       const int broadcast);       
+                       const int broadcast);
 #endif

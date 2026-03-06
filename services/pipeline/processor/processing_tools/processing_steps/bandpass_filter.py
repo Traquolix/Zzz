@@ -7,7 +7,6 @@ from processor.processing_tools.processing_steps.base_step import ProcessingStep
 
 
 class BandpassFilter(ProcessingStep):
-
     def __init__(
         self,
         low_freq: float,

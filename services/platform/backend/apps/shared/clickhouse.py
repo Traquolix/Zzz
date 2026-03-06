@@ -23,7 +23,7 @@ from rest_framework.response import Response
 
 from apps.shared.exceptions import ClickHouseUnavailableError
 
-logger = logging.getLogger('sequoia.clickhouse')
+logger = logging.getLogger("sequoia.clickhouse")
 
 _local = threading.local()
 
@@ -31,16 +31,16 @@ _local = threading.local()
 _breaker_lock = threading.Lock()
 _consecutive_failures = 0
 _last_failure_time = 0.0
-_MIN_COOLDOWN = 1.0    # seconds
-_MAX_COOLDOWN = 8.0    # seconds
-_JITTER_FACTOR = 0.5   # ±50% jitter
+_MIN_COOLDOWN = 1.0  # seconds
+_MAX_COOLDOWN = 8.0  # seconds
+_JITTER_FACTOR = 0.5  # ±50% jitter
 
 
 def _get_cooldown() -> float:
     """Calculate current cooldown with exponential backoff and jitter."""
     base = min(_MAX_COOLDOWN, _MIN_COOLDOWN * (2 ** (_consecutive_failures - 1)))
     jitter = base * _JITTER_FACTOR * (2 * random.random() - 1)
-    return max(0, base + jitter)
+    return float(max(0, base + jitter))
 
 
 def _is_in_cooldown() -> bool:
@@ -60,8 +60,9 @@ def _record_failure():
         _last_failure_time = time.time()
         cooldown = _get_cooldown()
         logger.warning(
-            'ClickHouse circuit breaker: failure #%d, cooldown %.1fs',
-            _consecutive_failures, cooldown,
+            "ClickHouse circuit breaker: failure #%d, cooldown %.1fs",
+            _consecutive_failures,
+            cooldown,
         )
 
 
@@ -70,7 +71,9 @@ def _record_success():
     global _consecutive_failures, _last_failure_time
     with _breaker_lock:
         if _consecutive_failures > 0:
-            logger.info('ClickHouse circuit breaker: recovered after %d failures', _consecutive_failures)
+            logger.info(
+                "ClickHouse circuit breaker: recovered after %d failures", _consecutive_failures
+            )
             _consecutive_failures = 0
             _last_failure_time = 0.0
 
@@ -83,18 +86,20 @@ def get_client():
     Uses circuit breaker with exponential backoff on connection failures.
     """
     # Return existing thread-local client if available
-    client = getattr(_local, 'client', None)
+    client = getattr(_local, "client", None)
     if client is not None:
         return client
 
     # Circuit breaker check
     if _is_in_cooldown():
         from apps.shared.metrics import CLICKHOUSE_CIRCUIT_BREAKER_TRIPS
+
         CLICKHOUSE_CIRCUIT_BREAKER_TRIPS.inc()
         raise ClickHouseUnavailableError("ClickHouse unavailable (circuit breaker)")
 
     try:
         import clickhouse_connect
+
         client = clickhouse_connect.get_client(
             host=settings.CLICKHOUSE_HOST,
             port=settings.CLICKHOUSE_HTTP_PORT,
@@ -130,9 +135,10 @@ def query(sql, parameters=None):
         List of dicts, one per row.
     """
     from apps.shared.metrics import CLICKHOUSE_QUERIES, CLICKHOUSE_QUERY_DURATION
+
     # Infer query type from SQL for metric labels
-    sql_upper = (sql or '').strip().upper()
-    query_type = 'select' if sql_upper.startswith('SELECT') else 'other'
+    sql_upper = (sql or "").strip().upper()
+    query_type = "select" if sql_upper.startswith("SELECT") else "other"
     timer = CLICKHOUSE_QUERY_DURATION.labels(query_type=query_type).time()
     try:
         timer.__enter__()
@@ -141,27 +147,30 @@ def query(sql, parameters=None):
         columns = result.column_names
         rows = [dict(zip(columns, row)) for row in result.result_rows]
         timer.__exit__(None, None, None)
-        CLICKHOUSE_QUERIES.labels(query_type=query_type, status='success').inc()
+        CLICKHOUSE_QUERIES.labels(query_type=query_type, status="success").inc()
         return rows
     except ClickHouseUnavailableError:
         timer.__exit__(None, None, None)
-        CLICKHOUSE_QUERIES.labels(query_type=query_type, status='circuit_breaker').inc()
+        CLICKHOUSE_QUERIES.labels(query_type=query_type, status="circuit_breaker").inc()
         raise
     except Exception as e:
         # Reset thread-local client so next call reconnects (connection may be stale)
         _local.client = None
         _record_failure()
         # Include SQL (truncated) and params for debuggability
-        sql_preview = (sql or '').strip()[:500]
+        sql_preview = (sql or "").strip()[:500]
         logger.error(
             "ClickHouse query failed: %s | SQL: %s | Params: %s",
-            e, sql_preview, parameters,
+            e,
+            sql_preview,
+            parameters,
         )
         timer.__exit__(None, None, None)
-        CLICKHOUSE_QUERIES.labels(query_type=query_type, status='error').inc()
+        CLICKHOUSE_QUERIES.labels(query_type=query_type, status="error").inc()
         # Report to Sentry (noop if not configured)
         try:
             import sentry_sdk
+
             sentry_sdk.capture_exception(e)
         except Exception:
             pass
@@ -185,9 +194,9 @@ def health() -> dict:
             cooldown = _get_cooldown()
             in_cooldown = (time.time() - _last_failure_time) < cooldown
         return {
-            'consecutive_failures': _consecutive_failures,
-            'in_cooldown': in_cooldown,
-            'last_failure': _last_failure_time,
+            "consecutive_failures": _consecutive_failures,
+            "in_cooldown": in_cooldown,
+            "last_failure": _last_failure_time,
         }
 
 
@@ -208,6 +217,7 @@ def clickhouse_fallback(fallback_fn=None):
             @clickhouse_fallback(fallback_fn=_incident_fallback)
             def get(self, request): ...
     """
+
     def decorator(method):
         @functools.wraps(method)
         def wrapper(self, request, *args, **kwargs):
@@ -215,17 +225,27 @@ def clickhouse_fallback(fallback_fn=None):
                 return method(self, request, *args, **kwargs)
             except ClickHouseUnavailableError:
                 logger.warning(
-                    'ClickHouse unavailable for %s %s',
-                    request.method, request.path,
+                    "ClickHouse unavailable for %s %s",
+                    request.method,
+                    request.path,
                 )
                 if fallback_fn is not None:
                     try:
                         return fallback_fn(self, request, *args, **kwargs)
                     except Exception:
-                        logger.exception('ClickHouse fallback also failed for %s %s', request.method, request.path)
+                        logger.exception(
+                            "ClickHouse fallback also failed for %s %s",
+                            request.method,
+                            request.path,
+                        )
                 return Response(
-                    {'detail': 'Analytics temporarily unavailable', 'code': 'analytics_unavailable'},
+                    {
+                        "detail": "Analytics temporarily unavailable",
+                        "code": "analytics_unavailable",
+                    },
                     status=503,
                 )
+
         return wrapper
+
     return decorator

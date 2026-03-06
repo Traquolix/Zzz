@@ -54,9 +54,7 @@ def gpu_lock(timeout: float = 120.0):
             except (OSError, BlockingIOError):
                 elapsed = time.monotonic() - start
                 if elapsed >= timeout:
-                    raise TimeoutError(
-                        f"GPU lock acquisition timed out after {timeout:.0f}s"
-                    )
+                    raise TimeoutError(f"GPU lock acquisition timed out after {timeout:.0f}s")
                 time.sleep(0.05)
 
         wait_time = time.monotonic() - start

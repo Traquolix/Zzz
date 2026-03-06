@@ -8,9 +8,7 @@ const sentryDsn = import.meta.env.VITE_SENTRY_DSN
 if (sentryDsn) {
   Sentry.init({
     dsn: sentryDsn,
-    integrations: [
-      Sentry.browserTracingIntegration(),
-    ],
+    integrations: [Sentry.browserTracingIntegration()],
     tracesSampleRate: 0.1,
     environment: import.meta.env.MODE,
   })

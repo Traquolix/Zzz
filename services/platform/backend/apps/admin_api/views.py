@@ -16,15 +16,15 @@ from rest_framework.views import APIView
 
 from apps.accounts.models import User
 from apps.alerting.dispatch import validate_webhook_url
-from apps.alerting.models import AlertRule, RULE_TYPES, DISPATCH_CHANNELS
+from apps.alerting.models import DISPATCH_CHANNELS, RULE_TYPES, AlertRule
 from apps.api_keys.models import APIKey
 from apps.fibers.models import FiberAssignment
-from apps.fibers.utils import invalidate_org_fiber_cache, invalidate_fiber_org_map
+from apps.fibers.utils import invalidate_fiber_org_map, invalidate_org_fiber_cache
 from apps.monitoring.models import Infrastructure
 from apps.organizations.models import Organization, OrganizationSettings
 from apps.shared.admin_permissions import IsAdminOrSuperuser, IsSuperuser
 
-logger = logging.getLogger('sequoia.admin')
+logger = logging.getLogger("sequoia.admin")
 
 
 def add_cache_control(max_age=300):
@@ -33,16 +33,19 @@ def add_cache_control(max_age=300):
     Admin endpoints serve private org-scoped data, so always use
     'private' to prevent CDN/proxy caching.
     """
+
     def decorator(func):
         @wraps(func)
         def wrapper(self, request, *args, **kwargs):
             response = func(self, request, *args, **kwargs)
             if max_age > 0:
-                response['Cache-Control'] = f'private, max-age={max_age}'
+                response["Cache-Control"] = f"private, max-age={max_age}"
             else:
-                response['Cache-Control'] = 'private, no-store'
+                response["Cache-Control"] = "private, no-store"
             return response
+
         return wrapper
+
     return decorator
 
 
@@ -50,7 +53,7 @@ def _get_org_scope(user):
     """Return org queryset filter for non-superusers."""
     if user.is_superuser:
         return {}
-    return {'organization': user.organization}
+    return {"organization": user.organization}
 
 
 def paginate_queryset(request, queryset, default_limit=50):
@@ -65,19 +68,19 @@ def paginate_queryset(request, queryset, default_limit=50):
     - Computes total = offset + len(items_fetched) if we got exactly limit+1
     - Only calls count() when we fetch fewer than limit+1 items (last page)
     """
-    search = request.GET.get('search', '').strip()
+    _search = request.GET.get("search", "").strip()  # noqa: F841 — reserved for future filtering
     try:
-        offset = max(0, int(request.GET.get('offset', 0)))
+        offset = max(0, int(request.GET.get("offset", 0)))
     except (ValueError, TypeError):
         offset = 0
     try:
-        limit = min(int(request.GET.get('limit', default_limit)), 200)
+        limit = min(int(request.GET.get("limit", default_limit)), 200)
     except (ValueError, TypeError):
         limit = default_limit
 
     # Fetch limit+1 to determine if there are more results (single query)
     fetch_limit = limit + 1
-    items = list(queryset[offset:offset + fetch_limit])
+    items = list(queryset[offset : offset + fetch_limit])
 
     # Check if we got more than limit (indicates more results exist)
     has_more = len(items) > limit
@@ -89,10 +92,10 @@ def paginate_queryset(request, queryset, default_limit=50):
     total = offset + len(items)
 
     return page, {
-        'hasMore': has_more,
-        'limit': limit,
-        'offset': offset,
-        'total': total,
+        "hasMore": has_more,
+        "limit": limit,
+        "offset": offset,
+        "total": total,
     }
 
 
@@ -106,16 +109,12 @@ class OrganizationListView(APIView):
 
     @add_cache_control()
     def get(self, request):
-        search = request.GET.get('search', '').strip()
-        orgs = Organization.objects.prefetch_related(
-            'settings', 'fiber_assignments'
-        ).all()
+        search = request.GET.get("search", "").strip()
+        orgs = Organization.objects.prefetch_related("settings", "fiber_assignments").all()
 
         # Apply search filter
         if search:
-            orgs = orgs.filter(
-                Q(name__icontains=search) | Q(slug__icontains=search)
-            )
+            orgs = orgs.filter(Q(name__icontains=search) | Q(slug__icontains=search))
 
         # Apply pagination
         page, pagination_data = paginate_queryset(request, orgs)
@@ -124,46 +123,55 @@ class OrganizationListView(APIView):
         for org in page:
             fiber_assignments = []
             for fa in org.fiber_assignments.all():
-                fiber_assignments.append({
-                    'id': str(fa.pk),
-                    'fiberId': fa.fiber_id,
-                    'assignedAt': fa.assigned_at.isoformat(),
-                })
-            settings = getattr(org, 'settings', None)
-            results.append({
-                'id': str(org.pk),
-                'name': org.name,
-                'slug': org.slug,
-                'isActive': org.is_active,
-                'createdAt': org.created_at.isoformat(),
-                'allowedWidgets': settings.allowed_widgets if settings else [],
-                'allowedLayers': settings.allowed_layers if settings else [],
-                'fiberAssignments': fiber_assignments,
-            })
-        return Response({
-            'results': results,
-            'hasMore': pagination_data['hasMore'],
-            'limit': pagination_data['limit'],
-            'offset': pagination_data['offset'],
-            'total': pagination_data['total'],
-        })
+                fiber_assignments.append(
+                    {
+                        "id": str(fa.pk),
+                        "fiberId": fa.fiber_id,
+                        "assignedAt": fa.assigned_at.isoformat(),
+                    }
+                )
+            settings = getattr(org, "settings", None)
+            results.append(
+                {
+                    "id": str(org.pk),
+                    "name": org.name,
+                    "slug": org.slug,
+                    "isActive": org.is_active,
+                    "createdAt": org.created_at.isoformat(),
+                    "allowedWidgets": settings.allowed_widgets if settings else [],
+                    "allowedLayers": settings.allowed_layers if settings else [],
+                    "fiberAssignments": fiber_assignments,
+                }
+            )
+        return Response(
+            {
+                "results": results,
+                "hasMore": pagination_data["hasMore"],
+                "limit": pagination_data["limit"],
+                "offset": pagination_data["offset"],
+                "total": pagination_data["total"],
+            }
+        )
 
     def post(self, request):
-        name = request.data.get('name')
+        name = request.data.get("name")
         if not name:
             return Response(
-                {'detail': 'Name is required', 'code': 'validation_error'},
+                {"detail": "Name is required", "code": "validation_error"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         org = Organization.objects.create(name=name)
         # Auto-create settings
         OrganizationSettings.objects.get_or_create(organization=org)
-        return Response({
-            'id': str(org.pk),
-            'name': org.name,
-            'slug': org.slug,
-            'isActive': org.is_active,
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "id": str(org.pk),
+                "name": org.name,
+                "slug": org.slug,
+                "isActive": org.is_active,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class OrganizationDetailView(APIView):
@@ -174,20 +182,22 @@ class OrganizationDetailView(APIView):
             org = Organization.objects.get(pk=org_id)
         except Organization.DoesNotExist:
             return Response(
-                {'detail': 'Organization not found', 'code': 'not_found'},
+                {"detail": "Organization not found", "code": "not_found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
-        if 'name' in request.data:
-            org.name = request.data['name']
-        if 'isActive' in request.data:
-            org.is_active = request.data['isActive']
+        if "name" in request.data:
+            org.name = request.data["name"]
+        if "isActive" in request.data:
+            org.is_active = request.data["isActive"]
         org.save()
-        return Response({
-            'id': str(org.pk),
-            'name': org.name,
-            'slug': org.slug,
-            'isActive': org.is_active,
-        })
+        return Response(
+            {
+                "id": str(org.pk),
+                "name": org.name,
+                "slug": org.slug,
+                "isActive": org.is_active,
+            }
+        )
 
 
 class OrgSettingsView(APIView):
@@ -197,70 +207,90 @@ class OrgSettingsView(APIView):
         # Org admin can only GET their own org's settings
         # Superuser can GET any
         if not request.user.is_superuser and str(request.user.organization_id) != str(org_id):
-            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         try:
-            settings = OrganizationSettings.objects.select_related('organization').get(organization_id=org_id)
+            settings = OrganizationSettings.objects.select_related("organization").get(
+                organization_id=org_id
+            )
         except OrganizationSettings.DoesNotExist:
-            return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
-        return Response({
-            'timezone': settings.timezone,
-            'speedAlertThreshold': settings.speed_alert_threshold,
-            'incidentAutoResolveMinutes': settings.incident_auto_resolve_minutes,
-            'shmEnabled': settings.shm_enabled,
-            'allowedWidgets': settings.allowed_widgets,
-            'allowedLayers': settings.allowed_layers,
-        })
+            return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(
+            {
+                "timezone": settings.timezone,
+                "speedAlertThreshold": settings.speed_alert_threshold,
+                "incidentAutoResolveMinutes": settings.incident_auto_resolve_minutes,
+                "shmEnabled": settings.shm_enabled,
+                "allowedWidgets": settings.allowed_widgets,
+                "allowedLayers": settings.allowed_layers,
+            }
+        )
 
     def patch(self, request, org_id):
         if not request.user.is_superuser and str(request.user.organization_id) != str(org_id):
-            return Response({'detail': 'Forbidden'}, status=status.HTTP_403_FORBIDDEN)
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         try:
             settings = OrganizationSettings.objects.get(organization_id=org_id)
         except OrganizationSettings.DoesNotExist:
-            return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
 
         data = request.data
 
         # Fields org admin CAN edit
-        if 'timezone' in data:
-            settings.timezone = data['timezone']
-        if 'speedAlertThreshold' in data:
-            settings.speed_alert_threshold = data['speedAlertThreshold']
-        if 'incidentAutoResolveMinutes' in data:
-            settings.incident_auto_resolve_minutes = data['incidentAutoResolveMinutes']
-        if 'shmEnabled' in data:
-            settings.shm_enabled = data['shmEnabled']
+        if "timezone" in data:
+            settings.timezone = data["timezone"]
+        if "speedAlertThreshold" in data:
+            settings.speed_alert_threshold = data["speedAlertThreshold"]
+        if "incidentAutoResolveMinutes" in data:
+            settings.incident_auto_resolve_minutes = data["incidentAutoResolveMinutes"]
+        if "shmEnabled" in data:
+            settings.shm_enabled = data["shmEnabled"]
 
         # Fields ONLY superuser can edit
-        if 'allowedWidgets' in data:
+        if "allowedWidgets" in data:
             if not request.user.is_superuser:
-                return Response({'detail': 'Only superusers can edit widget restrictions'}, status=status.HTTP_403_FORBIDDEN)
-            widgets = data['allowedWidgets']
+                return Response(
+                    {"detail": "Only superusers can edit widget restrictions"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            widgets = data["allowedWidgets"]
             from apps.shared.constants import ALL_WIDGETS
+
             invalid = [w for w in widgets if w not in ALL_WIDGETS]
             if invalid:
-                return Response({'detail': f'Invalid widget keys: {", ".join(invalid)}'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"detail": f"Invalid widget keys: {', '.join(invalid)}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             settings.allowed_widgets = widgets
 
-        if 'allowedLayers' in data:
+        if "allowedLayers" in data:
             if not request.user.is_superuser:
-                return Response({'detail': 'Only superusers can edit layer restrictions'}, status=status.HTTP_403_FORBIDDEN)
-            layers = data['allowedLayers']
+                return Response(
+                    {"detail": "Only superusers can edit layer restrictions"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            layers = data["allowedLayers"]
             from apps.shared.constants import ALL_LAYERS
-            invalid = [l for l in layers if l not in ALL_LAYERS]
+
+            invalid = [layer for layer in layers if layer not in ALL_LAYERS]
             if invalid:
-                return Response({'detail': f'Invalid layer keys: {", ".join(invalid)}'}, status=status.HTTP_400_BAD_REQUEST)
+                return Response(
+                    {"detail": f"Invalid layer keys: {', '.join(invalid)}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             settings.allowed_layers = layers
 
         settings.save()
-        return Response({
-            'timezone': settings.timezone,
-            'speedAlertThreshold': settings.speed_alert_threshold,
-            'incidentAutoResolveMinutes': settings.incident_auto_resolve_minutes,
-            'shmEnabled': settings.shm_enabled,
-            'allowedWidgets': settings.allowed_widgets,
-            'allowedLayers': settings.allowed_layers,
-        })
+        return Response(
+            {
+                "timezone": settings.timezone,
+                "speedAlertThreshold": settings.speed_alert_threshold,
+                "incidentAutoResolveMinutes": settings.incident_auto_resolve_minutes,
+                "shmEnabled": settings.shm_enabled,
+                "allowedWidgets": settings.allowed_widgets,
+                "allowedLayers": settings.allowed_layers,
+            }
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -274,80 +304,87 @@ class UserListView(APIView):
     @add_cache_control()
     def get(self, request):
         scope = _get_org_scope(request.user)
-        search = request.GET.get('search', '').strip()
-        users = User.objects.filter(**scope).select_related('organization')
+        search = request.GET.get("search", "").strip()
+        users = User.objects.filter(**scope).select_related("organization")
 
         # Apply search filter
         if search:
-            users = users.filter(
-                Q(username__icontains=search) | Q(email__icontains=search)
-            )
+            users = users.filter(Q(username__icontains=search) | Q(email__icontains=search))
 
         # Apply pagination
         page, pagination_data = paginate_queryset(request, users)
 
         results = []
         for u in page:
-            results.append({
-                'id': str(u.pk),
-                'username': u.username,
-                'email': u.email,
-                'role': u.role,
-                'isActive': u.is_active,
-                'organizationId': str(u.organization_id) if u.organization_id else None,
-                'organizationName': u.organization.name if u.organization else None,
-                'allowedWidgets': u.allowed_widgets,
-                'allowedLayers': u.allowed_layers,
-            })
-        return Response({
-            'results': results,
-            'hasMore': pagination_data['hasMore'],
-            'limit': pagination_data['limit'],
-            'offset': pagination_data['offset'],
-            'total': pagination_data['total'],
-        })
+            results.append(
+                {
+                    "id": str(u.pk),
+                    "username": u.username,
+                    "email": u.email,
+                    "role": u.role,
+                    "isActive": u.is_active,
+                    "organizationId": str(u.organization_id) if u.organization_id else None,
+                    "organizationName": u.organization.name if u.organization else None,
+                    "allowedWidgets": u.allowed_widgets,
+                    "allowedLayers": u.allowed_layers,
+                }
+            )
+        return Response(
+            {
+                "results": results,
+                "hasMore": pagination_data["hasMore"],
+                "limit": pagination_data["limit"],
+                "offset": pagination_data["offset"],
+                "total": pagination_data["total"],
+            }
+        )
 
     def post(self, request):
-        username = request.data.get('username')
-        password = request.data.get('password')
-        role = request.data.get('role', 'viewer')
+        username = request.data.get("username")
+        password = request.data.get("password")
+        role = request.data.get("role", "viewer")
 
         if not username or not password:
             return Response(
-                {'detail': 'Username and password are required', 'code': 'validation_error'},
+                {"detail": "Username and password are required", "code": "validation_error"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Validate role against allowed choices
         from apps.shared.constants import USER_ROLES
+
         valid_roles = [r[0] for r in USER_ROLES]
         if role not in valid_roles:
             return Response(
-                {'detail': f'Invalid role. Must be one of: {", ".join(valid_roles)}', 'code': 'validation_error'},
+                {
+                    "detail": f"Invalid role. Must be one of: {', '.join(valid_roles)}",
+                    "code": "validation_error",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Validate password strength
         from django.contrib.auth.password_validation import validate_password
         from django.core.exceptions import ValidationError as DjangoValidationError
+
         try:
             validate_password(password)
         except DjangoValidationError as e:
             return Response(
-                {'detail': e.messages[0], 'code': 'validation_error'},
+                {"detail": e.messages[0], "code": "validation_error"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Determine org: admin creates in their own org; superuser can specify
         if request.user.is_superuser:
-            org_id = request.data.get('organizationId')
+            org_id = request.data.get("organizationId")
             org = None
             if org_id:
                 try:
                     org = Organization.objects.get(pk=org_id)
                 except Organization.DoesNotExist:
                     return Response(
-                        {'detail': 'Organization not found', 'code': 'org_invalid'},
+                        {"detail": "Organization not found", "code": "org_invalid"},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
         else:
@@ -356,16 +393,19 @@ class UserListView(APIView):
         user = User.objects.create_user(
             username=username,
             password=password,
-            email=request.data.get('email', ''),
+            email=request.data.get("email", ""),
             organization=org,
             role=role,
         )
-        return Response({
-            'id': str(user.pk),
-            'username': user.username,
-            'role': user.role,
-            'organizationId': str(user.organization_id) if user.organization_id else None,
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "id": str(user.pk),
+                "username": user.username,
+                "role": user.role,
+                "organizationId": str(user.organization_id) if user.organization_id else None,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class UserDetailView(APIView):
@@ -376,55 +416,69 @@ class UserDetailView(APIView):
         try:
             user = User.objects.get(pk=user_id, **scope)
         except User.DoesNotExist:
-            return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
 
         data = request.data
 
         # Prevent self-modification of role and active status
         if str(user.pk) == str(request.user.pk):
-            if 'role' in data or 'isActive' in data:
+            if "role" in data or "isActive" in data:
                 return Response(
-                    {'detail': 'Cannot modify your own role or active status', 'code': 'self_modification'},
+                    {
+                        "detail": "Cannot modify your own role or active status",
+                        "code": "self_modification",
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-        if 'role' in data:
+        if "role" in data:
             from apps.shared.constants import USER_ROLES
+
             valid_roles = [r[0] for r in USER_ROLES]
-            if data['role'] not in valid_roles:
+            if data["role"] not in valid_roles:
                 return Response(
-                    {'detail': f'Invalid role. Must be one of: {", ".join(valid_roles)}'},
+                    {"detail": f"Invalid role. Must be one of: {', '.join(valid_roles)}"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            user.role = data['role']
-        if 'email' in data:
-            user.email = data['email']
-        if 'isActive' in data:
-            user.is_active = data['isActive']
-        if 'allowedWidgets' in data:
+            user.role = data["role"]
+        if "email" in data:
+            user.email = data["email"]
+        if "isActive" in data:
+            user.is_active = data["isActive"]
+        if "allowedWidgets" in data:
             from apps.shared.constants import ALL_WIDGETS
-            invalid = [w for w in data['allowedWidgets'] if w not in ALL_WIDGETS]
+
+            invalid = [w for w in data["allowedWidgets"] if w not in ALL_WIDGETS]
             if invalid:
-                return Response({'detail': f'Invalid widget keys: {", ".join(invalid)}'}, status=status.HTTP_400_BAD_REQUEST)
-            user.allowed_widgets = data['allowedWidgets']
-        if 'allowedLayers' in data:
+                return Response(
+                    {"detail": f"Invalid widget keys: {', '.join(invalid)}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            user.allowed_widgets = data["allowedWidgets"]
+        if "allowedLayers" in data:
             from apps.shared.constants import ALL_LAYERS
-            invalid = [l for l in data['allowedLayers'] if l not in ALL_LAYERS]
+
+            invalid = [layer for layer in data["allowedLayers"] if layer not in ALL_LAYERS]
             if invalid:
-                return Response({'detail': f'Invalid layer keys: {", ".join(invalid)}'}, status=status.HTTP_400_BAD_REQUEST)
-            user.allowed_layers = data['allowedLayers']
+                return Response(
+                    {"detail": f"Invalid layer keys: {', '.join(invalid)}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            user.allowed_layers = data["allowedLayers"]
 
         user.save()
-        return Response({
-            'id': str(user.pk),
-            'username': user.username,
-            'email': user.email,
-            'role': user.role,
-            'isActive': user.is_active,
-            'allowedWidgets': user.allowed_widgets,
-            'allowedLayers': user.allowed_layers,
-            'organizationId': str(user.organization_id) if user.organization_id else None,
-        })
+        return Response(
+            {
+                "id": str(user.pk),
+                "username": user.username,
+                "email": user.email,
+                "role": user.role,
+                "isActive": user.is_active,
+                "allowedWidgets": user.allowed_widgets,
+                "allowedLayers": user.allowed_layers,
+                "organizationId": str(user.organization_id) if user.organization_id else None,
+            }
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -438,87 +492,96 @@ class InfrastructureAdminListView(APIView):
     @add_cache_control()
     def get(self, request):
         scope = _get_org_scope(request.user)
-        search = request.GET.get('search', '').strip()
+        search = request.GET.get("search", "").strip()
         items = Infrastructure.objects.filter(**scope)
 
         # Apply search filter
         if search:
-            items = items.filter(
-                Q(name__icontains=search) | Q(type__icontains=search)
-            )
+            items = items.filter(Q(name__icontains=search) | Q(type__icontains=search))
 
         # Apply pagination
         page, pagination_data = paginate_queryset(request, items)
 
         results = []
         for item in page:
-            results.append({
-                'id': item.id,
-                'name': item.name,
-                'type': item.type,
-                'fiberId': item.fiber_id,
-                'startChannel': item.start_channel,
-                'endChannel': item.end_channel,
-                'organizationId': str(item.organization_id),
-            })
-        return Response({
-            'results': results,
-            'hasMore': pagination_data['hasMore'],
-            'limit': pagination_data['limit'],
-            'offset': pagination_data['offset'],
-            'total': pagination_data['total'],
-        })
+            results.append(
+                {
+                    "id": item.id,
+                    "name": item.name,
+                    "type": item.type,
+                    "fiberId": item.fiber_id,
+                    "startChannel": item.start_channel,
+                    "endChannel": item.end_channel,
+                    "organizationId": str(item.organization_id),
+                }
+            )
+        return Response(
+            {
+                "results": results,
+                "hasMore": pagination_data["hasMore"],
+                "limit": pagination_data["limit"],
+                "offset": pagination_data["offset"],
+                "total": pagination_data["total"],
+            }
+        )
 
     def post(self, request):
         data = request.data
-        required = ['id', 'name', 'type', 'fiberId', 'startChannel', 'endChannel']
+        required = ["id", "name", "type", "fiberId", "startChannel", "endChannel"]
         missing = [f for f in required if f not in data]
         if missing:
             return Response(
-                {'detail': f'Missing fields: {", ".join(missing)}', 'code': 'validation_error'},
+                {"detail": f"Missing fields: {', '.join(missing)}", "code": "validation_error"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         from apps.shared.constants import INFRASTRUCTURE_TYPES
+
         valid_types = [t[0] for t in INFRASTRUCTURE_TYPES]
-        if data['type'] not in valid_types:
+        if data["type"] not in valid_types:
             return Response(
-                {'detail': f'Invalid type. Must be one of: {", ".join(valid_types)}', 'code': 'validation_error'},
+                {
+                    "detail": f"Invalid type. Must be one of: {', '.join(valid_types)}",
+                    "code": "validation_error",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         org = request.user.organization if not request.user.is_superuser else None
         if request.user.is_superuser:
-            org_id = data.get('organizationId')
+            org_id = data.get("organizationId")
             if org_id:
                 try:
                     org = Organization.objects.get(pk=org_id)
                 except Organization.DoesNotExist:
                     return Response(
-                        {'detail': 'Organization not found', 'code': 'org_invalid'},
+                        {"detail": "Organization not found", "code": "org_invalid"},
                         status=status.HTTP_400_BAD_REQUEST,
                     )
             else:
                 return Response(
-                    {'detail': 'organizationId required for superuser', 'code': 'org_required'},
+                    {"detail": "organizationId required for superuser", "code": "org_required"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
         infra = Infrastructure.objects.create(
-            id=data['id'],
-            name=data['name'],
-            type=data['type'],
+            id=data["id"],
+            name=data["name"],
+            type=data["type"],
             organization=org,
-            fiber_id=data['fiberId'],
-            start_channel=data['startChannel'],
-            end_channel=data['endChannel'],
-            image=data.get('image', ''),
+            fiber_id=data["fiberId"],
+            start_channel=data["startChannel"],
+            end_channel=data["endChannel"],
+            image=data.get("image", ""),
         )
-        return Response({
-            'id': infra.id,
-            'name': infra.name,
-            'type': infra.type,
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "id": infra.id,
+                "name": infra.name,
+                "type": infra.type,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class InfrastructureAdminDetailView(APIView):
@@ -530,7 +593,7 @@ class InfrastructureAdminDetailView(APIView):
             item = Infrastructure.objects.get(id=infra_id, **scope)
         except Infrastructure.DoesNotExist:
             return Response(
-                {'detail': 'Not found', 'code': 'not_found'},
+                {"detail": "Not found", "code": "not_found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
         item.delete()
@@ -548,45 +611,47 @@ class AlertRuleListView(APIView):
     @add_cache_control()
     def get(self, request):
         scope = _get_org_scope(request.user)
-        search = request.GET.get('search', '').strip()
+        search = request.GET.get("search", "").strip()
         rules = AlertRule.objects.filter(**scope)
 
         # Apply search filter
         if search:
-            rules = rules.filter(
-                Q(name__icontains=search) | Q(rule_type__icontains=search)
-            )
+            rules = rules.filter(Q(name__icontains=search) | Q(rule_type__icontains=search))
 
         # Apply pagination
         page, pagination_data = paginate_queryset(request, rules)
 
         results = []
         for rule in page:
-            results.append({
-                'id': str(rule.pk),
-                'name': rule.name,
-                'ruleType': rule.rule_type,
-                'threshold': rule.threshold,
-                'isActive': rule.is_active,
-                'dispatchChannel': rule.dispatch_channel,
-                'organizationId': str(rule.organization_id),
-            })
-        return Response({
-            'results': results,
-            'hasMore': pagination_data['hasMore'],
-            'limit': pagination_data['limit'],
-            'offset': pagination_data['offset'],
-            'total': pagination_data['total'],
-        })
+            results.append(
+                {
+                    "id": str(rule.pk),
+                    "name": rule.name,
+                    "ruleType": rule.rule_type,
+                    "threshold": rule.threshold,
+                    "isActive": rule.is_active,
+                    "dispatchChannel": rule.dispatch_channel,
+                    "organizationId": str(rule.organization_id),
+                }
+            )
+        return Response(
+            {
+                "results": results,
+                "hasMore": pagination_data["hasMore"],
+                "limit": pagination_data["limit"],
+                "offset": pagination_data["offset"],
+                "total": pagination_data["total"],
+            }
+        )
 
     def post(self, request):
         data = request.data
-        name = data.get('name')
-        rule_type = data.get('ruleType')
+        name = data.get("name")
+        rule_type = data.get("ruleType")
 
         if not name or not rule_type:
             return Response(
-                {'detail': 'name and ruleType are required', 'code': 'validation_error'},
+                {"detail": "name and ruleType are required", "code": "validation_error"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -594,63 +659,77 @@ class AlertRuleListView(APIView):
         valid_rule_types = [c[0] for c in RULE_TYPES]
         if rule_type not in valid_rule_types:
             return Response(
-                {'detail': f'Invalid ruleType. Must be one of: {", ".join(valid_rule_types)}', 'code': 'validation_error'},
+                {
+                    "detail": f"Invalid ruleType. Must be one of: {', '.join(valid_rule_types)}",
+                    "code": "validation_error",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        dispatch_channel = data.get('dispatchChannel', 'log')
+        dispatch_channel = data.get("dispatchChannel", "log")
         valid_channels = [c[0] for c in DISPATCH_CHANNELS]
         if dispatch_channel not in valid_channels:
             return Response(
-                {'detail': f'Invalid dispatchChannel. Must be one of: {", ".join(valid_channels)}', 'code': 'validation_error'},
+                {
+                    "detail": f"Invalid dispatchChannel. Must be one of: {', '.join(valid_channels)}",
+                    "code": "validation_error",
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         # SSRF check on webhook URL
-        webhook_url = data.get('webhookUrl', '')
-        if dispatch_channel == 'webhook' and webhook_url:
+        webhook_url = data.get("webhookUrl", "")
+        if dispatch_channel == "webhook" and webhook_url:
             ssrf_error = validate_webhook_url(webhook_url)
             if ssrf_error:
                 return Response(
-                    {'detail': f'Webhook URL rejected: {ssrf_error}', 'code': 'validation_error'},
+                    {"detail": f"Webhook URL rejected: {ssrf_error}", "code": "validation_error"},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
         org = request.user.organization if not request.user.is_superuser else None
         if request.user.is_superuser:
-            org_id = data.get('organizationId')
+            org_id = data.get("organizationId")
             if org_id:
                 try:
                     org = Organization.objects.get(pk=org_id)
                 except Organization.DoesNotExist:
-                    return Response({'detail': 'Organization not found', 'code': 'org_invalid'}, status=400)
+                    return Response(
+                        {"detail": "Organization not found", "code": "org_invalid"}, status=400
+                    )
             else:
-                return Response({'detail': 'organizationId required for superuser', 'code': 'org_required'}, status=400)
+                return Response(
+                    {"detail": "organizationId required for superuser", "code": "org_required"},
+                    status=400,
+                )
 
         rule = AlertRule.objects.create(
             organization=org,
             name=name,
             rule_type=rule_type,
-            threshold=data.get('threshold'),
-            incident_type_filter=data.get('incidentTypeFilter', []),
-            severity_filter=data.get('severityFilter', []),
-            fiber_id_filter=data.get('fiberIdFilter', []),
-            channel_start=data.get('channelStart'),
-            channel_end=data.get('channelEnd'),
-            dispatch_channel=data.get('dispatchChannel', 'log'),
-            webhook_url=data.get('webhookUrl', ''),
-            webhook_secret=data.get('webhookSecret', ''),
-            email_recipients=data.get('emailRecipients', []),
-            cooldown_seconds=data.get('cooldownSeconds', 300),
-            is_active=data.get('isActive', True),
+            threshold=data.get("threshold"),
+            incident_type_filter=data.get("incidentTypeFilter", []),
+            severity_filter=data.get("severityFilter", []),
+            fiber_id_filter=data.get("fiberIdFilter", []),
+            channel_start=data.get("channelStart"),
+            channel_end=data.get("channelEnd"),
+            dispatch_channel=data.get("dispatchChannel", "log"),
+            webhook_url=data.get("webhookUrl", ""),
+            webhook_secret=data.get("webhookSecret", ""),
+            email_recipients=data.get("emailRecipients", []),
+            cooldown_seconds=data.get("cooldownSeconds", 300),
+            is_active=data.get("isActive", True),
         )
-        return Response({
-            'id': str(rule.pk),
-            'name': rule.name,
-            'ruleType': rule.rule_type,
-            'threshold': rule.threshold,
-            'isActive': rule.is_active,
-            'dispatchChannel': rule.dispatch_channel,
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "id": str(rule.pk),
+                "name": rule.name,
+                "ruleType": rule.rule_type,
+                "threshold": rule.threshold,
+                "isActive": rule.is_active,
+                "dispatchChannel": rule.dispatch_channel,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class AlertRuleDetailView(APIView):
@@ -662,7 +741,7 @@ class AlertRuleDetailView(APIView):
             return AlertRule.objects.get(pk=rule_id, **scope), None
         except AlertRule.DoesNotExist:
             return None, Response(
-                {'detail': 'Not found', 'code': 'not_found'},
+                {"detail": "Not found", "code": "not_found"},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -672,54 +751,61 @@ class AlertRuleDetailView(APIView):
             return error
 
         data = request.data
-        if 'name' in data:
-            rule.name = data['name']
-        if 'threshold' in data:
-            rule.threshold = data['threshold']
-        if 'isActive' in data:
-            rule.is_active = data['isActive']
-        if 'dispatchChannel' in data:
+        if "name" in data:
+            rule.name = data["name"]
+        if "threshold" in data:
+            rule.threshold = data["threshold"]
+        if "isActive" in data:
+            rule.is_active = data["isActive"]
+        if "dispatchChannel" in data:
             valid_channels = [c[0] for c in DISPATCH_CHANNELS]
-            if data['dispatchChannel'] not in valid_channels:
+            if data["dispatchChannel"] not in valid_channels:
                 return Response(
-                    {'detail': f'Invalid dispatchChannel. Must be one of: {", ".join(valid_channels)}'},
+                    {
+                        "detail": f"Invalid dispatchChannel. Must be one of: {', '.join(valid_channels)}"
+                    },
                     status=status.HTTP_400_BAD_REQUEST,
                 )
-            rule.dispatch_channel = data['dispatchChannel']
-        if 'webhookUrl' in data:
-            webhook_url = data['webhookUrl']
+            rule.dispatch_channel = data["dispatchChannel"]
+        if "webhookUrl" in data:
+            webhook_url = data["webhookUrl"]
             if webhook_url:
                 ssrf_error = validate_webhook_url(webhook_url)
                 if ssrf_error:
                     return Response(
-                        {'detail': f'Webhook URL rejected: {ssrf_error}', 'code': 'validation_error'},
+                        {
+                            "detail": f"Webhook URL rejected: {ssrf_error}",
+                            "code": "validation_error",
+                        },
                         status=status.HTTP_400_BAD_REQUEST,
                     )
             rule.webhook_url = webhook_url
-        if 'webhookSecret' in data:
-            rule.webhook_secret = data['webhookSecret']
-        if 'cooldownSeconds' in data:
-            rule.cooldown_seconds = data['cooldownSeconds']
-        if 'incidentTypeFilter' in data:
-            rule.incident_type_filter = data['incidentTypeFilter']
-        if 'severityFilter' in data:
-            rule.severity_filter = data['severityFilter']
-        if 'fiberIdFilter' in data:
-            rule.fiber_id_filter = data['fiberIdFilter']
-        if 'channelStart' in data:
-            rule.channel_start = data['channelStart']
-        if 'channelEnd' in data:
-            rule.channel_end = data['channelEnd']
+        if "webhookSecret" in data:
+            rule.webhook_secret = data["webhookSecret"]
+        if "cooldownSeconds" in data:
+            rule.cooldown_seconds = data["cooldownSeconds"]
+        if "incidentTypeFilter" in data:
+            rule.incident_type_filter = data["incidentTypeFilter"]
+        if "severityFilter" in data:
+            rule.severity_filter = data["severityFilter"]
+        if "fiberIdFilter" in data:
+            rule.fiber_id_filter = data["fiberIdFilter"]
+        if "channelStart" in data:
+            rule.channel_start = data["channelStart"]
+        if "channelEnd" in data:
+            rule.channel_end = data["channelEnd"]
         rule.save()
 
-        return Response({
-            'id': str(rule.pk),
-            'name': rule.name,
-            'ruleType': rule.rule_type,
-            'threshold': rule.threshold,
-            'isActive': rule.is_active,
-            'dispatchChannel': rule.dispatch_channel,
-        })
+        return Response(
+            {
+                "id": str(rule.pk),
+                "name": rule.name,
+                "ruleType": rule.rule_type,
+                "threshold": rule.threshold,
+                "isActive": rule.is_active,
+                "dispatchChannel": rule.dispatch_channel,
+            }
+        )
 
     def delete(self, request, rule_id):
         rule, error = self._get_rule(request, rule_id)
@@ -739,23 +825,36 @@ class FiberAssignmentListView(APIView):
 
     def get(self, request, org_id):
         assignments = FiberAssignment.objects.filter(organization_id=org_id)
-        results = [{'id': str(a.pk), 'fiberId': a.fiber_id, 'assignedAt': a.assigned_at.isoformat()} for a in assignments]
-        return Response({'results': results})
+        results = [
+            {"id": str(a.pk), "fiberId": a.fiber_id, "assignedAt": a.assigned_at.isoformat()}
+            for a in assignments
+        ]
+        return Response({"results": results})
 
     def post(self, request, org_id):
-        fiber_id = request.data.get('fiberId')
+        fiber_id = request.data.get("fiberId")
         if not fiber_id:
-            return Response({'detail': 'fiberId is required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "fiberId is required"}, status=status.HTTP_400_BAD_REQUEST)
         try:
             Organization.objects.get(pk=org_id)
         except Organization.DoesNotExist:
-            return Response({'detail': 'Organization not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Organization not found"}, status=status.HTTP_404_NOT_FOUND)
         if FiberAssignment.objects.filter(organization_id=org_id, fiber_id=fiber_id).exists():
-            return Response({'detail': 'Fiber already assigned to this organization'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Fiber already assigned to this organization"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         assignment = FiberAssignment.objects.create(organization_id=org_id, fiber_id=fiber_id)
         invalidate_org_fiber_cache(org_id)
         invalidate_fiber_org_map()
-        return Response({'id': str(assignment.pk), 'fiberId': assignment.fiber_id, 'assignedAt': assignment.assigned_at.isoformat()}, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "id": str(assignment.pk),
+                "fiberId": assignment.fiber_id,
+                "assignedAt": assignment.assigned_at.isoformat(),
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class FiberAssignmentDetailView(APIView):
@@ -765,7 +864,7 @@ class FiberAssignmentDetailView(APIView):
         try:
             assignment = FiberAssignment.objects.get(pk=assignment_id, organization_id=org_id)
         except FiberAssignment.DoesNotExist:
-            return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
         assignment.delete()
         invalidate_org_fiber_cache(org_id)
         invalidate_fiber_org_map()
@@ -783,39 +882,43 @@ class AlertLogListView(APIView):
     @add_cache_control()
     def get(self, request):
         from apps.alerting.models import AlertLog
-        search = request.GET.get('search', '').strip()
+
+        search = request.GET.get("search", "").strip()
 
         if request.user.is_superuser:
-            logs = AlertLog.objects.select_related('rule').all()
+            logs = AlertLog.objects.select_related("rule").all()
         else:
-            logs = AlertLog.objects.select_related('rule').filter(
+            logs = AlertLog.objects.select_related("rule").filter(
                 rule__organization=request.user.organization
             )
 
         # Apply search filter
         if search:
-            logs = logs.filter(
-                Q(rule__name__icontains=search) | Q(detail__icontains=search)
-            )
+            logs = logs.filter(Q(rule__name__icontains=search) | Q(detail__icontains=search))
 
         # Apply pagination
         page, pagination_data = paginate_queryset(request, logs)
 
-        results = [{
-            'id': str(log.pk),
-            'ruleName': log.rule.name,
-            'fiberId': log.fiber_id,
-            'channel': log.channel,
-            'detail': log.detail,
-            'dispatchedAt': log.dispatched_at.isoformat(),
-        } for log in page]
-        return Response({
-            'results': results,
-            'hasMore': pagination_data['hasMore'],
-            'limit': pagination_data['limit'],
-            'offset': pagination_data['offset'],
-            'total': pagination_data['total'],
-        })
+        results = [
+            {
+                "id": str(log.pk),
+                "ruleName": log.rule.name,
+                "fiberId": log.fiber_id,
+                "channel": log.channel,
+                "detail": log.detail,
+                "dispatchedAt": log.dispatched_at.isoformat(),
+            }
+            for log in page
+        ]
+        return Response(
+            {
+                "results": results,
+                "hasMore": pagination_data["hasMore"],
+                "limit": pagination_data["limit"],
+                "offset": pagination_data["offset"],
+                "total": pagination_data["total"],
+            }
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -829,40 +932,44 @@ class APIKeyListView(APIView):
     def get(self, request):
         scope = _get_org_scope(request.user)
         keys = APIKey.objects.filter(**scope, is_active=True)
-        results = [{
-            'id': str(k.pk),
-            'name': k.name,
-            'prefix': k.key_prefix,
-            'scopes': k.scopes,
-            'createdAt': k.created_at.isoformat(),
-            'lastUsedAt': k.last_used_at.isoformat() if k.last_used_at else None,
-            'expiresAt': k.expires_at.isoformat() if k.expires_at else None,
-        } for k in keys]
-        return Response({'results': results})
+        results = [
+            {
+                "id": str(k.pk),
+                "name": k.name,
+                "prefix": k.key_prefix,
+                "scopes": k.scopes,
+                "createdAt": k.created_at.isoformat(),
+                "lastUsedAt": k.last_used_at.isoformat() if k.last_used_at else None,
+                "expiresAt": k.expires_at.isoformat() if k.expires_at else None,
+            }
+            for k in keys
+        ]
+        return Response({"results": results})
 
     def post(self, request):
-        name = request.data.get('name')
+        name = request.data.get("name")
         if not name:
             return Response(
-                {'detail': 'name is required', 'code': 'validation_error'},
+                {"detail": "name is required", "code": "validation_error"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
         org = request.user.organization if not request.user.is_superuser else None
         if request.user.is_superuser:
-            org_id = request.data.get('organizationId')
+            org_id = request.data.get("organizationId")
             if org_id:
                 try:
                     org = Organization.objects.get(pk=org_id)
                 except Organization.DoesNotExist:
-                    return Response({'detail': 'Organization not found'}, status=400)
+                    return Response({"detail": "Organization not found"}, status=400)
             else:
-                return Response({'detail': 'organizationId required for superuser'}, status=400)
+                return Response({"detail": "organizationId required for superuser"}, status=400)
 
         from django.utils.dateparse import parse_datetime
+
         expires_at = None
-        if request.data.get('expiresAt'):
-            expires_at = parse_datetime(request.data['expiresAt'])
+        if request.data.get("expiresAt"):
+            expires_at = parse_datetime(request.data["expiresAt"])
 
         key_obj, raw_key = APIKey.generate(
             organization=org,
@@ -870,12 +977,15 @@ class APIKeyListView(APIView):
             created_by=request.user,
             expires_at=expires_at,
         )
-        return Response({
-            'id': str(key_obj.pk),
-            'name': key_obj.name,
-            'prefix': key_obj.key_prefix,
-            'key': raw_key,  # Only returned once at creation
-        }, status=status.HTTP_201_CREATED)
+        return Response(
+            {
+                "id": str(key_obj.pk),
+                "name": key_obj.name,
+                "prefix": key_obj.key_prefix,
+                "key": raw_key,  # Only returned once at creation
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class APIKeyDetailView(APIView):
@@ -886,9 +996,9 @@ class APIKeyDetailView(APIView):
         try:
             key_obj = APIKey.objects.get(pk=key_id, **scope)
         except APIKey.DoesNotExist:
-            return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
         key_obj.is_active = False
-        key_obj.save(update_fields=['is_active'])
+        key_obj.save(update_fields=["is_active"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -900,11 +1010,11 @@ class APIKeyRotateView(APIView):
         try:
             old_key = APIKey.objects.get(pk=key_id, **scope)
         except APIKey.DoesNotExist:
-            return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
 
         # Revoke old key
         old_key.is_active = False
-        old_key.save(update_fields=['is_active'])
+        old_key.save(update_fields=["is_active"])
 
         # Create new key with same config
         new_key, raw_key = APIKey.generate(
@@ -914,16 +1024,19 @@ class APIKeyRotateView(APIView):
             expires_at=old_key.expires_at,
             scopes=old_key.scopes,
         )
-        return Response({
-            'id': str(new_key.pk),
-            'name': new_key.name,
-            'prefix': new_key.key_prefix,
-            'key': raw_key,
-        })
+        return Response(
+            {
+                "id": str(new_key.pk),
+                "name": new_key.name,
+                "prefix": new_key.key_prefix,
+                "key": raw_key,
+            }
+        )
 
 
 class AlertRuleTestView(APIView):
     """Send a test webhook payload for an alert rule."""
+
     permission_classes = [IsAdminOrSuperuser]
 
     def post(self, request, rule_id):
@@ -931,8 +1044,11 @@ class AlertRuleTestView(APIView):
         try:
             rule = AlertRule.objects.get(pk=rule_id, **scope)
         except AlertRule.DoesNotExist:
-            return Response({'detail': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
 
         from apps.alerting.dispatch import _dispatch_webhook
-        _dispatch_webhook(rule, 'test-incident-id', 'test-fiber:0', 0, 'Test alert from SequoIA', test=True)
-        return Response({'detail': 'Test payload sent.'})
+
+        _dispatch_webhook(
+            rule, "test-incident-id", "test-fiber:0", 0, "Test alert from SequoIA", test=True
+        )
+        return Response({"detail": "Test payload sent."})

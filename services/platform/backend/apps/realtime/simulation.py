@@ -17,7 +17,7 @@ import random
 import threading
 import time
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 from channels.layers import get_channel_layer
@@ -25,7 +25,7 @@ from channels.layers import get_channel_layer
 from apps.alerting.integration import check_alerts_for_detections, check_alerts_for_incident
 from apps.shared.constants import MAP_REFRESH_INTERVAL
 
-logger = logging.getLogger('sequoia.simulation')
+logger = logging.getLogger("sequoia.simulation")
 
 # Global cache for simulation incidents (used by REST API fallback)
 _simulation_incidents_cache: list = []
@@ -41,16 +41,16 @@ def get_simulation_incidents() -> list:
 def _update_simulation_incidents_cache(incidents: list):
     """Update the global incidents cache from simulation engine."""
     from apps.monitoring.incident_service import transform_simulation_incident
+
     global _simulation_incidents_cache
     with _simulation_incidents_lock:
-        _simulation_incidents_cache = [
-            transform_simulation_incident(i)
-            for i in incidents
-        ]
+        _simulation_incidents_cache = [transform_simulation_incident(i) for i in incidents]
+
 
 # ============================================================================
 # TYPES
 # ============================================================================
+
 
 @dataclass
 class FiberConfig:
@@ -61,7 +61,7 @@ class FiberConfig:
     channel_count: int
     lanes: int = 4
     speed_limit: float = 110.0
-    traffic_density: str = 'medium'
+    traffic_density: str = "medium"
 
 
 @dataclass
@@ -98,7 +98,7 @@ class Incident:
     fiber_line: str
     channel: int
     detected_at: str
-    status: str = 'active'
+    status: str = "active"
     duration: Optional[float] = None
 
 
@@ -115,34 +115,75 @@ class SHMReading:
 # ============================================================================
 
 VEHICLE_PROFILES = {
-    'car': {'min_speed': 60, 'max_speed': 130, 'accel': 3.5, 'decel': 6, 'length': 1.5},
-    'truck': {'min_speed': 40, 'max_speed': 90, 'accel': 1.5, 'decel': 4, 'length': 4},
-    'motorcycle': {'min_speed': 50, 'max_speed': 150, 'accel': 5, 'decel': 7, 'length': 0.8},
-    'bus': {'min_speed': 40, 'max_speed': 100, 'accel': 2, 'decel': 5, 'length': 3.5},
+    "car": {"min_speed": 60, "max_speed": 130, "accel": 3.5, "decel": 6, "length": 1.5},
+    "truck": {"min_speed": 40, "max_speed": 90, "accel": 1.5, "decel": 4, "length": 4},
+    "motorcycle": {"min_speed": 50, "max_speed": 150, "accel": 5, "decel": 7, "length": 0.8},
+    "bus": {"min_speed": 40, "max_speed": 100, "accel": 2, "decel": 5, "length": 3.5},
 }
 
 METERS_PER_CHANNEL = 5
 SAFE_FOLLOWING_SECONDS = 2
 MIN_GAP_CHANNELS = 3
-VEHICLE_TYPES = ['car', 'car', 'car', 'car', 'truck', 'motorcycle', 'bus']
+VEHICLE_TYPES = ["car", "car", "car", "car", "truck", "motorcycle", "bus"]
 
 DAILY_TRAFFIC = [
-    0.2, 0.1, 0.1, 0.1, 0.15, 0.3, 0.6, 0.9, 1.0, 0.85,
-    0.7, 0.75, 0.8, 0.75, 0.7, 0.75, 0.85, 1.0, 0.95, 0.8,
-    0.6, 0.45, 0.35, 0.25,
+    0.2,
+    0.1,
+    0.1,
+    0.1,
+    0.15,
+    0.3,
+    0.6,
+    0.9,
+    1.0,
+    0.85,
+    0.7,
+    0.75,
+    0.8,
+    0.75,
+    0.7,
+    0.75,
+    0.85,
+    1.0,
+    0.95,
+    0.8,
+    0.6,
+    0.45,
+    0.35,
+    0.25,
 ]
 
-BASE_SPAWN_RATES = {'low': 4, 'medium': 10, 'high': 20}
+BASE_SPAWN_RATES = {"low": 4, "medium": 10, "high": 20}
 
 INCIDENT_CONFIGS = [
-    {'type': 'slowdown', 'prob': 0.3, 'dur': (300_000, 1_800_000), 'weights': [0.4, 0.4, 0.15, 0.05]},
-    {'type': 'congestion', 'prob': 0.5, 'dur': (900_000, 3_600_000), 'weights': [0.3, 0.5, 0.15, 0.05]},
-    {'type': 'accident', 'prob': 0.05, 'dur': (1_800_000, 7_200_000), 'weights': [0.1, 0.3, 0.4, 0.2]},
-    {'type': 'anomaly', 'prob': 0.15, 'dur': (600_000, 3_600_000), 'weights': [0.5, 0.3, 0.15, 0.05]},
+    {
+        "type": "slowdown",
+        "prob": 0.3,
+        "dur": (300_000, 1_800_000),
+        "weights": [0.4, 0.4, 0.15, 0.05],
+    },
+    {
+        "type": "congestion",
+        "prob": 0.5,
+        "dur": (900_000, 3_600_000),
+        "weights": [0.3, 0.5, 0.15, 0.05],
+    },
+    {
+        "type": "accident",
+        "prob": 0.05,
+        "dur": (1_800_000, 7_200_000),
+        "weights": [0.1, 0.3, 0.4, 0.2],
+    },
+    {
+        "type": "anomaly",
+        "prob": 0.15,
+        "dur": (600_000, 3_600_000),
+        "weights": [0.5, 0.3, 0.15, 0.05],
+    },
 ]
-SEVERITIES = ['low', 'medium', 'high', 'critical']
+SEVERITIES = ["low", "medium", "high", "critical"]
 
-INFRA_BASE_FREQ = {'bridge': 5.0, 'tunnel': 15.0}
+INFRA_BASE_FREQ = {"bridge": 5.0, "tunnel": 15.0}
 
 
 def _weighted_choice(items, weights):
@@ -159,9 +200,9 @@ def _create_vehicle(fiber: FiberConfig, channel: float, direction: int, lane: in
     vtype = random.choice(VEHICLE_TYPES)
     profile = VEHICLE_PROFILES[vtype]
     speed_var = 0.8 + random.random() * 0.4
-    target = min(profile['max_speed'], fiber.speed_limit * speed_var)
+    target = min(profile["max_speed"], fiber.speed_limit * speed_var)
     return Vehicle(
-        id=f'v-{int(time.time()*1000)}-{uuid.uuid4().hex[:6]}',
+        id=f"v-{int(time.time() * 1000)}-{uuid.uuid4().hex[:6]}",
         fiber_line=fiber.id,
         channel=channel,
         speed=target * (0.7 + random.random() * 0.3),
@@ -174,8 +215,13 @@ def _create_vehicle(fiber: FiberConfig, channel: float, direction: int, lane: in
     )
 
 
-def _update_vehicle(v: Vehicle, vehicles: list[Vehicle], fiber: FiberConfig,
-                     incidents: list[Incident], delta_s: float) -> Optional[Vehicle]:
+def _update_vehicle(
+    v: Vehicle,
+    vehicles: list[Vehicle],
+    fiber: FiberConfig,
+    incidents: list[Incident],
+    delta_s: float,
+) -> Optional[Vehicle]:
     profile = VEHICLE_PROFILES[v.vehicle_type]
 
     if v.channel < 0 or v.channel >= fiber.channel_count:
@@ -185,11 +231,16 @@ def _update_vehicle(v: Vehicle, vehicles: list[Vehicle], fiber: FiberConfig,
 
     # Find vehicle ahead in same lane
     ahead = [
-        o for o in vehicles
-        if o.id != v.id and o.fiber_line == v.fiber_line
-        and o.lane == v.lane and o.direction == v.direction
-        and ((v.direction == 0 and o.channel > v.channel) or
-             (v.direction == 1 and o.channel < v.channel))
+        o
+        for o in vehicles
+        if o.id != v.id
+        and o.fiber_line == v.fiber_line
+        and o.lane == v.lane
+        and o.direction == v.direction
+        and (
+            (v.direction == 0 and o.channel > v.channel)
+            or (v.direction == 1 and o.channel < v.channel)
+        )
     ]
     if ahead:
         ahead.sort(key=lambda o: abs(o.channel - v.channel))
@@ -201,7 +252,7 @@ def _update_vehicle(v: Vehicle, vehicles: list[Vehicle], fiber: FiberConfig,
 
     # Incident slowdown
     for inc in incidents:
-        if inc.fiber_line == v.fiber_line and inc.status == 'active':
+        if inc.fiber_line == v.fiber_line and inc.status == "active":
             dist = abs(inc.channel - v.channel)
             if dist < 30:
                 effective_target *= 0.3
@@ -211,30 +262,30 @@ def _update_vehicle(v: Vehicle, vehicles: list[Vehicle], fiber: FiberConfig,
     # Car-following
     new_speed = v.speed
     if vehicle_ahead:
-        gap = abs(vehicle_ahead.channel - v.channel) - profile['length']
+        gap = abs(vehicle_ahead.channel - v.channel) - profile["length"]
         safe_gap = MIN_GAP_CHANNELS + (v.speed / 3.6) * SAFE_FOLLOWING_SECONDS / METERS_PER_CHANNEL
         if gap < safe_gap:
             rel_speed = v.speed - vehicle_ahead.speed
             braking = min(1.0, (safe_gap - gap) / safe_gap + rel_speed / 50)
-            new_speed -= profile['decel'] * delta_s * braking * (2 - v.aggressiveness)
+            new_speed -= profile["decel"] * delta_s * braking * (2 - v.aggressiveness)
         elif gap < safe_gap * 2:
             target_match = vehicle_ahead.speed * 0.95
             if v.speed > target_match:
-                new_speed -= profile['decel'] * delta_s * 0.3
+                new_speed -= profile["decel"] * delta_s * 0.3
             else:
-                new_speed += profile['accel'] * delta_s * 0.5
+                new_speed += profile["accel"] * delta_s * 0.5
         else:
             if v.speed < effective_target:
-                new_speed += profile['accel'] * delta_s
+                new_speed += profile["accel"] * delta_s
             elif v.speed > effective_target:
-                new_speed -= profile['decel'] * delta_s * 0.5
+                new_speed -= profile["decel"] * delta_s * 0.5
     else:
         if v.speed < effective_target:
-            new_speed += profile['accel'] * delta_s
+            new_speed += profile["accel"] * delta_s
         elif v.speed > effective_target:
-            new_speed -= profile['decel'] * delta_s * 0.3
+            new_speed -= profile["decel"] * delta_s * 0.3
 
-    new_speed = max(0.0, min(profile['max_speed'], new_speed))
+    new_speed = max(0.0, min(profile["max_speed"], new_speed))
 
     # Move
     m_per_ms = (new_speed * 1000) / 3_600_000
@@ -250,20 +301,26 @@ def _update_vehicle(v: Vehicle, vehicles: list[Vehicle], fiber: FiberConfig,
 # ORG-SCOPED BROADCAST HELPERS
 # ============================================================================
 
+
 async def _load_fiber_org_map() -> dict[str, list[str]]:
     """Load fiber→org mapping from DB (cached)."""
     from asgiref.sync import sync_to_async
+
     from apps.fibers.utils import get_fiber_org_map
+
     return await sync_to_async(get_fiber_org_map)()
 
 
 def _load_infra_org_map(infrastructure: list[dict]) -> dict[str, str]:
     """Build infrastructure_id → org_id mapping from infrastructure list."""
-    return {infra['id']: infra.get('organization_id', '') for infra in infrastructure}
+    return {infra["id"]: infra.get("organization_id", "") for infra in infrastructure}
 
 
 async def _broadcast_to_orgs(
-    channel_layer, channel: str, data, fiber_org_map: dict[str, list[str]],
+    channel_layer,
+    channel: str,
+    data,
+    fiber_org_map: dict[str, list[str]],
     fiber_ids: set[str] | None = None,
 ):
     """
@@ -277,13 +334,13 @@ async def _broadcast_to_orgs(
         fiber_ids: Set of fiber_ids in this data batch (None = send to all orgs)
     """
     message = {
-        'type': 'broadcast_message',
-        'channel': channel,
-        'data': data,
+        "type": "broadcast_message",
+        "channel": channel,
+        "data": data,
     }
 
     # Always send to superuser group
-    await channel_layer.group_send(f'realtime_{channel}_org___all__', message)
+    await channel_layer.group_send(f"realtime_{channel}_org___all__", message)
 
     if fiber_ids is None:
         # Broadcast to all known orgs
@@ -292,26 +349,25 @@ async def _broadcast_to_orgs(
             for org_id in org_ids:
                 if org_id not in sent_orgs:
                     sent_orgs.add(org_id)
-                    await channel_layer.group_send(
-                        f'realtime_{channel}_org_{org_id}', message
-                    )
+                    await channel_layer.group_send(f"realtime_{channel}_org_{org_id}", message)
     else:
         # Broadcast to orgs that own these specific fibers
         # Strip directional suffix for org lookup
         sent_orgs = set()
         for fid in fiber_ids:
-            parent_fid = fid.rsplit(':', 1)[0] if ':' in fid else fid
+            parent_fid = fid.rsplit(":", 1)[0] if ":" in fid else fid
             for org_id in fiber_org_map.get(parent_fid, []):
                 if org_id not in sent_orgs:
                     sent_orgs.add(org_id)
-                    await channel_layer.group_send(
-                        f'realtime_{channel}_org_{org_id}', message
-                    )
+                    await channel_layer.group_send(f"realtime_{channel}_org_{org_id}", message)
 
 
 async def _broadcast_per_org(
-    channel_layer, channel: str, items: list[dict], fiber_org_map: dict[str, list[str]],
-    fiber_key: str = 'fiberLine',
+    channel_layer,
+    channel: str,
+    items: list[dict],
+    fiber_org_map: dict[str, list[str]],
+    fiber_key: str = "fiberLine",
 ):
     """
     Group items by fiber_id, then send each org only the items from their fibers.
@@ -323,31 +379,38 @@ async def _broadcast_per_org(
         return
 
     # Always send full data to superuser group
-    await channel_layer.group_send(f'realtime_{channel}_org___all__', {
-        'type': 'broadcast_message',
-        'channel': channel,
-        'data': items,
-    })
+    await channel_layer.group_send(
+        f"realtime_{channel}_org___all__",
+        {
+            "type": "broadcast_message",
+            "channel": channel,
+            "data": items,
+        },
+    )
 
     # Group items by org (strip directional suffix for org lookup)
     org_items: dict[str, list[dict]] = {}
     for item in items:
-        fid = item.get(fiber_key, '')
-        parent_fid = fid.rsplit(':', 1)[0] if ':' in fid else fid
+        fid = item.get(fiber_key, "")
+        parent_fid = fid.rsplit(":", 1)[0] if ":" in fid else fid
         for org_id in fiber_org_map.get(parent_fid, []):
             org_items.setdefault(org_id, []).append(item)
 
     for org_id, org_data in org_items.items():
-        await channel_layer.group_send(f'realtime_{channel}_org_{org_id}', {
-            'type': 'broadcast_message',
-            'channel': channel,
-            'data': org_data,
-        })
+        await channel_layer.group_send(
+            f"realtime_{channel}_org_{org_id}",
+            {
+                "type": "broadcast_message",
+                "channel": channel,
+                "data": org_data,
+            },
+        )
 
 
 # ============================================================================
 # SIMULATION ENGINE
 # ============================================================================
+
 
 class SimulationEngine:
     """Self-contained traffic simulation that broadcasts via Channels."""
@@ -365,20 +428,36 @@ class SimulationEngine:
         self.shm_base_freq = {}
         self.shm_phase = {}
         for infra in infrastructure:
-            iid = infra['id']
-            self.shm_base_freq[iid] = INFRA_BASE_FREQ.get(infra['type'], 10) + (random.random() - 0.5) * 2
+            iid = infra["id"]
+            self.shm_base_freq[iid] = (
+                INFRA_BASE_FREQ.get(infra["type"], 10) + (random.random() - 0.5) * 2
+            )
             self.shm_phase[iid] = random.random() * math.pi * 2
 
         # Spawn points
         self.spawn_points = []
         for fiber in fibers:
             rate = BASE_SPAWN_RATES.get(fiber.traffic_density, 10)
-            self.spawn_points.append({'fiber': fiber.id, 'ch': 5, 'dir': 0, 'rate': rate, 'last': 0})
-            self.spawn_points.append({'fiber': fiber.id, 'ch': fiber.channel_count - 5, 'dir': 1, 'rate': rate, 'last': 0})
+            self.spawn_points.append(
+                {"fiber": fiber.id, "ch": 5, "dir": 0, "rate": rate, "last": 0}
+            )
+            self.spawn_points.append(
+                {
+                    "fiber": fiber.id,
+                    "ch": fiber.channel_count - 5,
+                    "dir": 1,
+                    "rate": rate,
+                    "last": 0,
+                }
+            )
             if fiber.channel_count > 200:
                 mid = fiber.channel_count // 2
-                self.spawn_points.append({'fiber': fiber.id, 'ch': mid, 'dir': 0, 'rate': rate * 0.3, 'last': 0})
-                self.spawn_points.append({'fiber': fiber.id, 'ch': mid, 'dir': 1, 'rate': rate * 0.3, 'last': 0})
+                self.spawn_points.append(
+                    {"fiber": fiber.id, "ch": mid, "dir": 0, "rate": rate * 0.3, "last": 0}
+                )
+                self.spawn_points.append(
+                    {"fiber": fiber.id, "ch": mid, "dir": 1, "rate": rate * 0.3, "last": 0}
+                )
 
         # Pre-generate historical incidents
         self._generate_historical_incidents()
@@ -395,27 +474,31 @@ class SimulationEngine:
             fiber = random.choice(self.fibers)
             ch = 50 + random.randint(0, max(1, fiber.channel_count - 100))
             cfg = random.choice(INCIDENT_CONFIGS)
-            severity = _weighted_choice(SEVERITIES, cfg['weights'])
+            severity = _weighted_choice(SEVERITIES, cfg["weights"])
 
             # Incidents detected within the last 0-60 seconds (staggered)
             seconds_ago = (i / num_incidents) * 60  # Spread over first minute
             detected_at = now_ms - seconds_ago * 1000
 
             # Long duration to ensure they stay active
-            dur = cfg['dur'][1]  # Use max duration
+            dur = cfg["dur"][1]  # Use max duration
 
-            self.incidents.append(Incident(
-                id=f'inc-startup-{i}-{uuid.uuid4().hex[:4]}',
-                type=cfg['type'],
-                severity=severity,
-                fiber_line=fiber.id,
-                channel=ch,
-                detected_at=time.strftime('%Y-%m-%dT%H:%M:%S.000Z', time.gmtime(detected_at / 1000)),
-                status='active',
-                duration=dur,
-            ))
+            self.incidents.append(
+                Incident(
+                    id=f"inc-startup-{i}-{uuid.uuid4().hex[:4]}",
+                    type=cfg["type"],
+                    severity=severity,
+                    fiber_line=fiber.id,
+                    channel=ch,
+                    detected_at=time.strftime(
+                        "%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(detected_at / 1000)
+                    ),
+                    status="active",
+                    duration=dur,
+                )
+            )
 
-        logger.info('Generated %d startup incidents', num_incidents)
+        logger.info("Generated %d startup incidents", num_incidents)
 
     def _generate_historical_incidents(self):
         now_ms = time.time() * 1000
@@ -423,19 +506,25 @@ class SimulationEngine:
             fiber = random.choice(self.fibers)
             ch = 50 + random.randint(0, max(1, fiber.channel_count - 100))
             cfg = random.choice(INCIDENT_CONFIGS)
-            severity = _weighted_choice(SEVERITIES, cfg['weights'])
+            severity = _weighted_choice(SEVERITIES, cfg["weights"])
             hours_ago = (random.random() ** 2) * 168
             detected_at = now_ms - hours_ago * 3_600_000
-            dur = cfg['dur'][0] + random.random() * (cfg['dur'][1] - cfg['dur'][0])
+            dur = cfg["dur"][0] + random.random() * (cfg["dur"][1] - cfg["dur"][0])
             elapsed = now_ms - detected_at
-            self.incidents.append(Incident(
-                id=f'inc-hist-{i}-{uuid.uuid4().hex[:4]}',
-                type=cfg['type'], severity=severity,
-                fiber_line=fiber.id, channel=ch,
-                detected_at=time.strftime('%Y-%m-%dT%H:%M:%S.000Z', time.gmtime(detected_at / 1000)),
-                status='resolved' if elapsed > dur else 'active',
-                duration=dur,
-            ))
+            self.incidents.append(
+                Incident(
+                    id=f"inc-hist-{i}-{uuid.uuid4().hex[:4]}",
+                    type=cfg["type"],
+                    severity=severity,
+                    fiber_line=fiber.id,
+                    channel=ch,
+                    detected_at=time.strftime(
+                        "%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(detected_at / 1000)
+                    ),
+                    status="resolved" if elapsed > dur else "active",
+                    duration=dur,
+                )
+            )
 
     def _density_multiplier(self) -> float:
         h = int(self.simulated_hour) % 24
@@ -454,7 +543,7 @@ class SimulationEngine:
         hours = (delta_ms / 1000 / 3600) * self.hour_advance_rate
         self.simulated_hour = (self.simulated_hour + hours) % 24
 
-        active_incidents = [i for i in self.incidents if i.status == 'active']
+        active_incidents = [i for i in self.incidents if i.status == "active"]
 
         # Update vehicles
         surviving = []
@@ -469,25 +558,26 @@ class SimulationEngine:
         # Spawn new vehicles
         density_mult = self._density_multiplier()
         for sp in self.spawn_points:
-            fiber = next((f for f in self.fibers if f.id == sp['fiber']), None)
+            fiber = next((f for f in self.fibers if f.id == sp["fiber"]), None)
             if not fiber:
                 continue
-            eff_rate = sp['rate'] * density_mult
+            eff_rate = sp["rate"] * density_mult
             ms_per_vehicle = 60_000 / max(eff_rate, 0.1)
-            if (now_ms - sp['last']) < ms_per_vehicle:
+            if (now_ms - sp["last"]) < ms_per_vehicle:
                 continue
             too_close = any(
-                v.fiber_line == sp['fiber'] and v.direction == sp['dir']
-                and abs(v.channel - sp['ch']) < 15
+                v.fiber_line == sp["fiber"]
+                and v.direction == sp["dir"]
+                and abs(v.channel - sp["ch"]) < 15
                 for v in self.vehicles
             )
             if too_close:
                 continue
             lanes_per_dir = fiber.lanes // 2
-            base_lane = 0 if sp['dir'] == 0 else lanes_per_dir
+            base_lane = 0 if sp["dir"] == 0 else lanes_per_dir
             lane = base_lane + random.randint(0, max(0, lanes_per_dir - 1))
-            self.vehicles.append(_create_vehicle(fiber, sp['ch'], sp['dir'], lane))
-            sp['last'] = now_ms
+            self.vehicles.append(_create_vehicle(fiber, sp["ch"], sp["dir"], lane))
+            sp["last"] = now_ms
 
         # Generate detections (group nearby vehicles)
         detections = self._generate_detections()
@@ -497,36 +587,41 @@ class SimulationEngine:
         resolved_incidents = []
 
         for inc in self.incidents:
-            if inc.status == 'active' and inc.duration:
+            if inc.status == "active" and inc.duration:
                 try:
-                    detected_ts = time.mktime(time.strptime(inc.detected_at[:19], '%Y-%m-%dT%H:%M:%S')) * 1000
+                    detected_ts = (
+                        time.mktime(time.strptime(inc.detected_at[:19], "%Y-%m-%dT%H:%M:%S")) * 1000
+                    )
                 except ValueError:
                     detected_ts = now_ms
                 if now_ms - detected_ts > inc.duration:
-                    inc.status = 'resolved'
+                    inc.status = "resolved"
                     resolved_incidents.append(inc)
 
         # Maybe generate new incidents (15x multiplier for dev testing)
         hours_frac = delta_ms / 3_600_000 * 15
         for cfg in INCIDENT_CONFIGS:
-            if random.random() > cfg['prob'] * hours_frac:
+            if random.random() > cfg["prob"] * hours_frac:
                 continue
             fiber = random.choice(self.fibers)
             ch = random.randint(10, max(11, fiber.channel_count - 10))
-            severity = _weighted_choice(SEVERITIES, cfg['weights'])
-            dur = (cfg['dur'][0] + random.random() * (cfg['dur'][1] - cfg['dur'][0])) / 15
+            severity = _weighted_choice(SEVERITIES, cfg["weights"])
+            dur = (cfg["dur"][0] + random.random() * (cfg["dur"][1] - cfg["dur"][0])) / 15
             inc = Incident(
-                id=f'inc-{int(now_ms)}-{uuid.uuid4().hex[:4]}',
-                type=cfg['type'], severity=severity,
-                fiber_line=fiber.id, channel=ch,
-                detected_at=time.strftime('%Y-%m-%dT%H:%M:%S.000Z', time.gmtime(now)),
-                status='active', duration=dur,
+                id=f"inc-{int(now_ms)}-{uuid.uuid4().hex[:4]}",
+                type=cfg["type"],
+                severity=severity,
+                fiber_line=fiber.id,
+                channel=ch,
+                detected_at=time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(now)),
+                status="active",
+                duration=dur,
             )
             self.incidents.append(inc)
             new_incidents.append(inc)
 
         # Prune old resolved (keep last 50)
-        resolved_all = [i for i in self.incidents if i.status == 'resolved']
+        resolved_all = [i for i in self.incidents if i.status == "resolved"]
         if len(resolved_all) > 50:
             to_remove = set(id(i) for i in resolved_all[:-50])
             self.incidents = [i for i in self.incidents if id(i) not in to_remove]
@@ -544,9 +639,12 @@ class SimulationEngine:
             if v.id in processed:
                 continue
             nearby = [
-                o for o in sorted_v
-                if o.id not in processed and o.fiber_line == v.fiber_line
-                and o.direction == v.direction and abs(o.channel - v.channel) < 8
+                o
+                for o in sorted_v
+                if o.id not in processed
+                and o.fiber_line == v.fiber_line
+                and o.direction == v.direction
+                and abs(o.channel - v.channel) < 8
             ]
             if not nearby:
                 continue
@@ -557,16 +655,18 @@ class SimulationEngine:
             ch_noise = (random.random() - 0.5) * 4
             sp_noise = (random.random() - 0.5) * 10
             count = len(nearby)
-            detections.append(Detection(
-                fiber_line=v.fiber_line,
-                channel=round(avg_ch + ch_noise),
-                speed=max(0.0, avg_sp + sp_noise),
-                count=count,
-                n_cars=count,
-                n_trucks=0,
-                direction=v.direction,
-                timestamp=now_ms,
-            ))
+            detections.append(
+                Detection(
+                    fiber_line=v.fiber_line,
+                    channel=round(avg_ch + ch_noise),
+                    speed=max(0.0, avg_sp + sp_noise),
+                    count=count,
+                    n_cars=count,
+                    n_trucks=0,
+                    direction=v.direction,
+                    timestamp=now_ms,
+                )
+            )
         return detections
 
     def generate_shm_readings(self) -> list[SHMReading]:
@@ -577,7 +677,7 @@ class SimulationEngine:
         vehicle_count = len(self.vehicles)
 
         for infra in self.infrastructure:
-            iid = infra['id']
+            iid = infra["id"]
             base_freq = self.shm_base_freq.get(iid, 10.0)
             phase = self.shm_phase.get(iid, 0)
             load_factor = 1 - (vehicle_count / 2000) * 0.05
@@ -592,18 +692,21 @@ class SimulationEngine:
             noise_amp = random.random() * 0.1
             amp = min(1.0, base_amp + traffic_amp + vib_amp + noise_amp)
 
-            readings.append(SHMReading(
-                infrastructure_id=iid,
-                frequency=round(freq, 2),
-                amplitude=round(amp, 2),
-                timestamp=now_ms,
-            ))
+            readings.append(
+                SHMReading(
+                    infrastructure_id=iid,
+                    frequency=round(freq, 2),
+                    amplitude=round(amp, 2),
+                    timestamp=now_ms,
+                )
+            )
         return readings
 
 
 # ============================================================================
 # ASYNC BROADCAST LOOP
 # ============================================================================
+
 
 async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[dict]):
     """Main async loop — runs the simulation and broadcasts via Channels."""
@@ -616,15 +719,22 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
     last_map_refresh = time.time()
 
     logger.info(
-        'Simulation started: %d fibers, %d infrastructure, hour=%.1f, %d org mappings',
-        len(fibers), len(infrastructure), engine.simulated_hour, len(fiber_org_map),
+        "Simulation started: %d fibers, %d infrastructure, hour=%.1f, %d org mappings",
+        len(fibers),
+        len(infrastructure),
+        engine.simulated_hour,
+        len(fiber_org_map),
     )
 
     # Broadcast initial incidents (to all orgs) and update cache for REST API
     from apps.monitoring.incident_service import transform_simulation_incident
+
     initial_incidents = [transform_simulation_incident(i) for i in engine.incidents]
     await _broadcast_per_org(
-        channel_layer, 'incidents', initial_incidents, fiber_org_map,
+        channel_layer,
+        "incidents",
+        initial_incidents,
+        fiber_org_map,
     )
     _update_simulation_incidents_cache(engine.incidents)
 
@@ -636,7 +746,9 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
     detection_broadcast_interval = 0.1  # 100ms (10 Hz)
     pending_detections: list[Detection] = []  # Accumulate detections between broadcasts
     pending_new_incidents: list[Incident] = []  # Accumulate new incidents between broadcasts
-    pending_resolved_incidents: list[Incident] = []  # Accumulate resolved incidents between broadcasts
+    pending_resolved_incidents: list[
+        Incident
+    ] = []  # Accumulate resolved incidents between broadcasts
 
     while True:
         tick_start = time.time()
@@ -664,26 +776,29 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
             last_detection_broadcast = tick_start
             detection_dicts = [
                 {
-                    'fiberLine': f'{d.fiber_line}:{d.direction}',
-                    'channel': d.channel,
-                    'speed': round(d.speed, 1),
-                    'count': d.count,
-                    'nCars': d.n_cars,
-                    'nTrucks': d.n_trucks,
-                    'direction': d.direction,
-                    'timestamp': d.timestamp,
+                    "fiberLine": f"{d.fiber_line}:{d.direction}",
+                    "channel": d.channel,
+                    "speed": round(d.speed, 1),
+                    "count": d.count,
+                    "nCars": d.n_cars,
+                    "nTrucks": d.n_trucks,
+                    "direction": d.direction,
+                    "timestamp": d.timestamp,
                 }
                 for d in pending_detections
             ]
             pending_detections.clear()
             await _broadcast_per_org(
-                channel_layer, 'detections', detection_dicts, fiber_org_map,
+                channel_layer,
+                "detections",
+                detection_dicts,
+                fiber_org_map,
             )
             # Check alerts for detections (per-org)
             org_detections: dict[str, list[dict]] = {}
             for det in detection_dicts:
-                fid = det.get('fiberLine', '')
-                parent_fid = fid.rsplit(':', 1)[0] if ':' in fid else fid
+                fid = det.get("fiberLine", "")
+                parent_fid = fid.rsplit(":", 1)[0] if ":" in fid else fid
                 for org_id in fiber_org_map.get(parent_fid, []):
                     org_detections.setdefault(org_id, []).append(det)
             for org_id, org_dets in org_detections.items():
@@ -696,30 +811,34 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
             if readings:
                 shm_dicts = [
                     {
-                        'infrastructureId': r.infrastructure_id,
-                        'frequency': r.frequency,
-                        'amplitude': r.amplitude,
-                        'timestamp': r.timestamp,
+                        "infrastructureId": r.infrastructure_id,
+                        "frequency": r.frequency,
+                        "amplitude": r.amplitude,
+                        "timestamp": r.timestamp,
                     }
                     for r in readings
                 ]
                 # Group SHM readings by org based on infrastructure ownership
                 org_shm: dict[str, list[dict]] = {}
                 for shm in shm_dicts:
-                    org_id = infra_org_map.get(shm['infrastructureId'], '')
+                    org_id = infra_org_map.get(shm["infrastructureId"], "")
                     if org_id:
                         org_shm.setdefault(org_id, []).append(shm)
 
                 # Send to superuser group
                 await channel_layer.group_send(
-                    'realtime_shm_readings_org___all__',
-                    {'type': 'broadcast_message', 'channel': 'shm_readings', 'data': shm_dicts},
+                    "realtime_shm_readings_org___all__",
+                    {"type": "broadcast_message", "channel": "shm_readings", "data": shm_dicts},
                 )
                 # Send per-org
                 for org_id, org_readings in org_shm.items():
                     await channel_layer.group_send(
-                        f'realtime_shm_readings_org_{org_id}',
-                        {'type': 'broadcast_message', 'channel': 'shm_readings', 'data': org_readings},
+                        f"realtime_shm_readings_org_{org_id}",
+                        {
+                            "type": "broadcast_message",
+                            "channel": "shm_readings",
+                            "data": org_readings,
+                        },
                     )
 
         # Broadcast incidents every 100 ticks (5 seconds) — per-org
@@ -729,9 +848,12 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
             _update_simulation_incidents_cache(engine.incidents)
             for inc in pending_new_incidents + pending_resolved_incidents:
                 inc_data = transform_simulation_incident(inc)
-                directional_fid = inc_data['fiberLine']
+                directional_fid = inc_data["fiberLine"]
                 await _broadcast_to_orgs(
-                    channel_layer, 'incidents', inc_data, fiber_org_map,
+                    channel_layer,
+                    "incidents",
+                    inc_data,
+                    fiber_org_map,
                     fiber_ids={directional_fid},
                 )
                 # Check alerts for incident
@@ -745,15 +867,20 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
             counts = _compute_section_counts(engine)
             if counts:
                 await _broadcast_per_org(
-                    channel_layer, 'counts', counts, fiber_org_map,
+                    channel_layer,
+                    "counts",
+                    counts,
+                    fiber_org_map,
                 )
 
         # Log stats periodically
         if engine.tick_count % 400 == 0:
-            active = sum(1 for i in engine.incidents if i.status == 'active')
+            active = sum(1 for i in engine.incidents if i.status == "active")
             logger.info(
-                '[%.1fh] Vehicles: %d | Active incidents: %d',
-                engine.simulated_hour, len(engine.vehicles), active,
+                "[%.1fh] Vehicles: %d | Active incidents: %d",
+                engine.simulated_hour,
+                len(engine.vehicles),
+                active,
             )
 
         # Sleep for remaining tick time (minimum 1ms to allow event loop I/O)
@@ -779,19 +906,22 @@ def _compute_section_counts(engine: SimulationEngine) -> list[dict]:
                 end_ch = min(start_ch + section_size - 1, fiber.channel_count - 1)
 
                 vehicle_count = sum(
-                    1 for v in engine.vehicles
+                    1
+                    for v in engine.vehicles
                     if v.fiber_line == fiber.id
                     and v.direction == direction
                     and start_ch <= v.channel <= end_ch
                 )
 
                 if vehicle_count > 0:
-                    counts.append({
-                        'fiberLine': f'{fiber.id}:{direction}',
-                        'channelStart': start_ch,
-                        'channelEnd': end_ch,
-                        'vehicleCount': float(vehicle_count),
-                        'timestamp': now_ms,
-                    })
+                    counts.append(
+                        {
+                            "fiberLine": f"{fiber.id}:{direction}",
+                            "channelStart": start_ch,
+                            "channelEnd": end_ch,
+                            "vehicleCount": float(vehicle_count),
+                            "timestamp": now_ms,
+                        }
+                    )
 
     return counts

@@ -17,15 +17,15 @@ import logging
 from enum import Enum
 from typing import Optional
 
-logger = logging.getLogger('sequoia.simulation')
+logger = logging.getLogger("sequoia.simulation")
 
 
 class SimulationStatus(str, Enum):
-    IDLE = 'idle'
-    STARTING = 'starting'
-    RUNNING = 'running'
-    FAILED = 'failed'
-    STOPPED = 'stopped'
+    IDLE = "idle"
+    STARTING = "starting"
+    RUNNING = "running"
+    FAILED = "failed"
+    STOPPED = "stopped"
 
 
 class SimulationManager:
@@ -38,16 +38,16 @@ class SimulationManager:
     - Status is observable via health checks
     """
 
-    _instance: Optional['SimulationManager'] = None
+    _instance: Optional["SimulationManager"] = None
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._task: Optional[asyncio.Task] = None
-        self._status = SimulationStatus.IDLE
+        self._status: SimulationStatus = SimulationStatus.IDLE
         self._error: Optional[str] = None
-        self._started = False
+        self._started: bool = False
 
     @classmethod
-    def instance(cls) -> 'SimulationManager':
+    def instance(cls) -> "SimulationManager":
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
@@ -81,7 +81,7 @@ class SimulationManager:
 
         from django.conf import settings
 
-        if not getattr(settings, 'REALTIME_AUTO_START_SIMULATION', False):
+        if not getattr(settings, "REALTIME_AUTO_START_SIMULATION", False):
             return
 
         self._started = True
@@ -90,7 +90,7 @@ class SimulationManager:
 
         try:
             from asgiref.sync import sync_to_async
-            from apps.realtime.simulation import FiberConfig, run_simulation_loop
+
             from apps.realtime.management.commands.run_realtime import Command
 
             cmd = Command()
@@ -99,22 +99,21 @@ class SimulationManager:
 
             if not fibers:
                 self._status = SimulationStatus.FAILED
-                self._error = 'No fiber data found'
-                logger.error('Simulation startup failed: no fiber data found')
+                self._error = "No fiber data found"
+                logger.error("Simulation startup failed: no fiber data found")
                 return
 
-            self._task = asyncio.create_task(
-                self._run_with_supervision(fibers, infrastructure)
-            )
+            self._task = asyncio.create_task(self._run_with_supervision(fibers, infrastructure))
             logger.info(
-                'Simulation task created: %d fibers, %d infrastructure',
-                len(fibers), len(infrastructure),
+                "Simulation task created: %d fibers, %d infrastructure",
+                len(fibers),
+                len(infrastructure),
             )
 
         except Exception as e:
             self._status = SimulationStatus.FAILED
             self._error = str(e)
-            logger.exception('Simulation startup failed: %s', e)
+            logger.exception("Simulation startup failed: %s", e)
 
     async def _run_with_supervision(self, fibers, infrastructure):
         """
@@ -130,11 +129,11 @@ class SimulationManager:
             await run_simulation_loop(fibers, infrastructure)
         except asyncio.CancelledError:
             self._status = SimulationStatus.STOPPED
-            logger.info('Simulation stopped (cancelled)')
+            logger.info("Simulation stopped (cancelled)")
         except Exception as e:
             self._status = SimulationStatus.FAILED
             self._error = str(e)
-            logger.exception('Simulation crashed: %s', e)
+            logger.exception("Simulation crashed: %s", e)
 
     async def stop(self):
         """Cancel the simulation task if running."""
@@ -150,6 +149,6 @@ class SimulationManager:
     def health(self) -> dict:
         """Return health info for readiness checks."""
         return {
-            'status': self._status.value,
-            'error': self._error,
+            "status": self._status.value,
+            "error": self._error,
         }

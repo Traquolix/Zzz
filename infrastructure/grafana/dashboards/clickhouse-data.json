@@ -14,7 +14,151 @@
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
       "id": 1,
       "panels": [],
-      "title": "Speed Data",
+      "title": "Overview",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+      "id": 11,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
+          "format": 1,
+          "meta": { "builderOptions": { "fields": [], "limit": 100, "mode": "list" } },
+          "queryType": "sql",
+          "rawSql": "SELECT count() as total FROM sequoia.detection_hires WHERE ts > now() - INTERVAL 1 HOUR",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Detections (1h)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+      "id": 12,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
+          "format": 1,
+          "meta": { "builderOptions": { "fields": [], "limit": 100, "mode": "list" } },
+          "queryType": "sql",
+          "rawSql": "SELECT sum(vehicle_count) as total FROM sequoia.detection_hires WHERE ts > now() - INTERVAL 1 HOUR",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Vehicles (1h)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "purple", "value": null }] },
+          "unit": "velocitykmh"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+      "id": 13,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
+          "format": 1,
+          "meta": { "builderOptions": { "fields": [], "limit": 100, "mode": "list" } },
+          "queryType": "sql",
+          "rawSql": "SELECT avg(speed) as avg_speed FROM sequoia.detection_hires WHERE ts > now() - INTERVAL 1 HOUR",
+          "refId": "A"
+        }
+      ],
+      "title": "Avg Speed (1h)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "orange", "value": null }] },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+      "id": 14,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
+          "format": 1,
+          "meta": { "builderOptions": { "fields": [], "limit": 100, "mode": "list" } },
+          "queryType": "sql",
+          "rawSql": "SELECT sum(n_cars) as cars, sum(n_trucks) as trucks FROM sequoia.detection_hires WHERE ts > now() - INTERVAL 1 HOUR",
+          "refId": "A"
+        }
+      ],
+      "title": "Car/Truck Ratio (1h)",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "id": 4,
+      "panels": [],
+      "title": "Time Series",
       "type": "row"
     },
     {
@@ -25,7 +169,7 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "records/min",
+            "axisLabel": "detections/min",
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "line",
@@ -47,7 +191,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
       "id": 2,
       "options": {
         "legend": { "calcs": ["mean", "sum"], "displayMode": "table", "placement": "bottom", "showLegend": true },
@@ -59,11 +203,11 @@
           "format": 1,
           "meta": { "builderOptions": { "fields": [], "limit": 100, "mode": "list" } },
           "queryType": "sql",
-          "rawSql": "SELECT toStartOfMinute(ts) as time, count() as records FROM sequoia.speed_hires WHERE ts > now() - INTERVAL 1 HOUR GROUP BY time ORDER BY time",
+          "rawSql": "SELECT toStartOfMinute(ts) as time, count() as detections FROM sequoia.detection_hires WHERE ts > now() - INTERVAL 1 HOUR GROUP BY time ORDER BY time",
           "refId": "A"
         }
       ],
-      "title": "Speed Records Ingestion Rate",
+      "title": "Detection Rate",
       "type": "timeseries"
     },
     {
@@ -92,11 +236,11 @@
           },
           "mappings": [],
           "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
-          "unit": "short"
+          "unit": "velocitykmh"
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
       "id": 3,
       "options": {
         "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
@@ -108,7 +252,7 @@
           "format": 1,
           "meta": { "builderOptions": { "fields": [], "limit": 100, "mode": "list" } },
           "queryType": "sql",
-          "rawSql": "SELECT toStartOfMinute(ts) as time, avg(speed) as avg_speed, max(speed) as max_speed FROM sequoia.speed_hires WHERE ts > now() - INTERVAL 1 HOUR GROUP BY time ORDER BY time",
+          "rawSql": "SELECT toStartOfMinute(ts) as time, avg(speed) as avg_speed, max(speed) as max_speed FROM sequoia.detection_hires WHERE ts > now() - INTERVAL 1 HOUR GROUP BY time ORDER BY time",
           "refId": "A"
         }
       ],
@@ -117,113 +261,7 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
-      "id": 4,
-      "panels": [],
-      "title": "Count Data",
-      "type": "row"
-    },
-    {
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "records/min",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
-      "id": 5,
-      "options": {
-        "legend": { "calcs": ["mean", "sum"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "targets": [
-        {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
-          "format": 1,
-          "meta": { "builderOptions": { "fields": [], "limit": 100, "mode": "list" } },
-          "queryType": "sql",
-          "rawSql": "SELECT toStartOfMinute(ts) as time, count() as records FROM sequoia.count_hires WHERE ts > now() - INTERVAL 1 HOUR GROUP BY time ORDER BY time",
-          "refId": "A"
-        }
-      ],
-      "title": "Count Records Ingestion Rate",
-      "type": "timeseries"
-    },
-    {
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "palette-classic" },
-          "custom": {
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "vehicles",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "never",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
-      "id": 6,
-      "options": {
-        "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "bottom", "showLegend": true },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "targets": [
-        {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
-          "format": 1,
-          "meta": { "builderOptions": { "fields": [], "limit": 100, "mode": "list" } },
-          "queryType": "sql",
-          "rawSql": "SELECT toStartOfMinute(ts) as time, sum(count) as total_vehicles FROM sequoia.count_hires WHERE ts > now() - INTERVAL 1 HOUR GROUP BY time ORDER BY time",
-          "refId": "A"
-        }
-      ],
-      "title": "Vehicles Detected per Minute",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
       "id": 7,
       "panels": [],
       "title": "By Fiber",
@@ -237,7 +275,7 @@
           "custom": {
             "axisCenteredZero": false,
             "axisColorMode": "text",
-            "axisLabel": "records",
+            "axisLabel": "detections",
             "axisPlacement": "auto",
             "barAlignment": 0,
             "drawStyle": "bars",
@@ -259,7 +297,7 @@
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 19 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
       "id": 8,
       "options": {
         "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "bottom", "showLegend": true },
@@ -271,11 +309,11 @@
           "format": 1,
           "meta": { "builderOptions": { "fields": [], "limit": 100, "mode": "list" } },
           "queryType": "sql",
-          "rawSql": "SELECT toStartOfMinute(ts) as time, fiber_id, count() as records FROM sequoia.speed_hires WHERE ts > now() - INTERVAL 1 HOUR AND ('$fiber_id' = '$__all' OR fiber_id IN ($fiber_id)) GROUP BY time, fiber_id ORDER BY time",
+          "rawSql": "SELECT toStartOfMinute(ts) as time, fiber_id, count() as detections FROM sequoia.detection_hires WHERE ts > now() - INTERVAL 1 HOUR AND ('$fiber_id' = '$__all' OR fiber_id IN ($fiber_id)) GROUP BY time, fiber_id ORDER BY time",
           "refId": "A"
         }
       ],
-      "title": "Speed Records by Fiber",
+      "title": "Detections by Fiber",
       "type": "timeseries"
     },
     {
@@ -304,11 +342,11 @@
           },
           "mappings": [],
           "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
-          "unit": "short"
+          "unit": "velocitykmh"
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 19 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
       "id": 9,
       "options": {
         "legend": { "calcs": ["mean"], "displayMode": "table", "placement": "bottom", "showLegend": true },
@@ -320,156 +358,12 @@
           "format": 1,
           "meta": { "builderOptions": { "fields": [], "limit": 100, "mode": "list" } },
           "queryType": "sql",
-          "rawSql": "SELECT toStartOfMinute(ts) as time, fiber_id, avg(speed) as avg_speed FROM sequoia.speed_hires WHERE ts > now() - INTERVAL 1 HOUR AND ('$fiber_id' = '$__all' OR fiber_id IN ($fiber_id)) GROUP BY time, fiber_id ORDER BY time",
+          "rawSql": "SELECT toStartOfMinute(ts) as time, fiber_id, avg(speed) as avg_speed FROM sequoia.detection_hires WHERE ts > now() - INTERVAL 1 HOUR AND ('$fiber_id' = '$__all' OR fiber_id IN ($fiber_id)) GROUP BY time, fiber_id ORDER BY time",
           "refId": "A"
         }
       ],
-      "title": "Average Speed by Fiber",
+      "title": "Avg Speed by Fiber",
       "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 },
-      "id": 10,
-      "panels": [],
-      "title": "Statistics",
-      "type": "row"
-    },
-    {
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 28 },
-      "id": 11,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
-          "format": 1,
-          "meta": { "builderOptions": { "fields": [], "limit": 100, "mode": "list" } },
-          "queryType": "sql",
-          "rawSql": "SELECT count() as total FROM sequoia.speed_hires WHERE ts > now() - INTERVAL 1 HOUR",
-          "refId": "A"
-        }
-      ],
-      "title": "Speed Records (1h)",
-      "type": "stat"
-    },
-    {
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 28 },
-      "id": 12,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
-          "format": 1,
-          "meta": { "builderOptions": { "fields": [], "limit": 100, "mode": "list" } },
-          "queryType": "sql",
-          "rawSql": "SELECT count() as total FROM sequoia.count_hires WHERE ts > now() - INTERVAL 1 HOUR",
-          "refId": "A"
-        }
-      ],
-      "title": "Count Records (1h)",
-      "type": "stat"
-    },
-    {
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "purple", "value": null }] },
-          "unit": "velocitykmh"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 28 },
-      "id": 13,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
-          "format": 1,
-          "meta": { "builderOptions": { "fields": [], "limit": 100, "mode": "list" } },
-          "queryType": "sql",
-          "rawSql": "SELECT avg(speed) as avg_speed FROM sequoia.speed_hires WHERE ts > now() - INTERVAL 1 HOUR",
-          "refId": "A"
-        }
-      ],
-      "title": "Avg Speed (1h)",
-      "type": "stat"
-    },
-    {
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "orange", "value": null }] },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 28 },
-      "id": 14,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "horizontal",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
-          "format": 1,
-          "meta": { "builderOptions": { "fields": [], "limit": 100, "mode": "list" } },
-          "queryType": "sql",
-          "rawSql": "SELECT sum(count) as total FROM sequoia.count_hires WHERE ts > now() - INTERVAL 1 HOUR",
-          "refId": "A"
-        }
-      ],
-      "title": "Total Vehicles (1h)",
-      "type": "stat"
     }
   ],
   "refresh": "30s",
@@ -481,12 +375,12 @@
       {
         "current": { "selected": true, "text": "All", "value": "$__all" },
         "datasource": { "type": "grafana-clickhouse-datasource", "uid": "clickhouse" },
-        "definition": "SELECT DISTINCT fiber_id FROM sequoia.speed_hires WHERE ts > now() - INTERVAL 24 HOUR",
+        "definition": "SELECT DISTINCT fiber_id FROM sequoia.detection_hires WHERE ts > now() - INTERVAL 24 HOUR",
         "includeAll": true,
         "multi": true,
         "name": "fiber_id",
         "options": [],
-        "query": "SELECT DISTINCT fiber_id FROM sequoia.speed_hires WHERE ts > now() - INTERVAL 24 HOUR",
+        "query": "SELECT DISTINCT fiber_id FROM sequoia.detection_hires WHERE ts > now() - INTERVAL 24 HOUR",
         "refresh": 2,
         "type": "query"
       }
@@ -497,6 +391,6 @@
   "timezone": "browser",
   "title": "DAS ClickHouse Data",
   "uid": "das-clickhouse-data",
-  "version": 2,
+  "version": 3,
   "weekStart": ""
 }

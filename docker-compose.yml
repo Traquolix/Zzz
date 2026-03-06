@@ -104,7 +104,7 @@ services:
       - internal
 
   kafka-ui:
-    image: provectuslabs/kafka-ui:latest
+    image: provectuslabs/kafka-ui:v0.7.2
     container_name: kafka_ui
     restart: unless-stopped
     depends_on:
@@ -324,11 +324,11 @@ services:
       --maxmemory 256mb
       --maxmemory-policy allkeys-lru
       --appendonly no
-      --requirepass ${REDIS_PASSWORD:-changeme}
+      --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -361,6 +361,8 @@ services:
       - ./infrastructure/clickhouse/init:/docker-entrypoint-initdb.d:ro
       - ./infrastructure/clickhouse/cables:/opt/fiber_cables:ro
       - ./infrastructure/clickhouse/config/logging.xml:/etc/clickhouse-server/config.d/z_logging.xml:ro
+      - ./infrastructure/clickhouse/config/backup_disk.xml:/etc/clickhouse-server/config.d/backup_disk.xml:ro
+      - clickhouse_backups:/backups
     healthcheck:
       test: ["CMD", "clickhouse-client", "--query", "SELECT 1"]
       interval: 10s
@@ -370,7 +372,7 @@ services:
     networks: [ internal ]
 
   otel-lgtm:
-    image: grafana/otel-lgtm:latest
+    image: grafana/otel-lgtm:0.19.1
     container_name: otel-lgtm
     restart: unless-stopped
     ports:
@@ -396,6 +398,8 @@ services:
     volumes:
       - otel_data:/data
       - ./infrastructure/tempo/tempo-config.yaml:/otel-lgtm/tempo-config.yaml:ro
+      - ./infrastructure/otel/otelcol-config.yaml:/otel-lgtm/otelcol-config.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - ./infrastructure/grafana/provisioning/dashboards:/otel-lgtm/grafana/conf/provisioning/dashboards:ro
       - ./infrastructure/grafana/provisioning/datasources:/otel-lgtm/grafana/conf/provisioning/datasources:ro
       - ./infrastructure/grafana/dashboards:/otel-lgtm/grafana/dashboards:ro
@@ -446,7 +450,7 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       # Redis / Channels
       REDIS_HOST: redis
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
       # Frontend URL (for CORS)
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       ENVIRONMENT: ${ENVIRONMENT:-development}
@@ -470,33 +474,16 @@ services:
       - internal
       - default
 
-  platform-frontend:
-    build:
-      context: services/platform/frontend
-      dockerfile: Dockerfile
-      args:
-        HTTP_PROXY: ${HTTP_PROXY:-}
-        HTTPS_PROXY: ${HTTPS_PROXY:-}
-        NO_PROXY: ${NO_PROXY:-}
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8001}
-        VITE_MAPBOX_TOKEN: ${VITE_MAPBOX_TOKEN}
-    container_name: platform-frontend
-    restart: unless-stopped
-    depends_on:
-      platform-backend:
-        condition: service_healthy
-    ports:
-      - "3000:8080"
-    networks:
-      - default  # Frontend only needs default network since it's served to browser
-
 networks:
+  default:
+    name: sequoia-default
   internal:
-    name: internal
+    name: sequoia-internal
 
 volumes:
   kafka_data:
   clickhouse_data:
+  clickhouse_backups:
   redis_data:
   postgres_data:
   otel_data:

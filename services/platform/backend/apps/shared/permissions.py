@@ -26,7 +26,7 @@ class IsActiveUser(BasePermission):
         if user.is_superuser:
             return True
         # Non-superusers must belong to an active organization
-        org = getattr(user, 'organization', None)
+        org = getattr(user, "organization", None)
         if org is None:
             return False
         if not org.is_active:
@@ -46,4 +46,4 @@ class IsNotViewer(BasePermission):
             return False
         if user.is_superuser:
             return True
-        return getattr(user, 'role', None) != 'viewer'
+        return getattr(user, "role", None) != "viewer"

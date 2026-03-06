@@ -1,7 +1,4 @@
 services:
-  platform-frontend:
-    profiles:
-      - frontend-only
   platform-backend:
     volumes:
       - ./secrets:/app/secrets:ro

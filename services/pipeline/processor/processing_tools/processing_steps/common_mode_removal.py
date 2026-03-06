@@ -76,7 +76,7 @@ class CommonModeRemoval(ProcessingStep):
                 "warmup_samples": warmup_samples,
             }
             logger.info(
-                f"Initialized CMR state for fiber '{fiber_id}': " f"warmup_samples={warmup_samples}"
+                f"Initialized CMR state for fiber '{fiber_id}': warmup_samples={warmup_samples}"
             )
 
         fiber_state = self._fiber_states[fiber_id]

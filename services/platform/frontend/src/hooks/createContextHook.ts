@@ -7,16 +7,12 @@
  */
 import { useContext, type Context } from 'react'
 
-export function createContextHook<T>(
-    context: Context<T | null>,
-    hookName: string,
-    providerName: string,
-): () => T {
-    return () => {
-        const value = useContext(context)
-        if (!value) {
-            throw new Error(`${hookName} must be used within ${providerName}`)
-        }
-        return value
+export function createContextHook<T>(context: Context<T | null>, hookName: string, providerName: string): () => T {
+  return () => {
+    const value = useContext(context)
+    if (!value) {
+      throw new Error(`${hookName} must be used within ${providerName}`)
     }
+    return value
+  }
 }

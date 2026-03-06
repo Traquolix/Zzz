@@ -24,7 +24,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Callable, Coroutine
 
-logger = logging.getLogger('sequoia.replay_buffer')
+logger = logging.getLogger("sequoia.replay_buffer")
 
 # Safety margin above observed pipeline delay
 SAFETY_MARGIN_S = 15.0
@@ -40,10 +40,11 @@ BroadcastFn = Callable[[str, Any], Coroutine[Any, Any, None]]
 @dataclass(order=True)
 class ReplayItem:
     """Priority queue item ordered by replay wall-clock time."""
+
     replay_time: float
-    sequence: int = field(compare=True)     # tie-breaker for same replay_time
-    channel: str = field(compare=False)     # 'detections'
-    data: Any = field(compare=False)        # transformed message payload
+    sequence: int = field(compare=True)  # tie-breaker for same replay_time
+    channel: str = field(compare=False)  # 'detections'
+    data: Any = field(compare=False)  # transformed message payload
 
 
 class ReplayBuffer:
@@ -54,7 +55,7 @@ class ReplayBuffer:
     """
 
     def __init__(self):
-        self._queue: list[ReplayItem] = []      # heapq min-heap
+        self._queue: list[ReplayItem] = []  # heapq min-heap
         self._sequence: int = 0
         self._event = asyncio.Event()
         self._running: bool = False
@@ -101,14 +102,16 @@ class ReplayBuffer:
 
         if abs(new_estimate - self._estimated_delay_s) > 5.0:
             logger.info(
-                'Replay delay adjusted: %.1fs -> %.1fs (p90=%.1fs, margin=%.1fs, samples=%d)',
-                self._estimated_delay_s, new_estimate, p90_delay,
-                SAFETY_MARGIN_S, len(self._observed_delays),
+                "Replay delay adjusted: %.1fs -> %.1fs (p90=%.1fs, margin=%.1fs, samples=%d)",
+                self._estimated_delay_s,
+                new_estimate,
+                p90_delay,
+                SAFETY_MARGIN_S,
+                len(self._observed_delays),
             )
         self._estimated_delay_s = new_estimate
 
-    def ingest_detection(self, section_key: str, timestamp_ns: int,
-                         detections: list[dict]) -> None:
+    def ingest_detection(self, section_key: str, timestamp_ns: int, detections: list[dict]) -> None:
         """
         Add a detection to the replay queue.
 
@@ -130,12 +133,15 @@ class ReplayBuffer:
         replay_time = original_time_s + self._estimated_delay_s
 
         self._sequence += 1
-        heapq.heappush(self._queue, ReplayItem(
-            replay_time=replay_time,
-            sequence=self._sequence,
-            channel='detections',
-            data=detections,
-        ))
+        heapq.heappush(
+            self._queue,
+            ReplayItem(
+                replay_time=replay_time,
+                sequence=self._sequence,
+                channel="detections",
+                data=detections,
+            ),
+        )
         self._event.set()
 
     async def drain(self, broadcast_fn: BroadcastFn) -> None:
@@ -152,8 +158,11 @@ class ReplayBuffer:
         detection_accumulator: list[dict] = []
         last_detection_flush = time.time()
 
-        logger.info('Replay buffer drain started (initial delay=%.0fs, margin=%.0fs)',
-                    INITIAL_DELAY_S, SAFETY_MARGIN_S)
+        logger.info(
+            "Replay buffer drain started (initial delay=%.0fs, margin=%.0fs)",
+            INITIAL_DELAY_S,
+            SAFETY_MARGIN_S,
+        )
 
         while self._running:
             # Wait for items if queue is empty
@@ -182,29 +191,29 @@ class ReplayBuffer:
             while self._queue and self._queue[0].replay_time <= time.time():
                 item = heapq.heappop(self._queue)
 
-                if item.channel == 'detections':
+                if item.channel == "detections":
                     detection_accumulator.extend(item.data)
                     # Track the latest original detection timestamp
                     for det in item.data:
-                        ts = det.get('timestamp', 0)
+                        ts = det.get("timestamp", 0)
                         if ts > self._last_sent_timestamp_ms:
                             self._last_sent_timestamp_ms = ts
 
             # Flush detections at ~10 Hz
             now = time.time()
             if detection_accumulator and (now - last_detection_flush) >= 0.1:
-                await broadcast_fn('detections', detection_accumulator)
+                await broadcast_fn("detections", detection_accumulator)
                 detection_accumulator = []
                 last_detection_flush = now
 
         # Flush any remaining detections on shutdown
         if detection_accumulator:
             try:
-                await broadcast_fn('detections', detection_accumulator)
+                await broadcast_fn("detections", detection_accumulator)
             except Exception as e:
-                logger.warning('Failed to flush remaining detections on shutdown: %s', e)
+                logger.warning("Failed to flush remaining detections on shutdown: %s", e)
 
-        logger.info('Replay buffer drain stopped')
+        logger.info("Replay buffer drain stopped")
 
     def stop(self) -> None:
         """Signal the drain loop to stop."""
