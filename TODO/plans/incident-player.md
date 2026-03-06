@@ -2,82 +2,121 @@
 
 ## Goal
 
-Build an interactive incident replay view that lets users scrub through the ±60s snapshot window around an incident, seeing detection data animate on the map and charts simultaneously. This turns a static snapshot into a forensic tool for understanding how an incident developed.
+Build an interactive incident replay view inside the side panel. When you open an incident, you see a chart of the full 2-minute window (±60s around detection time) with the incident marked at the center. Below the chart, a playback slider scrubs through time. Below that, a small embedded map replays what was happening on the road — with the same visualization modes as the main PrototypeMap (dots or 3D vehicles). Scrubbing the slider updates the chart cursor, the mini map, and the stats together.
 
-## What it looks like
+Snapshots are stored persistently so any past incident can be replayed.
 
-When viewing an incident in the side panel, below the current snapshot chart:
+## Visual layout
 
-- **Time slider** spanning the full snapshot window (detected_at - 60s to detected_at + 60s)
-- **Play/pause button** with adjustable speed (0.5x, 1x, 2x, 4x)
-- **Map view** zoomed to the incident area showing detection dots at channel positions, color-coded by speed (green = normal, yellow = slowing, red = stopped), filtered to the current playback second
-- **Chart cursor** — a vertical line on the TimeSeriesChart that tracks the playback position
-- **Stats at cursor** — speed, flow, vehicle count at the current playback time
+All inside the incident detail view in the side panel:
 
-As the user scrubs or plays, all views update together: dots appear/disappear on the map, the chart cursor moves, and stats update. You can literally watch the speed drop propagate along the fiber as the incident develops.
-
-While the snapshot is still collecting (`complete: false`), the slider range extends as new data arrives.
-
-## Existing pieces
-
-- Snapshot detections already include channel positions and timestamps at per-second granularity
-- Fiber coordinates are mapped to lat/lng (`channel_coordinates` in cable data) — channel index maps to a map position
-- PrototypeMap already has a channel helper dots layer that renders circles at channel positions
-- TimeSeriesChart component renders the speed/flow/occupancy chart
-- Snapshot polling (1s) already keeps data fresh while collecting
-
-## Implementation sketch
-
-### 1. Shared playback state
-
-```typescript
-type PlaybackState = {
-  currentMs: number       // Current playback timestamp (ms)
-  playing: boolean
-  speed: number           // 0.5 | 1 | 2 | 4
-  startMs: number         // Snapshot window start
-  endMs: number           // Snapshot window end
-}
+```
++-----------------------------------------------+
+|  Incident header (type, severity, location)    |
++-----------------------------------------------+
+|                                                |
+|  SNAPSHOT CHART (speed over time, full 2 min)  |
+|                                                |
+|  ····|····|····|···↕···|····|····|····|····    |
+|                    ^                           |
+|           incident marker (dashed vertical)    |
+|           always centered in the window        |
+|                    |                           |
+|  ·····────────────●┤····  ← playback cursor    |
+|                                                |
++-----------------------------------------------+
+|  ▶ ▮▮  1x  [=======●=========]  -0:32 / 2:00 |
+|         playback slider (scrubs chart + map)   |
++-----------------------------------------------+
+|  ┌─────────────────────────────────────────┐   |
+|  │  [Dots] [3D]              mini map      │   |
+|  │                                         │   |
+|  │   Zoomed to ±100 channels around        │   |
+|  │   incident. Detections rendered as      │   |
+|  │   dots or 3D vehicles (same modes as    │   |
+|  │   the main map). Color-coded by speed.  │   |
+|  │                                         │   |
+|  └─────────────────────────────────────────┘   |
++-----------------------------------------------+
+|  Avg speed: 45 km/h  |  Flow: 12 veh  |  ... |
++-----------------------------------------------+
 ```
 
-A `useSnapshotPlayback` hook that manages this state, advances `currentMs` via `requestAnimationFrame` when playing, and exposes `play()`, `pause()`, `seek(ms)`, `setSpeed()`.
+## Behavior
 
-### 2. SnapshotPlayer component
+### Chart
+- Always shows the **full 2-minute window** (detected_at ± 60s)
+- **Incident marker** — dashed vertical line at detection time, always centered
+- **Playback cursor** — solid vertical line that follows the slider
+- When still collecting (`complete: false`), left half populated immediately, right half fills progressively
 
-Transport controls + time slider. Sits between the incident header and the chart. Shows elapsed time and total duration. The slider is draggable for manual scrubbing.
+### Slider
+- Between chart and mini map
+- Range = full 2 minutes, draggable, updates chart cursor + map + stats
+- Transport: play/pause, speed (0.5x, 1x, 2x, 4x)
+- Relative time display (`-0:32`, `+0:15`)
+- Scrub backward and forward freely
 
-### 3. Map incident layer
+### Mini map
+- Small self-contained Mapbox GL instance (~200px tall) in the side panel
+- Separate from the main full-screen map
+- Auto-zoomed to ±100 channels around the incident
+- Shows the fiber path as a line
+- **Same visualization modes as PrototypeMap**: toggle between channel dots and 3D vehicle models. Uses the same rendering code/layers.
+- Detections rendered at channel positions for the current playback second
+- Color-coded by speed (green → yellow → red)
+- As you scrub: vehicles/dots move along the fiber, slow near the incident, traffic builds up
+- Static camera centered on incident, minimal chrome
 
-A new Mapbox source/layer that:
-- Filters snapshot detections to the current playback second (±500ms window)
-- Maps each detection's channel to a lat/lng via the fiber's `channel_coordinates`
-- Renders as circles, sized by vehicle count, colored by speed relative to the section's speed thresholds
-- Zooms/fits the map to the incident area (center channel ± radius) when the player activates
+### Progressive collection
+- Left half appears immediately (pre-incident data from rolling buffer)
+- Right half fills second by second
+- "Collecting..." indicator until `complete: true`
+- Slider works on available data immediately
 
-### 4. Chart cursor overlay
+## Data recording
 
-Add an optional `cursorX` prop to TimeSeriesChart that renders a vertical line at the corresponding time position. The playback state drives this.
+### What gets recorded
+All detections within **±100 channels** of the incident center, for the full 2-minute window. Captures vehicles approaching from both directions and leaving.
 
-### 5. Stats panel
+### Rolling buffer (pre-incident)
+Per-fiber rolling buffer of last 60s of all detections. On incident spawn, the ±100 channel slice seeds the snapshot's first half.
 
-Small row below the chart showing interpolated values at the cursor position: avg speed, total flow, vehicle count. Updates as cursor moves.
+### Live recording (post-incident)
+New detections within ±100 channels appended until detected_at + 60s, then marked `complete`.
+
+### Persistent storage
+- **Simulation**: completed snapshots saved via Django ORM or file storage for replay after restart
+- **Production**: ClickHouse `detection_hires` (48h TTL) already stores raw detections — queried directly. For older incidents, `detection_1m` for lower-res replay.
+
+### Parameters
+- `SNAPSHOT_CHANNEL_RADIUS = 100` — ±100 channels (~1km)
+- `SNAPSHOT_WINDOW_S = 60` — ±60s (2 minutes total)
+- `SNAPSHOT_MAX_DETECTIONS = 20000`
 
 ## Phases
 
-### Phase 1 — Playback controls + chart cursor
-- `useSnapshotPlayback` hook
+### Phase 1 — Playback slider + chart cursor
+- Incident vertical marker on chart already implemented (dashed red line at incident time)
+- Playback cursor on chart (follows slider)
+- `useSnapshotPlayback` hook (currentMs, playing, speed, seek)
 - `SnapshotPlayer` component (slider + play/pause/speed)
-- Chart cursor overlay
-- No map changes yet — just the time controls and chart interaction
+- Widen snapshot recording to ±100 channels, raise cap
 
-### Phase 2 — Map visualization
-- Incident detection dots layer on the map
-- Channel-to-coordinate mapping for the incident's fiber
-- Color-coding by speed
-- Auto-zoom to incident area
+### Phase 2 — Embedded mini map
+- Small Mapbox GL instance in side panel (~200px, minimal chrome)
+- Fiber path line in incident area
+- Detection rendering with **both modes**: dots and 3D vehicles (reuse PrototypeMap layer code)
+- Toggle between modes (small [Dots] [3D] toggle in corner)
+- Color-code by speed, static camera on incident
 
-### Phase 3 — Polish
-- Stats at cursor
-- Keyboard shortcuts (space = play/pause, arrow keys = step ±1s)
-- Smooth dot transitions between seconds (interpolation)
-- Loading state while snapshot collects
+### Phase 3 — Persistent storage
+- Save completed sim snapshots to DB/file
+- Load for past incident replay
+- ClickHouse path already works for production
+
+### Phase 4 — Polish
+- Stats row (speed, flow, count at cursor)
+- Keyboard shortcuts (space = play/pause, arrows = ±1s)
+- Smooth interpolation between seconds
+- Lower-res replay for incidents older than 48h

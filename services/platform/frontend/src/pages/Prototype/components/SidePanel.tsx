@@ -1497,7 +1497,15 @@ function IncidentDetail({
               Loading snapshot...
             </div>
           ) : snapshotData ? (
-            <TimeSeriesChart data={snapshotData} />
+            <TimeSeriesChart
+              data={snapshotData}
+              incidentTime={new Date(incident.timestamp).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false,
+              })}
+            />
           ) : (
             <div className="text-xs text-[var(--proto-text-muted)] italic py-4 text-center">
               No snapshot data available

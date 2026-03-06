@@ -1,4 +1,4 @@
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import type { TimeSeriesPoint } from '../types'
 
 interface Props {
@@ -6,9 +6,10 @@ interface Props {
   metric: 'speed' | 'flow' | 'occupancy'
   config: { label: string; unit: string; color: string }
   timeRange?: string
+  incidentTime?: string
 }
 
-export default function TimeSeriesChartInner({ data, metric, config, timeRange }: Props) {
+export default function TimeSeriesChartInner({ data, metric, config, timeRange, incidentTime }: Props) {
   const stripSeconds = timeRange === '15m' || timeRange === '1h'
   const tickFormatter = stripSeconds
     ? (value: string) => value?.slice(0, 5) // "HH:MM:SS" → "HH:MM"
@@ -38,6 +39,15 @@ export default function TimeSeriesChartInner({ data, metric, config, timeRange }
             }}
             formatter={(value: number | undefined) => [`${value ?? 0} ${config.unit}`, config.label]}
           />
+          {incidentTime && (
+            <ReferenceLine
+              x={incidentTime}
+              stroke="var(--proto-red, #ef4444)"
+              strokeDasharray="4 3"
+              strokeWidth={1.5}
+              label={{ value: 'Incident', position: 'top', fill: 'var(--proto-red, #ef4444)', fontSize: 9 }}
+            />
+          )}
           <Line
             type="monotone"
             dataKey={metric}
