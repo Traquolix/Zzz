@@ -116,7 +116,7 @@ class DASWindowDataset(Dataset):
 
         logger.info(
             f"Section data: {self.data.shape} "
-            f"({self.data.shape[0]/10:.1f}s at 10Hz, {self.data.shape[1]} channels)"
+            f"({self.data.shape[0] / 10:.1f}s at 10Hz, {self.data.shape[1]} channels)"
         )
 
         # Extract windows
@@ -452,12 +452,20 @@ def main():
     )
 
     train_loader = DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=True,
-        num_workers=4, pin_memory=True, persistent_workers=True
+        train_dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=4,
+        pin_memory=True,
+        persistent_workers=True,
     )
     val_loader = DataLoader(
-        val_dataset, batch_size=args.batch_size, shuffle=False,
-        num_workers=4, pin_memory=True, persistent_workers=True
+        val_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True,
+        persistent_workers=True,
     )
 
     logger.info(f"Dataset: {n_train} train, {n_val} val windows")
@@ -491,7 +499,7 @@ def main():
     logger.info(f"Model: {n_params:,} parameters ({n_trainable:,} trainable)")
 
     # Loss and optimizer
-    from ai_engine.training.loss import DTANLoss
+    from .loss import DTANLoss
 
     criterion = DTANLoss(
         lambda_inner=args.lambda_inner,
