@@ -72,3 +72,12 @@ repos:
         entry: npx --prefix services/platform/frontend eslint --config services/platform/frontend/eslint.config.js
         language: system
         files: ^services/platform/frontend/src/.*\.(ts|tsx)$
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.3
+    hooks:
+      - id: bandit
+        name: bandit (pre-push)
+        stages: [pre-push]
+        args: ['-q', '-ll']
+        files: ^services/(pipeline|platform/backend)/.*\.py$
