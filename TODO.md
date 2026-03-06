@@ -34,4 +34,5 @@
 
 ## Code Quality
 
+- [ ] **Rewrite tests** — all AI-generated unit tests removed. Write meaningful tests manually for pipeline, backend, and frontend.
 - [ ] **Per-service READMEs** — processor, ai_engine, backend (frontend has one)
