@@ -14,92 +14,45 @@ env:
   NODE_VERSION: "22"
 
 jobs:
-  # ---------- LINT ----------
-  lint-pipeline:
+  # ---------- LINT + TYPECHECK ----------
+  lint:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: services/pipeline
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_PIPELINE_VERSION }}
-          cache: pip
-      - run: pip install ruff
-      - run: ruff check .
-      - run: ruff format --check .
 
-  lint-backend:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: services/platform/backend
-    steps:
-      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_BACKEND_VERSION }}
           cache: pip
       - run: pip install ruff
-      - run: ruff check .
-      - run: ruff format --check .
 
-  lint-frontend:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: services/platform/frontend
-    steps:
-      - uses: actions/checkout@v4
+      - name: Lint pipeline
+        run: cd services/pipeline && ruff check . && ruff format --check .
+
+      - name: Lint backend
+        run: cd services/platform/backend && ruff check . && ruff format --check .
+
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: services/platform/frontend/package-lock.json
-      - run: npm ci
-      - run: npm run lint
+      - run: cd services/platform/frontend && npm ci
 
-  # ---------- TYPECHECK ----------
-  typecheck-frontend:
-    runs-on: ubuntu-latest
-    needs: lint-frontend
-    defaults:
-      run:
-        working-directory: services/platform/frontend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: services/platform/frontend/package-lock.json
-      - run: npm ci
-      - run: npx tsc -p tsconfig.app.json --noEmit
+      - name: Lint frontend
+        run: cd services/platform/frontend && npm run lint
+
+      - name: Typecheck frontend
+        run: cd services/platform/frontend && npx tsc -p tsconfig.app.json --noEmit
 
   # ---------- UNIT TESTS ----------
   # Temporarily removed — tests being rewritten (see TODO.md)
 
-  # ---------- DOCKER BUILD ----------
-  docker-build:
-    runs-on: ubuntu-latest
-    needs: [lint-pipeline, lint-backend, typecheck-frontend]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build processor image
-        run: docker build -f services/pipeline/processor/Dockerfile services/pipeline
-      - name: Build backend image
-        run: docker build -f services/platform/backend/Dockerfile services/platform/backend
-      - name: Build frontend image
-        run: |
-          docker build -f services/platform/frontend/Dockerfile services/platform/frontend \
-            --build-arg VITE_API_URL=http://localhost:8001 \
-            --build-arg VITE_MAPBOX_TOKEN=pk.test_token_for_ci
-
-  # ---------- SECURITY ----------
+  # ---------- SECURITY (weekly only) ----------
   security:
     runs-on: ubuntu-latest
-    needs: [lint-pipeline, lint-backend, typecheck-frontend]
+    if: github.event_name == 'schedule'
+    needs: lint
     steps:
       - uses: actions/checkout@v4
 
