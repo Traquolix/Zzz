@@ -27,8 +27,16 @@
 
 ## Monitoring & Reliability
 
-- [x] ~~**Log retention**~~ — container logs shipped to Loki via OTel Collector filelog receiver (otelcol-config.yaml)
+- [ ] **Log retention** — config committed (otelcol-config.yaml filelog receiver) but needs deploy verification on production server
 - [x] ~~Weekly dependency scan~~ — CI runs `pip-audit` / `npm audit` on `schedule: cron` (Monday 07:00 UTC)
+
+## Observability Roadmap
+
+- [ ] **Kafka trace propagation** — inject/extract W3C trace context in Kafka message headers so traces span producer → consumer across services
+- [ ] **Log-trace correlation** — add `trace_id` and `span_id` fields to structured log output so Grafana can link logs to traces
+- [ ] **Structured Django logging** — replace Django's default text logging with JSON structured output via `python-json-logger` for Loki parsing
+- [ ] **Exemplars on histograms** — attach trace IDs as exemplars to Prometheus histogram metrics (inference latency, processing duration) for trace→metric drill-down
+- [ ] **Deploy and verify Tempo datasource** — confirm traces are queryable in Grafana after deploying the updated datasources.yaml
 
 ## Code Quality
 
