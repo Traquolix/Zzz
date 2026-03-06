@@ -45,10 +45,12 @@ DAS Interrogator (125 Hz, ~2800 channels)
 ## Deployment
 
 Two servers at IMREDD (Université Côte d'Azur):
-- **Backend server**: All Docker services (Kafka, ClickHouse, Processor, AI Engine, Django, Grafana). Has an NVIDIA RTX 4000 Ada GPU for ML inference.
-- **Frontend server**: nginx serving the React static build. Deployed via scp.
+- **Backend server** (`beaujoin@192.168.99.113`): All Docker services (Kafka, ClickHouse, Processor, AI Engine, Django, Grafana). Has an NVIDIA RTX 4000 Ada GPU for ML inference. Code at `/opt/Sequoia`.
+- **Frontend server** (`frontend@134.59.98.100`): nginx serving the React static build at `/var/www/sequoia/`.
 
 The DAS interrogator sits in a telco cabinet on the road and pushes raw data directly to Kafka over the university network.
+
+To set up a new server from scratch: `./scripts/server-setup.sh --role <backend|frontend>` (see script for options).
 
 ## Workflow
 
@@ -59,13 +61,31 @@ Every task follows this pattern:
 3. **Implement** the change
 4. **Validate**: run `make lint && make typecheck`
 5. **Commit** with conventional message: `feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, `test:`
-6. **Push and open a PR**: `git push -u origin <branch> && gh pr create`
-7. **Never merge** — the human reviews and merges PRs
-8. **Address PR feedback** — when asked to fix PR comments, read them with
+6. **Push**: `git push -u origin <branch>`
+7. **Open a PR**: `gh pr create --title "short title" --body "## Summary\n- what changed\n- why"`
+8. **Never merge** — the human reviews and merges PRs
+9. **Address PR feedback** — when asked to fix PR comments, read them with
    `gh api repos/Traquolix/Sequoia/pulls/<number>/comments` and
    `gh pr view <number> --comments`, then fix, commit, and push
 
 If the user doesn't specify a branch name, ask for one. Never work directly on main.
+
+### After Merge — Deploying
+
+Deployment is manual until GitHub Actions runners are installed. After merging a PR:
+
+```bash
+# Backend server
+ssh beaujoin@192.168.99.113
+cd /opt/Sequoia && git pull origin main && docker compose up -d
+
+# Frontend server (if frontend changed)
+# Build locally, then:
+scp -r services/platform/frontend/dist/* frontend@134.59.98.100:/var/www/sequoia/
+```
+
+Once GH runners are installed, merging to main triggers automatic deployment via
+`.github/workflows/deploy.yml` (with auto-rollback on health check failure).
 
 ## Validation
 
@@ -95,6 +115,8 @@ service-local venvs automatically.
 | Docker stack up/down | `make up` / `make down` |
 | Rebuild one service | `make rebuild SERVICE=<name>` |
 | View logs | `make logs SERVICE=<name>` |
+| Manual backup | `make backup` |
+| Restore from backup | `make restore BACKUP=--latest` |
 
 If a venv is missing, run `make setup` first. The `make dev` target auto-creates the
 backend venv on first run, but `make lint` and `make typecheck` expect venvs to exist.
@@ -161,11 +183,16 @@ backend venv on first run, but `make lint` and `make typecheck` expect venvs to 
 
 Consult `TODO.md` at the start of each session for pending infrastructure, security, and cleanup tasks.
 
-## Running the Stack
+## Key Files
 
-```bash
-make up                              # Start all Docker services
-make down                            # Stop all services
-make logs SERVICE=platform-backend   # Tail logs for a service
-make rebuild SERVICE=processor-carros # Rebuild and restart one service
-```
+| File | Purpose |
+|------|---------|
+| `Makefile` | All dev operations — lint, typecheck, setup, dev servers, Docker |
+| `docker-compose.yml` | Full production stack (Kafka, ClickHouse, PostgreSQL, Redis, services) |
+| `scripts/server-setup.sh` | Bootstrap a new server (Docker, GPU toolkit, GH runner, backups, nginx) |
+| `scripts/backup.sh` | Nightly DB backup with cron self-install |
+| `scripts/restore.sh` | Restore from backup |
+| `tools/scripts/deploy.sh` | Manual deploy script (SSH-based) |
+| `docs/ROLLBACK.md` | Rollback procedures |
+| `TODO.md` | Outstanding tasks |
+| `TODO/plans/` | Detailed implementation plans |
