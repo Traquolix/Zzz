@@ -21,12 +21,12 @@ help: ## Show this help
 lint: lint-pipeline lint-backend lint-frontend ## Run all linters
 
 lint-pipeline: ## Lint pipeline Python code
-	cd services/pipeline && python -m ruff check .
-	cd services/pipeline && python -m ruff format --check .
+	cd services/pipeline && python3 -m ruff check .
+	cd services/pipeline && python3 -m ruff format --check .
 
 lint-backend: ## Lint backend Python code
-	cd services/platform/backend && python -m ruff check .
-	cd services/platform/backend && python -m ruff format --check .
+	cd services/platform/backend && python3 -m ruff check .
+	cd services/platform/backend && python3 -m ruff format --check .
 
 lint-frontend: ## Lint frontend TypeScript code
 	cd services/platform/frontend && npm run lint
@@ -38,12 +38,12 @@ lint-frontend: ## Lint frontend TypeScript code
 format: format-pipeline format-backend ## Auto-format all code
 
 format-pipeline: ## Format pipeline Python code
-	cd services/pipeline && python -m ruff format .
-	cd services/pipeline && python -m ruff check --fix .
+	cd services/pipeline && python3 -m ruff format .
+	cd services/pipeline && python3 -m ruff check --fix .
 
 format-backend: ## Format backend Python code
-	cd services/platform/backend && python -m ruff format .
-	cd services/platform/backend && python -m ruff check --fix .
+	cd services/platform/backend && python3 -m ruff format .
+	cd services/platform/backend && python3 -m ruff check --fix .
 
 # ---------------------------------------------------------------------------
 # Type checking
@@ -51,10 +51,10 @@ format-backend: ## Format backend Python code
 typecheck: typecheck-pipeline typecheck-backend typecheck-frontend ## Run all type checkers
 
 typecheck-pipeline: ## Type-check pipeline
-	cd services/pipeline && python -m mypy --config-file pyproject.toml shared/ processor/ ai_engine/ config/
+	cd services/pipeline && python3 -m mypy --config-file pyproject.toml shared/ processor/ ai_engine/ config/
 
 typecheck-backend: ## Type-check backend
-	cd services/platform/backend && python -m mypy --config-file pyproject.toml apps/ sequoia/
+	cd services/platform/backend && python3 -m mypy --config-file pyproject.toml apps/ sequoia/
 
 typecheck-frontend: ## Type-check frontend
 	cd services/platform/frontend && npx tsc -p tsconfig.app.json --noEmit
@@ -69,12 +69,12 @@ typecheck-frontend: ## Type-check frontend
 security: security-pipeline security-backend security-frontend ## Run all security checks
 
 security-pipeline: ## Security scan pipeline
-	cd services/pipeline && python -m pip_audit 2>/dev/null || echo "pip-audit not installed — run: pip install pip-audit"
-	cd services/pipeline && python -m bandit -r shared/ processor/ ai_engine/ config/ -q 2>/dev/null || echo "bandit not installed — run: pip install bandit"
+	cd services/pipeline && python3 -m pip_audit 2>/dev/null || echo "pip-audit not installed — run: pip install pip-audit"
+	cd services/pipeline && python3 -m bandit -r shared/ processor/ ai_engine/ config/ -q 2>/dev/null || echo "bandit not installed — run: pip install bandit"
 
 security-backend: ## Security scan backend
-	cd services/platform/backend && python -m pip_audit 2>/dev/null || echo "pip-audit not installed"
-	cd services/platform/backend && python -m bandit -r apps/ sequoia/ -q 2>/dev/null || echo "bandit not installed"
+	cd services/platform/backend && python3 -m pip_audit 2>/dev/null || echo "pip-audit not installed"
+	cd services/platform/backend && python3 -m bandit -r apps/ sequoia/ -q 2>/dev/null || echo "bandit not installed"
 
 security-frontend: ## Security scan frontend
 	cd services/platform/frontend && npm audit --audit-level=high 2>/dev/null || true

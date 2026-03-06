@@ -57,7 +57,7 @@ Every task follows this pattern:
 1. **Create a branch** from main: `feat/description`, `fix/description`, or `refactor/description`
 2. **Write tests first** when adding features or fixing bugs
 3. **Implement** the change
-4. **Validate**: run `make lint && make typecheck && make test`
+4. **Validate**: run `make lint && make typecheck`
 5. **Commit** with conventional message: `feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, `test:`
 6. **Push and open a PR**: `git push -u origin <branch> && gh pr create`
 7. **Never merge** — the human reviews and merges PRs
@@ -69,7 +69,7 @@ If the user doesn't specify a branch name, ask for one. Never work directly on m
 **Run before considering any task complete:**
 
 ```bash
-make lint && make typecheck && make test
+make lint && make typecheck
 ```
 
 If any step fails, fix the issue and re-run. Do not report completion until all three pass.
@@ -115,7 +115,7 @@ If any step fails, fix the issue and re-run. Do not report completion until all 
 4. **Never import across service boundaries** — `pipeline/` must not import from `platform/` and vice versa. Within pipeline, `processor/` and `ai_engine/` import from `shared/` and `config/` only, never from each other.
 5. **Never add dependencies** without updating `pyproject.toml` (pipeline), `requirements.txt` (backend), or `package.json` (frontend).
 6. **Never push directly to main** — always work on feature branches.
-7. **Never skip validation** — always run `make lint && make typecheck && make test`.
+7. **Never skip validation** — always run `make lint && make typecheck`.
 8. **Never commit `.env` files, secrets, or credentials**.
 9. **Never modify model weight files** (`.pth`, `.pt`) — those are training outputs.
 10. **Never modify Avro schemas** without considering backwards compatibility.
@@ -143,5 +143,4 @@ make up                              # Start all Docker services
 make down                            # Stop all services
 make logs SERVICE=platform-backend   # Tail logs for a service
 make rebuild SERVICE=processor-carros # Rebuild and restart one service
-make test-integration                # Integration tests (requires stack running)
 ```

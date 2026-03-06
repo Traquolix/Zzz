@@ -34,5 +34,5 @@
 
 ## Code Quality
 
-- [ ] **Rewrite tests** — all AI-generated unit tests removed. Write meaningful tests manually for pipeline, backend, and frontend.
+- [ ] **Rewrite tests** — all AI-generated unit tests removed. Write meaningful tests manually for pipeline, backend, and frontend. Once done, re-add `make test` targets to Makefile, test jobs to CI workflow, and `make test` to the validation command in CLAUDE.md.
 - [ ] **Per-service READMEs** — processor, ai_engine, backend (frontend has one)
