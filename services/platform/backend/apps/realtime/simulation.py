@@ -122,6 +122,7 @@ class Incident:
     fiber_line: str
     channel: int
     detected_at: str
+    detected_at_ms: float  # Wall-clock ms at creation (avoids UTC/local parsing bugs)
     status: str = "active"
     duration: Optional[float] = None
 
@@ -572,13 +573,7 @@ class SimulationEngine:
 
         for inc in self.incidents:
             if inc.status == "active" and inc.duration:
-                try:
-                    detected_ts = (
-                        time.mktime(time.strptime(inc.detected_at[:19], "%Y-%m-%dT%H:%M:%S")) * 1000
-                    )
-                except ValueError:
-                    detected_ts = now_ms
-                if now_ms - detected_ts > inc.duration:
+                if now_ms - inc.detected_at_ms > inc.duration:
                     inc.status = "resolved"
                     resolved_incidents.append(inc)
 
@@ -607,6 +602,7 @@ class SimulationEngine:
                 fiber_line=fiber.id,
                 channel=ch,
                 detected_at=time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(now)),
+                detected_at_ms=now_ms,
                 status="active",
                 duration=dur,
             )
@@ -696,9 +692,8 @@ class SimulationEngine:
 
     def _init_snapshot(self, inc: Incident):
         """Initialize a snapshot for a new incident, seeding with pre-incident data from the ring."""
-        detected_ms = time.mktime(time.strptime(inc.detected_at[:19], "%Y-%m-%dT%H:%M:%S")) * 1000
-        start_ms = detected_ms - SNAPSHOT_WINDOW_S * 1000
-        end_ms = detected_ms + SNAPSHOT_WINDOW_S * 1000
+        start_ms = inc.detected_at_ms - SNAPSHOT_WINDOW_S * 1000
+        end_ms = inc.detected_at_ms + SNAPSHOT_WINDOW_S * 1000
 
         # Seed from rolling buffer: detections near this incident's channel in the time window
         ring = self._detection_ring.get(inc.fiber_line, [])
@@ -837,6 +832,7 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
     tick_interval = 0.05  # 50ms ticks (20 Hz physics)
     shm_counter = 0
     incident_counter = 0
+    snapshot_counter = 0
     count_counter = 0
     last_detection_broadcast = time.time()
     detection_broadcast_interval = 0.1  # 100ms (10 Hz)
@@ -858,6 +854,7 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
         detections, new_incidents, resolved_incidents = engine.tick(tick_interval * 1000)
         shm_counter += 1
         incident_counter += 1
+        snapshot_counter += 1
         count_counter += 1
 
         # Accumulate detections
@@ -937,17 +934,21 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
                         },
                     )
 
-        # Broadcast incidents every 100 ticks (5 seconds) — per-org
-        if incident_counter >= 100:
-            incident_counter = 0
-            # Update caches for REST API fallback
-            _update_simulation_incidents_cache(engine.incidents)
+        # Sync snapshot cache every 20 ticks (1s) so frontend polling gets fresh data
+        if snapshot_counter >= 20:
+            snapshot_counter = 0
             _update_simulation_snapshots(
                 {
                     iid: {"detections": list(snap["detections"]), "complete": snap["complete"]}
                     for iid, snap in engine.incident_snapshots.items()
                 }
             )
+
+        # Broadcast incidents every 100 ticks (5 seconds) — per-org
+        if incident_counter >= 100:
+            incident_counter = 0
+            # Update caches for REST API fallback
+            _update_simulation_incidents_cache(engine.incidents)
             for inc in pending_new_incidents + pending_resolved_incidents:
                 inc_data = transform_simulation_incident(inc)
                 directional_fid = inc_data["fiberLine"]
