@@ -83,26 +83,26 @@ open http://localhost:3000  # Frontend
 open http://localhost:3002  # Grafana (admin/admin)
 ```
 
-### Local Development (pipeline only)
+### Local Development
+
+```bash
+# Start backend + frontend with auto-setup (creates venv, installs deps, migrates DB, seeds users)
+make dev
+
+# Or individually:
+make dev-backend   # Backend on http://localhost:8001
+make dev-frontend  # Frontend on http://localhost:5173
+```
+
+No manual setup needed — `make dev` handles everything on first run.
+JWT keys are auto-generated in dev mode. Simulation data starts automatically when the frontend connects.
+
+### Pipeline Development
 
 ```bash
 cd services/pipeline
 pip install -e ".[dev]"    # Install with dev dependencies
 pytest tests/ -v           # Run tests
-```
-
-### Local Development (platform only)
-
-```bash
-# Backend
-cd services/platform/backend
-pip install -r requirements.txt
-python manage.py runserver
-
-# Frontend
-cd services/platform/frontend
-npm install
-npm run dev
 ```
 
 ## Configuration

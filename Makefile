@@ -3,7 +3,7 @@
 # Usage: make ci  (runs full validation pipeline)
 
 .PHONY: help lint format typecheck test test-integration security ci \
-        up down logs rebuild shell clean
+        up down logs rebuild shell clean dev dev-backend dev-frontend
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
@@ -113,6 +113,44 @@ rebuild: ## Rebuild and restart a service (usage: make rebuild SERVICE=processor
 
 shell: ## Open a shell in a service container (usage: make shell SERVICE=platform-backend)
 	docker compose exec $(SERVICE) /bin/sh
+
+# ---------------------------------------------------------------------------
+# Local Development
+# ---------------------------------------------------------------------------
+BACKEND_DIR := services/platform/backend
+FRONTEND_DIR := services/platform/frontend
+
+dev: ## Start backend + frontend for local development (auto-setup on first run)
+	@trap 'kill 0' EXIT; \
+	$(MAKE) dev-backend & \
+	$(MAKE) dev-frontend & \
+	wait
+
+dev-backend: ## Start backend dev server (auto-setup on first run)
+	@if [ ! -d "$(BACKEND_DIR)/.venv" ]; then \
+		echo "==> Creating backend venv..."; \
+		python3 -m venv $(BACKEND_DIR)/.venv; \
+	fi
+	@if ! $(BACKEND_DIR)/.venv/bin/python -c "import django" 2>/dev/null; then \
+		echo "==> Installing backend dependencies..."; \
+		$(BACKEND_DIR)/.venv/bin/pip install -r $(BACKEND_DIR)/requirements.txt -q; \
+	fi
+	@if [ ! -f "$(BACKEND_DIR)/db.sqlite3" ]; then \
+		echo "==> Running migrations..."; \
+		cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python manage.py migrate --run-syncdb; \
+		echo "==> Seeding dev users..."; \
+		cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python manage.py seed_users; \
+	fi
+	@echo "==> Starting backend on http://localhost:8001"
+	cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/daphne -b 127.0.0.1 -p 8001 sequoia.asgi:application
+
+dev-frontend: ## Start frontend dev server (auto-setup on first run)
+	@if [ ! -d "$(FRONTEND_DIR)/node_modules" ]; then \
+		echo "==> Installing frontend dependencies..."; \
+		cd $(FRONTEND_DIR) && npm install; \
+	fi
+	@echo "==> Starting frontend on http://localhost:5173"
+	cd $(FRONTEND_DIR) && npm run dev
 
 # ---------------------------------------------------------------------------
 # Utilities
