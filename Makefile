@@ -5,7 +5,7 @@
 
 .PHONY: help setup setup-pipeline setup-backend setup-frontend \
         lint lint-pipeline lint-backend lint-frontend \
-        format format-pipeline format-backend \
+        format format-pipeline format-backend format-frontend \
         typecheck typecheck-pipeline typecheck-backend typecheck-frontend \
         security security-pipeline security-backend security-frontend \
         ci up down logs rebuild shell clean dev dev-backend dev-frontend
@@ -83,7 +83,7 @@ lint-frontend: ## Lint frontend TypeScript code
 # ---------------------------------------------------------------------------
 # Format (auto-fix)
 # ---------------------------------------------------------------------------
-format: format-pipeline format-backend ## Auto-format all code
+format: format-pipeline format-backend format-frontend ## Auto-format all code
 
 format-pipeline: ## Format pipeline Python code
 	$(PIPELINE_PY) -m ruff format $(PIPELINE_DIR)
@@ -92,6 +92,9 @@ format-pipeline: ## Format pipeline Python code
 format-backend: ## Format backend Python code
 	$(BACKEND_PY) -m ruff format $(BACKEND_DIR)
 	$(BACKEND_PY) -m ruff check --fix $(BACKEND_DIR)
+
+format-frontend: ## Format frontend TypeScript code
+	cd $(FRONTEND_DIR) && npm run format
 
 # ---------------------------------------------------------------------------
 # Type checking

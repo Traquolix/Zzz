@@ -33,6 +33,8 @@ dev = [
     "ruff",
     "mypy",
     "tqdm",
+    "pip-audit",
+    "bandit",
 ]
 
 [tool.setuptools.packages.find]
