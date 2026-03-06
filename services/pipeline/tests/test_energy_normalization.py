@@ -1,18 +1,16 @@
 """Tests for energy normalization (Phase 2.2)."""
 
-import importlib
 import sys
 from unittest.mock import MagicMock
 
 import numpy as np
-import pytest
 
 # Mock heavy dependencies that utils.py doesn't need but __init__.py imports
 sys.modules.setdefault("torch", MagicMock())
 sys.modules.setdefault("matplotlib", MagicMock())
 sys.modules.setdefault("matplotlib.pyplot", MagicMock())
 
-from ai_engine.model_vehicle.utils import normalize_channel_energy
+from ai_engine.model_vehicle.utils import normalize_channel_energy  # noqa: E402
 
 
 class TestNormalizeChannelEnergy:

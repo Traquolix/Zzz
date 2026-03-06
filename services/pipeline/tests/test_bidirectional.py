@@ -1,7 +1,7 @@
 """Tests for bidirectional detection (Phase 4)."""
 
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import numpy as np
 import pytest
@@ -9,9 +9,9 @@ import pytest
 sys.modules.setdefault("matplotlib", MagicMock())
 sys.modules.setdefault("matplotlib.pyplot", MagicMock())
 
-import torch
+import torch  # noqa: E402
 
-from ai_engine.model_vehicle.vehicle_speed import VehicleSpeedEstimator
+from ai_engine.model_vehicle.vehicle_speed import VehicleSpeedEstimator  # noqa: E402
 
 
 class FakeModelArgs:
@@ -34,6 +34,7 @@ class TestBidirectionalDetection:
     @pytest.fixture
     def make_estimator(self):
         """Factory to create estimator with custom bidirectional setting."""
+
         def _make(bidirectional: bool):
             e = VehicleSpeedEstimator.__new__(VehicleSpeedEstimator)
             e.window_size = 100
@@ -58,6 +59,7 @@ class TestBidirectionalDetection:
             e.intervals = None
             e.verbose = False
             return e
+
         return _make
 
     def test_forward_only_when_disabled(self, make_estimator):
@@ -65,7 +67,6 @@ class TestBidirectionalDetection:
         e = make_estimator(False)
 
         calls = []
-        original_process = e._process_single_direction
 
         def mock_process(data):
             calls.append(data.shape)
@@ -73,11 +74,11 @@ class TestBidirectionalDetection:
             n_pairs = e.Nch - 1
             t = data.shape[1]
             return (
-                np.ones((n_sec, n_pairs, t)),   # per_pair
-                np.ones((n_sec, t)) * 1000,     # summed
+                np.ones((n_sec, n_pairs, t)),  # per_pair
+                np.ones((n_sec, t)) * 1000,  # summed
                 np.ones((n_sec, n_pairs, t)) * 60,  # speed
-                torch.ones(n_sec, e.Nch, t),    # aligned
-                torch.ones(n_sec, n_pairs, 10), # thetas
+                torch.ones(n_sec, e.Nch, t),  # aligned
+                torch.ones(n_sec, n_pairs, 10),  # thetas
             )
 
         e._process_single_direction = mock_process

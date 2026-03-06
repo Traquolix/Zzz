@@ -1,7 +1,7 @@
 """Tests for MessageOpsMixin: _on_delivery cross-thread safety."""
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -23,7 +23,7 @@ async def transformer_service():
         output_topic="test.out",
     )
 
-    with patch.object(ServiceBase, '_load_required_schemas'):
+    with patch.object(ServiceBase, "_load_required_schemas"):
         svc = StubTransformer("test-svc", config)
 
     svc.producer = MagicMock()

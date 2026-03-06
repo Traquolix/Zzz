@@ -9,7 +9,6 @@ from shared.otel_setup import get_correlation_id
 
 
 class ProcessingStep(ABC):
-
     def __init__(self, name: str, config: Optional[Dict[str, Any]] = None):
         self.name = name
         self.config = config or {}

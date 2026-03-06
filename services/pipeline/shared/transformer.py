@@ -406,8 +406,7 @@ class RollingBufferedTransformer(ServiceBase, Generic[T, U]):
                 buffer_info["new_count"] = 0  # Reset counter
 
                 self.logger.debug(
-                    f"Rolling buffer '{buffer_key}' ready: {buffer_len} messages, "
-                    f"processing window"
+                    f"Rolling buffer '{buffer_key}' ready: {buffer_len} messages, processing window"
                 )
                 # Dispatch as background task so poll loop continues
                 task = asyncio.create_task(

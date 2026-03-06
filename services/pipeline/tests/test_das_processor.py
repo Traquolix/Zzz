@@ -73,7 +73,6 @@ class TestDASProcessorMessageAdaptation:
             patch("shared.service_base.ServiceBase._load_schema", return_value=None),
             patch("processor.main.setup_otel"),
         ):
-
             processor = DASProcessor()
             processor.logger = MagicMock()
 
@@ -99,7 +98,6 @@ class TestDASProcessorMessageAdaptation:
             patch("shared.service_base.ServiceBase._load_schema", return_value=None),
             patch("processor.main.setup_otel"),
         ):
-
             processor = DASProcessor()
             processor.logger = MagicMock()
 
@@ -122,7 +120,6 @@ class TestDASProcessorMessageAdaptation:
             patch("shared.service_base.ServiceBase._load_schema", return_value=None),
             patch("processor.main.setup_otel"),
         ):
-
             processor = DASProcessor()
             processor.logger = MagicMock()
 
@@ -152,7 +149,6 @@ class TestDASProcessorFiberIdExtraction:
             patch("shared.service_base.ServiceBase._load_schema", return_value=None),
             patch("processor.main.setup_otel"),
         ):
-
             processor = DASProcessor()
 
             assert processor._extract_fiber_id("das.raw.carros") == "carros"
@@ -175,7 +171,6 @@ class TestDASProcessorTransform:
             patch("shared.service_base.ServiceBase._load_schema", return_value=None),
             patch("processor.main.setup_otel"),
         ):
-
             processor = DASProcessor()
             processor.logger = MagicMock()
             processor.tracer = MagicMock()
@@ -228,7 +223,6 @@ class TestDASProcessorTransform:
             patch("shared.service_base.ServiceBase._load_schema", return_value=None),
             patch("processor.main.setup_otel"),
         ):
-
             processor = DASProcessor()
             processor.logger = MagicMock()
             processor.tracer = MagicMock()
@@ -271,7 +265,6 @@ class TestDASProcessorTransform:
             patch("shared.service_base.ServiceBase._load_schema", return_value=None),
             patch("processor.main.setup_otel"),
         ):
-
             processor = DASProcessor()
             processor.logger = MagicMock()
             processor.tracer = MagicMock()
@@ -304,7 +297,6 @@ class TestDASProcessorTransform:
             patch("shared.service_base.ServiceBase._load_schema", return_value=None),
             patch("processor.main.setup_otel"),
         ):
-
             processor = DASProcessor()
             processor.logger = MagicMock()
             processor.tracer = MagicMock()
@@ -353,7 +345,6 @@ class TestDASProcessorBuildOutput:
             patch("shared.service_base.ServiceBase._load_schema", return_value=None),
             patch("processor.main.setup_otel"),
         ):
-
             processor = DASProcessor()
             processor.logger = MagicMock()
 
@@ -400,7 +391,6 @@ class TestDASProcessorBuildOutput:
             patch("shared.service_base.ServiceBase._load_schema", return_value=None),
             patch("processor.main.setup_otel"),
         ):
-
             processor = DASProcessor()
             processor.logger = MagicMock()
 
@@ -437,7 +427,6 @@ class TestDASProcessorPipelineCaching:
             patch("shared.service_base.ServiceBase._load_schema", return_value=None),
             patch("processor.main.setup_otel"),
         ):
-
             processor = DASProcessor()
             processor.logger = MagicMock()
 
@@ -458,7 +447,6 @@ class TestDASProcessorPipelineCaching:
             patch("shared.service_base.ServiceBase._load_schema", return_value=None),
             patch("processor.main.setup_otel"),
         ):
-
             processor = DASProcessor()
             processor.logger = MagicMock()
 
@@ -499,7 +487,6 @@ class TestDASProcessorPipelineCaching:
             patch("shared.service_base.ServiceBase._load_schema", return_value=None),
             patch("processor.main.setup_otel"),
         ):
-
             processor = DASProcessor()
             processor.logger = MagicMock()
 

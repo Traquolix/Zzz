@@ -280,5 +280,3 @@ class TestMessagesToArrays:
 
         with pytest.raises(ValueError, match="channel_start mismatch"):
             messages_to_arrays(messages, ctx, 10.0)
-
-

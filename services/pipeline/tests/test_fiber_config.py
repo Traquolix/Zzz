@@ -311,7 +311,7 @@ class TestStepSize:
 
     def test_step_size_with_sixth_overlap(self):
         """window=300, overlap=1/6 -> step=250."""
-        config = InferenceConfig(window_seconds=30, sampling_rate_hz=10.0, time_overlap_ratio=1/6)
+        config = InferenceConfig(window_seconds=30, sampling_rate_hz=10.0, time_overlap_ratio=1 / 6)
         assert config.step_size == 250
 
     def test_step_size_with_zero_overlap(self):

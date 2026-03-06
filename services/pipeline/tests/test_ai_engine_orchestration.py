@@ -4,8 +4,6 @@ import threading
 from collections import OrderedDict
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from shared.ai_metrics import AIMetrics
 
 
@@ -25,7 +23,7 @@ class TestModelRegistryCaching:
         registry = _make_mock_registry(max_models=5, ai_metrics=metrics)
         registry._loaded_models["model_a"] = MagicMock()
 
-        with patch.object(metrics, 'record_cache_hit') as mock_hit:
+        with patch.object(metrics, "record_cache_hit") as mock_hit:
             registry.get_speed_estimator("model_a")
             mock_hit.assert_called_once_with("model_a")
 
@@ -43,7 +41,7 @@ class TestModelRegistryCaching:
         registry = _make_mock_registry(max_models=5, ai_metrics=metrics)
         registry._load_speed_estimator = MagicMock(return_value=MagicMock())
 
-        with patch.object(metrics, 'record_cache_miss') as mock_miss:
+        with patch.object(metrics, "record_cache_miss") as mock_miss:
             registry.get_speed_estimator("new_model")
             mock_miss.assert_called_once_with("new_model")
 
@@ -65,7 +63,7 @@ class TestModelRegistryCaching:
         registry._loaded_models["old"] = MagicMock()
         registry._load_speed_estimator = MagicMock(return_value=MagicMock())
 
-        with patch.object(metrics, 'record_cache_eviction') as mock_evict:
+        with patch.object(metrics, "record_cache_eviction") as mock_evict:
             registry.get_speed_estimator("new_model")
             mock_evict.assert_called_once_with("old")
 
@@ -102,9 +100,9 @@ class TestAIMetricsCache:
 
     def test_cache_counters_created(self):
         metrics = AIMetrics("test")
-        assert hasattr(metrics, 'model_cache_hits')
-        assert hasattr(metrics, 'model_cache_misses')
-        assert hasattr(metrics, 'model_cache_evictions')
+        assert hasattr(metrics, "model_cache_hits")
+        assert hasattr(metrics, "model_cache_misses")
+        assert hasattr(metrics, "model_cache_evictions")
 
     def test_record_methods_exist(self):
         metrics = AIMetrics("test")
@@ -115,6 +113,7 @@ class TestAIMetricsCache:
 
 
 # --- Helpers ---
+
 
 def _make_mock_registry(max_models=20, ai_metrics=None):
     """Create a ModelRegistry-like object without loading real models."""

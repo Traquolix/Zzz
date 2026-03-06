@@ -3,7 +3,6 @@
 import sys
 from unittest.mock import MagicMock
 
-import numpy as np
 import pytest
 
 # Remove ALL mocked modules from earlier test files so we get clean imports
@@ -66,6 +65,7 @@ class TestApplyGlrtPerPair:
     def test_edge_safety_zeroed(self, estimator):
         """First/last (safety + glrt_win//2) samples should be 0."""
         from ai_engine.model_vehicle.constants import GLRT_EDGE_SAFETY_SAMPLES
+
         aligned = torch.randn(2, 9, 200)
         result = estimator.apply_glrt(aligned)
         safety = GLRT_EDGE_SAFETY_SAMPLES

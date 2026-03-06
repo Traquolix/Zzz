@@ -19,24 +19,24 @@ class Cpab(object):
     """ Core class for this library. This class contains all the information
         about the tesselation, transformation ect. The user is not meant to
         use anything else than this specific class.
-        
+
     Arguments:
         tess_size: list, with the number of cells in each dimension
-        
-        backend: string, computational backend to use. Choose between 
+
+        backend: string, computational backend to use. Choose between
             "numpy" (default), "pytorch" or "tensorflow"
-        
+
         device: string, either "cpu" (default) or "gpu". For the numpy backend
             only the "cpu" option is valid
-        
-        zero_boundary: bool, determines is the velocity at the boundary is zero 
-        
-        volume_perservation: bool, determine if the transformation is 
+
+        zero_boundary: bool, determines is the velocity at the boundary is zero
+
+        volume_perservation: bool, determine if the transformation is
             volume perservating
-            
+
         override: bool, if true a new basis will always be created and saved,
             when the class is called
-        
+
     Methods:
         @get_theta_dim
         @get_params
@@ -162,7 +162,7 @@ class Cpab(object):
 
     #%%
     def uniform_meshgrid(self, n_points):
-        """ Constructs a meshgrid 
+        """ Constructs a meshgrid
         Arguments:
             n_points: list, number of points in each dimension
         Output:
@@ -200,12 +200,12 @@ class Cpab(object):
             the more the cell parameters should correlate -> smooth transistion in
             parameters. The covariance in the D-space is calculated using the
             squared exponential kernel.
-                
+
         Arguments:
             n_sample: integer, number of transformation to sample
             mean: [d,] vector, mean of multivariate gaussian
-            length_scale: float>0, determines how fast the covariance declines 
-                between the cells 
+            length_scale: float>0, determines how fast the covariance declines
+                between the cells
             output_variance: float>0, determines the overall variance from the mean
         Output:
             samples: [n_sample, d] matrix. Each row is a independen sample from
@@ -248,14 +248,14 @@ class Cpab(object):
 
     #%%
     def identity(self, n_sample=1, epsilon=0):
-        """ Method for getting the identity parameters for the identity 
-            transformation (vector of zeros) 
+        """ Method for getting the identity parameters for the identity
+            transformation (vector of zeros)
         Arguments:
             n_sample: integer, number of transformations to sample
             epsilon: float>0, small number to add to the identity transformation
                 for stability during training
         Output:
-            samples: [n_sample, d] matrix. Each row is a sample    
+            samples: [n_sample, d] matrix. Each row is a sample
         """
         return self.backend.identity(self.params.d, n_sample, epsilon, self.device, device_name=self.device_name)
 
@@ -296,7 +296,7 @@ class Cpab(object):
                     In 1D: [n_batch, n_channels, number_of_features]
                     In 2D: [n_batch, n_channels, width, height]
                     In 3D: [n_batch, n_channels, width, height, depth]
-            grid: [n_batch, ndim, n_points] tensor with grid points that are 
+            grid: [n_batch, ndim, n_points] tensor with grid points that are
                 used to interpolate the data
             outsize: list, with number of points in the output
         Output:
@@ -347,7 +347,7 @@ class Cpab(object):
         Arguments:
             grid: [ndim, nP] matrix, with points
             theta: [1, d] single parametrization vector
-        Output:    
+        Output:
             v: [ndim, nP] matrix, with velocity vectors for each point
         """
         self._check_type(grid); self._check_device(grid)
@@ -358,8 +358,8 @@ class Cpab(object):
     #%%
     def visualize_vectorfield(self, theta, nb_points = 50, fig = plt.figure()):
         """ Utility function that helps visualize the vectorfield for a specific
-            parametrization vector theta 
-        Arguments:    
+            parametrization vector theta
+        Arguments:
             theta: [1, d] single parametrization vector
             nb_points: number of points in each dimension to plot i.e. in 2D
                 with nb_points=50 the function will plot 50*50=2500 arrows!
@@ -524,14 +524,14 @@ class Cpab(object):
     #%%
     def _check_device(self, x):
         """ Asssert that x is on the same device (cpu or gpu) as the class """
-        assert self.backend.check_device(x, self.device), '''Input is placed on 
+        assert self.backend.check_device(x, self.device), '''Input is placed on
             device {0} but the class expects it to be on device {1}'''.format(
             str(x.device), self.device)
 
     #%%
     def __repr__(self):
         output = '''
-        CPAB transformer class. 
+        CPAB transformer class.
             Parameters:
                 Tesselation size:           {0}
                 Total number of cells:      {1}

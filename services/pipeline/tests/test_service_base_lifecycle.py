@@ -1,13 +1,11 @@
 """Tests for ServiceBase lifecycle: startup order, shutdown drain, capability sets."""
 
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
-from shared.circuit_breaker import CircuitBreakerState
-from shared.service_base import ServiceBase, ServiceType, _NEEDS_CONSUMER, _NEEDS_PRODUCER
-from shared.service_config import OutputConfig, ServiceConfig
+from shared.service_base import _NEEDS_CONSUMER, _NEEDS_PRODUCER, ServiceBase, ServiceType
+from shared.service_config import ServiceConfig
 
 
 class TestCapabilitySets:
@@ -96,6 +94,7 @@ class TestCircuitBreakerWiring:
 
 # --- Helpers ---
 
+
 def _create_stub_transformer(name, config):
     """Create a minimal Transformer subclass for testing ServiceBase init."""
     from shared.transformer import Transformer
@@ -104,7 +103,7 @@ def _create_stub_transformer(name, config):
         async def transform(self, message):
             return message
 
-    with patch.object(ServiceBase, '_load_required_schemas'):
+    with patch.object(ServiceBase, "_load_required_schemas"):
         return StubTransformer(name, config)
 
 
@@ -115,7 +114,7 @@ def _create_stub_producer(name, config):
         async def generate(self):
             return None
 
-    with patch.object(ServiceBase, '_load_required_schemas'):
+    with patch.object(ServiceBase, "_load_required_schemas"):
         return StubProducer(name, config)
 
 
@@ -126,5 +125,5 @@ def _create_stub_consumer(name, config):
         async def consume(self, message):
             pass
 
-    with patch.object(ServiceBase, '_load_required_schemas'):
+    with patch.object(ServiceBase, "_load_required_schemas"):
         return StubConsumer(name, config)

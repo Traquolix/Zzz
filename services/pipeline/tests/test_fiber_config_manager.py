@@ -1,6 +1,5 @@
 """Tests for FiberConfigManager: hot-reload, rate limiting, parse errors."""
 
-import os
 import time
 
 import pytest
@@ -35,9 +34,7 @@ def config_file(tmp_path):
                 "input_topic": "das.raw.fiber1",
                 "total_channels": 100,
                 "sampling_rate_hz": 50.0,
-                "sections": [
-                    {"name": "section_a", "channels": [0, 50], "model": "test_model"}
-                ],
+                "sections": [{"name": "section_a", "channels": [0, 50], "model": "test_model"}],
             }
         },
         "models": {

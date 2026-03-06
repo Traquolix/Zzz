@@ -1,7 +1,6 @@
 """Tests for transformer patterns: Transformer, MultiTransformer, Consumer using shared _poll_loop."""
 
-import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -41,7 +40,7 @@ class TestTransformerPattern:
                 return Message(id=message.id, payload={"doubled": True})
 
         config = _make_config()
-        with patch.object(ServiceBase, '_load_required_schemas'):
+        with patch.object(ServiceBase, "_load_required_schemas"):
             svc = DoubleTransformer("test", config)
 
         svc._internal_send = AsyncMock()
@@ -64,7 +63,7 @@ class TestTransformerPattern:
                 return None  # Skip
 
         config = _make_config()
-        with patch.object(ServiceBase, '_load_required_schemas'):
+        with patch.object(ServiceBase, "_load_required_schemas"):
             svc = FilterTransformer("test", config)
 
         svc._internal_send = AsyncMock()
@@ -88,7 +87,7 @@ class TestMultiTransformerPattern:
                 ]
 
         config = _make_config()
-        with patch.object(ServiceBase, '_load_required_schemas'):
+        with patch.object(ServiceBase, "_load_required_schemas"):
             svc = SplitTransformer("test", config)
 
         svc._internal_send = AsyncMock()
@@ -112,7 +111,7 @@ class TestConsumerPattern:
                 consumed.append(message)
 
         config = _make_config(output_topic=None)
-        with patch.object(ServiceBase, '_load_required_schemas'):
+        with patch.object(ServiceBase, "_load_required_schemas"):
             svc = TrackingConsumer("test", config)
 
         svc._commit_message = AsyncMock()
@@ -136,16 +135,16 @@ class TestPollLoopShared:
                 return message
 
         config = _make_config()
-        with patch.object(ServiceBase, '_load_required_schemas'):
+        with patch.object(ServiceBase, "_load_required_schemas"):
             svc = Stub("test", config)
 
         # Verify _start_service_loops creates task with _poll_loop
         svc._tasks = []
-        with patch.object(svc, '_poll_loop', new_callable=AsyncMock) as mock_poll:
+        with patch.object(svc, "_poll_loop", new_callable=AsyncMock):
             # Can't await _start_service_loops without a running loop properly,
             # but we can check the method exists and is used
-            assert hasattr(svc, '_poll_loop')
-            assert hasattr(svc, '_dispatch')
+            assert hasattr(svc, "_poll_loop")
+            assert hasattr(svc, "_dispatch")
 
     @pytest.mark.asyncio
     async def test_consumer_uses_poll_loop(self):
@@ -156,8 +155,8 @@ class TestPollLoopShared:
                 pass
 
         config = _make_config(output_topic=None)
-        with patch.object(ServiceBase, '_load_required_schemas'):
+        with patch.object(ServiceBase, "_load_required_schemas"):
             svc = Stub("test", config)
 
-        assert hasattr(svc, '_poll_loop')
-        assert hasattr(svc, '_dispatch')
+        assert hasattr(svc, "_poll_loop")
+        assert hasattr(svc, "_dispatch")

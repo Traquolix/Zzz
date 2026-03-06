@@ -365,15 +365,15 @@ async def run_async_tests():
         msg = MockMessage("test:buffer", i)
         await transformer._handle_rolling_message(msg)
 
-    assert (
-        len(transformer.processed_windows) == 2
-    ), f"Expected 2 windows, got {len(transformer.processed_windows)}"
-    assert transformer.processed_windows[0] == list(
-        range(10)
-    ), f"First window wrong: {transformer.processed_windows[0]}"
-    assert transformer.processed_windows[1] == list(
-        range(8, 18)
-    ), f"Second window wrong: {transformer.processed_windows[1]}"
+    assert len(transformer.processed_windows) == 2, (
+        f"Expected 2 windows, got {len(transformer.processed_windows)}"
+    )
+    assert transformer.processed_windows[0] == list(range(10)), (
+        f"First window wrong: {transformer.processed_windows[0]}"
+    )
+    assert transformer.processed_windows[1] == list(range(8, 18)), (
+        f"Second window wrong: {transformer.processed_windows[1]}"
+    )
     print("✓ test_handles_rolling_message")
 
     # Test 2: Buffer key isolation
@@ -399,12 +399,12 @@ async def run_async_tests():
             msg = MockMessage(f"key{key_idx}", msg_idx)
             await transformer3._handle_rolling_message(msg)
 
-    assert (
-        transformer3._buffers_evicted >= 1
-    ), f"Expected evictions, got {transformer3._buffers_evicted}"
-    assert (
-        len(transformer3._rolling_buffers) <= 3
-    ), f"Too many buffers: {len(transformer3._rolling_buffers)}"
+    assert transformer3._buffers_evicted >= 1, (
+        f"Expected evictions, got {transformer3._buffers_evicted}"
+    )
+    assert len(transformer3._rolling_buffers) <= 3, (
+        f"Too many buffers: {len(transformer3._rolling_buffers)}"
+    )
     print("✓ test_lru_eviction")
 
     print("\nAll async tests passed!")

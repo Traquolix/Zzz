@@ -27,8 +27,8 @@ from ai_engine.model_vehicle import (
     Args_NN_model_all_channels,
     VehicleSpeedEstimator,
 )
-from ai_engine.model_vehicle.simple_interval_counter import VehicleCounter, build_counting_network
 from ai_engine.model_vehicle.calibration import CalibrationManager
+from ai_engine.model_vehicle.simple_interval_counter import VehicleCounter, build_counting_network
 
 # Unified config loader
 from config import (
@@ -40,8 +40,8 @@ from config import (
 )
 from shared import RollingBufferedTransformer
 from shared.ai_metrics import AIMetrics
-from shared.message import KafkaMessage, Message
 from shared.gpu_lock import gpu_lock
+from shared.message import KafkaMessage, Message
 from shared.otel_setup import get_correlation_id, setup_otel
 
 warnings.filterwarnings("ignore", message=".*torch.meshgrid.*")
@@ -87,7 +87,9 @@ class ModelRegistry:
         # Build default model and counter through the same code path as all others
         self._default_model = self._load_speed_estimator(default_model_name)
         spec = get_model_spec(default_model_name)
-        self._default_counter = self._load_counter(default_model_name) if spec.counting.enabled else None
+        self._default_counter = (
+            self._load_counter(default_model_name) if spec.counting.enabled else None
+        )
 
     def get_speed_estimator(self, model_hint: str) -> VehicleSpeedEstimator:
         """Get speed estimator by model hint (lazy-loaded with LRU eviction)."""
@@ -143,7 +145,8 @@ class ModelRegistry:
                 data_window_length=spec.inference.samples_per_window,
                 gauge=spec.inference.gauge_meters,
                 Nch=spec.inference.channels_per_section,
-                N_channels=spec.inference.channels_per_section - 1,  # overlap_space = Nch-1 → step=1 (matches notebook)
+                N_channels=spec.inference.channels_per_section
+                - 1,  # overlap_space = Nch-1 → step=1 (matches notebook)
                 fs=spec.inference.sampling_rate_hz,
                 exp_name=spec.exp_name,
                 version=spec.version,
@@ -211,9 +214,7 @@ class ModelRegistry:
                 model_path = (_MODULE_DIR / spec.counting.model_path).resolve()
                 # Validate path is within expected model directory (prevent path traversal)
                 if not str(model_path).startswith(str(_MODULE_DIR)):
-                    raise ValueError(
-                        f"Counting model path escapes module directory: {model_path}"
-                    )
+                    raise ValueError(f"Counting model path escapes module directory: {model_path}")
                 if model_path.exists():
                     nn_model = build_counting_network()
                     # Model file may be full-object (legacy) or state_dict.
@@ -221,7 +222,9 @@ class ModelRegistry:
                     try:
                         state = torch.load(model_path, map_location="cpu", weights_only=True)
                     except Exception:
-                        state = torch.load(model_path, map_location="cpu", weights_only=False).state_dict()
+                        state = torch.load(
+                            model_path, map_location="cpu", weights_only=False
+                        ).state_dict()
                     nn_model.load_state_dict(state)
                     nn_model.eval()
 
@@ -433,12 +436,9 @@ class AIEngineService(RollingBufferedTransformer):
                     self._pending_ready.clear()
                     self._msgs_since_first_ready = 0
                     self.logger.info(
-                        f"Dispatching batch: {len(ready)} sections: "
-                        f"{list(ready.keys())}"
+                        f"Dispatching batch: {len(ready)} sections: {list(ready.keys())}"
                     )
-                    task = asyncio.create_task(
-                        self._process_sections_batch(ready)
-                    )
+                    task = asyncio.create_task(self._process_sections_batch(ready))
                     self._processing_tasks.add(task)
 
         except Exception as e:
@@ -473,19 +473,23 @@ class AIEngineService(RollingBufferedTransformer):
                         )
                         continue
 
-                    section_inputs.append((
-                        data_array,
-                        np.array(timestamps),
-                        np.array(timestamps_ns),
-                    ))
-                    section_meta.append({
-                        "buffer_key": buffer_key,
-                        "fiber_id": fiber_id,
-                        "section": section,
-                        "model_hint": model_hint,
-                        "messages": messages,
-                        "ctx": ctx,
-                    })
+                    section_inputs.append(
+                        (
+                            data_array,
+                            np.array(timestamps),
+                            np.array(timestamps_ns),
+                        )
+                    )
+                    section_meta.append(
+                        {
+                            "buffer_key": buffer_key,
+                            "fiber_id": fiber_id,
+                            "section": section,
+                            "model_hint": model_hint,
+                            "messages": messages,
+                            "ctx": ctx,
+                        }
+                    )
 
                 if not section_inputs:
                     return
@@ -585,15 +589,14 @@ class AIEngineService(RollingBufferedTransformer):
             # Count processing (visualization only)
             buffer_key = meta["buffer_key"]
             ctx = meta["ctx"]
-            count_processor = self.model_registry.get_counter(
-                meta["model_hint"], buffer_key
-            )
+            count_processor = self.model_registry.get_counter(meta["model_hint"], buffer_key)
             if self._model_spec.counting.enabled and count_processor is not None:
                 for result in section_results:
                     try:
                         chunk_start_ns = (
                             int(result.timestamps_ns[0])
-                            if result.timestamps_ns is not None else None
+                            if result.timestamps_ns is not None
+                            else None
                         )
                         for chunk_result in count_processor.process_data_chunk(
                             aligned_speed=result.aligned_speed_per_pair,
@@ -603,17 +606,18 @@ class AIEngineService(RollingBufferedTransformer):
                         ):
                             counts, intervals, window_start_ns = chunk_result
                             count_timestamps = (
-                                [window_start_ns] if window_start_ns is not None
+                                [window_start_ns]
+                                if window_start_ns is not None
                                 else ctx.timestamps_ns
                             )
-                            speed_processor.set_count_data(
-                                (counts, intervals, count_timestamps)
-                            )
+                            speed_processor.set_count_data((counts, intervals, count_timestamps))
                     except Exception as e:
                         logger.error(f"Error in vehicle counting: {e}")
 
             output_messages = self._create_detection_messages(
-                meta["fiber_id"], all_detections, ctx,
+                meta["fiber_id"],
+                all_detections,
+                ctx,
             )
             results.append((all_detections, output_messages))
 
@@ -673,16 +677,14 @@ class AIEngineService(RollingBufferedTransformer):
                     speed_processor.set_section(section)
 
                 try:
-                    detections = (
-                        await self._run_ai_inference(
-                            data_array,
-                            timestamps,
-                            timestamps_ns,
-                            buffer_key,
-                            ctx,
-                            speed_processor=speed_processor,
-                            count_processor=count_processor,
-                        )
+                    detections = await self._run_ai_inference(
+                        data_array,
+                        timestamps,
+                        timestamps_ns,
+                        buffer_key,
+                        ctx,
+                        speed_processor=speed_processor,
+                        count_processor=count_processor,
                     )
                 except RuntimeError as e:
                     # Catch PyTorch dimension mismatches (e.g., "input.size(-1) must be equal to input_size")
@@ -700,7 +702,9 @@ class AIEngineService(RollingBufferedTransformer):
                 span.set_attribute("detections.count", len(detections))
 
                 output_messages = self._create_detection_messages(
-                    fiber_id, detections, ctx,
+                    fiber_id,
+                    detections,
+                    ctx,
                 )
 
                 processing_time = (time.time() - start_time) * 1000
@@ -816,7 +820,9 @@ class AIEngineService(RollingBufferedTransformer):
         yield_count = 0
 
         with gpu_lock():
-            inference_results = list(speed_processor.process_file(data, timestamps, timestamps_ns_array))
+            inference_results = list(
+                speed_processor.process_file(data, timestamps, timestamps_ns_array)
+            )
 
         for result in inference_results:
             yield_count += 1
@@ -836,7 +842,9 @@ class AIEngineService(RollingBufferedTransformer):
             # Optional: feed count data to visualizer (does NOT produce Kafka output)
             if self._model_spec.counting.enabled and count_processor is not None:
                 try:
-                    chunk_start_ns = int(result.timestamps_ns[0]) if result.timestamps_ns is not None else None
+                    chunk_start_ns = (
+                        int(result.timestamps_ns[0]) if result.timestamps_ns is not None else None
+                    )
                     for chunk_result in count_processor.process_data_chunk(
                         aligned_speed=result.aligned_speed_per_pair,
                         correlations=result.glrt_summed,
@@ -844,7 +852,9 @@ class AIEngineService(RollingBufferedTransformer):
                         timestamp_ns=chunk_start_ns,
                     ):
                         counts, intervals, window_start_ns = chunk_result
-                        count_timestamps = [window_start_ns] if window_start_ns is not None else ctx.timestamps_ns
+                        count_timestamps = (
+                            [window_start_ns] if window_start_ns is not None else ctx.timestamps_ns
+                        )
                         speed_processor.set_count_data((counts, intervals, count_timestamps))
                 except Exception as e:
                     self.logger.error(f"Error in vehicle counting (visualization): {e}")

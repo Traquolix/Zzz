@@ -83,7 +83,7 @@ class DASProcessor(MultiTransformer):
             self._fiber_pipelines[fiber_id] = self._build_fiber_pipelines(fiber_cfg)
             self.logger.info(
                 f"Built pipelines for fiber '{fiber_id}': {len(fiber_cfg.sections)} sections"
-                + (f" (config changed)" if cached_hash is not None else "")
+                + (" (config changed)" if cached_hash is not None else "")
             )
 
         return self._fiber_pipelines.get(fiber_id, {})
@@ -236,13 +236,15 @@ class DASProcessor(MultiTransformer):
 
         measurements = []
         for i in range(batch_size):
-            measurements.append({
-                "fiber_id": fiber_id,
-                "values": data_2d[i],
-                "timestamp_ns": first_ts + i * sample_interval_ns,
-                "channel_start": 0,
-                "sampling_rate_hz": sampling_rate_hz,
-            })
+            measurements.append(
+                {
+                    "fiber_id": fiber_id,
+                    "values": data_2d[i],
+                    "timestamp_ns": first_ts + i * sample_interval_ns,
+                    "channel_start": 0,
+                    "sampling_rate_hz": sampling_rate_hz,
+                }
+            )
         return measurements
 
     def _adapt_message(self, raw: dict, fiber_id: str, sampling_rate_hz: float) -> dict:

@@ -96,7 +96,7 @@ def test_rolling_fifo_buffer():
         print(f"✗ FAILURE: Found {len(gaps)} gaps!")
         for gap_idx in gaps[:10]:
             print(
-                f"  Gap at index {gap_idx}: T{output_ts[gap_idx]} -> T{output_ts[gap_idx+1]} (diff={diffs[gap_idx]})"
+                f"  Gap at index {gap_idx}: T{output_ts[gap_idx]} -> T{output_ts[gap_idx + 1]} (diff={diffs[gap_idx]})"
             )
         return False
 

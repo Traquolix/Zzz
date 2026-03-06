@@ -10,7 +10,6 @@ Requires:
 - Reference modules from experiments/vehicle_detection_tuning/11_newmodel_remake/reference/
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -20,7 +19,9 @@ import torch
 
 # --- Path setup ---
 PIPELINE_ROOT = Path(__file__).parent.parent
-REF_DIR = PIPELINE_ROOT / "experiments" / "vehicle_detection_tuning" / "11_newmodel_remake" / "reference"
+REF_DIR = (
+    PIPELINE_ROOT / "experiments" / "vehicle_detection_tuning" / "11_newmodel_remake" / "reference"
+)
 TEST_DATA_DIR = PIPELINE_ROOT / "experiments" / "test_data"
 MODEL_CHECKPOINT = REF_DIR / "models" / "allignment_parameters_16_02_2026_fullSet_28s.pth"
 
@@ -232,22 +233,23 @@ class TestConfigMatchesNotebook:
 
     def test_speed_weighting_matches_notebook(self):
         from config.fiber_config import SpeedDetectionConfig
+
         config = SpeedDetectionConfig()
         assert config.speed_weighting == "median", (
-            f"Production default speed_weighting={config.speed_weighting!r}, "
-            f"notebook uses 'median'"
+            f"Production default speed_weighting={config.speed_weighting!r}, notebook uses 'median'"
         )
 
     def test_speed_glrt_factor_matches_notebook(self):
         from config.fiber_config import SpeedDetectionConfig
+
         config = SpeedDetectionConfig()
         assert config.speed_glrt_factor == 1.0, (
-            f"Production default speed_glrt_factor={config.speed_glrt_factor}, "
-            f"notebook uses 1.0"
+            f"Production default speed_glrt_factor={config.speed_glrt_factor}, notebook uses 1.0"
         )
 
     def test_speed_positive_glrt_only_matches_notebook(self):
         from config.fiber_config import SpeedDetectionConfig
+
         config = SpeedDetectionConfig()
         assert config.speed_positive_glrt_only is False, (
             f"Production default speed_positive_glrt_only={config.speed_positive_glrt_only}, "
@@ -256,6 +258,7 @@ class TestConfigMatchesNotebook:
 
     def test_correlation_threshold_matches_notebook(self):
         from config.fiber_config import SpeedDetectionConfig
+
         config = SpeedDetectionConfig()
         assert config.correlation_threshold == 500.0, (
             f"Production default correlation_threshold={config.correlation_threshold}, "
@@ -264,6 +267,7 @@ class TestConfigMatchesNotebook:
 
     def test_bidirectional_detection_matches_notebook(self):
         from config.fiber_config import SpeedDetectionConfig
+
         config = SpeedDetectionConfig()
         assert config.bidirectional_detection is True, (
             f"Production default bidirectional_detection={config.bidirectional_detection}, "
@@ -272,15 +276,16 @@ class TestConfigMatchesNotebook:
 
     def test_glrt_window_matches_notebook(self):
         from config.fiber_config import SpeedDetectionConfig
+
         config = SpeedDetectionConfig()
         assert config.glrt_window == 20, (
-            f"Production default glrt_window={config.glrt_window}, "
-            f"notebook uses 20"
+            f"Production default glrt_window={config.glrt_window}, notebook uses 20"
         )
 
     def test_fibers_yaml_matches_defaults(self):
         """Verify fibers.yaml model_defaults match the Python defaults."""
         import yaml
+
         from config.fiber_config import SpeedDetectionConfig
 
         yaml_path = PIPELINE_ROOT / "config" / "fibers.yaml"
@@ -325,7 +330,9 @@ class TestPredictTheta:
 
         # Grid_t should be identical
         np.testing.assert_allclose(
-            nb_grid_t, prod_grid_t, rtol=1e-5,
+            nb_grid_t,
+            prod_grid_t,
+            rtol=1e-5,
             err_msg="Grid_t differs between notebook and production",
         )
 
@@ -333,7 +340,9 @@ class TestPredictTheta:
 class TestCompSpeed:
     """Verify comp_speed produces matching outputs."""
 
-    def test_speed_computation_matches(self, notebook_processor, production_estimator, single_window_data):
+    def test_speed_computation_matches(
+        self, notebook_processor, production_estimator, single_window_data
+    ):
         """Both should compute the same speeds from grid_t."""
         window_9ch, dates = single_window_data
         space_split = np.expand_dims(window_9ch, axis=0)
@@ -346,7 +355,9 @@ class TestCompSpeed:
 
         # Both should return absolute speeds (no inline filtering)
         np.testing.assert_allclose(
-            nb_speed, prod_speed, rtol=1e-5,
+            nb_speed,
+            prod_speed,
+            rtol=1e-5,
             err_msg="comp_speed outputs differ",
         )
 
@@ -358,7 +369,9 @@ class TestCompSpeed:
 class TestApplyGlrt:
     """Verify apply_glrt produces matching per-pair outputs."""
 
-    def test_glrt_per_pair_matches(self, notebook_processor, production_estimator, single_window_data):
+    def test_glrt_per_pair_matches(
+        self, notebook_processor, production_estimator, single_window_data
+    ):
         """Both should produce identical per-pair GLRT values."""
         window_9ch, dates = single_window_data
         space_split = np.expand_dims(window_9ch, axis=0)
@@ -373,14 +386,19 @@ class TestApplyGlrt:
         prod_glrt = production_estimator.apply_glrt(prod_aligned).cpu().numpy()
 
         # Both should return 3D: (1, 8, time)
-        assert nb_glrt.shape == prod_glrt.shape, f"GLRT shapes differ: {nb_glrt.shape} vs {prod_glrt.shape}"
+        assert nb_glrt.shape == prod_glrt.shape, (
+            f"GLRT shapes differ: {nb_glrt.shape} vs {prod_glrt.shape}"
+        )
         assert nb_glrt.ndim == 3, f"GLRT should be 3D, got {nb_glrt.ndim}D"
         assert nb_glrt.shape[1] == 8, f"Expected 8 pairs, got {nb_glrt.shape[1]}"
 
         # F.conv1d vs Python loop: mathematically equivalent but floating-point
         # summation order differs, so we allow slightly more tolerance
         np.testing.assert_allclose(
-            nb_glrt, prod_glrt, rtol=1e-4, atol=1e-2,
+            nb_glrt,
+            prod_glrt,
+            rtol=1e-4,
+            atol=1e-2,
             err_msg="Per-pair GLRT outputs differ",
         )
 
@@ -388,7 +406,9 @@ class TestApplyGlrt:
 class TestProcessOneFile:
     """Compare full process_one_file flow between notebook and production."""
 
-    def test_full_pipeline_outputs_match(self, notebook_processor, production_estimator, single_window_data):
+    def test_full_pipeline_outputs_match(
+        self, notebook_processor, production_estimator, single_window_data
+    ):
         """Notebook process_one_file and production _process_single_direction
         should produce matching GLRT and filtered speed outputs."""
         window_9ch, dates = single_window_data
@@ -408,25 +428,36 @@ class TestProcessOneFile:
         # order differs, so allow tolerance proportional to typical GLRT values)
         nb_glrt = nb_result["glrt_res"]  # (1, 8, time)
         np.testing.assert_allclose(
-            nb_glrt, prod_glrt_pp, rtol=1e-3, atol=2.0,
+            nb_glrt,
+            prod_glrt_pp,
+            rtol=1e-3,
+            atol=2.0,
             err_msg="Per-pair GLRT differs between notebook and production",
         )
 
         # Compare summed GLRT
         nb_glrt_sum = np.sum(nb_glrt[0], axis=0)  # Sum across pairs -> (time,)
         np.testing.assert_allclose(
-            nb_glrt_sum, prod_glrt_sum[0], rtol=1e-3, atol=16.0,
+            nb_glrt_sum,
+            prod_glrt_sum[0],
+            rtol=1e-3,
+            atol=16.0,
             err_msg="Summed GLRT differs between notebook and production",
         )
 
         # Compare filtered speed (production now returns filtered directly)
         nb_filtered = nb_result["filtered_speed"]  # (1, 8, time)
         np.testing.assert_allclose(
-            nb_filtered, prod_filtered_speed, rtol=1e-3, atol=1.0,
+            nb_filtered,
+            prod_filtered_speed,
+            rtol=1e-3,
+            atol=1.0,
             err_msg="Filtered speed differs between notebook and production",
         )
 
-    def test_filtered_speed_matches(self, notebook_processor, production_estimator, single_window_data):
+    def test_filtered_speed_matches(
+        self, notebook_processor, production_estimator, single_window_data
+    ):
         """Filtered speed (after per-pair thresholding) should match."""
         window_9ch, dates = single_window_data
 
@@ -434,18 +465,21 @@ class TestProcessOneFile:
 
         # Production _process_single_direction now returns filtered_speed directly
         # Returns: (glrt_per_pair, glrt_summed, filtered_speed, aligned, thetas)
-        _, _, prod_filtered, _, _ = (
-            production_estimator._process_single_direction(window_9ch)
-        )
+        _, _, prod_filtered, _, _ = production_estimator._process_single_direction(window_9ch)
 
         nb_filtered = nb_result["filtered_speed"]
 
         np.testing.assert_allclose(
-            nb_filtered, prod_filtered, rtol=1e-4, atol=1e-2,
+            nb_filtered,
+            prod_filtered,
+            rtol=1e-4,
+            atol=1e-2,
             err_msg="Filtered speed differs between notebook and production",
         )
 
-    def test_unaligned_speed_matches(self, notebook_processor, production_estimator, single_window_data):
+    def test_unaligned_speed_matches(
+        self, notebook_processor, production_estimator, single_window_data
+    ):
         """Unaligned speed (speeds mapped back to original frame) should match."""
         window_9ch, dates = single_window_data
 
@@ -453,20 +487,26 @@ class TestProcessOneFile:
 
         # Production returns filtered_speed directly from _process_single_direction
         # Returns: (glrt_per_pair, glrt_summed, filtered_speed, aligned, thetas)
-        _, _, prod_filtered, _, prod_thetas = (
-            production_estimator._process_single_direction(window_9ch)
+        _, _, prod_filtered, _, prod_thetas = production_estimator._process_single_direction(
+            window_9ch
         )
 
         # Manually unalign production filtered speed (same as notebook does)
         align_idx = (9 - 1) // 2
-        prod_unaligned = production_estimator.align_window(
-            prod_filtered, -prod_thetas[:, :-1, :], 8, align_idx
-        ).detach().cpu().numpy()
+        prod_unaligned = (
+            production_estimator.align_window(prod_filtered, -prod_thetas[:, :-1, :], 8, align_idx)
+            .detach()
+            .cpu()
+            .numpy()
+        )
 
         nb_unaligned = nb_result["unaligned_speed"]
 
         np.testing.assert_allclose(
-            nb_unaligned, prod_unaligned, rtol=1e-4, atol=2e-2,
+            nb_unaligned,
+            prod_unaligned,
+            rtol=1e-4,
+            atol=2e-2,
             err_msg="Unaligned speed differs between notebook and production",
         )
 
@@ -479,15 +519,18 @@ class TestSpeedAggregation:
         window_9ch, dates = single_window_data
 
         nb_result = notebook_processor.process_one_file(window_9ch, dates)
-        nb_glrt = nb_result["glrt_res"][0]       # (8, time)
+        nb_glrt = nb_result["glrt_res"][0]  # (8, time)
         nb_speed = nb_result["aligned_speed"][0]  # (8, time)
 
         from ai_engine.model_vehicle.utils import compute_speed_from_pairs
 
         aggregated = compute_speed_from_pairs(
-            nb_glrt, nb_speed,
-            min_speed=20, max_speed=120,
-            positive_glrt_only=False, weighting="median",
+            nb_glrt,
+            nb_speed,
+            min_speed=20,
+            max_speed=120,
+            positive_glrt_only=False,
+            weighting="median",
         )
 
         # Basic sanity: output is 1D, same time length
@@ -501,7 +544,9 @@ class TestSpeedAggregation:
 class TestMultipleSections:
     """Test with multiple spatial sections (more realistic scenario)."""
 
-    def test_multi_section_glrt_matches(self, loaded_data, notebook_processor, production_estimator, model_and_config):
+    def test_multi_section_glrt_matches(
+        self, loaded_data, notebook_processor, production_estimator, model_and_config
+    ):
         """Process multiple spatial positions like notebook's Cell 7 loop."""
         selected_data, _, fs = loaded_data
         _, model_config = model_and_config
@@ -513,7 +558,7 @@ class TestMultipleSections:
         n_positions = min(5, selected_data.shape[0] - 9 + 1)
 
         for i in range(n_positions):
-            window_9ch = selected_data[i:i + 9, :window_samples].copy()
+            window_9ch = selected_data[i : i + 9, :window_samples].copy()
             window_9ch = normalize_channel_energy(window_9ch)
             window_dates = np.arange(window_samples) / fs
 
@@ -525,7 +570,10 @@ class TestMultipleSections:
             _, prod_glrt_sum, _, _, _ = production_estimator._process_single_direction(window_9ch)
 
             np.testing.assert_allclose(
-                nb_glrt_sum, prod_glrt_sum[0], rtol=1e-3, atol=6.0,
+                nb_glrt_sum,
+                prod_glrt_sum[0],
+                rtol=1e-3,
+                atol=6.0,
                 err_msg=f"Summed GLRT differs at spatial position {i}",
             )
 
@@ -540,15 +588,22 @@ class TestBidirectionalDetection:
         window_samples = model_config.signal_length
 
         from modules.speed_vehicules import SpeedVehicules
+
         from ai_engine.model_vehicle.vehicle_speed import VehicleSpeedEstimator
 
         model, _ = model_and_config
 
         # Notebook processors (forward + reverse)
         nb_processor = SpeedVehicules(
-            model=model, T=model.T, model_args=model_config,
-            ovr_time=1 / 6, glrt_win=20,
-            min_speed=20, max_speed=120, corr_threshold=500, verbose=False,
+            model=model,
+            T=model.T,
+            model_args=model_config,
+            ovr_time=1 / 6,
+            glrt_win=20,
+            min_speed=20,
+            max_speed=120,
+            corr_threshold=500,
+            verbose=False,
         )
 
         from ai_engine.model_vehicle.utils import normalize_channel_energy
@@ -560,7 +615,7 @@ class TestBidirectionalDetection:
         # Forward (with per-window energy normalization, matching Cell 28)
         nb_fwd_glrt = np.zeros((20 - 9 + 1, window_samples))
         for i in range(20 - 9 + 1):
-            window_9ch = normalize_channel_energy(data_section[i:i + 9, :])
+            window_9ch = normalize_channel_energy(data_section[i : i + 9, :])
             dates = np.arange(window_samples) / fs
             result = nb_processor.process_one_file(window_9ch, dates)
             nb_fwd_glrt[i, :] = np.sum(result["glrt_res"][0], axis=0)
@@ -569,21 +624,26 @@ class TestBidirectionalDetection:
         data_flipped = data_section[::-1, :].copy()
         nb_rev_glrt = np.zeros((20 - 9 + 1, window_samples))
         for i in range(20 - 9 + 1):
-            window_9ch = normalize_channel_energy(data_flipped[i:i + 9, :])
+            window_9ch = normalize_channel_energy(data_flipped[i : i + 9, :])
             dates = np.arange(window_samples) / fs
             result = nb_processor.process_one_file(window_9ch, dates)
             nb_rev_glrt[i, :] = np.sum(result["glrt_res"][0], axis=0)
         nb_rev_glrt = nb_rev_glrt[::-1, :].copy()
 
-        # Combine
-        nb_combined_glrt = np.maximum(nb_fwd_glrt, nb_rev_glrt)
+        # Combine (used implicitly for verification via fwd/rev separate checks below)
+        _ = np.maximum(nb_fwd_glrt, nb_rev_glrt)
 
         # --- Production approach ---
         prod_estimator = VehicleSpeedEstimator(
-            model_args=model_config, ovr_time=1 / 6, glrt_win=20,
-            min_speed=20, max_speed=120, corr_threshold=500,
+            model_args=model_config,
+            ovr_time=1 / 6,
+            glrt_win=20,
+            min_speed=20,
+            max_speed=120,
+            corr_threshold=500,
             bidirectional_detection=True,
-            speed_glrt_factor=1.0, speed_weighting="median",
+            speed_glrt_factor=1.0,
+            speed_weighting="median",
             speed_positive_glrt_only=False,
         )
 
@@ -591,7 +651,9 @@ class TestBidirectionalDetection:
         # For step=1 comparison, we process each position manually
         fwd_per_pair, fwd_summed, _, _, _ = prod_estimator._process_single_direction(data_section)
         data_flipped_prod = data_section[::-1, :].copy()
-        rev_per_pair, rev_summed, _, _, _ = prod_estimator._process_single_direction(data_flipped_prod)
+        rev_per_pair, rev_summed, _, _, _ = prod_estimator._process_single_direction(
+            data_flipped_prod
+        )
         rev_summed_flipped = rev_summed[::-1, :].copy()
 
         prod_combined_glrt = np.maximum(fwd_summed, rev_summed_flipped)

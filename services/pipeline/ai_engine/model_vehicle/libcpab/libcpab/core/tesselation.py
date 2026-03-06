@@ -17,24 +17,24 @@ class Tesselation(object):
         but descripes the base structure that needs to be implemented in
         1D, 2D, and 3D. Additionally, some functionallity is shared across
         the different dimensions.
-        
+
     Args:
         nc: list with number of cells
         domain_min: value of the lower bound(s) of the domain
         domain_max: value of the upper bound(s) of the domain
         zero_boundary: bool, if true the velocity is zero on the boundary
         volume_perservation: bool, if true volume is perserved
-        
+
     Methods that should not be implemented in subclasses:
         @get_cell_centers:
         @create_continuity_constrains:
         @create_zero_trace_constrains:
-            
+
     Methods that should be implemented in subclasses:
         @find_verts:
         @find_verts_outside:
         @create_zero_boundary_constrains:
-        
+
     """
     def __init__(self, nc, domain_min, domain_max,
                  zero_boundary = True, volume_perservation=False,

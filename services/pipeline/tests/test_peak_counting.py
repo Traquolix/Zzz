@@ -56,7 +56,9 @@ class TestPeakCounting:
             timestamps_ns=timestamps_ns,
         )
 
-        total = sum(c[0] if len(c) == 3 else float(c) for c in counts[0]) if len(counts[0]) > 0 else 0
+        total = (
+            sum(c[0] if len(c) == 3 else float(c) for c in counts[0]) if len(counts[0]) > 0 else 0
+        )
         assert total >= 1
 
     def test_truck_classification(self, counter):
@@ -104,10 +106,14 @@ class TestPeakCounting:
         )
 
         # All counts should be zero
-        total = sum(
-            (c[0] if isinstance(c, (tuple, list)) and len(c) == 3 else float(c))
-            for c in counts[0]
-        ) if len(counts[0]) > 0 else 0
+        total = (
+            sum(
+                (c[0] if isinstance(c, (tuple, list)) and len(c) == 3 else float(c))
+                for c in counts[0]
+            )
+            if len(counts[0]) > 0
+            else 0
+        )
         assert total == 0
 
     def test_empty_interval(self, counter):
@@ -148,7 +154,6 @@ class TestPeakCounting:
         )
 
         total = sum(
-            (c[0] if isinstance(c, (tuple, list)) and len(c) == 3 else float(c))
-            for c in counts[0]
+            (c[0] if isinstance(c, (tuple, list)) and len(c) == 3 else float(c)) for c in counts[0]
         )
         assert total >= 2
