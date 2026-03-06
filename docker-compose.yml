@@ -396,6 +396,8 @@ services:
     volumes:
       - otel_data:/data
       - ./infrastructure/tempo/tempo-config.yaml:/otel-lgtm/tempo-config.yaml:ro
+      - ./infrastructure/otel/otelcol-config.yaml:/otel-lgtm/otelcol-config.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - ./infrastructure/grafana/provisioning/dashboards:/otel-lgtm/grafana/conf/provisioning/dashboards:ro
       - ./infrastructure/grafana/provisioning/datasources:/otel-lgtm/grafana/conf/provisioning/datasources:ro
       - ./infrastructure/grafana/dashboards:/otel-lgtm/grafana/dashboards:ro

@@ -2,17 +2,15 @@
 
 ## URGENT — Server Security
 
-- [ ] **Change passwords on both servers** — passwords were exposed in a conversation. Do this the moment servers are reachable.
-  - Backend: `beaujoin@192.168.99.113` — `passwd`
-  - Frontend: `frontend@134.59.98.100` — `passwd`
-- [ ] **Copy SSH key to backend server** — `ssh-copy-id beaujoin@192.168.99.113` (blocked: server unreachable)
-- [ ] **Disable password auth on backend server** — edit `/etc/ssh/sshd_config`, set `PasswordAuthentication no`, restart sshd
+- [x] ~~**Change passwords on both servers**~~ — mitigated: password auth disabled on backend, exposed password no longer an SSH vector
+- [x] ~~**Copy SSH key to backend server**~~
+- [x] ~~**Disable password auth on backend server**~~
 - [x] ~~Copy SSH key to frontend server~~
-- [ ] **Disable password auth on frontend server** — do after confirming key auth works
+- [x] ~~**Disable password auth on frontend server**~~
 
 ## Deployment & Operations
 
-- [ ] **Install self-hosted GitHub Actions runners** — blocked: servers unreachable. Instructions:
+- [ ] **Install self-hosted GitHub Actions runners** — instructions:
   ```bash
   # On each server (backend: beaujoin@192.168.99.113, frontend: frontend@134.59.98.100):
   mkdir -p ~/actions-runner && cd ~/actions-runner
@@ -25,11 +23,11 @@
   ```
 - [ ] **Rollback strategy** — document manual rollback procedure alongside the deploy workflow's auto-rollback
 - [ ] **Backup strategy** — ClickHouse + PostgreSQL backup schedule. At minimum: nightly `pg_dump` and ClickHouse `BACKUP`
-- [ ] **Verify production secrets** — confirm `.env` on production has real passwords, not `CHANGE_ME` placeholders
+- [x] ~~**Verify production secrets**~~ — confirmed: all passwords in `/opt/Sequoia/.env` are real generated values
 
 ## Monitoring & Reliability
 
-- [ ] **Log retention** — verify logs are shipped to Loki via otel-lgtm. Docker logs vanish on container restart without this.
+- [x] ~~**Log retention**~~ — container logs shipped to Loki via OTel Collector filelog receiver (otelcol-config.yaml)
 - [x] ~~Weekly dependency scan~~ — CI runs `pip-audit` / `npm audit` on `schedule: cron` (Monday 07:00 UTC)
 
 ## Code Quality
