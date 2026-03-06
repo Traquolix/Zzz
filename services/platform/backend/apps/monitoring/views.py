@@ -54,6 +54,7 @@ from apps.shared.exceptions import ClickHouseUnavailableError
 from apps.shared.permissions import IsActiveUser, IsNotViewer
 
 logger = logging.getLogger("sequoia")
+
 _PROCESS_START_TIME = time.time()
 
 INCIDENTS_CACHE_TTL = 10  # 10 seconds
@@ -152,10 +153,9 @@ class IncidentListView(APIView):
                 except ImportError:
                     pass
             if incidents is None:
-                return Response(
-                    {"detail": "ClickHouse unavailable", "code": "clickhouse_unavailable"},
-                    status=503,
-                )
+                # ClickHouse is down and simulation has no incidents yet —
+                # return empty rather than 503 to avoid console errors on page load.
+                incidents = []
 
         has_more = len(incidents) > limit
         page = incidents[:limit]
@@ -174,9 +174,9 @@ class IncidentSnapshotView(APIView):
 
     Org-scoped: verifies the incident's fiber belongs to the user's org.
 
-    Note: snapshots are empty in simulation mode because the simulation engine
-    does not write to the detection_hires ClickHouse table. Snapshots require live
-    pipeline data flowing through Kafka -> ClickHouse.
+    Supports both live (ClickHouse) and simulation (in-memory) incidents.
+    Simulation snapshots contain real recorded detections from the simulation
+    engine — the same vehicles and speeds that were happening near the incident.
     """
 
     permission_classes = [IsActiveUser]
@@ -186,6 +186,11 @@ class IncidentSnapshotView(APIView):
         tags=["incidents"],
     )
     def get(self, request, incident_id):
+        # Check simulation cache first (fast path, no ClickHouse needed)
+        sim_snapshot = self._get_simulation_snapshot(request, incident_id)
+        if sim_snapshot is not None:
+            return Response(sim_snapshot)
+
         try:
             incident_rows = query(
                 """
@@ -279,6 +284,33 @@ class IncidentSnapshotView(APIView):
                 "detections": detections,
             }
         )
+
+    def _get_simulation_snapshot(self, request, incident_id: str) -> dict | None:
+        """Return snapshot from simulation cache, or None to fall through to ClickHouse."""
+        from apps.realtime.simulation import get_simulation_incidents, get_simulation_snapshot
+
+        # Find the incident in simulation cache
+        sim_incidents = get_simulation_incidents()
+        sim_incident = next((i for i in sim_incidents if i["id"] == incident_id), None)
+        if sim_incident is None:
+            return None
+
+        # Org-scoping: verify fiber belongs to user's org
+        fiber_ids = _get_fiber_ids_or_none(request.user)
+        if fiber_ids is not None:
+            plain_fid = strip_directional_suffix(sim_incident["fiberLine"])
+            if plain_fid not in fiber_ids:
+                return None
+
+        detections = get_simulation_snapshot(incident_id) or []
+
+        return {
+            "incidentId": incident_id,
+            "fiberLine": sim_incident["fiberLine"],
+            "centerChannel": sim_incident["channel"],
+            "capturedAt": int(time.time() * 1000),
+            "detections": detections,
+        }
 
 
 class IncidentActionView(APIView):
@@ -591,7 +623,7 @@ class SectionListView(APIView):
         responses={200: SectionSerializer(many=True)},
         tags=["sections"],
     )
-    @clickhouse_fallback()
+    @clickhouse_fallback(fallback_fn=lambda self, request, *a, **kw: Response({"results": []}))
     def get(self, request):
         fiber_ids = _get_fiber_ids_or_none(request.user)
         if fiber_ids is not None and not fiber_ids:

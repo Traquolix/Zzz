@@ -31,11 +31,24 @@ logger = logging.getLogger("sequoia.simulation")
 _simulation_incidents_cache: list = []
 _simulation_incidents_lock = threading.Lock()
 
+# Global cache for incident snapshots — recorded detections near each incident
+_simulation_snapshots: dict[str, list[dict]] = {}
+_simulation_snapshots_lock = threading.Lock()
+
 
 def get_simulation_incidents() -> list:
     """Get current simulation incidents for REST API fallback."""
     with _simulation_incidents_lock:
         return list(_simulation_incidents_cache)
+
+
+def get_simulation_snapshot(incident_id: str) -> list[dict] | None:
+    """Get recorded snapshot detections for a simulated incident, or None."""
+    with _simulation_snapshots_lock:
+        detections = _simulation_snapshots.get(incident_id)
+        if detections is not None:
+            return list(detections)
+        return None
 
 
 def _update_simulation_incidents_cache(incidents: list):
@@ -45,6 +58,13 @@ def _update_simulation_incidents_cache(incidents: list):
     global _simulation_incidents_cache
     with _simulation_incidents_lock:
         _simulation_incidents_cache = [transform_simulation_incident(i) for i in incidents]
+
+
+def _update_simulation_snapshots(snapshots: dict[str, list[dict]]):
+    """Replace the global snapshots cache with the engine's current state."""
+    global _simulation_snapshots
+    with _simulation_snapshots_lock:
+        _simulation_snapshots = snapshots
 
 
 # ============================================================================
@@ -182,6 +202,10 @@ INCIDENT_CONFIGS = [
     },
 ]
 SEVERITIES = ["low", "medium", "high", "critical"]
+
+SNAPSHOT_CHANNEL_RADIUS = 50  # ±50 channels around incident center
+SNAPSHOT_MAX_DETECTIONS = 5000  # Max detections stored per incident
+SNAPSHOT_DURATION_S = 60  # Keep last 60 seconds of detections
 
 INFRA_BASE_FREQ = {"bridge": 5.0, "tunnel": 15.0}
 
@@ -322,6 +346,7 @@ async def _broadcast_to_orgs(
     data,
     fiber_org_map: dict[str, list[str]],
     fiber_ids: set[str] | None = None,
+    flow: str = "sim",
 ):
     """
     Send data to all org groups that own the given fibers, plus __all__.
@@ -332,6 +357,7 @@ async def _broadcast_to_orgs(
         data: Payload to send
         fiber_org_map: fiber_id → [org_id, ...] mapping
         fiber_ids: Set of fiber_ids in this data batch (None = send to all orgs)
+        flow: Flow prefix for group names ('sim' or 'live')
     """
     message = {
         "type": "broadcast_message",
@@ -340,7 +366,7 @@ async def _broadcast_to_orgs(
     }
 
     # Always send to superuser group
-    await channel_layer.group_send(f"realtime_{channel}_org___all__", message)
+    await channel_layer.group_send(f"realtime_{flow}_{channel}_org___all__", message)
 
     if fiber_ids is None:
         # Broadcast to all known orgs
@@ -349,7 +375,9 @@ async def _broadcast_to_orgs(
             for org_id in org_ids:
                 if org_id not in sent_orgs:
                     sent_orgs.add(org_id)
-                    await channel_layer.group_send(f"realtime_{channel}_org_{org_id}", message)
+                    await channel_layer.group_send(
+                        f"realtime_{flow}_{channel}_org_{org_id}", message
+                    )
     else:
         # Broadcast to orgs that own these specific fibers
         # Strip directional suffix for org lookup
@@ -359,7 +387,9 @@ async def _broadcast_to_orgs(
             for org_id in fiber_org_map.get(parent_fid, []):
                 if org_id not in sent_orgs:
                     sent_orgs.add(org_id)
-                    await channel_layer.group_send(f"realtime_{channel}_org_{org_id}", message)
+                    await channel_layer.group_send(
+                        f"realtime_{flow}_{channel}_org_{org_id}", message
+                    )
 
 
 async def _broadcast_per_org(
@@ -368,6 +398,7 @@ async def _broadcast_per_org(
     items: list[dict],
     fiber_org_map: dict[str, list[str]],
     fiber_key: str = "fiberLine",
+    flow: str = "sim",
 ):
     """
     Group items by fiber_id, then send each org only the items from their fibers.
@@ -380,7 +411,7 @@ async def _broadcast_per_org(
 
     # Always send full data to superuser group
     await channel_layer.group_send(
-        f"realtime_{channel}_org___all__",
+        f"realtime_{flow}_{channel}_org___all__",
         {
             "type": "broadcast_message",
             "channel": channel,
@@ -398,7 +429,7 @@ async def _broadcast_per_org(
 
     for org_id, org_data in org_items.items():
         await channel_layer.group_send(
-            f"realtime_{channel}_org_{org_id}",
+            f"realtime_{flow}_{channel}_org_{org_id}",
             {
                 "type": "broadcast_message",
                 "channel": channel,
@@ -423,6 +454,10 @@ class SimulationEngine:
         self.simulated_hour = 8.0
         self.hour_advance_rate = 30  # 30x speed
         self.tick_count = 0
+
+        # Recorded detections near each incident: incident_id → list[detection_dict]
+        # Capped at SNAPSHOT_MAX_DETECTIONS per incident, keeps ±50 channels around incident
+        self.incident_snapshots: dict[str, list[dict]] = {}
 
         # SHM state
         self.shm_base_freq = {}
@@ -459,72 +494,10 @@ class SimulationEngine:
                     {"fiber": fiber.id, "ch": mid, "dir": 1, "rate": rate * 0.3, "last": 0}
                 )
 
-        # Pre-generate historical incidents
-        self._generate_historical_incidents()
-
-        # Generate startup incidents (5-10 active incidents in first minute)
-        self._generate_startup_incidents()
-
-    def _generate_startup_incidents(self):
-        """Generate 5-10 active incidents to populate the UI at startup."""
-        now_ms = time.time() * 1000
-        num_incidents = random.randint(5, 10)
-
-        for i in range(num_incidents):
-            fiber = random.choice(self.fibers)
-            ch = 50 + random.randint(0, max(1, fiber.channel_count - 100))
-            cfg = random.choice(INCIDENT_CONFIGS)
-            severity = _weighted_choice(SEVERITIES, cfg["weights"])
-
-            # Incidents detected within the last 0-60 seconds (staggered)
-            seconds_ago = (i / num_incidents) * 60  # Spread over first minute
-            detected_at = now_ms - seconds_ago * 1000
-
-            # Long duration to ensure they stay active
-            dur = cfg["dur"][1]  # Use max duration
-
-            self.incidents.append(
-                Incident(
-                    id=f"inc-startup-{i}-{uuid.uuid4().hex[:4]}",
-                    type=cfg["type"],
-                    severity=severity,
-                    fiber_line=fiber.id,
-                    channel=ch,
-                    detected_at=time.strftime(
-                        "%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(detected_at / 1000)
-                    ),
-                    status="active",
-                    duration=dur,
-                )
-            )
-
-        logger.info("Generated %d startup incidents", num_incidents)
-
-    def _generate_historical_incidents(self):
-        now_ms = time.time() * 1000
-        for i in range(50):
-            fiber = random.choice(self.fibers)
-            ch = 50 + random.randint(0, max(1, fiber.channel_count - 100))
-            cfg = random.choice(INCIDENT_CONFIGS)
-            severity = _weighted_choice(SEVERITIES, cfg["weights"])
-            hours_ago = (random.random() ** 2) * 168
-            detected_at = now_ms - hours_ago * 3_600_000
-            dur = cfg["dur"][0] + random.random() * (cfg["dur"][1] - cfg["dur"][0])
-            elapsed = now_ms - detected_at
-            self.incidents.append(
-                Incident(
-                    id=f"inc-hist-{i}-{uuid.uuid4().hex[:4]}",
-                    type=cfg["type"],
-                    severity=severity,
-                    fiber_line=fiber.id,
-                    channel=ch,
-                    detected_at=time.strftime(
-                        "%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(detected_at / 1000)
-                    ),
-                    status="resolved" if elapsed > dur else "active",
-                    duration=dur,
-                )
-            )
+        # Track when simulation started — incidents only spawn after warmup period
+        # so snapshot data has time to accumulate
+        self._started_at = time.time()
+        self._incident_warmup_s = 180  # 3 minutes
 
     def _density_multiplier(self) -> float:
         h = int(self.simulated_hour) % 24
@@ -582,6 +555,9 @@ class SimulationEngine:
         # Generate detections (group nearby vehicles)
         detections = self._generate_detections()
 
+        # Record detections near active incidents for snapshot queries
+        self._record_incident_detections(detections, now_ms)
+
         # Resolve expired incidents + maybe create new ones
         new_incidents = []
         resolved_incidents = []
@@ -597,6 +573,14 @@ class SimulationEngine:
                 if now_ms - detected_ts > inc.duration:
                     inc.status = "resolved"
                     resolved_incidents.append(inc)
+
+        # Only generate new incidents after warmup (so snapshot data can accumulate)
+        if now - self._started_at < self._incident_warmup_s:
+            return detections, new_incidents, resolved_incidents
+
+        if not hasattr(self, "_warmup_logged"):
+            self._warmup_logged = True
+            logger.info("Warmup complete (%ds), incidents will now spawn", self._incident_warmup_s)
 
         # Maybe generate new incidents (15x multiplier for dev testing)
         hours_frac = delta_ms / 3_600_000 * 15
@@ -624,7 +608,11 @@ class SimulationEngine:
         resolved_all = [i for i in self.incidents if i.status == "resolved"]
         if len(resolved_all) > 50:
             to_remove = set(id(i) for i in resolved_all[:-50])
+            removed_ids = {i.id for i in self.incidents if id(i) in to_remove}
             self.incidents = [i for i in self.incidents if id(i) not in to_remove]
+            # Clean up snapshots for pruned incidents
+            for rid in removed_ids:
+                self.incident_snapshots.pop(rid, None)
 
         return detections, new_incidents, resolved_incidents
 
@@ -668,6 +656,52 @@ class SimulationEngine:
                 )
             )
         return detections
+
+    def _record_incident_detections(self, detections: list[Detection], now_ms: float):
+        """Record detections near active incidents for snapshot queries."""
+        active = [i for i in self.incidents if i.status == "active"]
+        if not active or not detections:
+            return
+
+        cutoff_ms = now_ms - SNAPSHOT_DURATION_S * 1000
+
+        for inc in active:
+            # Initialize buffer on first encounter
+            if inc.id not in self.incident_snapshots:
+                self.incident_snapshots[inc.id] = []
+
+            buf = self.incident_snapshots[inc.id]
+
+            # Capture detections within ±SNAPSHOT_CHANNEL_RADIUS of this incident
+            for d in detections:
+                if d.fiber_line != inc.fiber_line:
+                    continue
+                if abs(d.channel - inc.channel) > SNAPSHOT_CHANNEL_RADIUS:
+                    continue
+                buf.append(
+                    {
+                        "fiberLine": f"{d.fiber_line}:{d.direction}",
+                        "channel": d.channel,
+                        "speed": round(d.speed, 1),
+                        "count": d.count,
+                        "nCars": d.n_cars,
+                        "nTrucks": d.n_trucks,
+                        "direction": d.direction,
+                        "timestamp": d.timestamp,
+                    }
+                )
+
+            # Evict detections older than SNAPSHOT_DURATION_S
+            if buf and buf[0]["timestamp"] < cutoff_ms:
+                self.incident_snapshots[inc.id] = [
+                    det for det in buf if det["timestamp"] >= cutoff_ms
+                ]
+
+            # Cap total size
+            if len(self.incident_snapshots[inc.id]) > SNAPSHOT_MAX_DETECTIONS:
+                self.incident_snapshots[inc.id] = self.incident_snapshots[inc.id][
+                    -SNAPSHOT_MAX_DETECTIONS:
+                ]
 
     def generate_shm_readings(self) -> list[SHMReading]:
         """Generate SHM frequency readings for all infrastructure."""
@@ -726,16 +760,10 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
         len(fiber_org_map),
     )
 
-    # Broadcast initial incidents (to all orgs) and update cache for REST API
     from apps.monitoring.incident_service import transform_simulation_incident
 
-    initial_incidents = [transform_simulation_incident(i) for i in engine.incidents]
-    await _broadcast_per_org(
-        channel_layer,
-        "incidents",
-        initial_incidents,
-        fiber_org_map,
-    )
+    # No initial incidents — they spawn after the warmup period so
+    # snapshot data has time to accumulate from the vehicle simulation
     _update_simulation_incidents_cache(engine.incidents)
 
     tick_interval = 0.05  # 50ms ticks (20 Hz physics)
@@ -827,13 +855,13 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
 
                 # Send to superuser group
                 await channel_layer.group_send(
-                    "realtime_shm_readings_org___all__",
+                    "realtime_sim_shm_readings_org___all__",
                     {"type": "broadcast_message", "channel": "shm_readings", "data": shm_dicts},
                 )
                 # Send per-org
                 for org_id, org_readings in org_shm.items():
                     await channel_layer.group_send(
-                        f"realtime_shm_readings_org_{org_id}",
+                        f"realtime_sim_shm_readings_org_{org_id}",
                         {
                             "type": "broadcast_message",
                             "channel": "shm_readings",
@@ -844,8 +872,9 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
         # Broadcast incidents every 100 ticks (5 seconds) — per-org
         if incident_counter >= 100:
             incident_counter = 0
-            # Update cache for REST API fallback
+            # Update caches for REST API fallback
             _update_simulation_incidents_cache(engine.incidents)
+            _update_simulation_snapshots(dict(engine.incident_snapshots))
             for inc in pending_new_incidents + pending_resolved_incidents:
                 inc_data = transform_simulation_incident(inc)
                 directional_fid = inc_data["fiberLine"]

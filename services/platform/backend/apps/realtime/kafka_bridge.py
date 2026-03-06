@@ -210,7 +210,9 @@ def _load_infra_org_map(infrastructure: list[dict]) -> dict[str, str]:
     return {infra["id"]: infra.get("organization_id", "") for infra in infrastructure}
 
 
-async def _org_broadcast(channel_layer, channel: str, data, fiber_org_map: dict[str, list[str]]):
+async def _org_broadcast(
+    channel_layer, channel: str, data, fiber_org_map: dict[str, list[str]], flow: str = "live"
+):
     """
     Broadcast data to org-scoped groups based on fiberLine field.
 
@@ -220,7 +222,7 @@ async def _org_broadcast(channel_layer, channel: str, data, fiber_org_map: dict[
     """
     # Always send to superuser group
     await channel_layer.group_send(
-        f"realtime_{channel}_org___all__",
+        f"realtime_{flow}_{channel}_org___all__",
         {
             "type": "broadcast_message",
             "channel": channel,
@@ -239,7 +241,7 @@ async def _org_broadcast(channel_layer, channel: str, data, fiber_org_map: dict[
 
         for org_id, org_data in org_items.items():
             await channel_layer.group_send(
-                f"realtime_{channel}_org_{org_id}",
+                f"realtime_{flow}_{channel}_org_{org_id}",
                 {
                     "type": "broadcast_message",
                     "channel": channel,
@@ -251,7 +253,7 @@ async def _org_broadcast(channel_layer, channel: str, data, fiber_org_map: dict[
         parent_fid = fid.rsplit(":", 1)[0] if ":" in fid else fid
         for org_id in fiber_org_map.get(parent_fid, []):
             await channel_layer.group_send(
-                f"realtime_{channel}_org_{org_id}",
+                f"realtime_{flow}_{channel}_org_{org_id}",
                 {
                     "type": "broadcast_message",
                     "channel": channel,
@@ -330,6 +332,7 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
     )
     consumer.subscribe(["das.detections"])
 
+    settings.KAFKA_AVAILABLE = True
     logger.info(
         "Kafka bridge started (time-shifted replay): %s, topic: das.detections, %d org mappings",
         bootstrap_servers,
@@ -407,13 +410,13 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
 
                     # Superuser group gets all
                     await channel_layer.group_send(
-                        "realtime_shm_readings_org___all__",
+                        "realtime_live_shm_readings_org___all__",
                         {"type": "broadcast_message", "channel": "shm_readings", "data": readings},
                     )
                     # Per-org
                     for org_id, org_readings in org_shm.items():
                         await channel_layer.group_send(
-                            f"realtime_shm_readings_org_{org_id}",
+                            f"realtime_live_shm_readings_org_{org_id}",
                             {
                                 "type": "broadcast_message",
                                 "channel": "shm_readings",
@@ -439,6 +442,7 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
     except KeyboardInterrupt:
         logger.info("Kafka bridge shutting down...")
     finally:
+        settings.KAFKA_AVAILABLE = False
         replay_buffer.stop()
         drain_task.cancel()
         try:

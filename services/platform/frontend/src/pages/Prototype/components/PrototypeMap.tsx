@@ -58,6 +58,7 @@ interface PrototypeMapProps {
   sidebarOpen?: boolean
   hideFibersInOverview?: boolean
   show3DBuildings?: boolean
+  showChannelHelper?: boolean
 }
 
 function findNearestFiberPoint(lngLat: [number, number], maxDistDeg = 0.003) {
@@ -98,7 +99,6 @@ export const PrototypeMap = memo(
       sectionCreationMode,
       pendingPoint,
       sections,
-      selectedSectionId: _selectedSectionId, // eslint-disable-line @typescript-eslint/no-unused-vars
       onFiberClick,
       onSectionComplete,
       buildVehicleGeoJSON,
@@ -118,6 +118,7 @@ export const PrototypeMap = memo(
       sidebarOpen,
       hideFibersInOverview,
       show3DBuildings,
+      showChannelHelper,
     },
     ref,
   ) {
@@ -147,8 +148,6 @@ export const PrototypeMap = memo(
 
     const sectionCreationRef = useRef(sectionCreationMode)
     sectionCreationRef.current = sectionCreationMode
-
-    // selectedSectionId is used by parent for flyTo; highlight is handled via imperative handle
 
     const buildGeoJSONRef = useRef(buildVehicleGeoJSON)
     buildGeoJSONRef.current = buildVehicleGeoJSON
@@ -378,6 +377,37 @@ export const PrototypeMap = memo(
             'line-color': ['get', 'color'],
             'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1.5, 12, 2, 14, 2.5],
             'line-opacity': ['interpolate', ['linear'], ['zoom'], 10, 0.5, 12.5, 0.7, 14, 0.8],
+          },
+        })
+
+        // ── Channel helper dots (one dot per channel for selection aid) ──
+        const channelFeatures: GeoJSON.Feature[] = []
+        for (const fiber of fibers) {
+          const coords = fiberOffsetCache.get(fiber.id)
+          if (!coords) continue
+          for (let ch = 0; ch < coords.length; ch++) {
+            const c = coords[ch]
+            if (c[0] == null || c[1] == null) continue
+            channelFeatures.push({
+              type: 'Feature',
+              properties: { color: fiber.color },
+              geometry: { type: 'Point', coordinates: [c[0], c[1]] },
+            })
+          }
+        }
+        map.addSource('channel-helper', {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: channelFeatures },
+        })
+        map.addLayer({
+          id: 'channel-helper-dots',
+          type: 'circle',
+          source: 'channel-helper',
+          layout: { visibility: 'none' },
+          paint: {
+            'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 1, 14, 2.5, 17, 4],
+            'circle-color': ['get', 'color'],
+            'circle-opacity': 0.6,
           },
         })
 
@@ -1170,6 +1200,15 @@ export const PrototypeMap = memo(
         map.setLayoutProperty('3d-buildings', 'visibility', show3DBuildings ? 'visible' : 'none')
       }
     }, [show3DBuildings])
+
+    // ── Toggle channel helper dots ───────────────────────────────
+    useEffect(() => {
+      const map = mapRef.current
+      if (!map || !map.isStyleLoaded()) return
+      if (map.getLayer('channel-helper-dots')) {
+        map.setLayoutProperty('channel-helper-dots', 'visibility', showChannelHelper ? 'visible' : 'none')
+      }
+    }, [showChannelHelper])
 
     // ── Map cursor in creation mode ──────────────────────────────
     useEffect(() => {
