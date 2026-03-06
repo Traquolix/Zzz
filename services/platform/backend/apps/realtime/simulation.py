@@ -591,6 +591,7 @@ class SimulationEngine:
             ch = random.randint(10, max(11, fiber.channel_count - 10))
             severity = _weighted_choice(SEVERITIES, cfg["weights"])
             dur = (cfg["dur"][0] + random.random() * (cfg["dur"][1] - cfg["dur"][0])) / 15
+            dur = max(dur, 120_000)  # Minimum 2 minutes real-time so incidents are visible
             inc = Incident(
                 id=f"inc-{int(now_ms)}-{uuid.uuid4().hex[:4]}",
                 type=cfg["type"],
