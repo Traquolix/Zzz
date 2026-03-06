@@ -7,143 +7,135 @@ import { useRealtime } from '@/hooks/useRealtime'
 import { fibers } from '../data'
 
 export interface VehiclePosition {
-    id: string
-    position: [number, number, number]
-    angle: number
-    speed: number
-    opacity: number
-    fiberId: string
-    channel: number
+  id: string
+  position: [number, number, number]
+  angle: number
+  speed: number
+  opacity: number
+  fiberId: string
+  channel: number
 }
 
 interface FiberEngine {
-    fiberId: string
-    engine: VehicleSimEngine
-    coords: [number, number][]
-    direction: 0 | 1
-    step: number
+  fiberId: string
+  engine: VehicleSimEngine
+  coords: [number, number][]
+  direction: 0 | 1
+  step: number
 }
 
-function getBearing(
-    coords: [number, number][],
-    index: number,
-    direction: 0 | 1,
-): number {
-    if (coords.length < 2) return 0
-    const i = Math.max(0, Math.min(coords.length - 2, Math.floor(index)))
-    const [lng1, lat1] = coords[i]
-    const [lng2, lat2] = coords[i + 1]
-    const dLng = ((lng2 - lng1) * Math.PI) / 180
-    const lat1R = (lat1 * Math.PI) / 180
-    const lat2R = (lat2 * Math.PI) / 180
-    const y = Math.sin(dLng) * Math.cos(lat2R)
-    const x =
-        Math.cos(lat1R) * Math.sin(lat2R) -
-        Math.sin(lat1R) * Math.cos(lat2R) * Math.cos(dLng)
-    const b = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360
-    return direction === 0 ? b : (b + 180) % 360
+function getBearing(coords: [number, number][], index: number, direction: 0 | 1): number {
+  if (coords.length < 2) return 0
+  const i = Math.max(0, Math.min(coords.length - 2, Math.floor(index)))
+  const [lng1, lat1] = coords[i]
+  const [lng2, lat2] = coords[i + 1]
+  const dLng = ((lng2 - lng1) * Math.PI) / 180
+  const lat1R = (lat1 * Math.PI) / 180
+  const lat2R = (lat2 * Math.PI) / 180
+  const y = Math.sin(dLng) * Math.cos(lat2R)
+  const x = Math.cos(lat1R) * Math.sin(lat2R) - Math.sin(lat1R) * Math.cos(lat2R) * Math.cos(dLng)
+  const b = ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360
+  return direction === 0 ? b : (b + 180) % 360
 }
 
-function interpCoord(
-    coords: [number, number][],
-    index: number,
-): [number, number] | null {
-    if (coords.length < 2) return null
-    const c = Math.max(0, Math.min(coords.length - 1, index))
-    const i = Math.floor(c)
-    const j = Math.min(i + 1, coords.length - 1)
-    const t = c - i
-    return [
-        coords[i][0] + (coords[j][0] - coords[i][0]) * t,
-        coords[i][1] + (coords[j][1] - coords[i][1]) * t,
-    ]
+function interpCoord(coords: [number, number][], index: number): [number, number] | null {
+  if (coords.length < 2) return null
+  const c = Math.max(0, Math.min(coords.length - 1, index))
+  const i = Math.floor(c)
+  const j = Math.min(i + 1, coords.length - 1)
+  const t = c - i
+  return [coords[i][0] + (coords[j][0] - coords[i][0]) * t, coords[i][1] + (coords[j][1] - coords[i][1]) * t]
 }
 
 export function useVehicleSim(): {
-    tickAndCollect: (now: number, deltaMs: number) => VehiclePosition[]
+  tickAndCollect: (now: number, deltaMs: number) => VehiclePosition[]
 } {
-    const { subscribe } = useRealtime()
-    const enginesRef = useRef<FiberEngine[]>([])
+  const { subscribe, onFlowChange } = useRealtime()
+  const enginesRef = useRef<FiberEngine[]>([])
 
-    // Initialize engines once
-    if (enginesRef.current.length === 0) {
-        enginesRef.current = fibers.map((fiber) => {
-            const engine = new VehicleSimEngine({
-                totalChannels: fiber.totalChannels,
-                metersPerChannel: 5,
-            })
-            const coords = getFiberOffsetCoords({ ...fiber, coordinates: fiber.coordinates as [number, number][] })
-            return {
-                fiberId: fiber.id,
-                engine,
-                coords,
-                direction: fiber.direction,
-                step: 1,
-            }
-        })
+  // Clear all engine state on flow switch
+  useEffect(() => {
+    return onFlowChange(() => {
+      for (const fe of enginesRef.current) {
+        fe.engine.reset()
+      }
+    })
+  }, [onFlowChange])
+
+  // Initialize engines once
+  if (enginesRef.current.length === 0) {
+    enginesRef.current = fibers.map(fiber => {
+      const engine = new VehicleSimEngine({
+        totalChannels: fiber.totalChannels,
+        metersPerChannel: 5,
+      })
+      const coords = getFiberOffsetCoords({ ...fiber, coordinates: fiber.coordinates as [number, number][] })
+      return {
+        fiberId: fiber.id,
+        engine,
+        coords,
+        direction: fiber.direction,
+        step: 1,
+      }
+    })
+  }
+
+  // Subscribe to detections
+  useEffect(() => {
+    const unsub = subscribe('detections', (data: unknown) => {
+      const detections = parseDetections(data)
+      const now = performance.now()
+
+      for (const d of detections) {
+        const fe = enginesRef.current.find(e => e.fiberId === d.fiberLine)
+        if (!fe) continue
+
+        const event: SensorEvent = {
+          channel: d.channel,
+          speed: d.speed,
+          count: d.count,
+          direction: d.direction,
+        }
+        fe.engine.onSensorEvent(event, now)
+      }
+    })
+    return unsub
+  }, [subscribe])
+
+  const tickAndCollect = useCallback((now: number, deltaMs: number): VehiclePosition[] => {
+    const positions: VehiclePosition[] = []
+
+    for (const fe of enginesRef.current) {
+      fe.engine.tick(now, deltaMs)
+
+      for (const track of fe.engine.tracks) {
+        if (track.opacity <= 0) continue
+
+        // Convert render position (raw channels) to coordinate index
+        const coordIndex = track.renderPosition / fe.step
+        const coord = interpCoord(fe.coords, coordIndex)
+        if (!coord) continue
+
+        const bearing = getBearing(fe.coords, coordIndex, fe.direction)
+        const speed = fe.engine.getRenderSpeed(track)
+
+        for (const car of track.cars) {
+          if (car.opacity <= 0) continue
+          positions.push({
+            id: car.id,
+            position: [coord[0], coord[1], 0],
+            angle: bearing,
+            speed,
+            opacity: track.opacity * car.opacity,
+            fiberId: fe.fiberId,
+            channel: Math.round(track.renderPosition),
+          })
+        }
+      }
     }
 
-    // Subscribe to detections
-    useEffect(() => {
-        const unsub = subscribe('detections', (data: unknown) => {
-            const detections = parseDetections(data)
-            const now = performance.now()
+    return positions
+  }, [])
 
-            for (const d of detections) {
-                const fe = enginesRef.current.find(
-                    (e) => e.fiberId === d.fiberLine,
-                )
-                if (!fe) continue
-
-                const event: SensorEvent = {
-                    channel: d.channel,
-                    speed: d.speed,
-                    count: d.count,
-                    direction: d.direction,
-                }
-                fe.engine.onSensorEvent(event, now)
-            }
-        })
-        return unsub
-    }, [subscribe])
-
-    const tickAndCollect = useCallback(
-        (now: number, deltaMs: number): VehiclePosition[] => {
-            const positions: VehiclePosition[] = []
-
-            for (const fe of enginesRef.current) {
-                fe.engine.tick(now, deltaMs)
-
-                for (const track of fe.engine.tracks) {
-                    if (track.opacity <= 0) continue
-
-                    // Convert render position (raw channels) to coordinate index
-                    const coordIndex = track.renderPosition / fe.step
-                    const coord = interpCoord(fe.coords, coordIndex)
-                    if (!coord) continue
-
-                    const bearing = getBearing(fe.coords, coordIndex, fe.direction)
-                    const speed = fe.engine.getRenderSpeed(track)
-
-                    for (const car of track.cars) {
-                        if (car.opacity <= 0) continue
-                        positions.push({
-                            id: car.id,
-                            position: [coord[0], coord[1], 0],
-                            angle: bearing,
-                            speed,
-                            opacity: track.opacity * car.opacity,
-                            fiberId: fe.fiberId,
-                            channel: Math.round(track.renderPosition),
-                        })
-                    }
-                }
-            }
-
-            return positions
-        },
-        [],
-    )
-
-    return { tickAndCollect }
+  return { tickAndCollect }
 }

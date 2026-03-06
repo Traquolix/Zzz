@@ -15,51 +15,52 @@ import type { ReactNode } from 'react'
 
 let mockToken: string | null = 'valid-token'
 vi.mock('@/api/client', () => ({
-    getAuthToken: () => mockToken,
+  getAuthToken: () => mockToken,
 }))
 
 // Minimal WebSocket mock
 class MockWebSocket {
-    static OPEN = 1
-    static CONNECTING = 0
-    static CLOSING = 2
-    static CLOSED = 3
+  static OPEN = 1
+  static CONNECTING = 0
+  static CLOSING = 2
+  static CLOSED = 3
 
-    readyState = MockWebSocket.CONNECTING
-    onopen: (() => void) | null = null
-    onclose: (() => void) | null = null
-    onmessage: ((event: { data: string }) => void) | null = null
-    onerror: (() => void) | null = null
+  readyState = MockWebSocket.CONNECTING
+  onopen: (() => void) | null = null
+  onclose: (() => void) | null = null
+  onmessage: ((event: { data: string }) => void) | null = null
+  onerror: (() => void) | null = null
 
-    url: string
-    constructor(url: string) {
-        this.url = url
-        // Auto-fire onopen in next tick
-        setTimeout(() => {
-            this.readyState = MockWebSocket.OPEN
-            this.onopen?.()
-        }, 0)
-    }
+  url: string
+  constructor(url: string) {
+    this.url = url
+    // Auto-fire onopen in next tick
+    setTimeout(() => {
+      this.readyState = MockWebSocket.OPEN
+      this.onopen?.()
+    }, 0)
+  }
 
-    send = vi.fn()
-    close = vi.fn(() => {
-        this.readyState = MockWebSocket.CLOSED
-        setTimeout(() => this.onclose?.(), 0)
-    })
+  send = vi.fn()
+  close = vi.fn(() => {
+    this.readyState = MockWebSocket.CLOSED
+    setTimeout(() => this.onclose?.(), 0)
+  })
 
-    // Test helper: simulate server message
-    _receive(data: unknown) {
-        this.onmessage?.({ data: JSON.stringify(data) })
-    }
+  // Test helper: simulate server message
+  _receive(data: unknown) {
+    this.onmessage?.({ data: JSON.stringify(data) })
+  }
 }
 
 let wsInstances: MockWebSocket[] = []
 const mockWebSocketClass = class extends MockWebSocket {
-    constructor(url: string) {
-        super(url)
-        wsInstances.push(this)
-    }
+  constructor(url: string) {
+    super(url)
+    wsInstances.push(this)
+  }
 }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 vi.stubGlobal('WebSocket', mockWebSocketClass as any)
 
 import { RealtimeProvider } from './RealtimeProvider'
@@ -67,93 +68,101 @@ import { RealtimeContext } from './RealtimeContext'
 import { useContext } from 'react'
 
 function useTestRealtime() {
-    return useContext(RealtimeContext)
+  return useContext(RealtimeContext)
 }
 
 function wrapper({ children }: { children: ReactNode }) {
-    return <RealtimeProvider url="ws://test">{children}</RealtimeProvider>
+  return <RealtimeProvider url="ws://test">{children}</RealtimeProvider>
 }
 
 describe('RealtimeProvider — auth failure handling', () => {
-    beforeEach(() => {
-        vi.useFakeTimers()
-        vi.clearAllMocks()
-        wsInstances = []
-        mockToken = 'valid-token'
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.clearAllMocks()
+    wsInstances = []
+    mockToken = 'valid-token'
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('exposes authFailed=false when authentication succeeds', async () => {
+    const { result } = renderHook(useTestRealtime, { wrapper })
+
+    // Advance to let WebSocket connect
+    await act(async () => {
+      vi.advanceTimersByTime(10)
     })
 
-    afterEach(() => {
-        vi.useRealTimers()
+    // Simulate successful auth response
+    const ws = wsInstances[0]
+    await act(async () => {
+      ws._receive({ action: 'authenticated', success: true })
     })
 
-    it('exposes authFailed=false when authentication succeeds', async () => {
-        const { result } = renderHook(useTestRealtime, { wrapper })
+    expect(result.current?.connected).toBe(true)
+    expect(result.current?.authFailed).toBe(false)
+  })
 
-        // Advance to let WebSocket connect
-        await act(async () => { vi.advanceTimersByTime(10) })
+  it('sets authFailed=true when token polling exhausts without finding a token', async () => {
+    mockToken = null // No token available
 
-        // Simulate successful auth response
-        const ws = wsInstances[0]
-        await act(async () => {
-            ws._receive({ action: 'authenticated', success: true })
-        })
+    const { result } = renderHook(useTestRealtime, { wrapper })
 
-        expect(result.current?.connected).toBe(true)
-        expect(result.current?.authFailed).toBe(false)
+    // Advance through all 20 poll attempts (500ms each = 10s)
+    await act(async () => {
+      vi.advanceTimersByTime(20 * 500 + 100)
     })
 
-    it('sets authFailed=true when token polling exhausts without finding a token', async () => {
-        mockToken = null // No token available
+    expect(result.current?.authFailed).toBe(true)
+    expect(result.current?.connected).toBe(false)
+  })
 
-        const { result } = renderHook(useTestRealtime, { wrapper })
+  it('sets authFailed=true when server rejects authentication', async () => {
+    const { result } = renderHook(useTestRealtime, { wrapper })
 
-        // Advance through all 20 poll attempts (500ms each = 10s)
-        await act(async () => {
-            vi.advanceTimersByTime(20 * 500 + 100)
-        })
-
-        expect(result.current?.authFailed).toBe(true)
-        expect(result.current?.connected).toBe(false)
+    await act(async () => {
+      vi.advanceTimersByTime(10)
     })
 
-    it('sets authFailed=true when server rejects authentication', async () => {
-        const { result } = renderHook(useTestRealtime, { wrapper })
-
-        await act(async () => { vi.advanceTimersByTime(10) })
-
-        const ws = wsInstances[0]
-        await act(async () => {
-            ws._receive({ action: 'authenticated', success: false, message: 'invalid token' })
-        })
-
-        // WebSocket closes after failed auth, which should surface authFailed
-        await act(async () => { vi.advanceTimersByTime(10) })
-
-        expect(result.current?.authFailed).toBe(true)
+    const ws = wsInstances[0]
+    await act(async () => {
+      ws._receive({ action: 'authenticated', success: false, message: 'invalid token' })
     })
 
-    it('authFailed stays false during normal reconnect cycle', async () => {
-        const { result } = renderHook(useTestRealtime, { wrapper })
-
-        // Let WebSocket connect
-        await act(async () => { vi.advanceTimersByTime(10) })
-
-        const ws = wsInstances[0]
-        // Authenticate successfully first
-        await act(async () => {
-            ws._receive({ action: 'authenticated', success: true })
-        })
-        expect(result.current?.connected).toBe(true)
-        expect(result.current?.authFailed).toBe(false)
-
-        // Simulate disconnect (network drop, not auth failure)
-        await act(async () => {
-            ws.readyState = MockWebSocket.CLOSED
-            ws.onclose?.()
-        })
-
-        expect(result.current?.connected).toBe(false)
-        // authFailed should remain false — this was a network issue, not auth
-        expect(result.current?.authFailed).toBe(false)
+    // WebSocket closes after failed auth, which should surface authFailed
+    await act(async () => {
+      vi.advanceTimersByTime(10)
     })
+
+    expect(result.current?.authFailed).toBe(true)
+  })
+
+  it('authFailed stays false during normal reconnect cycle', async () => {
+    const { result } = renderHook(useTestRealtime, { wrapper })
+
+    // Let WebSocket connect
+    await act(async () => {
+      vi.advanceTimersByTime(10)
+    })
+
+    const ws = wsInstances[0]
+    // Authenticate successfully first
+    await act(async () => {
+      ws._receive({ action: 'authenticated', success: true })
+    })
+    expect(result.current?.connected).toBe(true)
+    expect(result.current?.authFailed).toBe(false)
+
+    // Simulate disconnect (network drop, not auth failure)
+    await act(async () => {
+      ws.readyState = MockWebSocket.CLOSED
+      ws.onclose?.()
+    })
+
+    expect(result.current?.connected).toBe(false)
+    // authFailed should remain false — this was a network issue, not auth
+    expect(result.current?.authFailed).toBe(false)
+  })
 })

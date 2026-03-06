@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -157,7 +157,7 @@
   /* slate: light shades → dark navy tints, dark shades → light
      950 = deepest, bg = #101e2c, 50 = card-level surface,
      white (#1b3044) = card surface */
-  --color-slate-50:  #192d3f;
+  --color-slate-50: #192d3f;
   --color-slate-100: #1e3448;
   --color-slate-200: #243e56;
   --color-slate-300: #365a78;
@@ -170,7 +170,7 @@
   --color-slate-950: #0a1218;
 
   /* gray: same inversion with wider spread */
-  --color-gray-50:  #192d3f;
+  --color-gray-50: #192d3f;
   --color-gray-100: #1e3448;
   --color-gray-200: #243e56;
   --color-gray-300: #365a78;
@@ -184,7 +184,7 @@
 
   /* blue: remap to brand teal (#357b82) for interactive elements,
      green (#c1d868) reserved for primary/active accents */
-  --color-blue-50:  #0f2b2e;
+  --color-blue-50: #0f2b2e;
   --color-blue-100: #153a3e;
   --color-blue-200: #1e5258;
   --color-blue-300: #2a6b72;
@@ -200,14 +200,18 @@
   * {
     @apply border-border outline-ring/50;
   }
-  html, body, #root {
+  html,
+  body,
+  #root {
     @apply h-full m-0;
   }
   body {
     @apply bg-background text-foreground select-none;
   }
   /* Allow text selection in form inputs */
-  input, textarea, [contenteditable="true"] {
+  input,
+  textarea,
+  [contenteditable='true'] {
     @apply select-text;
   }
 }
@@ -217,12 +221,17 @@
 .theme-transitioning *,
 .theme-transitioning *::before,
 .theme-transitioning *::after {
-    transition: background-color 200ms ease, color 150ms ease, border-color 200ms ease, fill 200ms ease !important;
+  transition:
+    background-color 200ms ease,
+    color 150ms ease,
+    border-color 200ms ease,
+    fill 200ms ease !important;
 }
 
 /* Pulse animation for incident markers */
 @keyframes pulse {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     opacity: 1;
   }
@@ -243,23 +252,22 @@
 
 /* Ambient page background with dual radial gradients */
 .sequoia body {
-    background:
-        radial-gradient(ellipse at 10% 0%, rgba(53, 123, 130, 0.07) 0%, transparent 50%),
-        radial-gradient(ellipse at 90% 100%, rgba(193, 216, 104, 0.03) 0%, transparent 50%),
-        #101e2c;
+  background:
+    radial-gradient(ellipse at 10% 0%, rgba(53, 123, 130, 0.07) 0%, transparent 50%),
+    radial-gradient(ellipse at 90% 100%, rgba(193, 216, 104, 0.03) 0%, transparent 50%), #101e2c;
 }
 
 /* Enhanced shadows for map overlays and popups */
 .sequoia .shadow-lg {
-    box-shadow:
-        0 0 1px rgba(53, 123, 130, 0.3),
-        0 10px 30px rgba(0, 0, 0, 0.4) !important;
+  box-shadow:
+    0 0 1px rgba(53, 123, 130, 0.3),
+    0 10px 30px rgba(0, 0, 0, 0.4) !important;
 }
 
 .sequoia .shadow-xl {
-    box-shadow:
-        0 0 1px rgba(53, 123, 130, 0.4),
-        0 20px 40px rgba(0, 0, 0, 0.5) !important;
+  box-shadow:
+    0 0 1px rgba(53, 123, 130, 0.4),
+    0 20px 40px rgba(0, 0, 0, 0.5) !important;
 }
 
 /* Mobile-friendly mapbox navigation controls */

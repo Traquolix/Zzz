@@ -14,38 +14,37 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { useAppStore } from './appStore'
 
 describe('appStore', () => {
-    beforeEach(() => {
-        // Reset store between tests
-        useAppStore.setState(useAppStore.getInitialState())
+  beforeEach(() => {
+    // Reset store between tests
+    useAppStore.setState(useAppStore.getInitialState())
+  })
+
+  describe('connection slice', () => {
+    it('starts disconnected with no auth failure', () => {
+      const state = useAppStore.getState()
+      expect(state.connected).toBe(false)
+      expect(state.authFailed).toBe(false)
     })
 
-    describe('connection slice', () => {
-        it('starts disconnected with no auth failure', () => {
-            const state = useAppStore.getState()
-            expect(state.connected).toBe(false)
-            expect(state.authFailed).toBe(false)
-        })
+    it('setConnected updates connected state', () => {
+      useAppStore.getState().setConnected(true)
+      expect(useAppStore.getState().connected).toBe(true)
 
-        it('setConnected updates connected state', () => {
-            useAppStore.getState().setConnected(true)
-            expect(useAppStore.getState().connected).toBe(true)
-
-            useAppStore.getState().setConnected(false)
-            expect(useAppStore.getState().connected).toBe(false)
-        })
-
-        it('setAuthFailed updates auth failure state', () => {
-            useAppStore.getState().setAuthFailed(true)
-            expect(useAppStore.getState().authFailed).toBe(true)
-        })
-
-        it('setConnected(true) clears authFailed', () => {
-            useAppStore.getState().setAuthFailed(true)
-            expect(useAppStore.getState().authFailed).toBe(true)
-
-            useAppStore.getState().setConnected(true)
-            expect(useAppStore.getState().authFailed).toBe(false)
-        })
+      useAppStore.getState().setConnected(false)
+      expect(useAppStore.getState().connected).toBe(false)
     })
 
+    it('setAuthFailed updates auth failure state', () => {
+      useAppStore.getState().setAuthFailed(true)
+      expect(useAppStore.getState().authFailed).toBe(true)
+    })
+
+    it('setConnected(true) clears authFailed', () => {
+      useAppStore.getState().setAuthFailed(true)
+      expect(useAppStore.getState().authFailed).toBe(true)
+
+      useAppStore.getState().setConnected(true)
+      expect(useAppStore.getState().authFailed).toBe(false)
+    })
+  })
 })

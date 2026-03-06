@@ -30,6 +30,7 @@ lint-backend: ## Lint backend Python code
 
 lint-frontend: ## Lint frontend TypeScript code
 	cd services/platform/frontend && npm run lint
+	cd services/platform/frontend && npm run format:check
 
 # ---------------------------------------------------------------------------
 # Format (auto-fix)

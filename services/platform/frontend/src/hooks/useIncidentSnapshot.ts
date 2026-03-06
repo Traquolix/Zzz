@@ -5,52 +5,54 @@ import { fetchIncidentSnapshot } from '@/api/incidents'
 import { ApiError } from '@/api/client'
 
 type UseIncidentSnapshotResult = {
-    snapshot: IncidentSnapshot | null
-    loading: boolean
-    error: string | null
-    fetchSnapshot: (incidentId: string) => Promise<void>
-    clearSnapshot: () => void
+  snapshot: IncidentSnapshot | null
+  loading: boolean
+  error: string | null
+  fetchSnapshot: (incidentId: string) => Promise<void>
+  clearSnapshot: () => void
 }
 
 export function useIncidentSnapshot(): UseIncidentSnapshotResult {
-    const { t } = useTranslation()
-    const [snapshot, setSnapshot] = useState<IncidentSnapshot | null>(null)
-    const [loading, setLoading] = useState(false)
-    const [error, setError] = useState<string | null>(null)
-    // Track the latest request to ignore stale responses
-    const requestIdRef = useRef(0)
+  const { t } = useTranslation()
+  const [snapshot, setSnapshot] = useState<IncidentSnapshot | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  // Track the latest request to ignore stale responses
+  const requestIdRef = useRef(0)
 
-    const fetchSnapshotFn = useCallback(async (incidentId: string) => {
-        const thisRequest = ++requestIdRef.current
+  const fetchSnapshotFn = useCallback(
+    async (incidentId: string) => {
+      const thisRequest = ++requestIdRef.current
 
-        setLoading(true)
-        setError(null)
+      setLoading(true)
+      setError(null)
 
-        try {
-            const data = await fetchIncidentSnapshot(incidentId)
-            if (thisRequest === requestIdRef.current) {
-                setSnapshot(data)
-            }
-        } catch (e) {
-            if (thisRequest !== requestIdRef.current) return
-            if (e instanceof ApiError && e.status === 404) {
-                setError(t('common.noSnapshot'))
-            } else if (e instanceof ApiError || typeof e === 'object') {
-                setError(t('common.somethingWentWrong'))
-            }
-            setSnapshot(null)
-        } finally {
-            if (thisRequest === requestIdRef.current) {
-                setLoading(false)
-            }
+      try {
+        const data = await fetchIncidentSnapshot(incidentId)
+        if (thisRequest === requestIdRef.current) {
+          setSnapshot(data)
         }
-
-    }, [t])
-
-    const clearSnapshot = useCallback(() => {
+      } catch (e) {
+        if (thisRequest !== requestIdRef.current) return
+        if (e instanceof ApiError && e.status === 404) {
+          setError(t('common.noSnapshot'))
+        } else if (e instanceof ApiError || typeof e === 'object') {
+          setError(t('common.somethingWentWrong'))
+        }
         setSnapshot(null)
-        setError(null)
-    }, [])
+      } finally {
+        if (thisRequest === requestIdRef.current) {
+          setLoading(false)
+        }
+      }
+    },
+    [t],
+  )
 
-    return { snapshot, loading, error, fetchSnapshot: fetchSnapshotFn, clearSnapshot }
+  const clearSnapshot = useCallback(() => {
+    setSnapshot(null)
+    setError(null)
+  }, [])
+
+  return { snapshot, loading, error, fetchSnapshot: fetchSnapshotFn, clearSnapshot }
 }

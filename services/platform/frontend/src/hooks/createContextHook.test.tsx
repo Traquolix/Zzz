@@ -16,18 +16,18 @@ const TestCtx = createContext<TestContext | null>(null)
 const useTest = createContextHook(TestCtx, 'useTest', 'TestProvider')
 
 describe('createContextHook', () => {
-    it('throws when used outside provider', () => {
-        // renderHook catches the error boundary — we need to suppress console.error
-        const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
-        expect(() => renderHook(() => useTest())).toThrow('useTest must be used within TestProvider')
-        spy.mockRestore()
-    })
+  it('throws when used outside provider', () => {
+    // renderHook catches the error boundary — we need to suppress console.error
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    expect(() => renderHook(() => useTest())).toThrow('useTest must be used within TestProvider')
+    spy.mockRestore()
+  })
 
-    it('returns context value inside provider', () => {
-        function wrapper({ children }: { children: ReactNode }) {
-            return <TestCtx.Provider value={{ value: 42 }}>{children}</TestCtx.Provider>
-        }
-        const { result } = renderHook(() => useTest(), { wrapper })
-        expect(result.current.value).toBe(42)
-    })
+  it('returns context value inside provider', () => {
+    function wrapper({ children }: { children: ReactNode }) {
+      return <TestCtx.Provider value={{ value: 42 }}>{children}</TestCtx.Provider>
+    }
+    const { result } = renderHook(() => useTest(), { wrapper })
+    expect(result.current.value).toBe(42)
+  })
 })

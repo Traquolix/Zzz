@@ -24,12 +24,20 @@ describe('Button', () => {
   })
 
   it('shows loadingText when provided with isLoading=true', () => {
-    render(<Button isLoading loadingText="Loading...">Click me</Button>)
+    render(
+      <Button isLoading loadingText="Loading...">
+        Click me
+      </Button>,
+    )
     expect(screen.getByText('Loading...')).toBeInTheDocument()
   })
 
   it('hides children when loadingText provided and isLoading=true', () => {
-    render(<Button isLoading loadingText="Loading...">Click me</Button>)
+    render(
+      <Button isLoading loadingText="Loading...">
+        Click me
+      </Button>,
+    )
     expect(screen.queryByText('Click me')).not.toBeInTheDocument()
   })
 

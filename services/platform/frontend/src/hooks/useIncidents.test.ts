@@ -14,248 +14,250 @@ import { fetchIncidents } from '@/api/incidents'
 import { parseIncident } from '@/lib/parseMessage'
 
 const mockIncident: Incident = {
-    id: 'incident-1',
-    status: 'active',
-    location: { lat: 10, lng: 20 },
-    timestamp: new Date().toISOString(),
-    title: 'Test Incident',
-} as any
+  id: 'incident-1',
+  status: 'active',
+  location: { lat: 10, lng: 20 },
+  timestamp: new Date().toISOString(),
+  title: 'Test Incident',
+} as unknown as Incident
 
 const mockIncident2: Incident = {
-    id: 'incident-2',
-    status: 'acknowledged',
-    location: { lat: 15, lng: 25 },
-    timestamp: new Date().toISOString(),
-    title: 'Second Incident',
-} as any
+  id: 'incident-2',
+  status: 'acknowledged',
+  location: { lat: 15, lng: 25 },
+  timestamp: new Date().toISOString(),
+  title: 'Second Incident',
+} as unknown as Incident
 
 describe('useIncidents', () => {
-    let mockIncidentSubscriber: ((data: unknown) => void) | null = null
+  let mockIncidentSubscriber: ((data: unknown) => void) | null = null
 
-    beforeEach(() => {
-        vi.useFakeTimers()
-        vi.clearAllMocks()
-        mockIncidentSubscriber = null
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.clearAllMocks()
+    mockIncidentSubscriber = null
 
-        vi.mocked(useRealtime).mockReturnValue({
-            subscribe: vi.fn((channel, callback) => {
-                if (channel === 'incidents') {
-                    mockIncidentSubscriber = callback
-                }
-                return vi.fn()
-            }),
-            connected: true,
-            reconnecting: false,
-            authFailed: false,
-        } as any)
-
-        vi.mocked(fetchIncidents).mockResolvedValue({
-            results: [mockIncident],
-            hasMore: false,
-            total: 1,
-        } as any)
-    })
-
-    afterEach(() => {
-        vi.useRealTimers()
-    })
-
-    it('should initialize with loading true and empty incidents', () => {
-        vi.mocked(fetchIncidents).mockImplementationOnce(
-            () => new Promise(() => {}) // Never resolves
-        )
-
-        const { result } = renderHook(() => useIncidents())
-
-        expect(result.current.loading).toBe(true)
-        expect(result.current.incidents).toEqual([])
-        expect(result.current.connected).toBe(true)
-    })
-
-    it('should fetch initial incidents from API', async () => {
-        const { result } = renderHook(() => useIncidents())
-
-        await act(async () => {
-            vi.advanceTimersByTime(0)
-        })
-
-        expect(result.current.loading).toBe(false)
-        expect(result.current.incidents).toEqual([mockIncident])
-        expect(vi.mocked(fetchIncidents)).toHaveBeenCalled()
-    })
-
-    it('should handle API fetch error gracefully', async () => {
-        const error = new Error('API Error')
-        vi.mocked(fetchIncidents).mockRejectedValueOnce(error)
-
-        const { result } = renderHook(() => useIncidents())
-
-        await act(async () => {
-            vi.advanceTimersByTime(0)
-        })
-
-        expect(result.current.loading).toBe(false)
-        expect(result.current.incidents).toEqual([])
-    })
-
-    it('should subscribe to WebSocket incidents when connected', () => {
-        vi.mocked(parseIncident).mockReturnValue(mockIncident2)
-
-        const { result } = renderHook(() => useIncidents())
-
-        expect(mockIncidentSubscriber).not.toBeNull()
-
-        // Simulate WebSocket message
-        if (mockIncidentSubscriber) {
-            act(() => {
-                mockIncidentSubscriber!({ some: 'data' })
-            })
+    vi.mocked(useRealtime).mockReturnValue({
+      subscribe: vi.fn((channel, callback) => {
+        if (channel === 'incidents') {
+          mockIncidentSubscriber = callback
         }
+        return vi.fn()
+      }),
+      connected: true,
+      reconnecting: false,
+      authFailed: false,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
 
-        expect(result.current.incidents).toContainEqual(mockIncident2)
+    vi.mocked(fetchIncidents).mockResolvedValue({
+      results: [mockIncident],
+      hasMore: false,
+      total: 1,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('should initialize with loading true and empty incidents', () => {
+    vi.mocked(fetchIncidents).mockImplementationOnce(
+      () => new Promise(() => {}), // Never resolves
+    )
+
+    const { result } = renderHook(() => useIncidents())
+
+    expect(result.current.loading).toBe(true)
+    expect(result.current.incidents).toEqual([])
+    expect(result.current.connected).toBe(true)
+  })
+
+  it('should fetch initial incidents from API', async () => {
+    const { result } = renderHook(() => useIncidents())
+
+    await act(async () => {
+      vi.advanceTimersByTime(0)
     })
 
-    it('should add new incident from WebSocket to the front of the list', async () => {
-        vi.mocked(parseIncident).mockReturnValue(mockIncident2)
+    expect(result.current.loading).toBe(false)
+    expect(result.current.incidents).toEqual([mockIncident])
+    expect(vi.mocked(fetchIncidents)).toHaveBeenCalled()
+  })
 
-        const { result } = renderHook(() => useIncidents())
+  it('should handle API fetch error gracefully', async () => {
+    const error = new Error('API Error')
+    vi.mocked(fetchIncidents).mockRejectedValueOnce(error)
 
-        await act(async () => {
-            vi.advanceTimersByTime(0)
-        })
+    const { result } = renderHook(() => useIncidents())
 
-        expect(result.current.incidents).toEqual([mockIncident])
-
-        // Simulate new incident from WebSocket
-        if (mockIncidentSubscriber) {
-            act(() => {
-                mockIncidentSubscriber!({ some: 'data' })
-            })
-        }
-
-        expect(result.current.incidents[0]).toEqual(mockIncident2)
-        expect(result.current.incidents[1]).toEqual(mockIncident)
+    await act(async () => {
+      vi.advanceTimersByTime(0)
     })
 
-    it('should update existing incident when WebSocket message has same ID', async () => {
-        const updatedIncident: Incident = {
-            ...mockIncident,
-            status: 'resolved',
-        }
-        vi.mocked(parseIncident).mockReturnValue(updatedIncident)
+    expect(result.current.loading).toBe(false)
+    expect(result.current.incidents).toEqual([])
+  })
 
-        const { result } = renderHook(() => useIncidents())
+  it('should subscribe to WebSocket incidents when connected', () => {
+    vi.mocked(parseIncident).mockReturnValue(mockIncident2)
 
-        await act(async () => {
-            vi.advanceTimersByTime(0)
-        })
+    const { result } = renderHook(() => useIncidents())
 
-        expect(result.current.incidents[0].status).toBe('active')
+    expect(mockIncidentSubscriber).not.toBeNull()
 
-        // Simulate update from WebSocket
-        if (mockIncidentSubscriber) {
-            act(() => {
-                mockIncidentSubscriber!({ some: 'data' })
-            })
-        }
+    // Simulate WebSocket message
+    if (mockIncidentSubscriber) {
+      act(() => {
+        mockIncidentSubscriber!({ some: 'data' })
+      })
+    }
 
-        expect(result.current.incidents).toHaveLength(1)
-        expect(result.current.incidents[0].status).toBe('resolved')
+    expect(result.current.incidents).toContainEqual(mockIncident2)
+  })
+
+  it('should add new incident from WebSocket to the front of the list', async () => {
+    vi.mocked(parseIncident).mockReturnValue(mockIncident2)
+
+    const { result } = renderHook(() => useIncidents())
+
+    await act(async () => {
+      vi.advanceTimersByTime(0)
     })
 
-    it('should track new incident with receivedAt timestamp', async () => {
-        vi.mocked(parseIncident).mockReturnValue(mockIncident2)
+    expect(result.current.incidents).toEqual([mockIncident])
 
-        const { result } = renderHook(() => useIncidents())
+    // Simulate new incident from WebSocket
+    if (mockIncidentSubscriber) {
+      act(() => {
+        mockIncidentSubscriber!({ some: 'data' })
+      })
+    }
 
-        if (mockIncidentSubscriber) {
-            act(() => {
-                mockIncidentSubscriber!({ some: 'data' })
-            })
-        }
+    expect(result.current.incidents[0]).toEqual(mockIncident2)
+    expect(result.current.incidents[1]).toEqual(mockIncident)
+  })
 
-        // Should be new immediately after receipt
-        expect(result.current.isNewIncident(mockIncident2.id)).toBe(true)
+  it('should update existing incident when WebSocket message has same ID', async () => {
+    const updatedIncident: Incident = {
+      ...mockIncident,
+      status: 'resolved',
+    }
+    vi.mocked(parseIncident).mockReturnValue(updatedIncident)
+
+    const { result } = renderHook(() => useIncidents())
+
+    await act(async () => {
+      vi.advanceTimersByTime(0)
     })
 
-    it('should expire new indicator after NEW_INCIDENT_DURATION', async () => {
-        vi.mocked(parseIncident).mockReturnValue(mockIncident2)
+    expect(result.current.incidents[0].status).toBe('active')
 
-        const { result } = renderHook(() => useIncidents())
+    // Simulate update from WebSocket
+    if (mockIncidentSubscriber) {
+      act(() => {
+        mockIncidentSubscriber!({ some: 'data' })
+      })
+    }
 
-        if (mockIncidentSubscriber) {
-            act(() => {
-                mockIncidentSubscriber!({ some: 'data' })
-            })
-        }
+    expect(result.current.incidents).toHaveLength(1)
+    expect(result.current.incidents[0].status).toBe('resolved')
+  })
 
-        expect(result.current.isNewIncident(mockIncident2.id)).toBe(true)
+  it('should track new incident with receivedAt timestamp', async () => {
+    vi.mocked(parseIncident).mockReturnValue(mockIncident2)
 
-        // Advance past NEW_INCIDENT_DURATION (30 seconds)
-        act(() => {
-            vi.advanceTimersByTime(30_001)
-        })
+    const { result } = renderHook(() => useIncidents())
 
-        expect(result.current.isNewIncident(mockIncident2.id)).toBe(false)
+    if (mockIncidentSubscriber) {
+      act(() => {
+        mockIncidentSubscriber!({ some: 'data' })
+      })
+    }
+
+    // Should be new immediately after receipt
+    expect(result.current.isNewIncident(mockIncident2.id)).toBe(true)
+  })
+
+  it('should expire new indicator after NEW_INCIDENT_DURATION', async () => {
+    vi.mocked(parseIncident).mockReturnValue(mockIncident2)
+
+    const { result } = renderHook(() => useIncidents())
+
+    if (mockIncidentSubscriber) {
+      act(() => {
+        mockIncidentSubscriber!({ some: 'data' })
+      })
+    }
+
+    expect(result.current.isNewIncident(mockIncident2.id)).toBe(true)
+
+    // Advance past NEW_INCIDENT_DURATION (30 seconds)
+    act(() => {
+      vi.advanceTimersByTime(30_001)
     })
 
-    it('should update incident status via updateIncidentStatus', async () => {
-        const { result } = renderHook(() => useIncidents())
+    expect(result.current.isNewIncident(mockIncident2.id)).toBe(false)
+  })
 
-        await act(async () => {
-            vi.advanceTimersByTime(0)
-        })
+  it('should update incident status via updateIncidentStatus', async () => {
+    const { result } = renderHook(() => useIncidents())
 
-        expect(result.current.incidents[0].status).toBe('active')
-
-        act(() => {
-            result.current.updateIncidentStatus('incident-1', 'resolved')
-        })
-
-        expect(result.current.incidents[0].status).toBe('resolved')
+    await act(async () => {
+      vi.advanceTimersByTime(0)
     })
 
-    it('should ignore invalid incident messages from WebSocket', async () => {
-        vi.mocked(parseIncident).mockReturnValue(null)
+    expect(result.current.incidents[0].status).toBe('active')
 
-        const { result } = renderHook(() => useIncidents())
-
-        await act(async () => {
-            vi.advanceTimersByTime(0)
-        })
-
-        const initialLength = result.current.incidents.length
-
-        if (mockIncidentSubscriber) {
-            act(() => {
-                mockIncidentSubscriber!({ invalid: 'data' })
-            })
-        }
-
-        expect(result.current.incidents).toHaveLength(initialLength)
+    act(() => {
+      result.current.updateIncidentStatus('incident-1', 'resolved')
     })
 
-    it('should clean up interval timer on unmount', () => {
-        const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval')
+    expect(result.current.incidents[0].status).toBe('resolved')
+  })
 
-        const { unmount } = renderHook(() => useIncidents())
+  it('should ignore invalid incident messages from WebSocket', async () => {
+    vi.mocked(parseIncident).mockReturnValue(null)
 
-        unmount()
+    const { result } = renderHook(() => useIncidents())
 
-        expect(clearIntervalSpy).toHaveBeenCalled()
-        clearIntervalSpy.mockRestore()
+    await act(async () => {
+      vi.advanceTimersByTime(0)
     })
 
-    it('should not set state after unmount', async () => {
-        const { unmount } = renderHook(() => useIncidents())
+    const initialLength = result.current.incidents.length
 
-        unmount()
+    if (mockIncidentSubscriber) {
+      act(() => {
+        mockIncidentSubscriber!({ invalid: 'data' })
+      })
+    }
 
-        await act(async () => {
-            vi.advanceTimersByTime(100)
-        })
+    expect(result.current.incidents).toHaveLength(initialLength)
+  })
 
-        // Should not throw any warnings about setting state after unmount
-        expect(true).toBe(true)
+  it('should clean up interval timer on unmount', () => {
+    const clearIntervalSpy = vi.spyOn(globalThis, 'clearInterval')
+
+    const { unmount } = renderHook(() => useIncidents())
+
+    unmount()
+
+    expect(clearIntervalSpy).toHaveBeenCalled()
+    clearIntervalSpy.mockRestore()
+  })
+
+  it('should not set state after unmount', async () => {
+    const { unmount } = renderHook(() => useIncidents())
+
+    unmount()
+
+    await act(async () => {
+      vi.advanceTimersByTime(100)
     })
+
+    // Should not throw any warnings about setting state after unmount
+    expect(true).toBe(true)
+  })
 })
