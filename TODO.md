@@ -20,6 +20,11 @@
 - [ ] **Log retention** — config committed (otelcol-config.yaml filelog receiver) but needs deploy verification on production server
 - [ ] **Enable stricter ruff rules** — add `UP`, `B`, `SIM`, `RUF`, `C4` to both `pyproject.toml` configs. Pipeline: 326 violations (230 auto-fixable, mostly `UP` type hint modernization). Backend: 139 violations (75 are `RUF012` Django model false positives — ignore). Ignore `RUF012` and `RUF002` (French text) in backend config. Run `ruff check --fix` for the bulk, then manual fixes for the rest.
 
+## Low Priority — Language Migrations
+
+- [ ] **Rewrite pipeline in Rust** — migrate `services/pipeline/` (Processor + AI Engine) to Rust for lower latency, smaller images, and stronger type safety. ONNX export for DTAN model, `rdkafka` for Kafka, `ndarray` for signal processing. Phased: Processor first (side-by-side with Python AI Engine), then full AI Engine. See [`TODO/plans/rust-migration.md`](plans/rust-migration.md)
+- [ ] **Rewrite backend in Go** — migrate `services/platform/backend/` (Django) to Go for performance and simpler deployment. Needs investigation and planning.
+
 ## Low Priority — Observability Roadmap
 
 - [ ] **Deploy and verify Tempo datasource** — confirm traces are queryable in Grafana after deploying the updated datasources.yaml
