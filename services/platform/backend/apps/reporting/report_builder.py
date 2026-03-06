@@ -132,7 +132,7 @@ def _query_speed_stats(report) -> list[dict]:
                 },
             )
         else:
-            table = "detection_1m" if tier == "1m" else "detection_1h"  # nosec B608
+            table = "detection_1m" if tier == "1m" else "detection_1h"
             rows = query(
                 f"""
                 SELECT
@@ -193,7 +193,7 @@ def _query_volume(report) -> list[dict]:
                 },
             )
         else:
-            table = "detection_1m" if tier == "1m" else "detection_1h"  # nosec B608
+            table = "detection_1m" if tier == "1m" else "detection_1h"
             rows = query(
                 f"""
                 SELECT

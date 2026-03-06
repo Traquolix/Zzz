@@ -27,7 +27,7 @@ class HealthMixin:
         self._health_runner = web.AppRunner(self._health_app)
         await self._health_runner.setup()
 
-        site = web.TCPSite(self._health_runner, "0.0.0.0", 8080)  # nosec B104 — Docker container
+        site = web.TCPSite(self._health_runner, "0.0.0.0", 8080)  # nosec B104
         await site.start()
         self.logger.info("Health check server started on port 8080")
 

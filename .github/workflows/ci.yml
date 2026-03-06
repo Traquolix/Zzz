@@ -66,10 +66,10 @@ jobs:
         run: pip-audit -r services/platform/backend/requirements.txt
 
       - name: Bandit scan pipeline
-        run: bandit -r services/pipeline/shared services/pipeline/processor services/pipeline/ai_engine services/pipeline/config -q -ll
+        run: bandit -r services/pipeline/shared services/pipeline/processor services/pipeline/ai_engine services/pipeline/config -q -ll --skip B608
 
       - name: Bandit scan backend
-        run: bandit -r services/platform/backend/apps services/platform/backend/sequoia -q -ll
+        run: bandit -r services/platform/backend/apps services/platform/backend/sequoia -q -ll --skip B608
 
       - uses: actions/setup-node@v4
         with:

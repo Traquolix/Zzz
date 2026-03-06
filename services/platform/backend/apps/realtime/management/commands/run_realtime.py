@@ -41,7 +41,7 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--host",
-            default="0.0.0.0",  # nosec B104 — Docker container
+            default="0.0.0.0",  # nosec B104
             help="Host to bind the ASGI server to (default: 0.0.0.0).",
         )
         parser.add_argument(

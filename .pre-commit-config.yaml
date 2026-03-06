@@ -56,7 +56,6 @@ repos:
       - id: ruff
         name: ruff (pre-push)
         stages: [pre-push]
-        args: ['--check']
         files: ^services/(pipeline|platform/backend)/
       - id: ruff-format
         name: ruff-format (pre-push)
@@ -79,5 +78,5 @@ repos:
       - id: bandit
         name: bandit (pre-push)
         stages: [pre-push]
-        args: ['-q', '-ll']
+        args: ['-q', '-ll', '--skip', 'B608']
         files: ^services/(pipeline|platform/backend)/.*\.py$

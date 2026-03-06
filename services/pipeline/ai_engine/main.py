@@ -222,7 +222,7 @@ class ModelRegistry:
                     try:
                         state = torch.load(model_path, map_location="cpu", weights_only=True)
                     except Exception:
-                        state = torch.load(  # nosec B614 — legacy .pth fallback, safe-load tried first
+                        state = torch.load(  # nosec B614
                             model_path, map_location="cpu", weights_only=False
                         ).state_dict()
                     nn_model.load_state_dict(state)
