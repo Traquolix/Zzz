@@ -47,3 +47,28 @@ repos:
       - id: detect-secrets
         args: ['--baseline', '.secrets.baseline']
         exclude: (package-lock\.json|\.env\.example)
+
+  # ---------- pre-push: full lint pass (mirrors CI) ----------
+  # Runs on all files, not just staged — catches anything CI would catch.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.10
+    hooks:
+      - id: ruff
+        name: ruff (pre-push)
+        stages: [pre-push]
+        args: ['--check']
+        files: ^services/(pipeline|platform/backend)/
+      - id: ruff-format
+        name: ruff-format (pre-push)
+        stages: [pre-push]
+        args: ['--check']
+        files: ^services/(pipeline|platform/backend)/
+
+  - repo: local
+    hooks:
+      - id: eslint-push
+        name: eslint (pre-push)
+        stages: [pre-push]
+        entry: npx --prefix services/platform/frontend eslint --config services/platform/frontend/eslint.config.js
+        language: system
+        files: ^services/platform/frontend/src/.*\.(ts|tsx)$
