@@ -65,7 +65,8 @@ defaults:
       params: { factor: 3 }
 ```
 
-Config hot-reloads — changes to `fibers.yaml` take effect without restart.
+Config hot-reloads — changes to `fibers.yaml` take effect without restart, including
+inside Docker containers (the config file is bind-mounted from the host).
 
 ## Environment Variables
 

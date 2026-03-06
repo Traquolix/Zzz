@@ -129,6 +129,22 @@ CH_SIZE=$(du -h "${BACKUP_SUBDIR}/clickhouse.tar.gz" | cut -f1)
 log "ClickHouse backup complete: ${BACKUP_SUBDIR}/clickhouse.tar.gz (${CH_SIZE})"
 
 # ---------------------------------------------------------------------------
+# Verify backup files
+# ---------------------------------------------------------------------------
+log "Verifying backup integrity..."
+
+for f in "${PG_FILE}" "${BACKUP_SUBDIR}/clickhouse.tar.gz"; do
+    if [ ! -f "${f}" ]; then
+        die "Backup file missing: ${f}"
+    fi
+    if [ ! -s "${f}" ]; then
+        die "Backup file is empty: ${f}"
+    fi
+done
+
+log "Backup verification passed"
+
+# ---------------------------------------------------------------------------
 # Metadata
 # ---------------------------------------------------------------------------
 cat > "${BACKUP_SUBDIR}/metadata.txt" <<METADATA
@@ -147,7 +163,7 @@ log "Metadata written to ${BACKUP_SUBDIR}/metadata.txt"
 log "Cleaning up backups older than ${RETENTION_DAYS} days..."
 
 DELETED=0
-for dir in "${BACKUP_DIR}"/20*; do
+for dir in "${BACKUP_DIR}"/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]_*; do
     [ -d "${dir}" ] || continue
     if [ "$(find "${dir}" -maxdepth 0 -mtime +${RETENTION_DAYS})" ]; then
         rm -rf "${dir}"
@@ -164,7 +180,7 @@ log "Deleted ${DELETED} old backup(s)"
 TOTAL_SIZE=$(du -sh "${BACKUP_SUBDIR}" | cut -f1)
 log "Backup complete: ${BACKUP_SUBDIR} (${TOTAL_SIZE} total)"
 log "Current backups:"
-for dir in "${BACKUP_DIR}"/20*; do
+for dir in "${BACKUP_DIR}"/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]_*; do
     [ -d "${dir}" ] || continue
     size=$(du -sh "${dir}" | cut -f1)
     echo "  $(basename "${dir}")  ${size}"

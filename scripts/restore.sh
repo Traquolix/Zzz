@@ -60,7 +60,7 @@ fi
 if [ "$1" = "--list" ]; then
     echo "Available backups in ${BACKUP_DIR}:"
     echo ""
-    for dir in "${BACKUP_DIR}"/20*; do
+    for dir in "${BACKUP_DIR}"/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]_*; do
         [ -d "${dir}" ] || continue
         size=$(du -sh "${dir}" | cut -f1)
         has_pg="no"
@@ -74,7 +74,7 @@ fi
 
 if [ "$1" = "--latest" ]; then
     # Find the most recent backup directory
-    RESTORE_DIR=$(find "${BACKUP_DIR}" -maxdepth 1 -type d -name '20*' | sort -r | head -1)
+    RESTORE_DIR=$(find "${BACKUP_DIR}" -maxdepth 1 -type d -name '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]_*' | sort -r | head -1)
     [ -n "${RESTORE_DIR}" ] || die "No backups found in ${BACKUP_DIR}"
 else
     RESTORE_DIR="$1"
@@ -140,11 +140,15 @@ if [ -f "${RESTORE_DIR}/clickhouse.tar.gz" ]; then
     ${COMPOSE} exec -T clickhouse tar xzf - -C /backups < "${RESTORE_DIR}/clickhouse.tar.gz"
 
     # Restore using ClickHouse's native RESTORE command
-    ${COMPOSE} exec -T clickhouse \
+    if ! ${COMPOSE} exec -T clickhouse \
         clickhouse-client \
         --user "${CLICKHOUSE_USER}" \
         --password "${CLICKHOUSE_PASSWORD}" \
-        --query "RESTORE DATABASE ${CLICKHOUSE_DB} FROM Disk('backups', '${BACKUP_NAME}') SETTINGS allow_non_empty_tables=true"
+        --query "RESTORE DATABASE ${CLICKHOUSE_DB} FROM Disk('backups', '${BACKUP_NAME}') SETTINGS allow_non_empty_tables=true"; then
+        # Clean up extracted backup even on failure
+        ${COMPOSE} exec -T clickhouse rm -rf "/backups/${BACKUP_NAME}" 2>/dev/null || true
+        die "ClickHouse RESTORE command failed"
+    fi
 
     # Clean up
     ${COMPOSE} exec -T clickhouse rm -rf "/backups/${BACKUP_NAME}"

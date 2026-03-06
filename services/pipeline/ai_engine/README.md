@@ -58,7 +58,7 @@ ai_engine/
 
 The DTAN (Diffeomorphic Temporal Alignment Network) learns to temporally align signal pairs from different channel positions along the fiber. The time-shift needed to align them encodes the vehicle speed — a vehicle passing channel A then channel B creates the same vibration pattern, shifted in time proportional to `distance / speed`.
 
-This is more robust than traditional cross-correlation because CPAB (Continuous Piecewise-Affine Based) transformations handle non-linear signal distortions from varying road surfaces, cable coupling, and vehicle dynamics.
+This is more robust than traditional cross-correlation because it handles non-linear signal distortions from varying road surfaces, cable coupling, and vehicle dynamics.
 
 ## Configuration
 
@@ -74,8 +74,8 @@ fibers:
         inference:
           window_size: 300       # samples (~30s at 10.4 Hz)
           glrt_window: 20        # sliding correlation width
-          min_speed_kmh: 20
-          max_speed_kmh: 120
+          min_speed_kmh: 20      # reject detections below this (noise/stopped vehicles)
+          max_speed_kmh: 120     # reject detections above this (sensor artifacts)
 ```
 
 ## Environment Variables

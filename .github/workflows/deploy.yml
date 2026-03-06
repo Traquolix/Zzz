@@ -53,31 +53,50 @@ jobs:
           docker compose build --parallel
           docker compose up -d
 
-      - name: Wait for services to start
-        run: sleep 15
-
       - name: Health check
         id: health
         run: |
           cd ${{ env.DEPLOY_DIR }}
 
-          FAILED=""
-          for SERVICE in platform-backend processor-carros ai-engine-carros; do
-            HEALTH=$(docker inspect --format='{{.State.Health.Status}}' "$SERVICE" 2>/dev/null || echo "not_found")
-            echo "$SERVICE: $HEALTH"
-            if [ "$HEALTH" != "healthy" ]; then
-              FAILED="$FAILED $SERVICE"
+          # Discover services that define a healthcheck
+          SERVICES=$(docker compose ps --format json | jq -r 'select(.Health != "") | .Name')
+          if [ -z "$SERVICES" ]; then
+            echo "WARNING: No services with healthchecks found"
+            echo "healthy=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          echo "Waiting for services to become healthy (timeout 120s)..."
+          TIMEOUT=120
+          INTERVAL=5
+          ELAPSED=0
+
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            FAILED=""
+            ALL_HEALTHY=true
+            for SERVICE in $SERVICES; do
+              HEALTH=$(docker inspect --format='{{.State.Health.Status}}' "$SERVICE" 2>/dev/null || echo "not_found")
+              if [ "$HEALTH" != "healthy" ]; then
+                ALL_HEALTHY=false
+                FAILED="$FAILED $SERVICE"
+              fi
+            done
+
+            if [ "$ALL_HEALTHY" = true ]; then
+              echo "All services healthy after ${ELAPSED}s"
+              echo "healthy=true" >> $GITHUB_OUTPUT
+              exit 0
             fi
+
+            echo "Waiting... (${ELAPSED}s elapsed, unhealthy:$FAILED)"
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
           done
 
-          if [ -n "$FAILED" ]; then
-            echo "UNHEALTHY:$FAILED"
-            echo "healthy=false" >> $GITHUB_OUTPUT
-            echo "failed_services=$FAILED" >> $GITHUB_OUTPUT
-          else
-            echo "All services healthy"
-            echo "healthy=true" >> $GITHUB_OUTPUT
-          fi
+          # Timeout reached — report failures
+          echo "TIMEOUT: unhealthy after ${TIMEOUT}s:$FAILED"
+          echo "healthy=false" >> $GITHUB_OUTPUT
+          echo "failed_services=$FAILED" >> $GITHUB_OUTPUT
 
       - name: Rollback on failure
         if: steps.health.outputs.healthy == 'false'

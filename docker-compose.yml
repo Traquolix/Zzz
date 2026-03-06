@@ -475,8 +475,10 @@ services:
       - default
 
 networks:
+  default:
+    name: sequoia-default
   internal:
-    name: internal
+    name: sequoia-internal
 
 volumes:
   kafka_data:

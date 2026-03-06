@@ -28,7 +28,7 @@ SECRET_KEY = "django-insecure-sequoia-dev-key-change-in-production"
 
 DEBUG = True
 
-ALLOWED_HOSTS = ["localhost", "127.0.0.1", "192.168.1.100"]
+ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 
 # Database — SQLite for development
 DATABASES = {

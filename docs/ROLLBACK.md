@@ -3,9 +3,9 @@
 ## Automated Rollback (CI/CD)
 
 The GitHub Actions deploy workflow (`.github/workflows/deploy.yml`) includes automatic
-rollback. After deploying, it health-checks `platform-backend`, `processor-carros`,
-and `ai-engine-carros`. If any are unhealthy, it rolls back to the previous commit
-and rebuilds. No manual intervention needed.
+rollback. After deploying, it polls all services that define a Docker healthcheck
+(timeout 120s). If any remain unhealthy, it rolls back to the previous commit and
+rebuilds. No manual intervention needed.
 
 ## Manual Rollback — Backend
 
@@ -14,7 +14,7 @@ When something breaks after a deploy and you need to roll back manually.
 ### Quick rollback (< 2 minutes)
 
 ```bash
-ssh beaujoin@192.168.99.113
+ssh <user>@<backend-host>
 cd /opt/Sequoia
 
 # See recent deploy history
@@ -53,7 +53,7 @@ docker compose up -d --build --force-recreate ai-engine-carros
 The frontend is static files served by nginx. Rolling back means replacing the files.
 
 ```bash
-ssh frontend@134.59.98.100
+ssh <user>@<frontend-host>
 
 # The previous build is still in git, rebuild from the last known good commit:
 cd /tmp
@@ -70,7 +70,7 @@ Or from your local machine, if you have the last good build locally:
 cd services/platform/frontend
 git checkout <good-commit> -- .
 npm ci && npm run build
-scp -r dist/* frontend@134.59.98.100:/var/www/sequoia/
+scp -r dist/* <user>@<frontend-host>:/var/www/sequoia/
 git checkout HEAD -- .
 ```
 
@@ -81,7 +81,7 @@ git checkout HEAD -- .
 If a migration or data change broke something:
 
 ```bash
-ssh beaujoin@192.168.99.113
+ssh <user>@<backend-host>
 cd /opt/Sequoia
 
 # List available backups
@@ -109,12 +109,39 @@ docker compose exec platform-backend python manage.py migrate <app> <migration_n
 docker compose exec platform-backend python manage.py migrate monitoring 0005
 ```
 
+## Kafka Topic Reset
+
+If a bad message or offset issue is poisoning consumers:
+
+```bash
+# Check current consumer group offsets
+docker compose exec kafka kafka-consumer-groups \
+    --bootstrap-server localhost:9092 \
+    --group <consumer-group> --describe
+
+# Reset to latest (skip bad messages)
+docker compose exec kafka kafka-consumer-groups \
+    --bootstrap-server localhost:9092 \
+    --group <consumer-group> \
+    --topic <topic> \
+    --reset-offsets --to-latest --execute
+
+# Or reset to a specific timestamp
+docker compose exec kafka kafka-consumer-groups \
+    --bootstrap-server localhost:9092 \
+    --group <consumer-group> \
+    --topic <topic> \
+    --reset-offsets --to-datetime 2026-03-06T00:00:00.000 --execute
+```
+
+Consumer group names follow the pattern `das-processor-<fiber>` and `das-ai-engine-<fiber>`.
+
 ## Nuclear Option — Full Rebuild
 
 If everything is broken and you need a clean slate (data preserved):
 
 ```bash
-ssh beaujoin@192.168.99.113
+ssh <user>@<backend-host>
 cd /opt/Sequoia
 
 # Take a backup first
@@ -139,7 +166,7 @@ docker compose up -d
 
 1. Verify all services are healthy: `docker compose ps`
 2. Check backend health: `curl -f http://localhost:8001/api/health`
-3. Check frontend loads: `curl -f http://<frontend-ip>/`
+3. Check frontend loads: `curl -f http://<frontend-host>/`
 4. Check Grafana dashboards for anomalies: `http://localhost:3002`
 5. Verify WebSocket is streaming: open the frontend, check live map updates
 6. Check logs for errors: `docker compose logs --tail=50 <service>`
