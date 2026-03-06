@@ -9,8 +9,7 @@ on:
     - cron: "0 7 * * 1" # Weekly Monday 07:00 UTC — dependency security scan
 
 env:
-  PYTHON_PIPELINE_VERSION: "3.10"
-  PYTHON_BACKEND_VERSION: "3.10"
+  PYTHON_VERSION: "3.10"
   NODE_VERSION: "22"
 
 jobs:
@@ -22,7 +21,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_BACKEND_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
       - run: pip install ruff
 
@@ -53,20 +52,18 @@ jobs:
   security:
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule'
-    needs: lint
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_BACKEND_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install security tools
         run: pip install pip-audit bandit
 
       - name: pip-audit backend
         run: pip-audit -r services/platform/backend/requirements.txt
-        continue-on-error: true
 
       - name: Bandit scan pipeline
         run: bandit -r services/pipeline/shared services/pipeline/processor services/pipeline/ai_engine services/pipeline/config -q -ll
@@ -82,4 +79,3 @@ jobs:
 
       - name: npm audit frontend
         run: cd services/platform/frontend && npm audit --audit-level=high
-        continue-on-error: true
