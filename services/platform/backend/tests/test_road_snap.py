@@ -9,15 +9,15 @@ Goal: The road_snap module should:
 5. Handle API failures gracefully (return None)
 """
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from apps.fibers.road_snap import (
-    snap_coordinates,
-    _resample_path,
     _haversine_distance,
+    _resample_path,
     _snap_single_batch,
-    BATCH_SIZE,
+    snap_coordinates,
 )
 
 
@@ -71,7 +71,7 @@ class TestHaversineDistance:
 class TestSnapCoordinates:
     """Integration-level tests with mocked API."""
 
-    @patch('apps.fibers.road_snap._snap_single_batch')
+    @patch("apps.fibers.road_snap._snap_single_batch")
     def test_preserves_null_coordinates(self, mock_snap):
         coords = [
             [7.0, 43.0],
@@ -86,7 +86,7 @@ class TestSnapCoordinates:
             [7.201, 43.201],
         ]
 
-        result = snap_coordinates(coords, 'fake-token')
+        result = snap_coordinates(coords, "fake-token")
 
         assert result is not None
         assert len(result) == 4
@@ -98,74 +98,70 @@ class TestSnapCoordinates:
         assert result[2] == [7.101, 43.101]
         assert result[3] == [7.201, 43.201]
 
-    @patch('apps.fibers.road_snap._snap_single_batch')
+    @patch("apps.fibers.road_snap._snap_single_batch")
     def test_returns_none_on_api_failure(self, mock_snap):
         mock_snap.return_value = None
         coords = [[7.0, 43.0], [7.1, 43.1]]
 
-        result = snap_coordinates(coords, 'fake-token')
+        result = snap_coordinates(coords, "fake-token")
         assert result is None
 
     def test_returns_none_with_insufficient_coordinates(self):
-        result = snap_coordinates([[7.0, 43.0]], 'fake-token')
+        result = snap_coordinates([[7.0, 43.0]], "fake-token")
         assert result is None
 
     def test_returns_none_with_all_nulls(self):
-        result = snap_coordinates([[None, None], [None, None]], 'fake-token')
+        result = snap_coordinates([[None, None], [None, None]], "fake-token")
         assert result is None
 
 
 class TestSnapSingleBatch:
     """Tests for the actual API interaction (mocked)."""
 
-    @patch('apps.fibers.road_snap.requests.get')
+    @patch("apps.fibers.road_snap.requests.get")
     def test_successful_snap(self, mock_get):
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
-            'code': 'Ok',
-            'matchings': [{
-                'geometry': {
-                    'coordinates': [[7.001, 43.001], [7.051, 43.051], [7.101, 43.101]]
-                }
-            }]
+            "code": "Ok",
+            "matchings": [
+                {"geometry": {"coordinates": [[7.001, 43.001], [7.051, 43.051], [7.101, 43.101]]}}
+            ],
         }
         mock_get.return_value = mock_response
 
         result = _snap_single_batch(
             [[7.0, 43.0], [7.05, 43.05], [7.1, 43.1]],
-            'fake-token',
-            'driving',
+            "fake-token",
+            "driving",
         )
 
         assert result is not None
         assert len(result) == 3  # Same count as input
 
-    @patch('apps.fibers.road_snap.requests.get')
+    @patch("apps.fibers.road_snap.requests.get")
     def test_api_error_returns_none(self, mock_get):
         import requests as req
-        mock_get.side_effect = req.ConnectionError('Network error')
+
+        mock_get.side_effect = req.ConnectionError("Network error")
 
         result = _snap_single_batch(
             [[7.0, 43.0], [7.1, 43.1]],
-            'fake-token',
-            'driving',
+            "fake-token",
+            "driving",
         )
         assert result is None
 
-    @patch('apps.fibers.road_snap.requests.get')
+    @patch("apps.fibers.road_snap.requests.get")
     def test_no_matchings_returns_none(self, mock_get):
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = {
-            'code': 'NoMatch',
-            'matchings': []
-        }
+        mock_response.json.return_value = {"code": "NoMatch", "matchings": []}
         mock_get.return_value = mock_response
 
         result = _snap_single_batch(
             [[7.0, 43.0], [7.1, 43.1]],
-            'fake-token',
-            'driving',
+            "fake-token",
+            "driving",
         )
         assert result is None

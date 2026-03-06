@@ -10,13 +10,12 @@ import pytest
 
 from apps.shared.models import AuditLog
 from tests.factories import (
+    InfrastructureFactory,
     OrganizationFactory,
     OrganizationSettingsFactory,
     UserFactory,
-    InfrastructureFactory,
     UserPreferencesFactory,
 )
-
 
 pytestmark = pytest.mark.django_db
 
@@ -27,32 +26,32 @@ class TestUserAuditSignals:
     def test_creating_user_creates_audit_log(self):
         """Creating a new User should produce a USER_CREATED audit entry."""
         initial_count = AuditLog.objects.count()
-        user = UserFactory(username='audit_new_user')
+        user = UserFactory(username="audit_new_user")
         logs = AuditLog.objects.filter(
             action=AuditLog.Action.USER_CREATED,
-            object_type='User',
+            object_type="User",
             object_id=str(user.pk),
         )
-        assert logs.exists(), 'Expected USER_CREATED audit log after user creation'
+        assert logs.exists(), "Expected USER_CREATED audit log after user creation"
         assert AuditLog.objects.count() > initial_count
 
     def test_creating_user_audit_has_correct_fields(self):
         """The audit entry for user creation should contain relevant fields."""
-        user = UserFactory(username='audit_fields_user')
+        user = UserFactory(username="audit_fields_user")
         log = AuditLog.objects.filter(
             action=AuditLog.Action.USER_CREATED,
             object_id=str(user.pk),
         ).first()
         assert log is not None
-        assert log.object_type == 'User'
+        assert log.object_type == "User"
         assert log.organization == user.organization
         # Changes dict should include username
-        assert 'username' in log.changes
-        assert log.changes['username'] == 'audit_fields_user'
+        assert "username" in log.changes
+        assert log.changes["username"] == "audit_fields_user"
 
     def test_updating_user_creates_audit_log(self):
         """Updating an existing User should produce a USER_UPDATED audit entry."""
-        user = UserFactory(username='audit_update_user')
+        user = UserFactory(username="audit_update_user")
         # Clear the creation log check
         create_count = AuditLog.objects.filter(
             action=AuditLog.Action.USER_CREATED,
@@ -61,20 +60,20 @@ class TestUserAuditSignals:
         assert create_count == 1
 
         # Update the user
-        user.role = 'operator'
+        user.role = "operator"
         user.save()
 
         update_logs = AuditLog.objects.filter(
             action=AuditLog.Action.USER_UPDATED,
-            object_type='User',
+            object_type="User",
             object_id=str(user.pk),
         )
-        assert update_logs.exists(), 'Expected USER_UPDATED audit log after user update'
+        assert update_logs.exists(), "Expected USER_UPDATED audit log after user update"
 
     def test_updating_user_audit_reflects_new_values(self):
         """The changes dict on update should reflect the new field values."""
-        user = UserFactory(username='audit_reflect_user', role='viewer')
-        user.role = 'operator'
+        user = UserFactory(username="audit_reflect_user", role="viewer")
+        user.role = "operator"
         user.save()
 
         log = AuditLog.objects.filter(
@@ -82,7 +81,7 @@ class TestUserAuditSignals:
             object_id=str(user.pk),
         ).first()
         assert log is not None
-        assert log.changes['role'] == 'operator'
+        assert log.changes["role"] == "operator"
 
 
 class TestInfrastructureAuditSignals:
@@ -93,22 +92,22 @@ class TestInfrastructureAuditSignals:
         org = OrganizationFactory()
         infra = InfrastructureFactory(
             organization=org,
-            id='bridge-audit-test',
-            name='Audit Bridge',
+            id="bridge-audit-test",
+            name="Audit Bridge",
         )
         logs = AuditLog.objects.filter(
             action=AuditLog.Action.INFRASTRUCTURE_UPDATED,
-            object_type='Infrastructure',
+            object_type="Infrastructure",
             object_id=str(infra.pk),
         )
         assert logs.exists(), (
-            'Expected INFRASTRUCTURE_UPDATED audit log after infrastructure creation'
+            "Expected INFRASTRUCTURE_UPDATED audit log after infrastructure creation"
         )
 
     def test_creating_infrastructure_audit_has_org(self):
         """The audit entry should reference the infrastructure's organization."""
         org = OrganizationFactory()
-        infra = InfrastructureFactory(organization=org, id='bridge-audit-org')
+        infra = InfrastructureFactory(organization=org, id="bridge-audit-org")
         log = AuditLog.objects.filter(
             action=AuditLog.Action.INFRASTRUCTURE_UPDATED,
             object_id=str(infra.pk),
@@ -119,13 +118,13 @@ class TestInfrastructureAuditSignals:
     def test_updating_infrastructure_creates_audit_log(self):
         """Updating Infrastructure should produce an INFRASTRUCTURE_UPDATED entry."""
         org = OrganizationFactory()
-        infra = InfrastructureFactory(organization=org, id='bridge-audit-upd')
+        infra = InfrastructureFactory(organization=org, id="bridge-audit-upd")
         initial_count = AuditLog.objects.filter(
             action=AuditLog.Action.INFRASTRUCTURE_UPDATED,
             object_id=str(infra.pk),
         ).count()
 
-        infra.name = 'Updated Bridge Name'
+        infra.name = "Updated Bridge Name"
         infra.save()
 
         new_count = AuditLog.objects.filter(
@@ -137,18 +136,20 @@ class TestInfrastructureAuditSignals:
     def test_updating_infrastructure_audit_reflects_new_values(self):
         """Changes dict should contain the new name after update."""
         org = OrganizationFactory()
-        infra = InfrastructureFactory(
-            organization=org, id='bridge-audit-val', name='Old Name'
-        )
-        infra.name = 'New Name'
+        infra = InfrastructureFactory(organization=org, id="bridge-audit-val", name="Old Name")
+        infra.name = "New Name"
         infra.save()
 
-        log = AuditLog.objects.filter(
-            action=AuditLog.Action.INFRASTRUCTURE_UPDATED,
-            object_id=str(infra.pk),
-        ).order_by('-created_at').first()
+        log = (
+            AuditLog.objects.filter(
+                action=AuditLog.Action.INFRASTRUCTURE_UPDATED,
+                object_id=str(infra.pk),
+            )
+            .order_by("-created_at")
+            .first()
+        )
         assert log is not None
-        assert log.changes['name'] == 'New Name'
+        assert log.changes["name"] == "New Name"
 
 
 class TestOrganizationAuditSignals:
@@ -156,22 +157,20 @@ class TestOrganizationAuditSignals:
 
     def test_creating_organization_creates_audit_log(self):
         """Creating an Organization should produce an ORG_SETTINGS_UPDATED audit entry."""
-        org = OrganizationFactory(name='Audit Test Org')
+        org = OrganizationFactory(name="Audit Test Org")
         logs = AuditLog.objects.filter(
             action=AuditLog.Action.ORG_SETTINGS_UPDATED,
-            object_type='Organization',
+            object_type="Organization",
             object_id=str(org.pk),
         )
-        assert logs.exists(), (
-            'Expected ORG_SETTINGS_UPDATED audit log after organization creation'
-        )
+        assert logs.exists(), "Expected ORG_SETTINGS_UPDATED audit log after organization creation"
 
     def test_creating_organization_audit_references_self(self):
         """The audit entry org field should reference the created org itself."""
-        org = OrganizationFactory(name='Self Ref Org')
+        org = OrganizationFactory(name="Self Ref Org")
         log = AuditLog.objects.filter(
             action=AuditLog.Action.ORG_SETTINGS_UPDATED,
-            object_type='Organization',
+            object_type="Organization",
             object_id=str(org.pk),
         ).first()
         assert log is not None
@@ -179,34 +178,34 @@ class TestOrganizationAuditSignals:
 
     def test_updating_organization_creates_audit_log(self):
         """Updating an Organization should produce another audit entry."""
-        org = OrganizationFactory(name='Org Before Update')
+        org = OrganizationFactory(name="Org Before Update")
         initial_count = AuditLog.objects.filter(
             action=AuditLog.Action.ORG_SETTINGS_UPDATED,
-            object_type='Organization',
+            object_type="Organization",
             object_id=str(org.pk),
         ).count()
 
-        org.name = 'Org After Update'
+        org.name = "Org After Update"
         org.save()
 
         new_count = AuditLog.objects.filter(
             action=AuditLog.Action.ORG_SETTINGS_UPDATED,
-            object_type='Organization',
+            object_type="Organization",
             object_id=str(org.pk),
         ).count()
         assert new_count == initial_count + 1
 
     def test_organization_settings_creates_audit_log(self):
         """Creating OrganizationSettings should also produce an audit entry."""
-        org = OrganizationFactory(name='Settings Audit Org')
+        org = OrganizationFactory(name="Settings Audit Org")
         settings = OrganizationSettingsFactory(organization=org)
         logs = AuditLog.objects.filter(
             action=AuditLog.Action.ORG_SETTINGS_UPDATED,
-            object_type='OrganizationSettings',
+            object_type="OrganizationSettings",
             object_id=str(settings.pk),
         )
         assert logs.exists(), (
-            'Expected ORG_SETTINGS_UPDATED audit log after OrganizationSettings creation'
+            "Expected ORG_SETTINGS_UPDATED audit log after OrganizationSettings creation"
         )
 
     def test_updating_organization_settings_creates_audit_log(self):
@@ -215,16 +214,16 @@ class TestOrganizationAuditSignals:
         settings = OrganizationSettingsFactory(organization=org)
         initial_count = AuditLog.objects.filter(
             action=AuditLog.Action.ORG_SETTINGS_UPDATED,
-            object_type='OrganizationSettings',
+            object_type="OrganizationSettings",
             object_id=str(settings.pk),
         ).count()
 
-        settings.timezone = 'America/New_York'
+        settings.timezone = "America/New_York"
         settings.save()
 
         new_count = AuditLog.objects.filter(
             action=AuditLog.Action.ORG_SETTINGS_UPDATED,
-            object_type='OrganizationSettings',
+            object_type="OrganizationSettings",
             object_id=str(settings.pk),
         ).count()
         assert new_count == initial_count + 1
@@ -240,19 +239,15 @@ class TestUntrackedModelDoesNotAudit:
         Organization, OrganizationSettings). Saving it should not
         produce any audit log entries with object_type='UserPreferences'.
         """
-        initial_count = AuditLog.objects.filter(
-            object_type='UserPreferences'
-        ).count()
+        initial_count = AuditLog.objects.filter(object_type="UserPreferences").count()
 
         prefs = UserPreferencesFactory()
-        prefs.dashboard = {'layout': 'compact'}
+        prefs.dashboard = {"layout": "compact"}
         prefs.save()
 
-        final_count = AuditLog.objects.filter(
-            object_type='UserPreferences'
-        ).count()
+        final_count = AuditLog.objects.filter(object_type="UserPreferences").count()
         assert final_count == initial_count, (
-            'UserPreferences is not tracked -- no audit log should be created'
+            "UserPreferences is not tracked -- no audit log should be created"
         )
 
 
@@ -261,12 +256,10 @@ class TestAuditLogChangesExcludesSensitive:
 
     def test_password_not_in_changes(self):
         """The password field should never appear in audit log changes."""
-        user = UserFactory(username='audit_pw_user')
+        user = UserFactory(username="audit_pw_user")
         log = AuditLog.objects.filter(
             action=AuditLog.Action.USER_CREATED,
             object_id=str(user.pk),
         ).first()
         assert log is not None
-        assert 'password' not in log.changes, (
-            'Password should be excluded from audit log changes'
-        )
+        assert "password" not in log.changes, "Password should be excluded from audit log changes"

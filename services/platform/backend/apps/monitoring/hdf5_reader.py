@@ -8,7 +8,6 @@ Reads spectral data from HDF5 files in the format:
 - t: 1D array of time offsets in seconds since t0
 """
 
-import os
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -242,6 +241,7 @@ def get_spectral_summary(filepath: Optional[Path] = None) -> dict:
     # Parse t0 to calculate end time
     t0_dt = datetime.fromisoformat(t0_str)
     from datetime import timedelta
+
     end_dt = t0_dt + timedelta(seconds=float(dt_seconds[-1]))
 
     return {

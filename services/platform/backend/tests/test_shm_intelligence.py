@@ -10,16 +10,15 @@ The SHM intelligence module should:
 """
 
 import numpy as np
-import pytest
 
 from apps.monitoring.shm_intelligence import (
+    FrequencyShift,
+    SHMBaseline,
+    TrendAnalysis,
+    analyze_trend,
+    classify_deviation,
     compute_baseline,
     detect_frequency_shift,
-    classify_deviation,
-    analyze_trend,
-    SHMBaseline,
-    FrequencyShift,
-    TrendAnalysis,
 )
 
 
@@ -49,10 +48,12 @@ class TestComputeBaseline:
 
     def test_baseline_ignores_outliers(self):
         """Median-based baseline should be robust to outliers."""
-        peak_freqs = np.concatenate([
-            np.full(95, 4.5),
-            np.full(5, 100.0),  # outliers
-        ])
+        peak_freqs = np.concatenate(
+            [
+                np.full(95, 4.5),
+                np.full(5, 100.0),  # outliers
+            ]
+        )
         baseline = compute_baseline(peak_freqs, robust=True)
         assert abs(baseline.mean_freq - 4.5) < 0.5
 
@@ -75,13 +76,13 @@ class TestDetectFrequencyShift:
         shift = detect_frequency_shift(baseline, current_freqs)
         assert shift.deviation_sigma > 3.0
         assert shift.is_anomalous
-        assert shift.direction == 'decrease'
+        assert shift.direction == "decrease"
 
     def test_upward_shift(self):
         baseline = SHMBaseline(mean_freq=4.5, std_freq=0.1, sample_count=100)
         current_freqs = np.full(20, 5.2)
         shift = detect_frequency_shift(baseline, current_freqs)
-        assert shift.direction == 'increase'
+        assert shift.direction == "increase"
         assert shift.is_anomalous
 
 
@@ -89,16 +90,16 @@ class TestClassifyDeviation:
     """Map deviation magnitude to severity levels."""
 
     def test_normal_range(self):
-        assert classify_deviation(1.5) == 'normal'
+        assert classify_deviation(1.5) == "normal"
 
     def test_warning_range(self):
-        assert classify_deviation(2.5) == 'warning'
+        assert classify_deviation(2.5) == "warning"
 
     def test_alert_range(self):
-        assert classify_deviation(3.5) == 'alert'
+        assert classify_deviation(3.5) == "alert"
 
     def test_critical_range(self):
-        assert classify_deviation(5.0) == 'critical'
+        assert classify_deviation(5.0) == "critical"
 
 
 class TestAnalyzeTrend:
@@ -110,22 +111,22 @@ class TestAnalyzeTrend:
         trend = analyze_trend(window)
         assert isinstance(trend, TrendAnalysis)
         assert abs(trend.slope_hz_per_hour) < 0.01
-        assert trend.direction == 'stable'
+        assert trend.direction == "stable"
 
     def test_downward_drift(self):
         # Linear decrease from 4.5 to 4.0 over 50 samples
         window = np.linspace(4.5, 4.0, 50)
         trend = analyze_trend(window, sample_interval_seconds=60)
         assert trend.slope_hz_per_hour < -0.1
-        assert trend.direction == 'decreasing'
+        assert trend.direction == "decreasing"
 
     def test_upward_drift(self):
         window = np.linspace(4.0, 4.5, 50)
         trend = analyze_trend(window, sample_interval_seconds=60)
         assert trend.slope_hz_per_hour > 0.1
-        assert trend.direction == 'increasing'
+        assert trend.direction == "increasing"
 
     def test_insufficient_data_returns_stable(self):
         window = np.array([4.5])
         trend = analyze_trend(window)
-        assert trend.direction == 'stable'
+        assert trend.direction == "stable"

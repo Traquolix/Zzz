@@ -9,10 +9,10 @@ from django.core.cache import cache
 from rest_framework.test import APIClient
 
 from tests.factories import (
-    OrganizationFactory,
-    UserFactory,
     FiberAssignmentFactory,
     InfrastructureFactory,
+    OrganizationFactory,
+    UserFactory,
 )
 
 
@@ -32,6 +32,7 @@ def _reset_circuit_breaker():
     thread-local client cache must be pristine for each test.
     """
     import apps.shared.clickhouse as ch
+
     ch._consecutive_failures = 0
     ch._last_failure_time = 0.0
     ch._local.__dict__.clear()
@@ -48,14 +49,15 @@ def _reset_prometheus_metrics():
     Without this, metrics leak across tests causing assertion failures.
     """
     try:
-        from apps.shared import metrics as m
         from prometheus_client import REGISTRY
 
+        import apps.shared.metrics  # noqa: F401 — force module init so collectors exist
+
         for collector_name in list(REGISTRY._names_to_collectors.keys()):
-            if collector_name.startswith('sequoia_'):
+            if collector_name.startswith("sequoia_"):
                 try:
                     collector = REGISTRY._names_to_collectors[collector_name]
-                    if hasattr(collector, '_metrics'):
+                    if hasattr(collector, "_metrics"):
                         collector._metrics.clear()
                 except Exception:
                     pass
@@ -73,7 +75,7 @@ def org():
 @pytest.fixture
 def other_org():
     """Create another organization for tenant isolation tests."""
-    return OrganizationFactory(name='Other Organization')
+    return OrganizationFactory(name="Other Organization")
 
 
 @pytest.fixture
@@ -81,8 +83,8 @@ def admin_user(org):
     """Create an admin user with all permissions."""
     return UserFactory(
         organization=org,
-        username='admin_test',
-        role='admin',
+        username="admin_test",
+        role="admin",
     )
 
 
@@ -91,8 +93,8 @@ def viewer_user(org):
     """Create a viewer user with limited permissions."""
     return UserFactory(
         organization=org,
-        username='viewer_test',
-        role='viewer',
+        username="viewer_test",
+        role="viewer",
     )
 
 
@@ -101,7 +103,7 @@ def other_org_user(other_org):
     """Create a user in a different organization."""
     return UserFactory(
         organization=other_org,
-        username='other_org_user',
+        username="other_org_user",
     )
 
 
@@ -111,19 +113,19 @@ def infrastructure(org):
     return [
         InfrastructureFactory(
             organization=org,
-            id='bridge-magnan',
-            type='bridge',
-            name='Pont Magnan',
-            fiber_id='fiber-promenade',
+            id="bridge-magnan",
+            type="bridge",
+            name="Pont Magnan",
+            fiber_id="fiber-promenade",
             start_channel=50,
             end_channel=60,
         ),
         InfrastructureFactory(
             organization=org,
-            id='tunnel-paillon',
-            type='tunnel',
-            name='Tunnel du Paillon',
-            fiber_id='fiber-promenade',
+            id="tunnel-paillon",
+            type="tunnel",
+            name="Tunnel du Paillon",
+            fiber_id="fiber-promenade",
             start_channel=120,
             end_channel=180,
         ),
@@ -134,9 +136,9 @@ def infrastructure(org):
 def fiber_assignments(org):
     """Assign fibers to the org for tenant-scoped tests."""
     return [
-        FiberAssignmentFactory(organization=org, fiber_id='carros'),
-        FiberAssignmentFactory(organization=org, fiber_id='mathis'),
-        FiberAssignmentFactory(organization=org, fiber_id='promenade'),
+        FiberAssignmentFactory(organization=org, fiber_id="carros"),
+        FiberAssignmentFactory(organization=org, fiber_id="mathis"),
+        FiberAssignmentFactory(organization=org, fiber_id="promenade"),
     ]
 
 
@@ -144,7 +146,7 @@ def fiber_assignments(org):
 def other_org_fiber_assignments(other_org):
     """Assign a single fiber to the other org."""
     return [
-        FiberAssignmentFactory(organization=other_org, fiber_id='carros'),
+        FiberAssignmentFactory(organization=other_org, fiber_id="carros"),
     ]
 
 
@@ -181,7 +183,7 @@ def superuser(org):
     """Superuser with is_superuser=True for cross-org access tests."""
     return UserFactory(
         organization=org,
-        username='superuser_test',
+        username="superuser_test",
         is_superuser=True,
     )
 
@@ -207,6 +209,7 @@ def mock_clickhouse_query():
         result = query("SELECT ...")  # returns configured rows
         assert mock_ch.last_sql contains expected SQL
     """
+
     class _MockCH:
         def __init__(self):
             self._results = []
@@ -233,9 +236,7 @@ def mock_clickhouse_query():
         def _make_mock_result(self, rows, column_names):
             result = MagicMock()
             result.column_names = column_names
-            result.result_rows = [
-                tuple(row.get(c) for c in column_names) for row in rows
-            ]
+            result.result_rows = [tuple(row.get(c) for c in column_names) for row in rows]
             return result
 
     mock_ch = _MockCH()
@@ -253,7 +254,7 @@ def mock_clickhouse_query():
     mock_client = MagicMock()
     mock_client.query.side_effect = _query_side_effect
 
-    with patch('apps.shared.clickhouse.get_client', return_value=mock_client):
+    with patch("apps.shared.clickhouse.get_client", return_value=mock_client):
         yield mock_ch
 
 
@@ -261,7 +262,8 @@ def mock_clickhouse_query():
 # Embedded ClickHouse (chdb) — real SQL engine for integration tests
 # ============================================================================
 
-@pytest.fixture(scope='session')
+
+@pytest.fixture(scope="session")
 def _clickhouse_engine():
     """Session-scoped embedded ClickHouse engine.
 
@@ -269,6 +271,7 @@ def _clickhouse_engine():
     and re-seed as needed via the ``clickhouse`` fixture.
     """
     from tests.clickhouse_embedded import EmbeddedClickHouse
+
     engine = EmbeddedClickHouse()
     engine.setup()
     yield engine
@@ -292,5 +295,5 @@ def clickhouse(_clickhouse_engine):
     _clickhouse_engine.truncate_all()
     client = _clickhouse_engine.get_client()
 
-    with patch('apps.shared.clickhouse.get_client', return_value=client):
+    with patch("apps.shared.clickhouse.get_client", return_value=client):
         yield _clickhouse_engine

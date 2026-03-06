@@ -24,9 +24,9 @@ from urllib.parse import urlparse
 import requests as http_requests
 from django.utils import timezone
 
-from apps.alerting.models import AlertRule, AlertLog
+from apps.alerting.models import AlertLog, AlertRule
 
-logger = logging.getLogger('sequoia.alerting')
+logger = logging.getLogger("sequoia.alerting")
 
 _executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
@@ -46,24 +46,24 @@ def validate_webhook_url(url: str) -> str | None:
     try:
         parsed = urlparse(url)
     except Exception:
-        return 'Invalid URL format'
+        return "Invalid URL format"
 
-    if parsed.scheme not in ('http', 'https'):
-        return 'URL must use http or https'
+    if parsed.scheme not in ("http", "https"):
+        return "URL must use http or https"
 
     hostname = parsed.hostname
     if not hostname:
-        return 'URL must include a hostname'
+        return "URL must include a hostname"
 
     try:
         resolved = socket.getaddrinfo(hostname, parsed.port or 443, proto=socket.IPPROTO_TCP)
     except socket.gaierror:
-        return f'Cannot resolve hostname: {hostname}'
+        return f"Cannot resolve hostname: {hostname}"
 
     for _, _, _, _, sockaddr in resolved:
         ip = ipaddress.ip_address(sockaddr[0])
         if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
-            return f'URL resolves to blocked address: {ip}'
+            return f"URL resolves to blocked address: {ip}"
 
     return None
 
@@ -96,8 +96,10 @@ def dispatch_alert(
     """
     if _is_in_cooldown(rule, fiber_id, channel):
         logger.debug(
-            'Alert cooldown active for rule %s on %s:%d',
-            rule.name, fiber_id, channel,
+            "Alert cooldown active for rule %s on %s:%d",
+            rule.name,
+            fiber_id,
+            channel,
         )
         return False
 
@@ -111,32 +113,40 @@ def dispatch_alert(
     )
 
     # Dispatch based on channel
-    if rule.dispatch_channel == 'webhook' and rule.webhook_url:
+    if rule.dispatch_channel == "webhook" and rule.webhook_url:
         # Validate URL against SSRF before dispatching
         ssrf_error = validate_webhook_url(rule.webhook_url)
         if ssrf_error:
-            logger.warning('Webhook URL blocked for rule %s: %s', rule.name, ssrf_error)
-            log_entry.delivery_status = 'failed'
-            log_entry.error_message = f'URL blocked: {ssrf_error}'
-            log_entry.save(update_fields=['delivery_status', 'error_message'])
+            logger.warning("Webhook URL blocked for rule %s: %s", rule.name, ssrf_error)
+            log_entry.delivery_status = "failed"
+            log_entry.error_message = f"URL blocked: {ssrf_error}"
+            log_entry.save(update_fields=["delivery_status", "error_message"])
             return True
         # Submit to thread pool so retries don't block the calling thread
         if _SYNC_MODE:
             _dispatch_webhook(rule, incident_id, fiber_id, channel, detail, log_entry=log_entry)
         else:
             _executor.submit(
-                _dispatch_webhook, rule, incident_id, fiber_id, channel, detail,
+                _dispatch_webhook,
+                rule,
+                incident_id,
+                fiber_id,
+                channel,
+                detail,
                 log_entry=log_entry,
             )
-    elif rule.dispatch_channel == 'email' and rule.email_recipients:
+    elif rule.dispatch_channel == "email" and rule.email_recipients:
         _dispatch_email(rule, incident_id, fiber_id, channel, detail, log_entry=log_entry)
     else:
         # 'log' channel — the AlertLog entry above is sufficient
-        log_entry.delivery_status = 'success'
-        log_entry.save(update_fields=['delivery_status'])
+        log_entry.delivery_status = "success"
+        log_entry.save(update_fields=["delivery_status"])
         logger.info(
-            'Alert [%s]: %s (fiber=%s ch=%d)',
-            rule.name, detail, fiber_id, channel,
+            "Alert [%s]: %s (fiber=%s ch=%d)",
+            rule.name,
+            detail,
+            fiber_id,
+            channel,
         )
 
     return True
@@ -153,21 +163,21 @@ def _dispatch_webhook(
 ) -> None:
     """POST alert payload to the configured webhook URL with HMAC signing and retries."""
     payload = {
-        'rule': rule.name,
-        'ruleId': str(rule.pk),
-        'incidentId': incident_id,
-        'fiberId': fiber_id,
-        'channel': channel,
-        'detail': detail,
-        'organization': rule.organization.name,
-        'timestamp': timezone.now().isoformat(),
+        "rule": rule.name,
+        "ruleId": str(rule.pk),
+        "incidentId": incident_id,
+        "fiberId": fiber_id,
+        "channel": channel,
+        "detail": detail,
+        "organization": rule.organization.name,
+        "timestamp": timezone.now().isoformat(),
     }
     if test:
-        payload['test'] = True
+        payload["test"] = True
 
-    payload_bytes = json.dumps(payload, separators=(',', ':')).encode()
+    payload_bytes = json.dumps(payload, separators=(",", ":")).encode()
 
-    headers = {'Content-Type': 'application/json'}
+    headers = {"Content-Type": "application/json"}
 
     # HMAC signing
     if rule.webhook_secret:
@@ -176,7 +186,7 @@ def _dispatch_webhook(
             payload_bytes,
             hashlib.sha256,
         ).hexdigest()
-        headers['X-Sequoia-Signature'] = f'sha256={signature}'
+        headers["X-Sequoia-Signature"] = f"sha256={signature}"
 
     # Attempt delivery with retries
     last_error = None
@@ -193,20 +203,26 @@ def _dispatch_webhook(
             if resp.status_code < 400:
                 # Success
                 if log_entry:
-                    log_entry.delivery_status = 'success'
-                    log_entry.save(update_fields=['delivery_status'])
+                    log_entry.delivery_status = "success"
+                    log_entry.save(update_fields=["delivery_status"])
                 return
             else:
-                last_error = f'HTTP {resp.status_code}'
+                last_error = f"HTTP {resp.status_code}"
                 logger.warning(
-                    'Webhook dispatch failed for rule %s (attempt %d/%d): HTTP %d',
-                    rule.name, attempt + 1, total_attempts, resp.status_code,
+                    "Webhook dispatch failed for rule %s (attempt %d/%d): HTTP %d",
+                    rule.name,
+                    attempt + 1,
+                    total_attempts,
+                    resp.status_code,
                 )
         except http_requests.RequestException as e:
             last_error = str(e)
             logger.warning(
-                'Webhook dispatch error for rule %s (attempt %d/%d): %s',
-                rule.name, attempt + 1, total_attempts, e,
+                "Webhook dispatch error for rule %s (attempt %d/%d): %s",
+                rule.name,
+                attempt + 1,
+                total_attempts,
+                e,
             )
 
         # Wait before retry (except on last attempt)
@@ -215,10 +231,12 @@ def _dispatch_webhook(
 
     # All attempts failed
     if log_entry:
-        log_entry.delivery_status = 'failed'
-        log_entry.error_message = last_error or 'Unknown error'
-        log_entry.save(update_fields=['delivery_status', 'error_message'])
-    logger.error('Webhook dispatch gave up for rule %s after %d attempts', rule.name, total_attempts)
+        log_entry.delivery_status = "failed"
+        log_entry.error_message = last_error or "Unknown error"
+        log_entry.save(update_fields=["delivery_status", "error_message"])
+    logger.error(
+        "Webhook dispatch gave up for rule %s after %d attempts", rule.name, total_attempts
+    )
 
 
 def _dispatch_email(
@@ -230,32 +248,32 @@ def _dispatch_email(
     log_entry: AlertLog | None = None,
 ) -> None:
     """Send alert email to configured recipients."""
-    from django.core.mail import send_mail
     from django.conf import settings
+    from django.core.mail import send_mail
 
-    subject = f'[SequoIA Alert] {rule.name}'
+    subject = f"[SequoIA Alert] {rule.name}"
     body = (
-        f'Alert Rule: {rule.name}\n'
-        f'Organization: {rule.organization.name}\n'
-        f'Incident: {incident_id}\n'
-        f'Fiber: {fiber_id}, Channel: {channel}\n'
-        f'Detail: {detail}\n'
-        f'Time: {timezone.now().isoformat()}\n'
+        f"Alert Rule: {rule.name}\n"
+        f"Organization: {rule.organization.name}\n"
+        f"Incident: {incident_id}\n"
+        f"Fiber: {fiber_id}, Channel: {channel}\n"
+        f"Detail: {detail}\n"
+        f"Time: {timezone.now().isoformat()}\n"
     )
     try:
         send_mail(
             subject,
             body,
-            getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@sequoia.io'),
+            getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@sequoia.io"),
             rule.email_recipients,
             fail_silently=False,
         )
         if log_entry:
-            log_entry.delivery_status = 'success'
-            log_entry.save(update_fields=['delivery_status'])
+            log_entry.delivery_status = "success"
+            log_entry.save(update_fields=["delivery_status"])
     except Exception as e:
-        logger.error('Email dispatch error for rule %s: %s', rule.name, e)
+        logger.error("Email dispatch error for rule %s: %s", rule.name, e)
         if log_entry:
-            log_entry.delivery_status = 'failed'
+            log_entry.delivery_status = "failed"
             log_entry.error_message = str(e)
-            log_entry.save(update_fields=['delivery_status', 'error_message'])
+            log_entry.save(update_fields=["delivery_status", "error_message"])

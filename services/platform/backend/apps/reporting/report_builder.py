@@ -10,40 +10,46 @@ from django.utils.translation import gettext as _
 from apps.shared.clickhouse import query
 from apps.shared.exceptions import ClickHouseUnavailableError
 
-logger = logging.getLogger('sequoia.reporting')
+logger = logging.getLogger("sequoia.reporting")
 
 
 def build_report_html(report) -> str:
     """Query ClickHouse data for the report's time range and render HTML."""
     context = {
-        'title': report.title,
-        'start_time': report.start_time,
-        'end_time': report.end_time,
-        'fiber_ids': report.fiber_ids,
-        'sections': [],
+        "title": report.title,
+        "start_time": report.start_time,
+        "end_time": report.end_time,
+        "fiber_ids": report.fiber_ids,
+        "sections": [],
     }
 
     for section in report.sections:
-        if section == 'incidents':
-            context['sections'].append({
-                'type': 'incidents',
-                'title': _('Incident Summary'),
-                'data': _query_incidents(report),
-            })
-        elif section == 'speed':
-            context['sections'].append({
-                'type': 'speed',
-                'title': _('Speed Statistics'),
-                'data': _query_speed_stats(report),
-            })
-        elif section == 'volume':
-            context['sections'].append({
-                'type': 'volume',
-                'title': _('Traffic Volume'),
-                'data': _query_volume(report),
-            })
+        if section == "incidents":
+            context["sections"].append(
+                {
+                    "type": "incidents",
+                    "title": _("Incident Summary"),
+                    "data": _query_incidents(report),
+                }
+            )
+        elif section == "speed":
+            context["sections"].append(
+                {
+                    "type": "speed",
+                    "title": _("Speed Statistics"),
+                    "data": _query_speed_stats(report),
+                }
+            )
+        elif section == "volume":
+            context["sections"].append(
+                {
+                    "type": "volume",
+                    "title": _("Traffic Volume"),
+                    "data": _query_volume(report),
+                }
+            )
 
-    return render_to_string('reporting/report.html', context)
+    return render_to_string("reporting/report.html", context)
 
 
 def _query_incidents(report):
@@ -62,9 +68,9 @@ def _query_incidents(report):
             ORDER BY total DESC
             """,
             parameters={
-                'fids': report.fiber_ids,
-                'start': report.start_time,
-                'end': report.end_time,
+                "fids": report.fiber_ids,
+                "start": report.start_time,
+                "end": report.end_time,
             },
         )
     except ClickHouseUnavailableError:
@@ -72,9 +78,9 @@ def _query_incidents(report):
 
     return [
         {
-            'type': row['incident_type'],
-            'severity': row['severity'],
-            'count': row['total'],
+            "type": row["incident_type"],
+            "severity": row["severity"],
+            "count": row["total"],
         }
         for row in rows
     ]
@@ -98,9 +104,9 @@ def _query_speed_stats(report):
             ORDER BY fiber_id
             """,
             parameters={
-                'fids': report.fiber_ids,
-                'start': report.start_time,
-                'end': report.end_time,
+                "fids": report.fiber_ids,
+                "start": report.start_time,
+                "end": report.end_time,
             },
         )
     except ClickHouseUnavailableError:
@@ -108,11 +114,11 @@ def _query_speed_stats(report):
 
     return [
         {
-            'fiberId': row['fiber_id'],
-            'avgSpeed': row['avg_speed'],
-            'minSpeed': row['min_speed'],
-            'maxSpeed': row['max_speed'],
-            'sampleCount': row['sample_count'],
+            "fiberId": row["fiber_id"],
+            "avgSpeed": row["avg_speed"],
+            "minSpeed": row["min_speed"],
+            "maxSpeed": row["max_speed"],
+            "sampleCount": row["sample_count"],
         }
         for row in rows
     ]
@@ -134,9 +140,9 @@ def _query_volume(report):
             ORDER BY fiber_id, hour
             """,
             parameters={
-                'fids': report.fiber_ids,
-                'start': report.start_time,
-                'end': report.end_time,
+                "fids": report.fiber_ids,
+                "start": report.start_time,
+                "end": report.end_time,
             },
         )
     except ClickHouseUnavailableError:
@@ -144,9 +150,11 @@ def _query_volume(report):
 
     return [
         {
-            'fiberId': row['fiber_id'],
-            'hour': row['hour'].isoformat() if hasattr(row['hour'], 'isoformat') else str(row['hour']),
-            'vehicles': row['total_vehicles'],
+            "fiberId": row["fiber_id"],
+            "hour": row["hour"].isoformat()
+            if hasattr(row["hour"], "isoformat")
+            else str(row["hour"]),
+            "vehicles": row["total_vehicles"],
         }
         for row in rows
     ]

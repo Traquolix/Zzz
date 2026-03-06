@@ -8,26 +8,23 @@ avoiding the need for a running Redis/Channels layer.
 
 import asyncio
 import time
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
-
-import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from apps.realtime.consumers import (
     RealtimeConsumer,
-    ALLOWED_CHANNELS,
     _org_group_name,
 )
-
 
 # ============================================================================
 # Helpers
 # ============================================================================
 
-def _make_consumer(*, authenticated=True, user=None, org_id='org-1', is_superuser=False):
+
+def _make_consumer(*, authenticated=True, user=None, org_id="org-1", is_superuser=False):
     """Create a RealtimeConsumer with pre-configured state (no real connection)."""
     consumer = RealtimeConsumer()
     consumer.channel_layer = AsyncMock()
-    consumer.channel_name = 'test-channel-name'
+    consumer.channel_name = "test-channel-name"
     consumer.send_json = AsyncMock()
     consumer.close = AsyncMock()
     consumer.accept = AsyncMock()
@@ -38,10 +35,10 @@ def _make_consumer(*, authenticated=True, user=None, org_id='org-1', is_superuse
         mock_user.is_authenticated = True
         mock_user.is_superuser = is_superuser
         mock_user.organization_id = org_id
-        mock_user.username = 'testuser'
+        mock_user.username = "testuser"
         consumer._user = mock_user
         consumer._authenticated = True
-        consumer._org_id = '__all__' if is_superuser else str(org_id)
+        consumer._org_id = "__all__" if is_superuser else str(org_id)
         consumer._message_times = []
     else:
         consumer._user = None
@@ -66,6 +63,7 @@ def _run(coro):
 # Auth Rate Limiting
 # ============================================================================
 
+
 class TestAuthRateLimiting:
     """_handle_authenticate: max 5 attempts per connection, then close(4029)."""
 
@@ -73,19 +71,23 @@ class TestAuthRateLimiting:
         """Invalid token → auth failure response, connection closed."""
         consumer = _make_consumer(authenticated=False)
 
-        with patch('apps.realtime.middleware.get_user_from_token', new_callable=AsyncMock, return_value=None):
-            _run(consumer._handle_authenticate('bad-token'))
+        with patch(
+            "apps.realtime.middleware.get_user_from_token",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            _run(consumer._handle_authenticate("bad-token"))
 
         consumer.send_json.assert_called()
         last_call = consumer.send_json.call_args[0][0]
-        assert last_call['success'] is False
+        assert last_call["success"] is False
 
     def test_six_attempts_triggers_rate_limit_close(self):
         """After 5 attempts, 6th attempt → close(4029)."""
         consumer = _make_consumer(authenticated=False)
         consumer._auth_attempts = 5  # Already at limit
 
-        _run(consumer._handle_authenticate('bad-token'))
+        _run(consumer._handle_authenticate("bad-token"))
 
         consumer.close.assert_called_with(code=4029)
 
@@ -93,9 +95,15 @@ class TestAuthRateLimiting:
         """Failed auth → WEBSOCKET_AUTH_FAILURES.inc() called."""
         consumer = _make_consumer(authenticated=False)
 
-        with patch('apps.realtime.middleware.get_user_from_token', new_callable=AsyncMock, return_value=None), \
-             patch('apps.shared.metrics.WEBSOCKET_AUTH_FAILURES') as mock_metric:
-            _run(consumer._handle_authenticate('bad-token'))
+        with (
+            patch(
+                "apps.realtime.middleware.get_user_from_token",
+                new_callable=AsyncMock,
+                return_value=None,
+            ),
+            patch("apps.shared.metrics.WEBSOCKET_AUTH_FAILURES") as mock_metric,
+        ):
+            _run(consumer._handle_authenticate("bad-token"))
 
         mock_metric.inc.assert_called_once()
 
@@ -107,12 +115,18 @@ class TestAuthRateLimiting:
         mock_user = MagicMock()
         mock_user.is_authenticated = True
         mock_user.is_superuser = False
-        mock_user.organization_id = 'org-1'
-        mock_user.username = 'validuser'
+        mock_user.organization_id = "org-1"
+        mock_user.username = "validuser"
 
-        with patch('apps.realtime.middleware.get_user_from_token', new_callable=AsyncMock, return_value=mock_user), \
-             patch('apps.shared.metrics.WEBSOCKET_CONNECTIONS') as mock_connections:
-            _run(consumer._handle_authenticate('good-token'))
+        with (
+            patch(
+                "apps.realtime.middleware.get_user_from_token",
+                new_callable=AsyncMock,
+                return_value=mock_user,
+            ),
+            patch("apps.shared.metrics.WEBSOCKET_CONNECTIONS") as mock_connections,
+        ):
+            _run(consumer._handle_authenticate("good-token"))
 
         assert consumer._authenticated is True
         mock_connections.inc.assert_called_once()
@@ -125,13 +139,14 @@ class TestAuthRateLimiting:
 
         consumer.send_json.assert_called()
         msg = consumer.send_json.call_args[0][0]
-        assert msg['success'] is False
-        assert 'Token required' in msg['message']
+        assert msg["success"] is False
+        assert "Token required" in msg["message"]
 
 
 # ============================================================================
 # Origin / CSRF Check
 # ============================================================================
+
 
 class TestOriginCSRF:
     """connect(): origin vs host validation for CSRF mitigation."""
@@ -139,19 +154,21 @@ class TestOriginCSRF:
     def _make_scope(self, origin=None, host=None, user=None, pending_auth=False):
         headers = []
         if origin:
-            headers.append((b'origin', origin.encode()))
+            headers.append((b"origin", origin.encode()))
         if host:
-            headers.append((b'host', host.encode()))
+            headers.append((b"host", host.encode()))
         return {
-            'headers': headers,
-            'user': user,
-            '_pending_auth': pending_auth,
+            "headers": headers,
+            "user": user,
+            "_pending_auth": pending_auth,
         }
 
     def test_mismatched_origin_rejected_4003(self):
         """Origin: evil.com, Host: legit.com → close(4003)."""
         consumer = _make_consumer(authenticated=False)
-        consumer.scope = self._make_scope(origin='https://evil.com', host='legit.com', pending_auth=True)
+        consumer.scope = self._make_scope(
+            origin="https://evil.com", host="legit.com", pending_auth=True
+        )
 
         _run(consumer.connect())
 
@@ -162,8 +179,8 @@ class TestOriginCSRF:
         """Origin matches host → connection accepted."""
         consumer = _make_consumer(authenticated=False)
         consumer.scope = self._make_scope(
-            origin='https://app.sequoia.io',
-            host='app.sequoia.io',
+            origin="https://app.sequoia.io",
+            host="app.sequoia.io",
             pending_auth=True,
         )
 
@@ -174,7 +191,7 @@ class TestOriginCSRF:
     def test_missing_origin_allowed(self):
         """No Origin header → connection accepted (same-origin browser requests omit it)."""
         consumer = _make_consumer(authenticated=False)
-        consumer.scope = self._make_scope(host='app.sequoia.io', pending_auth=True)
+        consumer.scope = self._make_scope(host="app.sequoia.io", pending_auth=True)
 
         _run(consumer.connect())
 
@@ -185,6 +202,7 @@ class TestOriginCSRF:
 # Broadcast Timeout
 # ============================================================================
 
+
 class TestBroadcastTimeout:
     """broadcast_message: 5s timeout on slow clients."""
 
@@ -192,15 +210,19 @@ class TestBroadcastTimeout:
         """Successful broadcast → WEBSOCKET_MESSAGES_SENT incremented."""
         consumer = _make_consumer()
 
-        with patch('apps.shared.metrics.WEBSOCKET_MESSAGES_SENT') as mock_metric:
+        with patch("apps.shared.metrics.WEBSOCKET_MESSAGES_SENT") as mock_metric:
             mock_labels = MagicMock()
             mock_metric.labels.return_value = mock_labels
-            _run(consumer.broadcast_message({
-                'channel': 'detections',
-                'data': [{'speed': 80}],
-            }))
+            _run(
+                consumer.broadcast_message(
+                    {
+                        "channel": "detections",
+                        "data": [{"speed": 80}],
+                    }
+                )
+            )
 
-        mock_metric.labels.assert_called_with(channel='detections')
+        mock_metric.labels.assert_called_with(channel="detections")
         mock_labels.inc.assert_called_once()
 
     def test_timeout_closes_connection_4008(self):
@@ -212,11 +234,15 @@ class TestBroadcastTimeout:
 
         consumer.send_json = _slow_send
 
-        with patch('apps.shared.metrics.WEBSOCKET_SEND_TIMEOUTS') as mock_timeout:
-            _run(consumer.broadcast_message({
-                'channel': 'detections',
-                'data': [],
-            }))
+        with patch("apps.shared.metrics.WEBSOCKET_SEND_TIMEOUTS"):
+            _run(
+                consumer.broadcast_message(
+                    {
+                        "channel": "detections",
+                        "data": [],
+                    }
+                )
+            )
 
         # The actual timeout in the code is 5s, but wait_for will raise TimeoutError
         consumer.close.assert_called_with(code=4008)
@@ -230,8 +256,8 @@ class TestBroadcastTimeout:
 
         consumer.send_json = _slow_send
 
-        with patch('apps.shared.metrics.WEBSOCKET_SEND_TIMEOUTS') as mock_timeout:
-            _run(consumer.broadcast_message({'channel': 'detections', 'data': []}))
+        with patch("apps.shared.metrics.WEBSOCKET_SEND_TIMEOUTS") as mock_timeout:
+            _run(consumer.broadcast_message({"channel": "detections", "data": []}))
 
         mock_timeout.inc.assert_called_once()
 
@@ -240,6 +266,7 @@ class TestBroadcastTimeout:
 # Connection Metrics
 # ============================================================================
 
+
 class TestConnectionMetrics:
     """WEBSOCKET_CONNECTIONS gauge: incremented on auth, decremented on disconnect."""
 
@@ -247,7 +274,7 @@ class TestConnectionMetrics:
         """Authenticated user disconnects → WEBSOCKET_CONNECTIONS.dec()."""
         consumer = _make_consumer()
 
-        with patch('apps.shared.metrics.WEBSOCKET_CONNECTIONS') as mock_connections:
+        with patch("apps.shared.metrics.WEBSOCKET_CONNECTIONS") as mock_connections:
             _run(consumer.disconnect(close_code=1000))
 
         mock_connections.dec.assert_called_once()
@@ -256,7 +283,7 @@ class TestConnectionMetrics:
         """Unauthenticated connection closes → no metric decrement."""
         consumer = _make_consumer(authenticated=False)
 
-        with patch('apps.shared.metrics.WEBSOCKET_CONNECTIONS') as mock_connections:
+        with patch("apps.shared.metrics.WEBSOCKET_CONNECTIONS") as mock_connections:
             _run(consumer.disconnect(close_code=1000))
 
         mock_connections.dec.assert_not_called()
@@ -266,6 +293,7 @@ class TestConnectionMetrics:
 # Channel Whitelist & Subscription
 # ============================================================================
 
+
 class TestChannelSubscription:
     """Subscribe/unsubscribe: whitelist enforcement and group management."""
 
@@ -273,60 +301,65 @@ class TestChannelSubscription:
         """Subscribe to 'detections' → added to subscriptions + group_add called."""
         consumer = _make_consumer()
 
-        with patch.object(consumer, '_send_initial_incidents', new_callable=AsyncMock), \
-             patch.object(consumer, '_send_initial_fibers', new_callable=AsyncMock):
-            _run(consumer.receive_json({'action': 'subscribe', 'channel': 'detections'}))
+        with (
+            patch.object(consumer, "_send_initial_incidents", new_callable=AsyncMock),
+            patch.object(consumer, "_send_initial_fibers", new_callable=AsyncMock),
+        ):
+            _run(consumer.receive_json({"action": "subscribe", "channel": "detections"}))
 
-        assert 'detections' in consumer.subscriptions
+        assert "detections" in consumer.subscriptions
         consumer.channel_layer.group_add.assert_called_once()
         group_name = consumer.channel_layer.group_add.call_args[0][0]
-        assert group_name == _org_group_name('detections', consumer._org_id)
+        assert group_name == _org_group_name("detections", consumer._org_id)
 
     def test_subscribe_to_unknown_channel_rejected(self):
         """Subscribe to 'hackme' → not added, no group_add."""
         consumer = _make_consumer()
 
-        _run(consumer.receive_json({'action': 'subscribe', 'channel': 'hackme'}))
+        _run(consumer.receive_json({"action": "subscribe", "channel": "hackme"}))
 
-        assert 'hackme' not in consumer.subscriptions
+        assert "hackme" not in consumer.subscriptions
         consumer.channel_layer.group_add.assert_not_called()
 
     def test_unsubscribe_removes_from_group(self):
         """Unsubscribe → removed from subscriptions + group_discard called."""
         consumer = _make_consumer()
-        consumer.subscriptions.add('detections')
+        consumer.subscriptions.add("detections")
 
-        _run(consumer.receive_json({'action': 'unsubscribe', 'channel': 'detections'}))
+        _run(consumer.receive_json({"action": "unsubscribe", "channel": "detections"}))
 
-        assert 'detections' not in consumer.subscriptions
+        assert "detections" not in consumer.subscriptions
         consumer.channel_layer.group_discard.assert_called_once()
 
     def test_unauthenticated_client_cannot_subscribe(self):
         """Unauthenticated client sends subscribe → error response."""
         consumer = _make_consumer(authenticated=False)
 
-        _run(consumer.receive_json({'action': 'subscribe', 'channel': 'detections'}))
+        _run(consumer.receive_json({"action": "subscribe", "channel": "detections"}))
 
         consumer.send_json.assert_called()
         msg = consumer.send_json.call_args[0][0]
-        assert msg['action'] == 'error'
-        assert 'Authentication required' in msg['message']
+        assert msg["action"] == "error"
+        assert "Authentication required" in msg["message"]
 
     def test_superuser_subscribes_to_all_group(self):
         """Superuser subscription → group name uses __all__."""
         consumer = _make_consumer(is_superuser=True)
 
-        with patch.object(consumer, '_send_initial_incidents', new_callable=AsyncMock), \
-             patch.object(consumer, '_send_initial_fibers', new_callable=AsyncMock):
-            _run(consumer.receive_json({'action': 'subscribe', 'channel': 'incidents'}))
+        with (
+            patch.object(consumer, "_send_initial_incidents", new_callable=AsyncMock),
+            patch.object(consumer, "_send_initial_fibers", new_callable=AsyncMock),
+        ):
+            _run(consumer.receive_json({"action": "subscribe", "channel": "incidents"}))
 
         group_name = consumer.channel_layer.group_add.call_args[0][0]
-        assert '__all__' in group_name
+        assert "__all__" in group_name
 
 
 # ============================================================================
 # Rate Limiting (general messages)
 # ============================================================================
+
 
 class TestMessageRateLimiting:
     """_is_rate_limited: sliding window, 100 msgs per 10s."""
@@ -359,19 +392,21 @@ class TestMessageRateLimiting:
 # Org Group Name Helper
 # ============================================================================
 
+
 class TestOrgGroupName:
     """_org_group_name: deterministic group name construction."""
 
     def test_regular_org(self):
-        assert _org_group_name('detections', 'org-1') == 'realtime_detections_org_org-1'
+        assert _org_group_name("detections", "org-1") == "realtime_detections_org_org-1"
 
     def test_superuser_all(self):
-        assert _org_group_name('incidents', '__all__') == 'realtime_incidents_org___all__'
+        assert _org_group_name("incidents", "__all__") == "realtime_incidents_org___all__"
 
 
 # ============================================================================
 # URL Token Auth Removed
 # ============================================================================
+
 
 class TestURLTokenAuthRemoved:
     """URL-based ?token= auth should NOT auto-authenticate connections."""
@@ -380,16 +415,16 @@ class TestURLTokenAuthRemoved:
         """Connecting with ?token=<valid_jwt> should NOT auto-authenticate."""
         consumer = _make_consumer(authenticated=False)
         consumer.scope = {
-            'headers': [],
-            'user': MagicMock(is_authenticated=False),
-            '_pending_auth': True,
+            "headers": [],
+            "user": MagicMock(is_authenticated=False),
+            "_pending_auth": True,
         }
 
         _run(consumer.connect())
 
         # Connection accepted but not authenticated — requires message auth
         consumer.accept.assert_called_once()
-        assert not getattr(consumer, '_authenticated', True)
+        assert not getattr(consumer, "_authenticated", True)
 
     def test_message_auth_still_works(self):
         """After removing URL token, message-based auth must still work."""
@@ -399,16 +434,22 @@ class TestURLTokenAuthRemoved:
         mock_user = MagicMock()
         mock_user.is_authenticated = True
         mock_user.is_superuser = False
-        mock_user.organization_id = 'org-1'
-        mock_user.username = 'validuser'
+        mock_user.organization_id = "org-1"
+        mock_user.username = "validuser"
 
-        with patch('apps.realtime.middleware.get_user_from_token', new_callable=AsyncMock, return_value=mock_user), \
-             patch('apps.shared.metrics.WEBSOCKET_CONNECTIONS') as mock_connections:
-            _run(consumer._handle_authenticate('good-token'))
+        with (
+            patch(
+                "apps.realtime.middleware.get_user_from_token",
+                new_callable=AsyncMock,
+                return_value=mock_user,
+            ),
+            patch("apps.shared.metrics.WEBSOCKET_CONNECTIONS"),
+        ):
+            _run(consumer._handle_authenticate("good-token"))
 
         assert consumer._authenticated is True
         assert consumer._user == mock_user
         consumer.send_json.assert_called()
         msg = consumer.send_json.call_args[0][0]
-        assert msg['action'] == 'authenticated'
-        assert msg['success'] is True
+        assert msg["action"] == "authenticated"
+        assert msg["success"] is True

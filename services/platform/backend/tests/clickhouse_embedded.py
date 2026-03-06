@@ -16,8 +16,8 @@ clickhouse_connect.Client interface used by apps.shared.clickhouse.
 
 import json
 import re
-import tempfile
 import shutil
+import tempfile
 
 from chdb import session as chs
 
@@ -77,6 +77,7 @@ class ChdbClient:
         Since chdb doesn't support the same parameter binding as
         clickhouse_connect's HTTP interface, we substitute directly.
         """
+
         def _replace(match):
             name = match.group(1)
             # Type hint is group(2), but we don't need it for substitution
@@ -86,12 +87,12 @@ class ChdbClient:
             val = parameters[name]
             return self._format_value(val)
 
-        return re.sub(r'\{(\w+):(\w+(?:\([^)]*\))?)\}', _replace, sql)
+        return re.sub(r"\{(\w+):(\w+(?:\([^)]*\))?)\}", _replace, sql)
 
     def _format_value(self, val):
         """Format a Python value as a ClickHouse SQL literal."""
         if val is None:
-            return 'NULL'
+            return "NULL"
         if isinstance(val, str):
             # Escape single quotes
             escaped = val.replace("'", "\\'")
@@ -100,8 +101,8 @@ class ChdbClient:
             return str(val)
         if isinstance(val, (list, tuple)):
             # Array literal: ['a', 'b'] -> ['a', 'b']
-            items = ', '.join(self._format_value(v) for v in val)
-            return f'[{items}]'
+            items = ", ".join(self._format_value(v) for v in val)
+            return f"[{items}]"
         return str(val)
 
 
@@ -117,7 +118,7 @@ class EmbeddedClickHouse:
         ch.teardown()                # Clean up
     """
 
-    SCHEMA_DIR = '/sessions/sweet-bold-hamilton/mnt/SequoIA/infrastructure/clickhouse/init'
+    SCHEMA_DIR = "/sessions/sweet-bold-hamilton/mnt/SequoIA/infrastructure/clickhouse/init"
 
     def __init__(self):
         self._tmpdir = None
@@ -126,7 +127,7 @@ class EmbeddedClickHouse:
 
     def setup(self):
         """Create temp directory, init chdb session, apply schema."""
-        self._tmpdir = tempfile.mkdtemp(prefix='chdb_test_')
+        self._tmpdir = tempfile.mkdtemp(prefix="chdb_test_")
         self._session = chs.Session(self._tmpdir)
         self._apply_schema()
         self._client = ChdbClient(self._session)
@@ -158,8 +159,8 @@ class EmbeddedClickHouse:
 
     def _apply_schema(self):
         """Apply 01_schema.sql and 02_sampling_tables.sql."""
-        self._exec_sql_file(f'{self.SCHEMA_DIR}/01_schema.sql')
-        self._exec_sql_file(f'{self.SCHEMA_DIR}/02_sampling_tables.sql')
+        self._exec_sql_file(f"{self.SCHEMA_DIR}/01_schema.sql")
+        self._exec_sql_file(f"{self.SCHEMA_DIR}/02_sampling_tables.sql")
 
     def _exec_sql_file(self, filepath):
         """Execute a SQL file, splitting on semicolons."""
@@ -167,12 +168,12 @@ class EmbeddedClickHouse:
             content = f.read()
 
         # Remove comments
-        content = re.sub(r'/\*.*?\*/', '', content, flags=re.DOTALL)
-        content = re.sub(r'--[^\n]*', '', content)
+        content = re.sub(r"/\*.*?\*/", "", content, flags=re.DOTALL)
+        content = re.sub(r"--[^\n]*", "", content)
 
-        for stmt in content.split(';'):
+        for stmt in content.split(";"):
             stmt = stmt.strip()
-            if not stmt or stmt.upper().startswith('SELECT'):
+            if not stmt or stmt.upper().startswith("SELECT"):
                 continue
             self._session.query(stmt)
 
@@ -189,18 +190,18 @@ class EmbeddedClickHouse:
                     channel_coordinates (list of (lat, lng) tuples).
         """
         for cable in cables:
-            fid = cable['fiber_id']
-            fname = cable.get('fiber_name', fid.title())
-            coords = cable.get('channel_coordinates', [])
-            color = cable.get('color', '#3B82F6')
+            fid = cable["fiber_id"]
+            fname = cable.get("fiber_name", fid.title())
+            coords = cable.get("channel_coordinates", [])
+            color = cable.get("color", "#3B82F6")
 
             # Build coordinate array literal
             coord_strs = []
             for lat, lng in coords:
-                lat_s = str(lat) if lat is not None else 'NULL'
-                lng_s = str(lng) if lng is not None else 'NULL'
-                coord_strs.append(f'({lat_s}, {lng_s})')
-            coords_literal = f'[{", ".join(coord_strs)}]'
+                lat_s = str(lat) if lat is not None else "NULL"
+                lng_s = str(lng) if lng is not None else "NULL"
+                coord_strs.append(f"({lat_s}, {lng_s})")
+            coords_literal = f"[{', '.join(coord_strs)}]"
 
             self._session.query(f"""
                 INSERT INTO sequoia.fiber_cables (fiber_id, fiber_name, channel_coordinates, color)
@@ -218,9 +219,9 @@ class EmbeddedClickHouse:
                 Optional: confidence, speed_drop_percent, duration_seconds
         """
         for inc in incidents:
-            confidence = inc.get('confidence', 0.9)
-            speed_drop = inc.get('speed_drop_percent', 20.0)
-            duration = inc.get('duration_seconds', 60)
+            confidence = inc.get("confidence", 0.9)
+            speed_drop = inc.get("speed_drop_percent", 20.0)
+            duration = inc.get("duration_seconds", 60)
 
             self._session.query(f"""
                 INSERT INTO sequoia.fiber_incidents (
@@ -252,9 +253,9 @@ class EmbeddedClickHouse:
                      ch, speed. Optional: lng, lat.
         """
         for rec in records:
-            ts = rec['ts']
-            lng = rec.get('lng', 'NULL')
-            lat = rec.get('lat', 'NULL')
+            ts = rec["ts"]
+            lng = rec.get("lng", "NULL")
+            lat = rec.get("lat", "NULL")
             if isinstance(lng, (int, float)):
                 lng = str(lng)
             if isinstance(lat, (int, float)):
@@ -294,12 +295,18 @@ class EmbeddedClickHouse:
     def truncate_all(self):
         """Truncate all data tables (keep schema)."""
         tables = [
-            'fiber_incidents', 'fiber_cables', 'fiber_danger_zones',
-            'speed_hires', 'count_hires',
-            'speed_1m', 'speed_1h', 'count_1m', 'count_1h',
+            "fiber_incidents",
+            "fiber_cables",
+            "fiber_danger_zones",
+            "speed_hires",
+            "count_hires",
+            "speed_1m",
+            "speed_1h",
+            "count_1m",
+            "count_1h",
         ]
         for t in tables:
             try:
-                self._session.query(f'TRUNCATE TABLE sequoia.{t}')
+                self._session.query(f"TRUNCATE TABLE sequoia.{t}")
             except Exception:
                 pass  # Table might not exist or be a view

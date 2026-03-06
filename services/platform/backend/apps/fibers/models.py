@@ -9,26 +9,28 @@ One fiber can be assigned to multiple orgs (shared infrastructure).
 """
 
 import uuid
+
 from django.db import models
 
 
 class FiberAssignment(models.Model):
     """Maps a fiber_id (from ClickHouse) to an organization."""
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organization = models.ForeignKey(
-        'organizations.Organization',
+        "organizations.Organization",
         on_delete=models.CASCADE,
-        related_name='fiber_assignments',
+        related_name="fiber_assignments",
     )
     fiber_id = models.CharField(
         max_length=100,
-        help_text='Matches fiber_cables.fiber_id in ClickHouse.',
+        help_text="Matches fiber_cables.fiber_id in ClickHouse.",
     )
     assigned_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        unique_together = ('organization', 'fiber_id')
-        ordering = ['organization', 'fiber_id']
+        unique_together = ("organization", "fiber_id")
+        ordering = ["organization", "fiber_id"]
 
     def __str__(self):
-        return f'{self.fiber_id} → {self.organization.name}'
+        return f"{self.fiber_id} → {self.organization.name}"

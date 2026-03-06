@@ -16,9 +16,9 @@ from django.db import models
 class APIKey(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organization = models.ForeignKey(
-        'organizations.Organization',
+        "organizations.Organization",
         on_delete=models.CASCADE,
-        related_name='api_keys',
+        related_name="api_keys",
     )
     name = models.CharField(max_length=200)
     key_prefix = models.CharField(max_length=8, db_index=True)
@@ -29,17 +29,17 @@ class APIKey(models.Model):
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
         null=True,
-        related_name='created_api_keys',
+        related_name="created_api_keys",
     )
     expires_at = models.DateTimeField(null=True, blank=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ["-created_at"]
 
     def __str__(self):
-        return f'{self.name} ({self.key_prefix}...)'
+        return f"{self.name} ({self.key_prefix}...)"
 
     @classmethod
     def generate(cls, organization, name, created_by, expires_at=None, scopes=None):
@@ -48,7 +48,7 @@ class APIKey(models.Model):
         The raw key (prefixed with 'sqk_') is only available at creation.
         """
         raw_secret = secrets.token_urlsafe(32)
-        raw_key = f'sqk_{raw_secret}'
+        raw_key = f"sqk_{raw_secret}"
         key_hash = hashlib.sha256(raw_secret.encode()).hexdigest()
         key_prefix = raw_secret[:8]
 

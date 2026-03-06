@@ -14,7 +14,7 @@ import os
 from channels.routing import ProtocolTypeRouter, URLRouter
 from django.core.asgi import get_asgi_application
 
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'sequoia.settings.prod')
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "sequoia.settings.prod")
 
 # Initialize Django ASGI application early to populate the app registry
 django_asgi_app = get_asgi_application()
@@ -23,10 +23,12 @@ django_asgi_app = get_asgi_application()
 from apps.realtime.middleware import JWTAuthMiddleware  # noqa: E402
 from apps.realtime.routing import websocket_urlpatterns  # noqa: E402
 
-_base_application = ProtocolTypeRouter({
-    'http': django_asgi_app,
-    'websocket': JWTAuthMiddleware(URLRouter(websocket_urlpatterns)),
-})
+_base_application = ProtocolTypeRouter(
+    {
+        "http": django_asgi_app,
+        "websocket": JWTAuthMiddleware(URLRouter(websocket_urlpatterns)),
+    }
+)
 
 
 class SimulationLifespanWrapper:
@@ -48,6 +50,7 @@ class SimulationLifespanWrapper:
         if not self._init_attempted:
             self._init_attempted = True
             from apps.realtime.simulation_manager import SimulationManager
+
             await SimulationManager.instance().start_if_configured()
 
         return await self.app(scope, receive, send)

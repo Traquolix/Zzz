@@ -11,7 +11,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-logger = logging.getLogger('sequoia.reporting')
+logger = logging.getLogger("sequoia.reporting")
 
 
 def generate_report_async(report_id) -> None:
@@ -25,26 +25,26 @@ def generate_report_async(report_id) -> None:
 
     # Atomically claim the report: only proceed if status is still 'pending'.
     # This prevents two concurrent threads from generating the same report.
-    updated = Report.objects.filter(pk=report_id, status='pending').update(status='generating')
+    updated = Report.objects.filter(pk=report_id, status="pending").update(status="generating")
     if updated == 0:
-        logger.info('Report %s already being generated or completed, skipping', report_id)
+        logger.info("Report %s already being generated or completed, skipping", report_id)
         return
 
     try:
         report = Report.objects.get(pk=report_id)
     except Report.DoesNotExist:
-        logger.error('Report %s not found for generation', report_id)
+        logger.error("Report %s not found for generation", report_id)
         return
 
     try:
         report.html_content = build_report_html(report)
-        report.status = 'completed'
-        logger.info('Report %s generated successfully', report_id)
+        report.status = "completed"
+        logger.info("Report %s generated successfully", report_id)
     except Exception as e:
-        report.status = 'failed'
-        logger.error('Report %s generation failed: %s', report_id, e)
+        report.status = "failed"
+        logger.error("Report %s generation failed: %s", report_id, e)
 
-    report.save(update_fields=['status', 'html_content'])
+    report.save(update_fields=["status", "html_content"])
 
 
 def enqueue_report_generation(report_id) -> None:
@@ -58,10 +58,10 @@ def enqueue_report_generation(report_id) -> None:
         target=generate_report_async,
         args=(report_id,),
         daemon=True,
-        name=f'report-gen-{report_id}',
+        name=f"report-gen-{report_id}",
     )
     thread.start()
-    logger.info('Enqueued report %s for background generation', report_id)
+    logger.info("Enqueued report %s for background generation", report_id)
 
 
 def run_scheduled_reports() -> int:
@@ -84,11 +84,11 @@ def run_scheduled_reports() -> int:
         now = timezone.now()
 
         # Compute time range based on frequency
-        if schedule.frequency == 'daily':
+        if schedule.frequency == "daily":
             start_time = now - timedelta(hours=24)
-        elif schedule.frequency == 'weekly':
+        elif schedule.frequency == "weekly":
             start_time = now - timedelta(days=7)
-        elif schedule.frequency == 'monthly':
+        elif schedule.frequency == "monthly":
             start_time = now - timedelta(days=30)
         else:
             continue
@@ -96,14 +96,14 @@ def run_scheduled_reports() -> int:
         # Create the report
         report = Report.objects.create(
             organization=schedule.organization,
-            title=f'{schedule.title} — {now.strftime("%Y-%m-%d")}',
+            title=f"{schedule.title} — {now.strftime('%Y-%m-%d')}",
             created_by=schedule.created_by,
             start_time=start_time,
             end_time=now,
             fiber_ids=schedule.fiber_ids,
             sections=schedule.sections,
             recipients=schedule.recipients,
-            status='pending',
+            status="pending",
         )
 
         # Generate synchronously (caller decides threading)
@@ -111,12 +111,13 @@ def run_scheduled_reports() -> int:
 
         # Update schedule
         schedule.last_run_at = now
-        schedule.save(update_fields=['last_run_at'])
+        schedule.save(update_fields=["last_run_at"])
 
         triggered += 1
         logger.info(
-            'Scheduled report triggered: %s (schedule=%s)',
-            report.pk, schedule.pk,
+            "Scheduled report triggered: %s (schedule=%s)",
+            report.pk,
+            schedule.pk,
         )
 
     return triggered

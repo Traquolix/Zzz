@@ -9,16 +9,15 @@ import uuid
 
 from django.db import models
 
-
 RULE_TYPES = [
-    ('speed_below', 'Speed Below Threshold'),
-    ('incident_type', 'Incident Type Match'),
+    ("speed_below", "Speed Below Threshold"),
+    ("incident_type", "Incident Type Match"),
 ]
 
 DISPATCH_CHANNELS = [
-    ('log', 'Log Only'),
-    ('webhook', 'Webhook'),
-    ('email', 'Email'),
+    ("log", "Log Only"),
+    ("webhook", "Webhook"),
+    ("email", "Email"),
 ]
 
 
@@ -32,11 +31,12 @@ class AlertRule(models.Model):
 
     Optional filters narrow the scope to specific fibers and channel ranges.
     """
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organization = models.ForeignKey(
-        'organizations.Organization',
+        "organizations.Organization",
         on_delete=models.CASCADE,
-        related_name='alert_rules',
+        related_name="alert_rules",
     )
     name = models.CharField(max_length=200)
     rule_type = models.CharField(max_length=30, choices=RULE_TYPES)
@@ -47,77 +47,86 @@ class AlertRule(models.Model):
 
     # Incident type filter (for incident_type rules)
     incident_type_filter = models.JSONField(
-        default=list, blank=True,
-        help_text='List of incident types to match: accident, congestion, anomaly, slowdown',
+        default=list,
+        blank=True,
+        help_text="List of incident types to match: accident, congestion, anomaly, slowdown",
     )
 
     # Severity filter (applies to both rule types)
     severity_filter = models.JSONField(
-        default=list, blank=True,
-        help_text='Only alert for these severities. Empty = all.',
+        default=list,
+        blank=True,
+        help_text="Only alert for these severities. Empty = all.",
     )
 
     # Scope filters
     fiber_id_filter = models.JSONField(
-        default=list, blank=True,
-        help_text='Restrict to these fiber IDs (plain, no direction suffix). Empty = all.',
+        default=list,
+        blank=True,
+        help_text="Restrict to these fiber IDs (plain, no direction suffix). Empty = all.",
     )
     channel_start = models.IntegerField(null=True, blank=True)
     channel_end = models.IntegerField(null=True, blank=True)
 
     # Dispatch configuration
     dispatch_channel = models.CharField(
-        max_length=20, choices=DISPATCH_CHANNELS, default='log',
+        max_length=20,
+        choices=DISPATCH_CHANNELS,
+        default="log",
     )
-    webhook_url = models.URLField(blank=True, default='')
+    webhook_url = models.URLField(blank=True, default="")
     webhook_secret = models.CharField(
-        max_length=64, blank=True, default='',
-        help_text='HMAC secret for webhook signature verification.',
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="HMAC secret for webhook signature verification.",
     )
     email_recipients = models.JSONField(
-        default=list, blank=True,
-        help_text='Email addresses to notify.',
+        default=list,
+        blank=True,
+        help_text="Email addresses to notify.",
     )
 
     # Cooldown to prevent alert storms
     cooldown_seconds = models.PositiveIntegerField(
         default=300,
-        help_text='Minimum seconds between alerts from this rule for the same fiber+channel.',
+        help_text="Minimum seconds between alerts from this rule for the same fiber+channel.",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ['name']
+        ordering = ["name"]
 
     def __str__(self):
-        return f'{self.name} ({self.rule_type})'
+        return f"{self.name} ({self.rule_type})"
 
 
 class AlertLog(models.Model):
     """
     Audit log of dispatched alerts. Used for cooldown enforcement and history.
     """
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    rule = models.ForeignKey(AlertRule, on_delete=models.CASCADE, related_name='logs')
-    incident_id = models.CharField(max_length=100, blank=True, default='')
+    rule = models.ForeignKey(AlertRule, on_delete=models.CASCADE, related_name="logs")
+    incident_id = models.CharField(max_length=100, blank=True, default="")
     fiber_id = models.CharField(max_length=100)
     channel = models.IntegerField()
-    detail = models.TextField(blank=True, default='')
+    detail = models.TextField(blank=True, default="")
     delivery_status = models.CharField(
         max_length=20,
-        choices=[('pending', 'Pending'), ('success', 'Success'), ('failed', 'Failed')],
-        default='pending',
+        choices=[("pending", "Pending"), ("success", "Success"), ("failed", "Failed")],
+        default="pending",
     )
-    error_message = models.TextField(blank=True, default='')
+    error_message = models.TextField(blank=True, default="")
     dispatched_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['-dispatched_at']
+        ordering = ["-dispatched_at"]
         indexes = [
-            models.Index(fields=['rule', 'fiber_id', 'channel', '-dispatched_at']),
+            models.Index(fields=["rule", "fiber_id", "channel", "-dispatched_at"]),
         ]
 
     def __str__(self):
-        return f'Alert {self.rule.name} @ {self.fiber_id}:{self.channel}'
+        return f"Alert {self.rule.name} @ {self.fiber_id}:{self.channel}"
