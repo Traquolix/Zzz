@@ -1,4 +1,4 @@
 # Re-export from inner libcpab package
-from .libcpab import Cpab, CpabAligner, CpabSequential
+from .libcpab import Cpab
 
-__all__ = ["Cpab", "CpabAligner", "CpabSequential"]
+__all__ = ["Cpab"]

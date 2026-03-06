@@ -357,13 +357,13 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.50, rate(ai_speed_detected_bucket{service_name=\"ai-engine\"}[5m]))",
+          "expr": "histogram_quantile(0.50, rate(ai_speed_detected_kmh_bucket{service_name=\"ai-engine\"}[5m]))",
           "legendFormat": "p50 {{fiber_id}}",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.95, rate(ai_speed_detected_bucket{service_name=\"ai-engine\"}[5m]))",
+          "expr": "histogram_quantile(0.95, rate(ai_speed_detected_kmh_bucket{service_name=\"ai-engine\"}[5m]))",
           "legendFormat": "p95 {{fiber_id}}",
           "refId": "B"
         }

@@ -295,4 +295,3 @@ class _CPABFunction_NumericGrad(torch.autograd.Function):
         # Reshaping
         gradient = torch.stack(gradient, dim = 1) # [n_theta, d]
         return None, gradient
-

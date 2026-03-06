@@ -29,12 +29,18 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from apps.shared.exceptions import ClickHouseUnavailableError
 
-logger = logging.getLogger('sequoia.realtime')
+logger = logging.getLogger("sequoia.realtime")
 
 # Whitelist of channels clients can subscribe to
-ALLOWED_CHANNELS = frozenset({
-    'detections', 'counts', 'incidents', 'shm_readings', 'fibers',
-})
+ALLOWED_CHANNELS = frozenset(
+    {
+        "detections",
+        "counts",
+        "incidents",
+        "shm_readings",
+        "fibers",
+    }
+)
 
 # Rate limiting: max messages per window
 RATE_LIMIT_MESSAGES = 100
@@ -46,7 +52,7 @@ AUTH_TIMEOUT_SECONDS = 15
 
 def _org_group_name(channel: str, org_id: str) -> str:
     """Build the org-scoped Channels group name."""
-    return f'realtime_{channel}_org_{org_id}'
+    return f"realtime_{channel}_org_{org_id}"
 
 
 class RealtimeConsumer(AsyncJsonWebsocketConsumer):
@@ -60,15 +66,16 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
 
     async def connect(self):
         # Origin check — reject cross-origin WebSocket connections (CSRF mitigation)
-        headers = dict(self.scope.get('headers', []))
-        origin = headers.get(b'origin', b'').decode('utf-8', errors='ignore')
-        host = headers.get(b'host', b'').decode('utf-8', errors='ignore')
+        headers = dict(self.scope.get("headers", []))
+        origin = headers.get(b"origin", b"").decode("utf-8", errors="ignore")
+        host = headers.get(b"host", b"").decode("utf-8", errors="ignore")
         if origin and host:
             from urllib.parse import urlparse
+
             origin_host = urlparse(origin).hostname
-            request_host = host.split(':')[0]
+            request_host = host.split(":")[0]
             if origin_host and request_host and origin_host != request_host:
-                logger.warning('WebSocket rejected: origin=%s does not match host=%s', origin, host)
+                logger.warning("WebSocket rejected: origin=%s does not match host=%s", origin, host)
                 await self.close(code=4003)
                 return
 
@@ -81,18 +88,24 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         await self.accept()
         # Start auth timeout — close connection if client doesn't authenticate in time
         self._auth_timeout_task = asyncio.ensure_future(self._auth_timeout())
-        logger.debug('WebSocket client connected (pending authentication, %ds timeout)', AUTH_TIMEOUT_SECONDS)
+        logger.debug(
+            "WebSocket client connected (pending authentication, %ds timeout)", AUTH_TIMEOUT_SECONDS
+        )
 
     async def _auth_timeout(self):
         """Close connection if authentication is not completed within timeout."""
         try:
             await asyncio.sleep(AUTH_TIMEOUT_SECONDS)
-            if not getattr(self, '_authenticated', False):
-                logger.warning('WebSocket auth timeout after %ds — closing connection', AUTH_TIMEOUT_SECONDS)
-                await self.send_json({
-                    'action': 'error',
-                    'message': 'Authentication timeout',
-                })
+            if not getattr(self, "_authenticated", False):
+                logger.warning(
+                    "WebSocket auth timeout after %ds — closing connection", AUTH_TIMEOUT_SECONDS
+                )
+                await self.send_json(
+                    {
+                        "action": "error",
+                        "message": "Authentication timeout",
+                    }
+                )
                 await self.close(code=4001)
         except asyncio.CancelledError:
             pass  # Auth succeeded or connection closed before timeout
@@ -106,13 +119,13 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         self._message_times = []
         # Superusers see all data; regular users scoped to their org
         if user.is_superuser:
-            self._org_id = '__all__'
+            self._org_id = "__all__"
         else:
             self._org_id = str(user.organization_id)
 
     async def disconnect(self, close_code):
         # Cancel auth timeout if still pending
-        if getattr(self, '_auth_timeout_task', None) and not self._auth_timeout_task.done():
+        if getattr(self, "_auth_timeout_task", None) and not self._auth_timeout_task.done():
             self._auth_timeout_task.cancel()
 
         # Leave all channel groups
@@ -121,10 +134,11 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
                 _org_group_name(channel, self._org_id), self.channel_name
             )
         self.subscriptions.clear()
-        if getattr(self, '_authenticated', False):
+        if getattr(self, "_authenticated", False):
             from apps.shared.metrics import WEBSOCKET_CONNECTIONS
+
             WEBSOCKET_CONNECTIONS.dec()
-        logger.debug('WebSocket client disconnected (code=%s)', close_code)
+        logger.debug("WebSocket client disconnected (code=%s)", close_code)
 
     def _is_rate_limited(self) -> bool:
         """Check if client has exceeded rate limit."""
@@ -141,93 +155,104 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         return False
 
     async def receive_json(self, content):
-        action = content.get('action')
+        action = content.get("action")
 
-        if action == 'ping':
-            await self.send_json({'action': 'pong'})
+        if action == "ping":
+            await self.send_json({"action": "pong"})
             return
 
         # Handle message-based authentication
-        if action == 'authenticate':
-            await self._handle_authenticate(content.get('token'))
+        if action == "authenticate":
+            await self._handle_authenticate(content.get("token"))
             return
 
         # Require authentication for all other actions
-        if not getattr(self, '_authenticated', False):
-            logger.warning('Unauthenticated client attempted action: %s', action)
-            await self.send_json({'action': 'error', 'message': 'Authentication required'})
+        if not getattr(self, "_authenticated", False):
+            logger.warning("Unauthenticated client attempted action: %s", action)
+            await self.send_json({"action": "error", "message": "Authentication required"})
             return
 
         # Rate limit check
         if self._is_rate_limited():
-            logger.warning('Client rate limited: user=%s', self._user.username if self._user else 'unknown')
-            await self.send_json({'action': 'error', 'message': 'Rate limit exceeded'})
+            logger.warning(
+                "Client rate limited: user=%s", self._user.username if self._user else "unknown"
+            )
+            await self.send_json({"action": "error", "message": "Rate limit exceeded"})
             return
 
-        channel = content.get('channel')
+        channel = content.get("channel")
         if not action or not channel:
             return
 
         # Reject subscriptions to unknown channels
         if channel not in ALLOWED_CHANNELS:
-            logger.warning('Client tried to subscribe to unknown channel: %s', channel)
+            logger.warning("Client tried to subscribe to unknown channel: %s", channel)
             return
 
-        if action == 'subscribe':
+        if action == "subscribe":
             if channel not in self.subscriptions:
                 self.subscriptions.add(channel)
                 await self.channel_layer.group_add(
                     _org_group_name(channel, self._org_id), self.channel_name
                 )
-                logger.debug('Client subscribed to: %s (org=%s)', channel, self._org_id)
+                logger.debug("Client subscribed to: %s (org=%s)", channel, self._org_id)
 
                 # Send initial data for certain channels
-                if channel == 'incidents':
+                if channel == "incidents":
                     await self._send_initial_incidents()
-                elif channel == 'fibers':
+                elif channel == "fibers":
                     await self._send_initial_fibers()
 
-        elif action == 'unsubscribe':
+        elif action == "unsubscribe":
             if channel in self.subscriptions:
                 self.subscriptions.discard(channel)
                 await self.channel_layer.group_discard(
                     _org_group_name(channel, self._org_id), self.channel_name
                 )
-                logger.debug('Client unsubscribed from: %s', channel)
+                logger.debug("Client unsubscribed from: %s", channel)
 
     async def _handle_authenticate(self, token: str | None):
         """Handle message-based authentication with rate limiting."""
         # Rate limit auth attempts (max 5 per connection)
-        self._auth_attempts = getattr(self, '_auth_attempts', 0) + 1
+        self._auth_attempts = getattr(self, "_auth_attempts", 0) + 1
         if self._auth_attempts > 5:
-            logger.warning('WebSocket auth rate limit exceeded')
-            await self.send_json({'action': 'authenticated', 'success': False, 'message': 'Too many attempts'})
+            logger.warning("WebSocket auth rate limit exceeded")
+            await self.send_json(
+                {"action": "authenticated", "success": False, "message": "Too many attempts"}
+            )
             await self.close(code=4029)
             return
 
         if not token:
-            await self.send_json({'action': 'authenticated', 'success': False, 'message': 'Token required'})
+            await self.send_json(
+                {"action": "authenticated", "success": False, "message": "Token required"}
+            )
             return
 
         from apps.realtime.middleware import get_user_from_token
+
         user = await get_user_from_token(token)
 
         if user is None or not user.is_authenticated:
             from apps.shared.metrics import WEBSOCKET_AUTH_FAILURES
+
             WEBSOCKET_AUTH_FAILURES.inc()
-            logger.warning('WebSocket authentication failed: invalid token')
-            await self.send_json({'action': 'authenticated', 'success': False, 'message': 'Invalid token'})
+            logger.warning("WebSocket authentication failed: invalid token")
+            await self.send_json(
+                {"action": "authenticated", "success": False, "message": "Invalid token"}
+            )
             await self.close()
             return
 
         self._setup_user(user)
         # Cancel auth timeout — client authenticated successfully
-        if getattr(self, '_auth_timeout_task', None) and not self._auth_timeout_task.done():
+        if getattr(self, "_auth_timeout_task", None) and not self._auth_timeout_task.done():
             self._auth_timeout_task.cancel()
         from apps.shared.metrics import WEBSOCKET_CONNECTIONS
+
         WEBSOCKET_CONNECTIONS.inc()
-        logger.debug('WebSocket client authenticated: %s (org=%s)', user.username, self._org_id)
-        await self.send_json({'action': 'authenticated', 'success': True})
+        logger.debug("WebSocket client authenticated: %s (org=%s)", user.username, self._org_id)
+        await self.send_json({"action": "authenticated", "success": True})
 
     # ----- Group message handlers -----
     # These are called when the Channels layer routes a group_send to this consumer
@@ -236,18 +261,24 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         """Handle broadcast from channel layer group. Timeout prevents slow clients from blocking."""
         try:
             await asyncio.wait_for(
-                self.send_json({
-                    'channel': event['channel'],
-                    'data': event['data'],
-                }),
+                self.send_json(
+                    {
+                        "channel": event["channel"],
+                        "data": event["data"],
+                    }
+                ),
                 timeout=15.0,
             )
             from apps.shared.metrics import WEBSOCKET_MESSAGES_SENT
-            WEBSOCKET_MESSAGES_SENT.labels(channel=event['channel']).inc()
+
+            WEBSOCKET_MESSAGES_SENT.labels(channel=event["channel"]).inc()
         except asyncio.TimeoutError:
             from apps.shared.metrics import WEBSOCKET_SEND_TIMEOUTS
+
             WEBSOCKET_SEND_TIMEOUTS.inc()
-            logger.warning('WebSocket send timeout for user=%s, channel=%s', self._user, event.get('channel'))
+            logger.warning(
+                "WebSocket send timeout for user=%s, channel=%s", self._user, event.get("channel")
+            )
             await self.close(code=4008)
 
     # ----- Initial data senders -----
@@ -256,15 +287,15 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         """Send current incidents snapshot on subscribe."""
         try:
             incidents = await sync_to_async(self._query_initial_incidents)()
-            await self.send_json({'channel': 'incidents', 'data': incidents})
+            await self.send_json({"channel": "incidents", "data": incidents})
         except ObjectDoesNotExist as e:
             # Organization not found - should not happen for authenticated users
-            logger.error('Organization not found for user %s: %s', self._user.username, e)
-            await self.send_json({'channel': 'incidents', 'data': []})
+            logger.error("Organization not found for user %s: %s", self._user.username, e)
+            await self.send_json({"channel": "incidents", "data": []})
         except Exception as e:
             # Unexpected error - log at error level with stack trace
-            logger.exception('Unexpected error sending initial incidents: %s', e)
-            await self.send_json({'channel': 'incidents', 'data': []})
+            logger.exception("Unexpected error sending initial incidents: %s", e)
+            await self.send_json({"channel": "incidents", "data": []})
 
     def _query_initial_incidents(self):
         """Synchronous ClickHouse query for initial incidents (org-scoped).
@@ -275,11 +306,12 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         from apps.monitoring.incident_service import query_active
 
         try:
-            if self._org_id == '__all__':
+            if self._org_id == "__all__":
                 incidents = query_active(fiber_ids=None, limit=100)
             else:
                 from apps.fibers.utils import get_org_fiber_ids
                 from apps.organizations.models import Organization
+
                 org = Organization.objects.get(pk=self._org_id)
                 fiber_ids = get_org_fiber_ids(org)
                 if not fiber_ids:
@@ -292,8 +324,10 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
 
         # Fallback: simulation keeps incidents in memory, not in ClickHouse
         from apps.realtime.simulation_manager import SimulationManager
+
         if SimulationManager.instance().is_running:
             from apps.realtime.simulation import get_simulation_incidents
+
             return get_simulation_incidents()
         return []
 
@@ -305,40 +339,42 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         """
         try:
             fibers = await sync_to_async(self._query_initial_fibers)()
-            await self.send_json({'channel': 'fibers', 'data': fibers})
+            await self.send_json({"channel": "fibers", "data": fibers})
         except ClickHouseUnavailableError as e:
             # Expected when ClickHouse is down - fall back to JSON files
-            logger.info('ClickHouse unavailable, falling back to JSON for fibers: %s', e)
+            logger.info("ClickHouse unavailable, falling back to JSON for fibers: %s", e)
             await self._send_fibers_from_json_fallback()
         except ObjectDoesNotExist as e:
-            logger.error('Organization not found for user %s: %s', self._user.username, e)
-            await self.send_json({'channel': 'fibers', 'data': []})
+            logger.error("Organization not found for user %s: %s", self._user.username, e)
+            await self.send_json({"channel": "fibers", "data": []})
         except Exception as e:
             # Unexpected error - log and try fallback
-            logger.exception('Unexpected error querying fibers from ClickHouse: %s', e)
+            logger.exception("Unexpected error querying fibers from ClickHouse: %s", e)
             await self._send_fibers_from_json_fallback()
 
     async def _send_fibers_from_json_fallback(self):
         """Load fibers from JSON cable files as fallback."""
         try:
             from apps.fibers.views import _load_fibers_from_json
+
             fiber_ids = None
-            if self._org_id != '__all__':
+            if self._org_id != "__all__":
                 from apps.fibers.utils import get_org_fiber_ids
                 from apps.organizations.models import Organization
+
                 org = Organization.objects.get(pk=self._org_id)
                 fiber_ids = get_org_fiber_ids(org)
             fibers = await sync_to_async(_load_fibers_from_json)(fiber_ids)
-            await self.send_json({'channel': 'fibers', 'data': fibers})
+            await self.send_json({"channel": "fibers", "data": fibers})
         except FileNotFoundError as e:
-            logger.error('Fiber JSON files not found: %s', e)
-            await self.send_json({'channel': 'fibers', 'data': []})
+            logger.error("Fiber JSON files not found: %s", e)
+            await self.send_json({"channel": "fibers", "data": []})
         except ObjectDoesNotExist as e:
-            logger.error('Organization not found in JSON fallback: %s', e)
-            await self.send_json({'channel': 'fibers', 'data': []})
+            logger.error("Organization not found in JSON fallback: %s", e)
+            await self.send_json({"channel": "fibers", "data": []})
         except Exception as e:
-            logger.exception('Failed to load fibers from JSON fallback: %s', e)
-            await self.send_json({'channel': 'fibers', 'data': []})
+            logger.exception("Failed to load fibers from JSON fallback: %s", e)
+            await self.send_json({"channel": "fibers", "data": []})
 
     def _query_initial_fibers(self):
         """Synchronous ClickHouse query for fiber configuration (org-scoped)."""
@@ -346,7 +382,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
 
         client = get_client()
 
-        if self._org_id == '__all__':
+        if self._org_id == "__all__":
             result = client.query("""
                 SELECT fiber_id, fiber_name, channel_coordinates, color, landmark_labels
                 FROM sequoia.fiber_cables
@@ -355,6 +391,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         else:
             from apps.fibers.utils import get_org_fiber_ids
             from apps.organizations.models import Organization
+
             org = Organization.objects.get(pk=self._org_id)
             fiber_ids = get_org_fiber_ids(org)
             if not fiber_ids:
@@ -366,7 +403,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
                 WHERE fiber_id IN {fids:Array(String)}
                 ORDER BY fiber_id
                 """,
-                parameters={'fids': fiber_ids},
+                parameters={"fids": fiber_ids},
             )
 
         from apps.fibers.views import _expand_to_directional
@@ -374,20 +411,20 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         fibers = []
         for row in result.named_results():
             coords = []
-            for coord in row['channel_coordinates']:
+            for coord in row["channel_coordinates"]:
                 lng, lat = coord
                 coords.append([lng, lat] if lng is not None and lat is not None else [None, None])
             landmarks = []
-            for idx, label in enumerate(row['landmark_labels'] or []):
+            for idx, label in enumerate(row["landmark_labels"] or []):
                 if label:
-                    landmarks.append({'channel': idx, 'name': label})
+                    landmarks.append({"channel": idx, "name": label})
             physical = {
-                'id': row['fiber_id'],
-                'name': row['fiber_name'],
-                'color': row['color'],
-                'coordinates': coords,
-                'landmarks': landmarks or None,
-                'directional_paths': {},  # ClickHouse doesn't store precomputed paths
+                "id": row["fiber_id"],
+                "name": row["fiber_name"],
+                "color": row["color"],
+                "coordinates": coords,
+                "landmarks": landmarks or None,
+                "directional_paths": {},  # ClickHouse doesn't store precomputed paths
             }
             fibers.extend(_expand_to_directional(physical))
         return fibers

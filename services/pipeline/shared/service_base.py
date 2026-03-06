@@ -47,19 +47,23 @@ class ServiceType(Enum):
     CONSUMER = "consumer"
 
 
-_NEEDS_CONSUMER = frozenset({
-    ServiceType.CONSUMER,
-    ServiceType.TRANSFORMER,
-    ServiceType.MULTI_TRANSFORMER,
-    ServiceType.BUFFERED_TRANSFORMER,
-})
+_NEEDS_CONSUMER = frozenset(
+    {
+        ServiceType.CONSUMER,
+        ServiceType.TRANSFORMER,
+        ServiceType.MULTI_TRANSFORMER,
+        ServiceType.BUFFERED_TRANSFORMER,
+    }
+)
 
-_NEEDS_PRODUCER = frozenset({
-    ServiceType.PRODUCER,
-    ServiceType.TRANSFORMER,
-    ServiceType.MULTI_TRANSFORMER,
-    ServiceType.BUFFERED_TRANSFORMER,
-})
+_NEEDS_PRODUCER = frozenset(
+    {
+        ServiceType.PRODUCER,
+        ServiceType.TRANSFORMER,
+        ServiceType.MULTI_TRANSFORMER,
+        ServiceType.BUFFERED_TRANSFORMER,
+    }
+)
 
 
 class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
@@ -432,9 +436,7 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
         """Override in pattern classes to handle a single polled message."""
         raise NotImplementedError
 
-    async def _execute_with_protection(
-        self, func, message: Any, *args
-    ) -> Optional[Any]:
+    async def _execute_with_protection(self, func, message: Any, *args) -> Optional[Any]:
         """Shared semaphore + timeout + circuit-breaker + retry + DLQ wrapper."""
         from shared.message import KafkaMessage
 

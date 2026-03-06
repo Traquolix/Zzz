@@ -10,8 +10,6 @@ Example:
 
 from typing import Any, Dict, Optional
 
-import numpy as np
-
 from processor.processing_tools.processing_steps.base_step import ProcessingStep
 
 

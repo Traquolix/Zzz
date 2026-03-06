@@ -15,22 +15,22 @@ For user-attributed audit entries, use AuditService.log() in the view layer.
 
 import logging
 
-from django.db.models.signals import post_save, post_delete
+from django.db.models.signals import post_delete, post_save
 
 from apps.shared.models import AuditLog
 
-logger = logging.getLogger('sequoia.audit')
+logger = logging.getLogger("sequoia.audit")
 
 
 def _get_org(instance):
     """Extract organization from instance if available."""
-    if hasattr(instance, 'organization'):
+    if hasattr(instance, "organization"):
         return instance.organization
     # OrganizationSettings -> organization is the FK
-    if hasattr(instance, 'organization_id'):
-        return getattr(instance, 'organization', None)
+    if hasattr(instance, "organization_id"):
+        return getattr(instance, "organization", None)
     # Organization itself
-    if instance.__class__.__name__ == 'Organization':
+    if instance.__class__.__name__ == "Organization":
         return instance
     return None
 
@@ -40,17 +40,21 @@ def _build_changes(instance, created):
     changes = {}
     for field in instance._meta.concrete_fields:
         name = field.name
-        if name in ('password', 'id', 'pk'):
+        if name in ("password", "id", "pk"):
             continue
         value = getattr(instance, name, None)
         if value is not None:
             # Convert non-serializable types
-            if hasattr(value, 'isoformat'):
+            if hasattr(value, "isoformat"):
                 value = value.isoformat()
-            elif hasattr(value, 'pk'):
+            elif hasattr(value, "pk"):
                 value = str(value.pk)
             else:
-                value = str(value) if not isinstance(value, (str, int, float, bool, list, dict)) else value
+                value = (
+                    str(value)
+                    if not isinstance(value, (str, int, float, bool, list, dict))
+                    else value
+                )
             changes[name] = value
     return changes
 
@@ -71,7 +75,7 @@ def audit_post_save(sender, instance, created, **kwargs):
             changes=_build_changes(instance, created),
         )
     except Exception:
-        logger.exception('Signal audit failed for %s %s', model_name, instance.pk)
+        logger.exception("Signal audit failed for %s %s", model_name, instance.pk)
 
 
 def audit_post_delete(sender, instance, **kwargs):
@@ -87,10 +91,10 @@ def audit_post_delete(sender, instance, **kwargs):
             action=action,
             object_type=model_name,
             object_id=str(instance.pk),
-            changes={'deleted': True},
+            changes={"deleted": True},
         )
     except Exception:
-        logger.exception('Signal audit failed for delete %s %s', model_name, instance.pk)
+        logger.exception("Signal audit failed for delete %s %s", model_name, instance.pk)
 
 
 def connect_audit_signals():
@@ -110,19 +114,19 @@ def connect_audit_signals():
 
 def _action_for_save(model_name, created):
     """Map model + created flag to an AuditLog.Action value."""
-    if model_name == 'User':
+    if model_name == "User":
         return AuditLog.Action.USER_CREATED if created else AuditLog.Action.USER_UPDATED
-    if model_name == 'Infrastructure':
+    if model_name == "Infrastructure":
         return AuditLog.Action.INFRASTRUCTURE_UPDATED
-    if model_name == 'Organization' or model_name == 'OrganizationSettings':
+    if model_name == "Organization" or model_name == "OrganizationSettings":
         return AuditLog.Action.ORG_SETTINGS_UPDATED
     return None
 
 
 def _action_for_delete(model_name):
     """Map model to a delete AuditLog.Action value."""
-    if model_name == 'User':
+    if model_name == "User":
         return AuditLog.Action.USER_DELETED
-    if model_name == 'Infrastructure':
+    if model_name == "Infrastructure":
         return AuditLog.Action.INFRASTRUCTURE_UPDATED
     return None

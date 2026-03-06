@@ -5,7 +5,7 @@ import { logger } from '@/lib/logger'
 const token = import.meta.env.VITE_MAPBOX_TOKEN
 
 if (!token) {
-    logger.error('VITE_MAPBOX_TOKEN environment variable is not set. Map functionality will not work.')
+  logger.error('VITE_MAPBOX_TOKEN environment variable is not set. Map functionality will not work.')
 }
 
 export const MAPBOX_TOKEN = token || ''

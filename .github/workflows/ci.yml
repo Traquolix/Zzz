@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 7 * * 1" # Weekly Monday 07:00 UTC — dependency security scan
+
+env:
+  PYTHON_VERSION: "3.10"
+  NODE_VERSION: "22"
+
+jobs:
+  # ---------- LINT + TYPECHECK ----------
+  lint:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - run: pip install ruff
+
+      - name: Lint pipeline
+        run: cd services/pipeline && ruff check . && ruff format --check .
+
+      - name: Lint backend
+        run: cd services/platform/backend && ruff check . && ruff format --check .
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: services/platform/frontend/package-lock.json
+      - run: cd services/platform/frontend && npm ci
+
+      - name: Lint frontend
+        run: cd services/platform/frontend && npm run lint
+
+      # TODO: restore frontend typecheck once src/lib/ modules are committed
+      # - name: Typecheck frontend
+      #   run: cd services/platform/frontend && npx tsc -p tsconfig.app.json --noEmit
+
+  # ---------- UNIT TESTS ----------
+  # Temporarily removed — tests being rewritten (see TODO.md)
+
+  # ---------- SECURITY (weekly only) ----------
+  security:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install security tools
+        run: pip install pip-audit bandit
+
+      - name: pip-audit backend
+        run: pip-audit -r services/platform/backend/requirements.txt
+
+      - name: Bandit scan pipeline
+        run: bandit -r services/pipeline/shared services/pipeline/processor services/pipeline/ai_engine services/pipeline/config -q -ll --skip B608
+
+      - name: Bandit scan backend
+        run: bandit -r services/platform/backend/apps services/platform/backend/sequoia -q -ll --skip B608
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: services/platform/frontend/package-lock.json
+
+      - name: npm audit frontend
+        run: cd services/platform/frontend && npm audit --audit-level=high

@@ -9,11 +9,11 @@ import logging
 
 from asgiref.sync import sync_to_async
 
-from apps.alerting.evaluator import evaluate_detection, evaluate_incident
 from apps.alerting.dispatch import dispatch_alert
+from apps.alerting.evaluator import evaluate_detection, evaluate_incident
 from apps.alerting.models import AlertRule
 
-logger = logging.getLogger('sequoia.alerting')
+logger = logging.getLogger("sequoia.alerting")
 
 
 async def check_alerts_for_detections(detection_dicts: list[dict], org_id: str) -> int:
@@ -33,9 +33,9 @@ async def check_alerts_for_detections(detection_dicts: list[dict], org_id: str) 
         for rule, detail in triggered:
             success = await sync_to_async(dispatch_alert)(
                 rule,
-                detection.get('incident_id', ''),
-                detection.get('fiberLine', ''),
-                detection.get('channel', 0),
+                detection.get("incident_id", ""),
+                detection.get("fiberLine", ""),
+                detection.get("channel", 0),
                 detail,
             )
             if success:
@@ -49,9 +49,9 @@ async def check_alerts_for_incident(incident_data: dict, fiber_org_map: dict) ->
     Looks up owning orgs from fiber_org_map and checks each org's rules.
     Returns the number of alerts dispatched.
     """
-    fiber_line = incident_data.get('fiberLine', '')
+    fiber_line = incident_data.get("fiberLine", "")
     # Strip directional suffix for org lookup
-    parent_fid = fiber_line.rsplit(':', 1)[0] if ':' in fiber_line else fiber_line
+    parent_fid = fiber_line.rsplit(":", 1)[0] if ":" in fiber_line else fiber_line
     org_ids = fiber_org_map.get(parent_fid, [])
     if not org_ids:
         return 0
@@ -67,9 +67,9 @@ async def check_alerts_for_incident(incident_data: dict, fiber_org_map: dict) ->
         for rule, detail in triggered:
             success = await sync_to_async(dispatch_alert)(
                 rule,
-                incident_data.get('id', ''),
+                incident_data.get("id", ""),
                 fiber_line,
-                incident_data.get('channel', 0),
+                incident_data.get("channel", 0),
                 detail,
             )
             if success:

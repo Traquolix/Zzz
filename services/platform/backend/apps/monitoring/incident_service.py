@@ -10,14 +10,14 @@ import logging
 from typing import Optional
 
 from apps.shared.clickhouse import query
-from apps.shared.exceptions import ClickHouseUnavailableError
 
-logger = logging.getLogger('sequoia.incidents')
+logger = logging.getLogger("sequoia.incidents")
 
 
 # ---------------------------------------------------------------------------
 # Fiber ID normalization
 # ---------------------------------------------------------------------------
+
 
 def _ensure_directional_fiber_id(fiber_id: str) -> str:
     """
@@ -29,8 +29,8 @@ def _ensure_directional_fiber_id(fiber_id: str) -> str:
     via ``fibers.find(f => f.id === incident.fiberLine)`` fails if the suffix
     is missing. Default to direction ``0`` when absent.
     """
-    if ':' not in fiber_id:
-        return f'{fiber_id}:0'
+    if ":" not in fiber_id:
+        return f"{fiber_id}:0"
     return fiber_id
 
 
@@ -43,12 +43,13 @@ def strip_directional_suffix(fiber_id: str) -> str:
     Used by org-scoped routing: ``fiber_org_map`` keys are plain fiber IDs
     from ``FiberAssignment.fiber_id``.
     """
-    return fiber_id.rsplit(':', 1)[0] if ':' in fiber_id else fiber_id
+    return fiber_id.rsplit(":", 1)[0] if ":" in fiber_id else fiber_id
 
 
 # ---------------------------------------------------------------------------
 # Transform — ONE implementation for all paths
 # ---------------------------------------------------------------------------
+
 
 def transform_row(row: dict) -> dict:
     """
@@ -62,23 +63,23 @@ def transform_row(row: dict) -> dict:
     ``fiber_id`` is normalized to always include a directional suffix
     so frontend ``FiberLine.id`` lookups work correctly.
     """
-    ts = row['timestamp']
-    detected_at = ts.isoformat() if hasattr(ts, 'isoformat') else str(ts)
-    dur = row.get('duration_seconds')
+    ts = row["timestamp"]
+    detected_at = ts.isoformat() if hasattr(ts, "isoformat") else str(ts)
+    dur = row.get("duration_seconds")
 
     return {
-        'id': row['incident_id'],
-        'type': row['incident_type'],
-        'severity': row['severity'],
-        'fiberLine': _ensure_directional_fiber_id(row['fiber_id']),
-        'channel': row['channel_start'],
-        'channelEnd': row.get('channel_end', row['channel_start']),
-        'detectedAt': detected_at,
-        'status': row['status'],
-        'duration': dur * 1000 if dur else None,
-        'speedBefore': row.get('speed_before_kmh'),
-        'speedDuring': row.get('speed_during_kmh'),
-        'speedDropPercent': row.get('speed_drop_percent'),
+        "id": row["incident_id"],
+        "type": row["incident_type"],
+        "severity": row["severity"],
+        "fiberLine": _ensure_directional_fiber_id(row["fiber_id"]),
+        "channel": row["channel_start"],
+        "channelEnd": row.get("channel_end", row["channel_start"]),
+        "detectedAt": detected_at,
+        "status": row["status"],
+        "duration": dur * 1000 if dur else None,
+        "speedBefore": row.get("speed_before_kmh"),
+        "speedDuring": row.get("speed_during_kmh"),
+        "speedDropPercent": row.get("speed_drop_percent"),
     }
 
 
@@ -90,18 +91,18 @@ def transform_simulation_incident(incident) -> dict:
     ``:0`` for the direction suffix.
     """
     return {
-        'id': incident.id,
-        'type': incident.type,
-        'severity': incident.severity,
-        'fiberLine': f'{incident.fiber_line}:0',
-        'channel': incident.channel,
-        'channelEnd': incident.channel,
-        'detectedAt': incident.detected_at,
-        'status': incident.status,
-        'duration': incident.duration,
-        'speedBefore': None,
-        'speedDuring': None,
-        'speedDropPercent': None,
+        "id": incident.id,
+        "type": incident.type,
+        "severity": incident.severity,
+        "fiberLine": f"{incident.fiber_line}:0",
+        "channel": incident.channel,
+        "channelEnd": incident.channel,
+        "detectedAt": incident.detected_at,
+        "status": incident.status,
+        "duration": incident.duration,
+        "speedBefore": None,
+        "speedDuring": None,
+        "speedDropPercent": None,
     }
 
 
@@ -171,9 +172,9 @@ def query_active(
         ClickHouseUnavailableError — caller decides fallback strategy.
     """
     if fiber_ids is not None:
-        rows = query(_ACTIVE_SQL_SCOPED, parameters={'fids': fiber_ids, 'lim': limit})
+        rows = query(_ACTIVE_SQL_SCOPED, parameters={"fids": fiber_ids, "lim": limit})
     else:
-        rows = query(_ACTIVE_SQL_ALL, parameters={'lim': limit})
+        rows = query(_ACTIVE_SQL_ALL, parameters={"lim": limit})
     return [transform_row(r) for r in rows]
 
 
@@ -194,9 +195,11 @@ def query_recent(
         ClickHouseUnavailableError — caller decides fallback strategy.
     """
     if fiber_ids is not None:
-        rows = query(_RECENT_SQL_SCOPED, parameters={'fids': fiber_ids, 'hours': hours, 'lim': limit})
+        rows = query(
+            _RECENT_SQL_SCOPED, parameters={"fids": fiber_ids, "hours": hours, "lim": limit}
+        )
     else:
-        rows = query(_RECENT_SQL_ALL, parameters={'hours': hours, 'lim': limit})
+        rows = query(_RECENT_SQL_ALL, parameters={"hours": hours, "lim": limit})
     return [transform_row(r) for r in rows]
 
 
@@ -215,15 +218,15 @@ def query_by_id(incident_id: str) -> dict | None:
         WHERE incident_id = {iid:String}
         LIMIT 1
         """,
-        parameters={'iid': incident_id},
+        parameters={"iid": incident_id},
     )
     if not rows:
         return None
     row = rows[0]
     return {
-        'incident_id': row['incident_id'],
-        'fiber_id': row['fiber_id'],
-        'status': row['status'],
+        "incident_id": row["incident_id"],
+        "fiber_id": row["fiber_id"],
+        "status": row["status"],
     }
 
 
@@ -238,5 +241,5 @@ def query_active_raw(
     tracking and the transformed shape for broadcast.
     """
     if fiber_ids is not None:
-        return query(_ACTIVE_SQL_SCOPED, parameters={'fids': fiber_ids, 'lim': limit})
-    return query(_ACTIVE_SQL_ALL, parameters={'lim': limit})
+        return list(query(_ACTIVE_SQL_SCOPED, parameters={"fids": fiber_ids, "lim": limit}))
+    return list(query(_ACTIVE_SQL_ALL, parameters={"lim": limit}))

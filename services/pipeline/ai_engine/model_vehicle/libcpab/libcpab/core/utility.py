@@ -29,12 +29,12 @@ class params:
 #%%
 def null(A, eps = 1e-6):
     """ Find the null space of a matrix
-        
+
     Arguments:
         A: `Matrix` [n,m]. Matrix to find the null space of
         eps: `float` (default: 1e-6). Only singular values below the value of
             eps are used to determine the null space
-    
+
     Output:
         `Matrix` [n,m]. The null space of the input matrix
     """
@@ -95,15 +95,15 @@ uniqueid = uniqueid_generator(12)
 #%%
 def show_images(images, cols='auto', title=None, scaling=False):
     """ Display a list of images in a single figure with matplotlib.
-    
+
     Arguments
         images: List/tensor of np.arrays compatible with plt.imshow.
-    
-        cols (Default = 'auto'): Number of columns in figure (number of rows is 
+
+        cols (Default = 'auto'): Number of columns in figure (number of rows is
                                  set to np.ceil(n_images/float(cols))).
-        
+
         title: One main title for the hole figure
-            
+
         scaling (Default = False): If True, will rescale the figure by the
                 number of images. Good if one want to show many.
     """

@@ -4,7 +4,6 @@ from processor.processing_tools.processing_steps.base_step import ProcessingStep
 
 
 class ProcessingChain:
-
     def __init__(self, steps: List[ProcessingStep]):
         self.steps = steps
 

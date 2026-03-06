@@ -12,7 +12,6 @@ from typing import Optional
 
 import numpy as np
 
-
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
@@ -21,6 +20,7 @@ import numpy as np
 @dataclass
 class SHMBaseline:
     """Reference frequency profile from a known-good period."""
+
     mean_freq: float
     std_freq: float
     sample_count: int
@@ -29,6 +29,7 @@ class SHMBaseline:
 @dataclass
 class FrequencyShift:
     """Result of comparing current readings to a baseline."""
+
     current_mean: float
     baseline_mean: float
     deviation_sigma: float
@@ -40,6 +41,7 @@ class FrequencyShift:
 @dataclass
 class TrendAnalysis:
     """Result of linear trend fitting over a sliding window."""
+
     slope_hz_per_hour: float
     direction: str  # 'increasing', 'decreasing', 'stable'
     r_squared: float
@@ -50,7 +52,7 @@ class TrendAnalysis:
 # Thresholds
 # ---------------------------------------------------------------------------
 
-ANOMALY_SIGMA = 2.0   # sigma above which a shift is considered anomalous
+ANOMALY_SIGMA = 2.0  # sigma above which a shift is considered anomalous
 WARNING_SIGMA = 2.0
 ALERT_SIGMA = 3.0
 CRITICAL_SIGMA = 4.0
@@ -120,14 +122,14 @@ def detect_frequency_shift(
     if baseline.std_freq > 0:
         deviation_sigma = abs(delta) / baseline.std_freq
     else:
-        deviation_sigma = 0.0 if abs(delta) < 1e-6 else float('inf')
+        deviation_sigma = 0.0 if abs(delta) < 1e-6 else float("inf")
 
     if abs(delta) < 1e-6:
-        direction = 'stable'
+        direction = "stable"
     elif delta > 0:
-        direction = 'increase'
+        direction = "increase"
     else:
-        direction = 'decrease'
+        direction = "decrease"
 
     is_anomalous = deviation_sigma >= sigma_threshold
     severity = classify_deviation(deviation_sigma)
@@ -158,12 +160,12 @@ def classify_deviation(sigma: float) -> str:
     - > 4σ: critical
     """
     if sigma < WARNING_SIGMA:
-        return 'normal'
+        return "normal"
     elif sigma < ALERT_SIGMA:
-        return 'warning'
+        return "warning"
     elif sigma < CRITICAL_SIGMA:
-        return 'alert'
-    return 'critical'
+        return "alert"
+    return "critical"
 
 
 # ---------------------------------------------------------------------------
@@ -184,7 +186,7 @@ def analyze_trend(
     if n < 2:
         return TrendAnalysis(
             slope_hz_per_hour=0.0,
-            direction='stable',
+            direction="stable",
             r_squared=0.0,
             window_size=n,
         )
@@ -201,7 +203,7 @@ def analyze_trend(
     if ss_xx == 0:
         return TrendAnalysis(
             slope_hz_per_hour=0.0,
-            direction='stable',
+            direction="stable",
             r_squared=0.0,
             window_size=n,
         )
@@ -216,11 +218,11 @@ def analyze_trend(
     r_squared = float(1 - ss_res / ss_tot) if ss_tot > 0 else 0.0
 
     if abs(slope_hz_per_hour) < TREND_STABILITY_THRESHOLD:
-        direction = 'stable'
+        direction = "stable"
     elif slope_hz_per_hour > 0:
-        direction = 'increasing'
+        direction = "increasing"
     else:
-        direction = 'decreasing'
+        direction = "decreasing"
 
     return TrendAnalysis(
         slope_hz_per_hour=slope_hz_per_hour,

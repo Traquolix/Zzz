@@ -18,9 +18,9 @@ from typing import Optional
 import requests
 import yaml
 
-logger = logging.getLogger('sequoia.fibers')
+logger = logging.getLogger("sequoia.fibers")
 
-MAPBOX_API_BASE = 'https://api.mapbox.com/matching/v5/mapbox/driving'
+MAPBOX_API_BASE = "https://api.mapbox.com/matching/v5/mapbox/driving"
 BATCH_SIZE = 100
 BATCH_OVERLAP = 5  # Overlap coordinates between batches for smooth joins
 DEFAULT_RADIUS = 25  # meters — tighter than 50m to avoid parallel road matches
@@ -32,7 +32,7 @@ RETRY_BACKOFF = 2.0  # seconds, doubles each retry
 def snap_coordinates(
     coordinates: list[list[float | None]],
     access_token: str,
-    profile: str = 'driving',
+    profile: str = "driving",
     radius: int = DEFAULT_RADIUS,
 ) -> Optional[list[list[float]]]:
     """
@@ -52,7 +52,7 @@ def snap_coordinates(
             valid_coords.append(coord)
 
     if len(valid_coords) < 2:
-        logger.warning('Not enough valid coordinates to snap (%d)', len(valid_coords))
+        logger.warning("Not enough valid coordinates to snap (%d)", len(valid_coords))
         return None
 
     # Snap valid coordinates in batches
@@ -86,20 +86,17 @@ def snap_directional(
     coordinate array for that direction. Returns None on failure.
     """
     # Build valid coords for offset computation
-    valid_coords = [
-        c for c in coordinates
-        if c and c[0] is not None and c[1] is not None
-    ]
+    valid_coords = [c for c in coordinates if c and c[0] is not None and c[1] is not None]
     if len(valid_coords) < 2:
-        logger.warning('Not enough valid coordinates for directional snap (%d)', len(valid_coords))
+        logger.warning("Not enough valid coordinates for directional snap (%d)", len(valid_coords))
         return None
 
     results = {}
-    for direction, sign in [('0', -1.0), ('1', 1.0)]:
+    for direction, sign in [("0", -1.0), ("1", 1.0)]:
         offset_coords = _offset_coords(coordinates, sign * offset_meters)
         snapped = snap_coordinates(offset_coords, access_token, radius=radius)
         if snapped is None:
-            logger.warning('Directional snap failed for direction %s', direction)
+            logger.warning("Directional snap failed for direction %s", direction)
             # Fall back to un-offset snap
             snapped = snap_coordinates(coordinates, access_token, radius=radius)
             if snapped is None:
@@ -119,31 +116,31 @@ def load_snap_config(config_path: Path) -> dict:
         config = yaml.safe_load(f)
 
     if not isinstance(config, dict):
-        raise ValueError(f'Snap config must be a YAML mapping, got {type(config).__name__}')
+        raise ValueError(f"Snap config must be a YAML mapping, got {type(config).__name__}")
 
-    if 'fiber_id' not in config:
-        raise ValueError('Snap config missing required key: fiber_id')
+    if "fiber_id" not in config:
+        raise ValueError("Snap config missing required key: fiber_id")
 
-    segments = config.get('segments', [])
+    segments = config.get("segments", [])
     # Validate segments don't overlap
     covered = set()
     for seg in segments:
-        ch = seg.get('channels')
+        ch = seg.get("channels")
         if not ch or len(ch) != 2:
-            raise ValueError(f'Segment channels must be [start, end], got {ch}')
+            raise ValueError(f"Segment channels must be [start, end], got {ch}")
         start, end = ch
         if start > end:
-            raise ValueError(f'Segment start ({start}) > end ({end})')
+            raise ValueError(f"Segment start ({start}) > end ({end})")
         for i in range(start, end + 1):
             if i in covered:
-                raise ValueError(f'Overlapping segments: channel {i} appears in multiple segments')
+                raise ValueError(f"Overlapping segments: channel {i} appears in multiple segments")
             covered.add(i)
 
-        for d in ['direction_0', 'direction_1']:
+        for d in ["direction_0", "direction_1"]:
             if d not in seg:
-                raise ValueError(f'Segment {ch} missing {d}')
-            if 'offset_meters' not in seg[d]:
-                raise ValueError(f'Segment {ch} {d} missing offset_meters')
+                raise ValueError(f"Segment {ch} missing {d}")
+            if "offset_meters" not in seg[d]:
+                raise ValueError(f"Segment {ch} {d} missing offset_meters")
 
     return config
 
@@ -165,24 +162,27 @@ def snap_directional_segmented(
     snapped coordinate array. Returns None on failure.
     """
     n = len(coordinates)
-    default = config.get('default', {
-        'direction_0': {'offset_meters': -12},
-        'direction_1': {'offset_meters': 12},
-    })
-    segments = config.get('segments', [])
+    default = config.get(
+        "default",
+        {
+            "direction_0": {"offset_meters": -12},
+            "direction_1": {"offset_meters": 12},
+        },
+    )
+    segments = config.get("segments", [])
 
     # Build a map: channel_index -> (dir0_offset, dir1_offset)
     channel_offsets: dict[int, tuple[float, float]] = {}
     for seg in segments:
-        start, end = seg['channels']
-        d0_off = seg['direction_0']['offset_meters']
-        d1_off = seg['direction_1']['offset_meters']
+        start, end = seg["channels"]
+        d0_off = seg["direction_0"]["offset_meters"]
+        d1_off = seg["direction_1"]["offset_meters"]
         for i in range(start, min(end + 1, n)):
             channel_offsets[i] = (d0_off, d1_off)
 
     # Fill in defaults for uncovered channels
-    default_d0 = default.get('direction_0', {}).get('offset_meters', -12)
-    default_d1 = default.get('direction_1', {}).get('offset_meters', 12)
+    default_d0 = default.get("direction_0", {}).get("offset_meters", -12)
+    default_d1 = default.get("direction_1", {}).get("offset_meters", 12)
     for i in range(n):
         if i not in channel_offsets:
             channel_offsets[i] = (default_d0, default_d1)
@@ -200,8 +200,10 @@ def snap_directional_segmented(
         groups.append((cur_start, n - 1, cur_pair[0], cur_pair[1]))
 
     logger.info(
-        'Segmented snap: %d channels, %d groups from %d config segments',
-        n, len(groups), len(segments),
+        "Segmented snap: %d channels, %d groups from %d config segments",
+        n,
+        len(groups),
+        len(segments),
     )
 
     # Initialize result arrays
@@ -209,43 +211,50 @@ def snap_directional_segmented(
     result_1: list[list[float | None]] = [[None, None] for _ in range(n)]
 
     for g_idx, (g_start, g_end, d0_off, d1_off) in enumerate(groups):
-        slice_coords = coordinates[g_start:g_end + 1]
+        slice_coords = coordinates[g_start : g_end + 1]
         slice_len = g_end - g_start + 1
 
         valid_count = sum(1 for c in slice_coords if c and c[0] is not None)
         logger.info(
-            '  Group %d/%d: channels %d-%d (%d channels, %d valid), '
-            'offsets: dir0=%.1fm, dir1=%.1fm',
-            g_idx + 1, len(groups), g_start, g_end, slice_len, valid_count,
-            d0_off, d1_off,
+            "  Group %d/%d: channels %d-%d (%d channels, %d valid), "
+            "offsets: dir0=%.1fm, dir1=%.1fm",
+            g_idx + 1,
+            len(groups),
+            g_start,
+            g_end,
+            slice_len,
+            valid_count,
+            d0_off,
+            d1_off,
         )
 
         if valid_count < 2:
-            logger.warning('  Group %d: not enough valid coords, filling with nulls', g_idx + 1)
+            logger.warning("  Group %d: not enough valid coords, filling with nulls", g_idx + 1)
             continue
 
         # Snap each direction independently
         for direction, offset, result_arr in [
-            ('0', d0_off, result_0),
-            ('1', d1_off, result_1),
+            ("0", d0_off, result_0),
+            ("1", d1_off, result_1),
         ]:
             offset_slice = _offset_coords(slice_coords, offset)
             snapped = snap_coordinates(offset_slice, access_token, radius=radius)
             if snapped is None:
                 logger.warning(
-                    '  Group %d dir %s: snap failed, trying un-offset fallback',
-                    g_idx + 1, direction,
+                    "  Group %d dir %s: snap failed, trying un-offset fallback",
+                    g_idx + 1,
+                    direction,
                 )
                 snapped = snap_coordinates(slice_coords, access_token, radius=radius)
                 if snapped is None:
-                    logger.error('  Group %d dir %s: fallback also failed', g_idx + 1, direction)
+                    logger.error("  Group %d dir %s: fallback also failed", g_idx + 1, direction)
                     return None
 
             # Place snapped results back at correct indices
             for i, coord in enumerate(snapped):
                 result_arr[g_start + i] = coord
 
-    return {'0': result_0, '1': result_1}
+    return {"0": result_0, "1": result_1}
 
 
 def _offset_coords(
@@ -260,7 +269,9 @@ def _offset_coords(
     """
     result = []
     # Collect valid coords for bearing computation
-    valid = [(i, c) for i, c in enumerate(coordinates) if c and c[0] is not None and c[1] is not None]
+    valid = [
+        (i, c) for i, c in enumerate(coordinates) if c and c[0] is not None and c[1] is not None
+    ]
 
     if len(valid) < 2:
         return list(coordinates)  # Can't compute bearing
@@ -331,12 +342,12 @@ def _offset_point(coord: list[float], bearing: float, distance_m: float) -> list
     lng1 = math.radians(coord[0])
 
     lat2 = math.asin(
-        math.sin(lat1) * math.cos(distance_m / R) +
-        math.cos(lat1) * math.sin(distance_m / R) * math.cos(bearing)
+        math.sin(lat1) * math.cos(distance_m / R)
+        + math.cos(lat1) * math.sin(distance_m / R) * math.cos(bearing)
     )
     lng2 = lng1 + math.atan2(
         math.sin(bearing) * math.sin(distance_m / R) * math.cos(lat1),
-        math.cos(distance_m / R) - math.sin(lat1) * math.sin(lat2)
+        math.cos(distance_m / R) - math.sin(lat1) * math.sin(lat2),
     )
 
     return [math.degrees(lng2), math.degrees(lat2)]
@@ -350,7 +361,7 @@ def _snap_batched(
 ) -> Optional[list[list[float]]]:
     """Snap coordinates in batches of BATCH_SIZE with overlap for continuity."""
     if len(coords) <= BATCH_SIZE:
-        logger.info('Batch 1/1 (coords 0-%d)', len(coords) - 1)
+        logger.info("Batch 1/1 (coords 0-%d)", len(coords) - 1)
         return _snap_single_batch(coords, access_token, profile, radius)
 
     result: list[list[float]] = []
@@ -364,11 +375,11 @@ def _snap_batched(
         batch = coords[start:end]
         batch_num += 1
 
-        logger.info('Batch %d/%d (coords %d-%d)', batch_num, total_batches, start, end - 1)
+        logger.info("Batch %d/%d (coords %d-%d)", batch_num, total_batches, start, end - 1)
 
         snapped = _snap_single_batch(batch, access_token, profile, radius)
         if snapped is None:
-            logger.error('Batch snap failed at offset %d', start)
+            logger.error("Batch snap failed at offset %d", start)
             return None
 
         if start == 0:
@@ -379,7 +390,7 @@ def _snap_batched(
 
         start += step
 
-    return result[:len(coords)]
+    return result[: len(coords)]
 
 
 def _snap_single_batch(
@@ -396,15 +407,15 @@ def _snap_single_batch(
     on the matched road polyline to preserve channel-to-position mapping.
     """
     # Build coordinate string: "lng,lat;lng,lat;..."
-    coord_str = ';'.join(f'{c[0]},{c[1]}' for c in coords)
+    coord_str = ";".join(f"{c[0]},{c[1]}" for c in coords)
 
-    url = f'{MAPBOX_API_BASE}/{coord_str}'
+    url = f"{MAPBOX_API_BASE}/{coord_str}"
     params = {
-        'access_token': access_token,
-        'geometries': 'geojson',
-        'overview': 'full',
-        'radiuses': ';'.join([str(radius)] * len(coords)),
-        'tidy': 'true',
+        "access_token": access_token,
+        "geometries": "geojson",
+        "overview": "full",
+        "radiuses": ";".join([str(radius)] * len(coords)),
+        "tidy": "true",
     }
 
     time.sleep(RATE_LIMIT_DELAY)
@@ -415,35 +426,46 @@ def _snap_single_batch(
             resp = requests.get(url, params=params, timeout=30)
             if resp.status_code == 429:
                 if attempt < MAX_RETRIES:
-                    wait = RETRY_BACKOFF * (2 ** attempt)
-                    logger.warning('Rate limited (429), retrying in %.1fs (attempt %d/%d)', wait, attempt + 1, MAX_RETRIES)
+                    wait = RETRY_BACKOFF * (2**attempt)
+                    logger.warning(
+                        "Rate limited (429), retrying in %.1fs (attempt %d/%d)",
+                        wait,
+                        attempt + 1,
+                        MAX_RETRIES,
+                    )
                     time.sleep(wait)
                     continue
-                logger.error('Rate limited (429) after %d retries', MAX_RETRIES)
+                logger.error("Rate limited (429) after %d retries", MAX_RETRIES)
                 return None
             resp.raise_for_status()
             data = resp.json()
             break
         except requests.RequestException as e:
             if attempt < MAX_RETRIES:
-                wait = RETRY_BACKOFF * (2 ** attempt)
-                logger.warning('API request failed: %s — retrying in %.1fs (attempt %d/%d)', e, wait, attempt + 1, MAX_RETRIES)
+                wait = RETRY_BACKOFF * (2**attempt)
+                logger.warning(
+                    "API request failed: %s — retrying in %.1fs (attempt %d/%d)",
+                    e,
+                    wait,
+                    attempt + 1,
+                    MAX_RETRIES,
+                )
                 time.sleep(wait)
                 continue
-            logger.error('Mapbox Map Matching API failed after %d retries: %s', MAX_RETRIES, e)
+            logger.error("Mapbox Map Matching API failed after %d retries: %s", MAX_RETRIES, e)
             return None
 
     if data is None:
         return None
 
-    if data.get('code') != 'Ok' or not data.get('matchings'):
-        logger.warning('Map Matching returned no matchings: %s', data.get('code'))
+    if data.get("code") != "Ok" or not data.get("matchings"):
+        logger.warning("Map Matching returned no matchings: %s", data.get("code"))
         return None
 
     # Take the first (best) matching
-    matched_coords = data['matchings'][0]['geometry']['coordinates']
+    matched_coords = data["matchings"][0]["geometry"]["coordinates"]
     if len(matched_coords) < 2:
-        logger.warning('Matched geometry too short (%d points)', len(matched_coords))
+        logger.warning("Matched geometry too short (%d points)", len(matched_coords))
         return None
 
     # Project each original coordinate to the nearest point on the matched path
@@ -463,7 +485,7 @@ def _project_to_path(
 
     for coord in original:
         best_point = path[0]
-        best_dist = float('inf')
+        best_dist = float("inf")
 
         for i in range(len(path) - 1):
             proj = _project_point_to_segment(coord, path[i], path[i + 1])

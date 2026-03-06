@@ -1,0 +1,82 @@
+repos:
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-yaml
+        args: ['--allow-multiple-documents']
+      - id: check-json
+        exclude: tsconfig.*\.json$
+      - id: check-merge-conflict
+      - id: trailing-whitespace
+        args: ['--markdown-linebreak-ext=md']
+      - id: end-of-file-fixer
+      - id: check-added-large-files
+        args: ['--maxkb=1024']
+      - id: no-commit-to-branch
+        args: ['--branch', 'main']
+
+  # Python linting and formatting (pipeline + backend)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.10
+    hooks:
+      - id: ruff
+        args: ['--fix']
+        files: ^services/(pipeline|platform/backend)/
+      - id: ruff-format
+        files: ^services/(pipeline|platform/backend)/
+
+  # Frontend linting and formatting (uses project's own node_modules)
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier
+        entry: npx --prefix services/platform/frontend prettier --write --ignore-unknown
+        language: system
+        files: ^services/platform/frontend/src/.*\.(ts|tsx|css|json)$
+      - id: eslint
+        name: eslint
+        entry: npx --prefix services/platform/frontend eslint --config services/platform/frontend/eslint.config.js --fix
+        language: system
+        files: ^services/platform/frontend/src/.*\.(ts|tsx)$
+
+  # Secrets detection
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: (package-lock\.json|\.env\.example)
+
+  # ---------- pre-push: full lint pass (mirrors CI) ----------
+  # Runs on all files, not just staged — catches anything CI would catch.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.10
+    hooks:
+      - id: ruff
+        name: ruff (pre-push)
+        stages: [pre-push]
+        files: ^services/(pipeline|platform/backend)/
+      - id: ruff-format
+        name: ruff-format (pre-push)
+        stages: [pre-push]
+        args: ['--check']
+        files: ^services/(pipeline|platform/backend)/
+
+  - repo: local
+    hooks:
+      - id: eslint-push
+        name: eslint (pre-push)
+        stages: [pre-push]
+        entry: npx --prefix services/platform/frontend eslint --config services/platform/frontend/eslint.config.js
+        language: system
+        files: ^services/platform/frontend/src/.*\.(ts|tsx)$
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.3
+    hooks:
+      - id: bandit
+        name: bandit (pre-push)
+        stages: [pre-push]
+        args: ['-q', '-ll', '--skip', 'B608']
+        files: ^services/(pipeline|platform/backend)/.*\.py$

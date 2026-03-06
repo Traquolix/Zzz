@@ -103,9 +103,7 @@ def setup_otel(service_name: str, service_version: str = "1.0.0") -> None:
     trace_provider = TracerProvider(resource=resource)
 
     # Configure OTLP span exporter
-    span_exporter = OTLPSpanExporter(
-        endpoint=otlp_endpoint, insecure=otlp_insecure
-    )
+    span_exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=otlp_insecure)
 
     # Use batch processor for better performance
     span_processor = BatchSpanProcessor(
@@ -123,7 +121,8 @@ def setup_otel(service_name: str, service_version: str = "1.0.0") -> None:
     metric_exporter = OTLPMetricExporter(endpoint=otlp_endpoint, insecure=otlp_insecure)
 
     metric_reader = PeriodicExportingMetricReader(
-        exporter=metric_exporter, export_interval_millis=10000  # Export every 10 seconds
+        exporter=metric_exporter,
+        export_interval_millis=10000,  # Export every 10 seconds
     )
 
     meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])

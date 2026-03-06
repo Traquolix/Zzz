@@ -3,7 +3,6 @@ from scipy.signal import butter
 
 
 class VectorizedBiquadFilter:
-
     def __init__(self, low_freq: float, high_freq: float, sampling_rate: float = 50.0):
         sos = butter(4, [low_freq, high_freq], btype="band", fs=sampling_rate, output="sos")
         sos = sos.astype(np.float64)

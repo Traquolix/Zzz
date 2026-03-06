@@ -1,103 +1,130 @@
 .prototype {
-    --proto-base: #1a1a2e;
-    --proto-surface: #2b2d31;
-    --proto-surface-raised: #313338;
-    --proto-border: rgba(255, 255, 255, 0.08);
-    --proto-text: #e2e8f0;
-    --proto-text-secondary: #94a3b8;
-    --proto-text-muted: #64748b;
-    --proto-accent: #3b82f6;
+  --proto-base: #1a1a2e;
+  --proto-surface: #2b2d31;
+  --proto-surface-raised: #313338;
+  --proto-border: rgba(255, 255, 255, 0.08);
+  --proto-text: #e2e8f0;
+  --proto-text-secondary: #94a3b8;
+  --proto-text-muted: #64748b;
+  --proto-accent: #3b82f6;
 
-    --proto-green: #22c55e;
-    --proto-amber: #f59e0b;
-    --proto-red: #ef4444;
+  --proto-green: #22c55e;
+  --proto-amber: #f59e0b;
+  --proto-red: #ef4444;
 
-    --proto-chart-grid: rgba(255, 255, 255, 0.03);
+  --proto-chart-grid: rgba(255, 255, 255, 0.03);
 
-    font-family: Inter, system-ui, -apple-system, sans-serif;
-    font-size: 14px;
-    color: var(--proto-text);
-    background: var(--proto-base);
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  font-size: 14px;
+  color: var(--proto-text);
+  background: var(--proto-base);
 }
 
 /* Analysis view fade in */
 .proto-analysis-enter {
-    animation: protoFadeIn 300ms ease-out forwards;
+  animation: protoFadeIn 300ms ease-out forwards;
 }
 
 @keyframes protoFadeIn {
-    from {
-        opacity: 0;
-        transform: translateX(12px);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 /* Creation banner */
 .proto-creation-banner {
-    animation: protoFadeIn 200ms ease-out forwards;
+  animation: protoFadeIn 200ms ease-out forwards;
 }
 
 /* Scrollbar styling for panels */
 .prototype ::-webkit-scrollbar {
-    width: 6px;
+  width: 6px;
 }
 
 .prototype ::-webkit-scrollbar-track {
-    background: transparent;
+  background: transparent;
 }
 
 .prototype ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.12);
-    border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
 }
 
 .prototype ::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.2);
 }
 
 /* Collapsible sidebar */
 .proto-sidebar {
-    transition: transform 200ms ease-in-out;
-    width: clamp(340px, 40vw, 680px);
+  transition: transform 200ms ease-in-out;
+  width: clamp(340px, 40vw, 680px);
 }
 
 /* Mapbox overrides for dark theme */
 .prototype .mapboxgl-ctrl-attrib {
-    background: rgba(0, 0, 0, 0.5) !important;
-    color: var(--proto-text-muted) !important;
-    font-size: 10px !important;
+  background: rgba(0, 0, 0, 0.5) !important;
+  color: var(--proto-text-muted) !important;
+  font-size: 10px !important;
 }
 
 .prototype .mapboxgl-ctrl-attrib a {
-    color: var(--proto-text-muted) !important;
+  color: var(--proto-text-muted) !important;
 }
 
 /* Incident marker pulse on hover */
 @keyframes proto-marker-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.6); }
-    50% { box-shadow: 0 0 12px 6px rgba(255, 255, 255, 0.6); }
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 12px 6px rgba(255, 255, 255, 0.6);
+  }
 }
 
 /* Incident marker — pulsing ring.
    Applied to the inner dot wrapper (not the Mapbox Marker root element)
    so transform: scale() doesn't clobber Mapbox's transform: translate(). */
 @keyframes proto-incident-ring {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.6; transform: scale(1.3); }
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.3);
+  }
 }
 
 /* Toast slide-up animation */
 @keyframes protoToastIn {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Channel selection blue dot pulse */
 @keyframes proto-channel-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.6); }
-    50% { box-shadow: 0 0 0 12px rgba(59, 130, 246, 0); }
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(59, 130, 246, 0);
+  }
 }

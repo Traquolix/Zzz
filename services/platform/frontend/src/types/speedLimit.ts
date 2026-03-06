@@ -1,7 +1,7 @@
 import type { FiberRange } from './fiber'
 
 export type SpeedLimitZone = FiberRange & {
-    limit: number           // km/h
+  limit: number // km/h
 }
 
 /**
@@ -9,18 +9,16 @@ export type SpeedLimitZone = FiberRange & {
  * Returns null if no zone covers this channel (falls back to absolute thresholds).
  */
 export function getSpeedLimitForChannel(
-    fiberId: string,
-    channel: number,
-    zones: Map<string, SpeedLimitZone>
+  fiberId: string,
+  channel: number,
+  zones: Map<string, SpeedLimitZone>,
 ): number | null {
-    for (const zone of zones.values()) {
-        if (zone.fiberId === fiberId &&
-            channel >= zone.startChannel &&
-            channel <= zone.endChannel) {
-            return zone.limit
-        }
+  for (const zone of zones.values()) {
+    if (zone.fiberId === fiberId && channel >= zone.startChannel && channel <= zone.endChannel) {
+      return zone.limit
     }
-    return null
+  }
+  return null
 }
 
 // Color conversion functions moved to @/lib/theme.ts:

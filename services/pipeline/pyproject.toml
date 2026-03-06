@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "das-pipeline"
 version = "1.0.0"
 description = "DAS Pipeline for vehicle detection and speed estimation"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "confluent-kafka[avro]",
     "aiohttp>=3.9.0",
@@ -30,9 +30,11 @@ ai = [
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
-    "black",
     "ruff",
+    "mypy",
     "tqdm",
+    "pip-audit",
+    "bandit",
 ]
 
 [tool.setuptools.packages.find]
@@ -44,23 +46,20 @@ include = ["shared*", "config*", "processor*", "ai_engine*"]
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py310"
 exclude = ["ai_engine/model_vehicle", "experiments", ".venv"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
 ignore = ["E501"]  # Line too long - handled by formatter
 
-[tool.black]
-line-length = 100
-target-version = ["py39"]
-extend-exclude = '''
-(
-    ai_engine/model_vehicle
-    | experiments
-    | \.venv
-)
-'''
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+explicit_package_bases = true
+exclude = ["ai_engine/model_vehicle", "experiments", ".venv", "tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

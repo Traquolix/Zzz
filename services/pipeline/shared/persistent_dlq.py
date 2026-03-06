@@ -128,7 +128,7 @@ class PersistentDLQ:
         if err is not None:
             self._write_failures += 1
             self.logger.error(
-                f"DLQ delivery failed: {err} | " f"Topic: {msg.topic() if msg else 'unknown'}"
+                f"DLQ delivery failed: {err} | Topic: {msg.topic() if msg else 'unknown'}"
             )
         else:
             self.logger.debug(

@@ -10,7 +10,7 @@ import logging
 from apps.alerting.models import AlertRule
 from apps.monitoring.incident_service import strip_directional_suffix
 
-logger = logging.getLogger('sequoia.alerting')
+logger = logging.getLogger("sequoia.alerting")
 
 
 def _passes_scope_filters(rule: AlertRule, fiber_line: str, channel: int) -> bool:
@@ -42,22 +42,22 @@ def evaluate_detection(
     """
     triggered: list[tuple[AlertRule, str]] = []
 
-    fiber_line = detection.get('fiberLine', '')
-    channel = detection.get('channel', 0)
-    speed = detection.get('speed', 0.0)
+    fiber_line = detection.get("fiberLine", "")
+    channel = detection.get("channel", 0)
+    speed = detection.get("speed", 0.0)
 
     for rule in rules:
         if not rule.is_active:
             continue
 
-        if rule.rule_type != 'speed_below':
+        if rule.rule_type != "speed_below":
             continue
 
         if not _passes_scope_filters(rule, fiber_line, channel):
             continue
 
         if rule.threshold is not None and speed < rule.threshold:
-            reason = f'Speed {speed:.1f} km/h below threshold {rule.threshold:.1f} km/h'
+            reason = f"Speed {speed:.1f} km/h below threshold {rule.threshold:.1f} km/h"
             triggered.append((rule, reason))
 
     return triggered
@@ -75,16 +75,16 @@ def evaluate_incident(
     """
     triggered: list[tuple[AlertRule, str]] = []
 
-    fiber_line = incident.get('fiberLine', '')
-    channel = incident.get('channel', 0)
-    inc_type = incident.get('type', '')
-    severity = incident.get('severity', '')
+    fiber_line = incident.get("fiberLine", "")
+    channel = incident.get("channel", 0)
+    inc_type = incident.get("type", "")
+    severity = incident.get("severity", "")
 
     for rule in rules:
         if not rule.is_active:
             continue
 
-        if rule.rule_type != 'incident_type':
+        if rule.rule_type != "incident_type":
             continue
 
         if not _passes_scope_filters(rule, fiber_line, channel):
@@ -98,7 +98,7 @@ def evaluate_incident(
         if rule.severity_filter and severity not in rule.severity_filter:
             continue
 
-        reason = f'Incident {incident.get("id", "?")} type={inc_type} severity={severity}'
+        reason = f"Incident {incident.get('id', '?')} type={inc_type} severity={severity}"
         triggered.append((rule, reason))
 
     return triggered

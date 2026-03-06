@@ -49,7 +49,7 @@ class InfrastructureSerializer(serializers.Serializer):
         """Return URL for infrastructure image, or None if not set."""
         if not obj.image:
             return None
-        return f'/infrastructure/{obj.image}'
+        return f"/infrastructure/{obj.image}"
 
 
 class StatsSerializer(serializers.Serializer):
@@ -63,24 +63,27 @@ class StatsSerializer(serializers.Serializer):
 
 class IncidentActionSerializer(serializers.Serializer):
     """Serializes a single workflow action for display."""
+
     id = serializers.UUIDField(read_only=True)
-    fromStatus = serializers.CharField(source='from_status')
-    toStatus = serializers.CharField(source='to_status')
-    performedBy = serializers.CharField(source='performed_by.username', default=None)
+    fromStatus = serializers.CharField(source="from_status")
+    toStatus = serializers.CharField(source="to_status")
+    performedBy = serializers.CharField(source="performed_by.username", default=None)
     note = serializers.CharField()
-    performedAt = serializers.DateTimeField(source='performed_at')
+    performedAt = serializers.DateTimeField(source="performed_at")
 
 
 class IncidentActionInputSerializer(serializers.Serializer):
     """Validates incoming workflow action requests."""
+
     action = serializers.ChoiceField(
-        choices=['acknowledged', 'investigating', 'resolved'],
+        choices=["acknowledged", "investigating", "resolved"],
     )
-    note = serializers.CharField(required=False, default='', allow_blank=True)
+    note = serializers.CharField(required=False, default="", allow_blank=True)
 
 
 class SectionInputSerializer(serializers.Serializer):
     """Validates incoming section creation requests."""
+
     fiberId = serializers.CharField()
     name = serializers.CharField()
     channelStart = serializers.IntegerField()
@@ -89,6 +92,7 @@ class SectionInputSerializer(serializers.Serializer):
 
 class SectionSerializer(serializers.Serializer):
     """Response serializer for a monitored section."""
+
     id = serializers.CharField()
     fiberId = serializers.CharField()
     name = serializers.CharField()
@@ -101,6 +105,7 @@ class SectionSerializer(serializers.Serializer):
 
 class SectionHistoryPointSerializer(serializers.Serializer):
     """A single point in a section speed time-series."""
+
     time = serializers.IntegerField()
     speed = serializers.FloatField()
     speedMax = serializers.FloatField()
@@ -109,6 +114,7 @@ class SectionHistoryPointSerializer(serializers.Serializer):
 
 class SectionHistorySerializer(serializers.Serializer):
     """Response serializer for section history endpoint."""
+
     sectionId = serializers.CharField()
     minutes = serializers.IntegerField()
     points = SectionHistoryPointSerializer(many=True)
@@ -116,6 +122,7 @@ class SectionHistorySerializer(serializers.Serializer):
 
 class SpectralDataSerializer(serializers.Serializer):
     """Response serializer for spectral heatmap data."""
+
     t0 = serializers.CharField()
     dt = serializers.ListField(child=serializers.FloatField())
     frequencies = serializers.ListField(child=serializers.FloatField())
@@ -125,6 +132,7 @@ class SpectralDataSerializer(serializers.Serializer):
 
 class SpectralPeaksSerializer(serializers.Serializer):
     """Response serializer for spectral peak frequencies."""
+
     t0 = serializers.CharField()
     dt = serializers.ListField(child=serializers.FloatField())
     peakFrequencies = serializers.ListField(child=serializers.FloatField())

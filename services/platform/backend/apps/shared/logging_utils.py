@@ -8,7 +8,7 @@ enabling distributed tracing across Django request lifecycle and ClickHouse quer
 import logging
 from contextvars import ContextVar
 
-_request_id: ContextVar[str] = ContextVar('request_id', default='-')
+_request_id: ContextVar[str] = ContextVar("request_id", default="-")
 
 
 class RequestIdFilter(logging.Filter):
