@@ -19,13 +19,11 @@ class IncidentSerializer(serializers.Serializer):
     duration = serializers.IntegerField(allow_null=True)
 
 
-class DetectionSerializer(serializers.Serializer):
-    fiberLine = serializers.CharField()
-    channel = serializers.IntegerField()
-    speed = serializers.FloatField()
-    count = serializers.IntegerField()
-    direction = serializers.IntegerField()
-    timestamp = serializers.IntegerField()
+class SnapshotPointSerializer(serializers.Serializer):
+    time = serializers.IntegerField()
+    speed = serializers.FloatField(allow_null=True)
+    flow = serializers.IntegerField(allow_null=True)
+    occupancy = serializers.FloatField(allow_null=True)
 
 
 class IncidentSnapshotSerializer(serializers.Serializer):
@@ -33,7 +31,8 @@ class IncidentSnapshotSerializer(serializers.Serializer):
     fiberLine = serializers.CharField()
     centerChannel = serializers.IntegerField()
     capturedAt = serializers.IntegerField()
-    detections = DetectionSerializer(many=True)
+    points = SnapshotPointSerializer(many=True)
+    complete = serializers.BooleanField()
 
 
 class InfrastructureSerializer(serializers.Serializer):

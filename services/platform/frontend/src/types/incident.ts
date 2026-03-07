@@ -29,13 +29,11 @@ export type IncidentActionHistory = {
   actions: IncidentAction[]
 }
 
-export type BufferedDetection = {
-  fiberLine: string
-  channel: number
-  speed: number
-  count: number
-  direction: 0 | 1
-  timestamp: number
+export type SnapshotPoint = {
+  time: number // epoch ms
+  speed: number | null
+  flow: number | null
+  occupancy: number | null
 }
 
 export type IncidentSnapshot = {
@@ -43,6 +41,6 @@ export type IncidentSnapshot = {
   fiberLine: string
   centerChannel: number
   capturedAt: number
-  detections: BufferedDetection[]
+  points: SnapshotPoint[]
   complete: boolean
 }

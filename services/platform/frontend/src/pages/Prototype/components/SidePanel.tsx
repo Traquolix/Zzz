@@ -1291,60 +1291,21 @@ function IncidentDetail({
     const formatTime = (d: Date) =>
       d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
 
-    const processSnapshot = (snapshot: import('@/types/incident').IncidentSnapshot) => {
-      // Build the full 2-minute window (incident ± 60s) so the X-axis is fixed
-      // and the incident marker stays centered from the start
-      const incidentMs = new Date(incident.timestamp).getTime()
-      const windowStart = incidentMs - 60_000
-      const windowEnd = incidentMs + 60_000
-
-      // Pre-fill all 120 seconds as empty slots
-      const slotMap = new Map<string, { speeds: number[]; count: number }>()
-      for (let ms = windowStart; ms < windowEnd; ms += 1000) {
-        slotMap.set(formatTime(new Date(ms)), { speeds: [], count: 0 })
-      }
-
-      // Merge actual detection data into the slots
-      for (const d of snapshot.detections) {
-        const key = formatTime(new Date(d.timestamp))
-        const bucket = slotMap.get(key)
-        if (bucket) {
-          bucket.speeds.push(d.speed)
-          bucket.count += d.count
-        }
-      }
-
-      const AVG_VEHICLE_LENGTH = 6 // meters
-      const points = [...slotMap.entries()]
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([time, { speeds, count }]) => {
-          const avgSpeed = speeds.length > 0 ? speeds.reduce((a, b) => a + b, 0) / speeds.length : undefined
-          // Occupancy = (flow_veh/h × vehicle_length_m) / (speed_m/s × 1000)
-          let occupancy: number | undefined
-          if (avgSpeed && avgSpeed > 0 && count > 0) {
-            const flowPerHour = count * 3600 // 1-second bucket → veh/h
-            const speedMs = avgSpeed * (1000 / 3600)
-            occupancy = Math.min(100, Math.round((flowPerHour * AVG_VEHICLE_LENGTH) / (speedMs * 1000)))
-          }
-          return {
-            time,
-            speed: avgSpeed !== undefined ? Math.round(avgSpeed) : undefined,
-            flow: count || undefined,
-            occupancy,
-          }
-        })
-      return { points, complete: snapshot.complete }
-    }
-
     const poll = () => {
       fetchIncidentSnapshot(incident.id)
         .then(snapshot => {
           if (!mounted) return
-          const { points, complete } = processSnapshot(snapshot)
+          // Backend returns pre-aggregated 1-second points with epoch ms timestamps
+          const points = snapshot.points.map(p => ({
+            time: formatTime(new Date(p.time)),
+            speed: p.speed ?? undefined,
+            flow: p.flow ?? undefined,
+            occupancy: p.occupancy ?? undefined,
+          }))
           setSnapshotData(points)
-          setSnapshotComplete(complete)
+          setSnapshotComplete(snapshot.complete)
           setSnapshotLoading(false)
-          if (!complete) {
+          if (!snapshot.complete) {
             timer = setTimeout(poll, 1000)
           }
         })
@@ -1363,7 +1324,6 @@ function IncidentDetail({
       mounted = false
       if (timer) clearTimeout(timer)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- incident.timestamp is derived from incident.id; refetch only on id change
   }, [incident.id])
 
   const [editing, setEditing] = useState(false)

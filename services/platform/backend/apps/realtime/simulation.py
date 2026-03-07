@@ -46,12 +46,13 @@ def get_simulation_incidents() -> list:
 def get_simulation_snapshot(incident_id: str) -> dict | None:
     """Get recorded snapshot for a simulated incident, or None.
 
-    Returns {"detections": [...], "complete": bool} or None.
+    Returns {"points": [...], "complete": bool} or None.
+    Each point: {"time": epoch_ms, "speed": float|null, "flow": int|null, "occupancy": float|null}
     """
     with _simulation_snapshots_lock:
         entry = _simulation_snapshots.get(incident_id)
         if entry is not None:
-            return {"detections": list(entry["detections"]), "complete": entry["complete"]}
+            return {"points": list(entry["points"]), "complete": entry["complete"]}
         return None
 
 
@@ -64,11 +65,46 @@ def _update_simulation_incidents_cache(incidents: list):
         _simulation_incidents_cache = [transform_simulation_incident(i) for i in incidents]
 
 
+def _buckets_to_points(snap: dict, now_ms: float) -> list[dict]:
+    """Convert aggregation buckets to time-series points.
+
+    Skips the bucket currently being filled (partial second) to avoid
+    showing artificially low values that get corrected on the next poll.
+    """
+    start_ms = snap["start_ms"]
+    # Bucket index of the current (incomplete) second
+    current_bucket = int((now_ms - start_ms) / 1000) if not snap["complete"] else -1
+    points = []
+    for s in range(SNAPSHOT_WINDOW_S * 2):
+        b = snap["buckets"][s]
+        t = start_ms + s * 1000
+        if s == current_bucket or b["speed_count"] == 0:
+            points.append({"time": t, "speed": None, "flow": None, "occupancy": None})
+        else:
+            avg_speed = round(b["speed_sum"] / b["speed_count"])
+            flow = b["vehicle_count"]
+            speed_ms = avg_speed * (1000 / 3600)
+            occupancy = (
+                min(100, round((flow * 3600 * AVG_VEHICLE_LENGTH_M) / (speed_ms * 1000)))
+                if speed_ms > 0
+                else None
+            )
+            points.append({"time": t, "speed": avg_speed, "flow": flow, "occupancy": occupancy})
+    return points
+
+
 def _update_simulation_snapshots(snapshots: dict[str, dict]):
-    """Replace the global snapshots cache with the engine's current state."""
+    """Replace the global snapshots cache with the engine's aggregated points."""
     global _simulation_snapshots
+    now_ms = time.time() * 1000
+    converted = {}
+    for iid, snap in snapshots.items():
+        converted[iid] = {
+            "points": _buckets_to_points(snap, now_ms),
+            "complete": snap["complete"],
+        }
     with _simulation_snapshots_lock:
-        _simulation_snapshots = snapshots
+        _simulation_snapshots = converted
 
 
 # ============================================================================
@@ -225,8 +261,8 @@ INCIDENT_CONFIGS: list[_IncidentConfig] = [
 SEVERITIES = ["low", "medium", "high", "critical"]
 
 SNAPSHOT_CHANNEL_RADIUS = 100  # ±100 channels (~1km) around incident center
-SNAPSHOT_MAX_DETECTIONS = 10000  # Max detections stored per incident
 SNAPSHOT_WINDOW_S = 60  # Record ±60s around incident detected_at
+AVG_VEHICLE_LENGTH_M = 6  # For occupancy estimation
 
 INFRA_BASE_FREQ = {"bridge": 5.0, "tunnel": 15.0}
 
@@ -717,17 +753,27 @@ class SimulationEngine:
         start_ms = inc.detected_at_ms - SNAPSHOT_WINDOW_S * 1000
         end_ms = inc.detected_at_ms + SNAPSHOT_WINDOW_S * 1000
 
-        # Seed from rolling buffer: detections near this incident's channel in the time window
+        # Pre-fill all 120 one-second buckets so the time axis is always complete
+        # Key: seconds offset from start (0..119) → {speed_sum, speed_count, vehicle_count}
+        buckets: dict[int, dict] = {}
+        for s in range(SNAPSHOT_WINDOW_S * 2):
+            buckets[s] = {"speed_sum": 0.0, "speed_count": 0, "vehicle_count": 0}
+
+        # Seed from rolling buffer: detections near this incident's channel
         ring = self._detection_ring.get(inc.fiber_line, [])
-        seed = [
-            det
-            for det in ring
-            if abs(det["channel"] - inc.channel) <= SNAPSHOT_CHANNEL_RADIUS
-            and det["timestamp"] >= start_ms
-        ]
+        for det in ring:
+            if abs(det["channel"] - inc.channel) > SNAPSHOT_CHANNEL_RADIUS:
+                continue
+            if det["timestamp"] < start_ms:
+                continue
+            s = int((det["timestamp"] - start_ms) / 1000)
+            if 0 <= s < SNAPSHOT_WINDOW_S * 2:
+                buckets[s]["speed_sum"] += det["speed"]
+                buckets[s]["speed_count"] += 1
+                buckets[s]["vehicle_count"] += det["count"]
 
         self.incident_snapshots[inc.id] = {
-            "detections": seed,
+            "buckets": buckets,
             "complete": False,
             "start_ms": start_ms,
             "end_ms": end_ms,
@@ -736,7 +782,7 @@ class SimulationEngine:
         }
 
     def _record_incident_detections(self, detections: list[Detection], now_ms: float):
-        """Record detections near active incidents for snapshot queries.
+        """Aggregate detections into 1-second snapshot buckets.
 
         Each snapshot has a fixed window: detected_at ± SNAPSHOT_WINDOW_S.
         Pre-incident data is seeded from the rolling detection buffer.
@@ -751,42 +797,30 @@ class SimulationEngine:
         for inc in self.incidents:
             snap = self.incident_snapshots.get(inc.id)
             if snap is None:
-                continue  # Not yet initialized (happens in tick() after creation)
+                continue
 
             if snap["complete"]:
                 continue
 
-            # Mark complete once we've passed the end of the window
             if now_ms > snap["end_ms"]:
                 snap["complete"] = True
                 continue
 
-            buf = snap["detections"]
+            buckets = snap["buckets"]
+            start_ms = snap["start_ms"]
 
-            # Capture detections within ±SNAPSHOT_CHANNEL_RADIUS and inside the time window
             for d in detections:
                 if d.fiber_line != snap["fiber_line"]:
                     continue
                 if abs(d.channel - snap["channel"]) > SNAPSHOT_CHANNEL_RADIUS:
                     continue
-                if d.timestamp < snap["start_ms"] or d.timestamp > snap["end_ms"]:
+                if d.timestamp < start_ms or d.timestamp > snap["end_ms"]:
                     continue
-                buf.append(
-                    {
-                        "fiberLine": f"{d.fiber_line}:{d.direction}",
-                        "channel": d.channel,
-                        "speed": round(d.speed, 1),
-                        "count": d.count,
-                        "nCars": d.n_cars,
-                        "nTrucks": d.n_trucks,
-                        "direction": d.direction,
-                        "timestamp": d.timestamp,
-                    }
-                )
-
-            # Cap total size
-            if len(buf) > SNAPSHOT_MAX_DETECTIONS:
-                snap["detections"] = buf[-SNAPSHOT_MAX_DETECTIONS:]
+                s = int((d.timestamp - start_ms) / 1000)
+                if 0 <= s < SNAPSHOT_WINDOW_S * 2:
+                    buckets[s]["speed_sum"] += d.speed
+                    buckets[s]["speed_count"] += 1
+                    buckets[s]["vehicle_count"] += d.count
 
     def generate_shm_readings(self) -> list[SHMReading]:
         """Generate SHM frequency readings for all infrastructure."""
@@ -959,12 +993,7 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
         # Sync snapshot cache every 20 ticks (1s) so frontend polling gets fresh data
         if snapshot_counter >= 20:
             snapshot_counter = 0
-            _update_simulation_snapshots(
-                {
-                    iid: {"detections": list(snap["detections"]), "complete": snap["complete"]}
-                    for iid, snap in engine.incident_snapshots.items()
-                }
-            )
+            _update_simulation_snapshots(engine.incident_snapshots)
 
         # Broadcast incidents every 100 ticks (5 seconds) — per-org
         if incident_counter >= 100:

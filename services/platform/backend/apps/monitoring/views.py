@@ -229,27 +229,32 @@ class IncidentSnapshotView(APIView):
         center_ch = (incident["channel_start"] + incident["channel_end"]) // 2
         ts_ns = incident["timestamp_ns"]
 
+        # Aggregate into 1-second buckets server-side
+        window_start_ns = ts_ns - 60_000_000_000
+        window_end_ns = ts_ns + 60_000_000_000
         try:
-            detection_rows = query(
+            agg_rows = query(
                 """
                 SELECT
-                    fiber_id, ch, speed, direction,
-                    vehicle_count, n_cars, n_trucks,
-                    toUnixTimestamp64Milli(ts) AS timestamp
+                    toUnixTimestamp64Milli(
+                        toStartOfInterval(ts, INTERVAL 1 second)
+                    ) AS bucket_ms,
+                    avg(abs(speed)) AS avg_speed,
+                    sum(vehicle_count) AS total_count
                 FROM sequoia.detection_hires
                 WHERE fiber_id = {fid:String}
                   AND ch BETWEEN {ch_min:UInt16} AND {ch_max:UInt16}
                   AND ts BETWEEN fromUnixTimestamp64Nano({ts_start:UInt64})
                               AND fromUnixTimestamp64Nano({ts_end:UInt64})
-                ORDER BY ts
-                LIMIT 50000
+                GROUP BY bucket_ms
+                ORDER BY bucket_ms
                 """,
                 parameters={
                     "fid": fiber_id,
                     "ch_min": max(0, center_ch - 50),
                     "ch_max": center_ch + 50,
-                    "ts_start": ts_ns - 60_000_000_000,
-                    "ts_end": ts_ns + 60_000_000_000,
+                    "ts_start": window_start_ns,
+                    "ts_end": window_end_ns,
                 },
             )
         except ClickHouseUnavailableError:
@@ -257,23 +262,33 @@ class IncidentSnapshotView(APIView):
                 {"detail": "ClickHouse unavailable", "code": "clickhouse_unavailable"}, status=503
             )
 
-        detections = []
-        for row in detection_rows:
-            # Map AI engine direction (1=fwd, 2=rev) to frontend (0, 1)
-            raw_direction = row.get("direction", 0)
-            direction = max(0, raw_direction - 1)  # 1->0, 2->1, 0->0
-            detections.append(
-                {
-                    "fiberLine": f"{row['fiber_id']}:{direction}",
-                    "channel": row["ch"],
-                    "speed": abs(row["speed"]),
-                    "count": row.get("vehicle_count", 1),
-                    "nCars": row.get("n_cars", 0),
-                    "nTrucks": row.get("n_trucks", 0),
-                    "direction": direction,
-                    "timestamp": row["timestamp"],
-                }
+        # Build lookup from aggregated rows
+        avg_vehicle_length_m = 6
+        bucket_lookup = {}
+        for row in agg_rows:
+            avg_spd = round(row["avg_speed"])
+            flow = int(row["total_count"])
+            speed_ms = avg_spd * (1000 / 3600)
+            occ = (
+                min(100, round((flow * 3600 * avg_vehicle_length_m) / (speed_ms * 1000)))
+                if speed_ms > 0
+                else None
             )
+            bucket_lookup[int(row["bucket_ms"])] = {
+                "speed": avg_spd,
+                "flow": flow,
+                "occupancy": occ,
+            }
+
+        # Fill all 120 second slots
+        window_start_ms = ts_ns // 1_000_000 - 60_000
+        points = []
+        for s in range(120):
+            t = window_start_ms + s * 1000
+            if t in bucket_lookup:
+                points.append({"time": t, **bucket_lookup[t]})
+            else:
+                points.append({"time": t, "speed": None, "flow": None, "occupancy": None})
 
         return Response(
             {
@@ -281,7 +296,7 @@ class IncidentSnapshotView(APIView):
                 "fiberLine": _ensure_directional_fiber_id(fiber_id),
                 "centerChannel": center_ch,
                 "capturedAt": int(time.time() * 1000),
-                "detections": detections,
+                "points": points,
                 "complete": True,
             }
         )
@@ -304,7 +319,7 @@ class IncidentSnapshotView(APIView):
                 return None
 
         snapshot = get_simulation_snapshot(incident_id)
-        detections = snapshot["detections"] if snapshot else []
+        points = snapshot["points"] if snapshot else []
         complete = snapshot["complete"] if snapshot else True
 
         return {
@@ -312,7 +327,7 @@ class IncidentSnapshotView(APIView):
             "fiberLine": sim_incident["fiberLine"],
             "centerChannel": sim_incident["channel"],
             "capturedAt": int(time.time() * 1000),
-            "detections": detections,
+            "points": points,
             "complete": complete,
         }
 
