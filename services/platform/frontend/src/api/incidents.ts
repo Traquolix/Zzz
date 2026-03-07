@@ -1,4 +1,5 @@
 import { apiPaginatedRequest, apiRequest, type PaginatedResponse } from './client'
+import type { DataFlow } from '@/context/RealtimeContext'
 import type { Incident, IncidentSnapshot, IncidentActionHistory, IncidentAction } from '@/types/incident'
 
 /**
@@ -12,8 +13,9 @@ export async function fetchIncidents(): Promise<PaginatedResponse<Incident>> {
 /**
  * Fetch snapshot data for a specific incident.
  */
-export async function fetchIncidentSnapshot(incidentId: string): Promise<IncidentSnapshot> {
-  return apiRequest<IncidentSnapshot>(`/api/incidents/${incidentId}/snapshot`)
+export async function fetchIncidentSnapshot(incidentId: string, flow?: DataFlow): Promise<IncidentSnapshot> {
+  const params = flow ? `?flow=${flow}` : ''
+  return apiRequest<IncidentSnapshot>(`/api/incidents/${incidentId}/snapshot${params}`)
 }
 
 /**

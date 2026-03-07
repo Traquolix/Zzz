@@ -1272,6 +1272,8 @@ function IncidentDetail({
   dispatch: React.Dispatch<ProtoAction>
   onBack: () => void
 }) {
+  const { flow } = useRealtime()
+
   // Find containing section by channel range
   const relatedSection = sections.find(
     s => s.fiberId === incident.fiberId && incident.channel >= s.startChannel && incident.channel <= s.endChannel,
@@ -1292,7 +1294,7 @@ function IncidentDetail({
       d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
 
     const poll = () => {
-      fetchIncidentSnapshot(incident.id)
+      fetchIncidentSnapshot(incident.id, flow)
         .then(snapshot => {
           if (!mounted) return
           // Backend returns pre-aggregated 1-second points with epoch ms timestamps
@@ -1324,7 +1326,7 @@ function IncidentDetail({
       mounted = false
       if (timer) clearTimeout(timer)
     }
-  }, [incident.id])
+  }, [incident.id, flow])
 
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(incident.description)

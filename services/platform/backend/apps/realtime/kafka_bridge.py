@@ -333,7 +333,7 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
     )
     consumer.subscribe(["das.detections"])
 
-    cache.set("kafka_available", True)
+    cache.set("kafka_available", True, timeout=None)
     logger.info(
         "Kafka bridge started (time-shifted replay): %s, topic: das.detections, %d org mappings",
         bootstrap_servers,
@@ -443,7 +443,7 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
     except KeyboardInterrupt:
         logger.info("Kafka bridge shutting down...")
     finally:
-        cache.set("kafka_available", False)
+        cache.set("kafka_available", False, timeout=None)
         replay_buffer.stop()
         drain_task.cancel()
         try:

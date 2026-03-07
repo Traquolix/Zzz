@@ -189,9 +189,11 @@ class IncidentSnapshotView(APIView):
     )
     def get(self, request, incident_id):
         # Check simulation cache first (fast path, no ClickHouse needed)
-        sim_snapshot = self._get_simulation_snapshot(request, incident_id)
-        if sim_snapshot is not None:
-            return Response(sim_snapshot)
+        # Skip sim cache when client is explicitly on the live flow
+        if request.query_params.get("flow") != "live":
+            sim_snapshot = self._get_simulation_snapshot(request, incident_id)
+            if sim_snapshot is not None:
+                return Response(sim_snapshot)
 
         try:
             incident_rows = query(
