@@ -55,8 +55,8 @@ export default function TimeSeriesChartInner({ data, metric, config, timeRange, 
             strokeWidth={1.5}
             dot={false}
             activeDot={{ r: 2.5, fill: config.color }}
-            isAnimationActive={false}
             connectNulls
+            isAnimationActive={false}
           />
         </LineChart>
       </ResponsiveContainer>

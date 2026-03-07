@@ -1512,8 +1512,8 @@ function IncidentDetail({
             )}
           </h3>
           {snapshotLoading ? (
-            <div className="text-xs text-[var(--proto-text-muted)] animate-pulse py-4 text-center">
-              Loading snapshot...
+            <div className="h-[200px] rounded bg-[var(--proto-surface)] animate-pulse flex items-center justify-center">
+              <span className="text-xs text-[var(--proto-text-muted)]">Loading snapshot...</span>
             </div>
           ) : snapshotData ? (
             <TimeSeriesChart
