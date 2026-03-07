@@ -607,7 +607,13 @@ class SimulationEngine:
             if random.random() > cfg["prob"] * hours_frac:
                 continue
             fiber = random.choice(self.fibers)
-            ch = random.randint(10, max(11, fiber.channel_count - 10))
+            # Place incident near an existing vehicle so snapshots have data
+            fiber_vehicles = [v for v in self.vehicles if v.fiber_line == fiber.id]
+            if fiber_vehicles:
+                target = random.choice(fiber_vehicles)
+                ch = max(10, min(fiber.channel_count - 10, round(target.channel)))
+            else:
+                continue  # No vehicles on this fiber — skip
             severity = _weighted_choice(SEVERITIES, cfg["weights"])
             dur = (cfg["dur"][0] + random.random() * (cfg["dur"][1] - cfg["dur"][0])) / 15
             dur = max(dur, 120_000)  # Minimum 2 minutes real-time so incidents are visible

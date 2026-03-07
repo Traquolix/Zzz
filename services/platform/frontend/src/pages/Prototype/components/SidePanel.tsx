@@ -1314,14 +1314,25 @@ function IncidentDetail({
         }
       }
 
+      const AVG_VEHICLE_LENGTH = 6 // meters
       const points = [...slotMap.entries()]
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([time, { speeds, count }]) => ({
-          time,
-          speed: speeds.length > 0 ? Math.round(speeds.reduce((a, b) => a + b, 0) / speeds.length) : undefined,
-          flow: count || undefined,
-          occupancy: undefined,
-        }))
+        .map(([time, { speeds, count }]) => {
+          const avgSpeed = speeds.length > 0 ? speeds.reduce((a, b) => a + b, 0) / speeds.length : undefined
+          // Occupancy = (flow_veh/h × vehicle_length_m) / (speed_m/s × 1000)
+          let occupancy: number | undefined
+          if (avgSpeed && avgSpeed > 0 && count > 0) {
+            const flowPerHour = count * 3600 // 1-second bucket → veh/h
+            const speedMs = avgSpeed * (1000 / 3600)
+            occupancy = Math.min(100, Math.round((flowPerHour * AVG_VEHICLE_LENGTH) / (speedMs * 1000)))
+          }
+          return {
+            time,
+            speed: avgSpeed !== undefined ? Math.round(avgSpeed) : undefined,
+            flow: count || undefined,
+            occupancy,
+          }
+        })
       return { points, complete: snapshot.complete }
     }
 
