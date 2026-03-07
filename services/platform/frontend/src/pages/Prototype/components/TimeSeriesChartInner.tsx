@@ -16,7 +16,7 @@ export default function TimeSeriesChartInner({ data, metric, config, timeRange, 
     : undefined
   return (
     <div className="h-[200px]">
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
         <LineChart data={data} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
           <CartesianGrid stroke="var(--proto-chart-grid, rgba(255,255,255,0.03))" strokeDasharray="3 3" />
           <XAxis

@@ -224,8 +224,8 @@ INCIDENT_CONFIGS: list[_IncidentConfig] = [
 ]
 SEVERITIES = ["low", "medium", "high", "critical"]
 
-SNAPSHOT_CHANNEL_RADIUS = 50  # ±50 channels around incident center
-SNAPSHOT_MAX_DETECTIONS = 5000  # Max detections stored per incident
+SNAPSHOT_CHANNEL_RADIUS = 100  # ±100 channels (~1km) around incident center
+SNAPSHOT_MAX_DETECTIONS = 10000  # Max detections stored per incident
 SNAPSHOT_WINDOW_S = 60  # Record ±60s around incident detected_at
 
 INFRA_BASE_FREQ = {"bridge": 5.0, "tunnel": 15.0}
