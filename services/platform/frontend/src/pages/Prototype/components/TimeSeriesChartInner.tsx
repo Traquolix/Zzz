@@ -1,3 +1,4 @@
+import { useRef, useState, useEffect } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import type { TimeSeriesPoint } from '../types'
 
@@ -14,52 +15,76 @@ export default function TimeSeriesChartInner({ data, metric, config, timeRange, 
   const tickFormatter = stripSeconds
     ? (value: string) => value?.slice(0, 5) // "HH:MM:SS" → "HH:MM"
     : undefined
+
+  // Defer rendering until the container has positive dimensions to prevent
+  // Recharts "width(-1) height(-1)" warnings on hidden/collapsed panels
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [visible, setVisible] = useState(false)
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    if (el.clientWidth > 0 && el.clientHeight > 0) {
+      setVisible(true)
+      return
+    }
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+        setVisible(true)
+        observer.disconnect()
+      }
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
   return (
-    <div className="h-[200px]">
-      <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-        <LineChart data={data} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
-          <CartesianGrid stroke="var(--proto-chart-grid, rgba(255,255,255,0.03))" strokeDasharray="3 3" />
-          <XAxis
-            dataKey="time"
-            tick={{ fill: '#64748b', fontSize: 10 }}
-            tickLine={false}
-            axisLine={false}
-            interval={Math.max(0, Math.floor(data.length / 6) - 1)}
-            tickFormatter={tickFormatter}
-          />
-          <YAxis tick={{ fill: '#64748b', fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: '#2b2d31',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: 8,
-              fontSize: 12,
-              color: '#e2e8f0',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-            }}
-            formatter={(value: number | undefined) => [`${value ?? 0} ${config.unit}`, config.label]}
-          />
-          {incidentTime && (
-            <ReferenceLine
-              x={incidentTime}
-              stroke="var(--proto-red, #ef4444)"
-              strokeDasharray="4 3"
-              strokeWidth={1.5}
-              label={{ value: 'Incident', position: 'top', fill: 'var(--proto-red, #ef4444)', fontSize: 9 }}
+    <div ref={containerRef} className="h-[200px]">
+      {visible && (
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
+            <CartesianGrid stroke="var(--proto-chart-grid, rgba(255,255,255,0.03))" strokeDasharray="3 3" />
+            <XAxis
+              dataKey="time"
+              tick={{ fill: '#64748b', fontSize: 10 }}
+              tickLine={false}
+              axisLine={false}
+              interval={Math.max(0, Math.floor(data.length / 6) - 1)}
+              tickFormatter={tickFormatter}
             />
-          )}
-          <Line
-            type="monotone"
-            dataKey={metric}
-            stroke={config.color}
-            strokeWidth={1.5}
-            dot={false}
-            activeDot={{ r: 2.5, fill: config.color }}
-            connectNulls
-            isAnimationActive={false}
-          />
-        </LineChart>
-      </ResponsiveContainer>
+            <YAxis tick={{ fill: '#64748b', fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#2b2d31',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 8,
+                fontSize: 12,
+                color: '#e2e8f0',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              }}
+              formatter={(value: number | undefined) => [`${value ?? 0} ${config.unit}`, config.label]}
+            />
+            {incidentTime && (
+              <ReferenceLine
+                x={incidentTime}
+                stroke="var(--proto-red, #ef4444)"
+                strokeDasharray="4 3"
+                strokeWidth={1.5}
+                label={{ value: 'Incident', position: 'top', fill: 'var(--proto-red, #ef4444)', fontSize: 9 }}
+              />
+            )}
+            <Line
+              type="monotone"
+              dataKey={metric}
+              stroke={config.color}
+              strokeWidth={1.5}
+              dot={false}
+              activeDot={{ r: 2.5, fill: config.color }}
+              connectNulls
+              isAnimationActive={false}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
     </div>
   )
 }
