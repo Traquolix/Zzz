@@ -28,6 +28,7 @@ import time
 
 from channels.layers import get_channel_layer
 from django.conf import settings
+from django.core.cache import cache
 
 from apps.alerting.integration import check_alerts_for_detections, check_alerts_for_incident
 from apps.shared.constants import MAP_REFRESH_INTERVAL
@@ -332,7 +333,7 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
     )
     consumer.subscribe(["das.detections"])
 
-    settings.KAFKA_AVAILABLE = True
+    cache.set("kafka_available", True)
     logger.info(
         "Kafka bridge started (time-shifted replay): %s, topic: das.detections, %d org mappings",
         bootstrap_servers,
@@ -442,7 +443,7 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
     except KeyboardInterrupt:
         logger.info("Kafka bridge shutting down...")
     finally:
-        settings.KAFKA_AVAILABLE = False
+        cache.set("kafka_available", False)
         replay_buffer.stop()
         drain_task.cancel()
         try:

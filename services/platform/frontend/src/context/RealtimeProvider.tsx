@@ -18,7 +18,6 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
   const [authFailed, setAuthFailed] = useState(false)
   const [flow, setFlowState] = useState<DataFlow>('sim')
   const flowRef = useRef<DataFlow>('sim')
-  const availableFlowsRef = useRef<DataFlow[]>(['sim'])
   const [availableFlows, setAvailableFlows] = useState<DataFlow[]>(['sim'])
   const flowChangeCallbacksRef = useRef<Set<(flow: DataFlow) => void>>(new Set())
   const subscriptionsRef = useRef<Map<string, Set<(data: unknown) => void>>>(new Map())
@@ -164,7 +163,6 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
 
               // Read available flows from auth response
               const flows: DataFlow[] = parsed.available_flows ?? ['sim']
-              availableFlowsRef.current = flows
               setAvailableFlows(flows)
 
               // Default to 'live' if available, else 'sim'

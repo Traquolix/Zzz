@@ -151,6 +151,12 @@
     "avg": "Moy",
     "max": "Max"
   },
+  "flow": {
+    "live": "Live",
+    "sim": "Sim",
+    "unavailable": "Source de données {{label}} indisponible",
+    "switchTo": "Basculer vers les données {{label}}"
+  },
   "chart": {
     "scatter": "Dispersion",
     "occupancy": "Remplissage"

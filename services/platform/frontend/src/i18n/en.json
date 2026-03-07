@@ -151,6 +151,12 @@
     "avg": "Avg",
     "max": "Max"
   },
+  "flow": {
+    "live": "Live",
+    "sim": "Sim",
+    "unavailable": "{{label}} data source unavailable",
+    "switchTo": "Switch to {{label}} data"
+  },
   "chart": {
     "scatter": "Scatter",
     "occupancy": "Occupancy"

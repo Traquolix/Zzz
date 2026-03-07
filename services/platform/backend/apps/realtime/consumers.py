@@ -25,7 +25,7 @@ import time
 
 from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
-from django.conf import settings
+from django.core.cache import cache
 from django.core.exceptions import ObjectDoesNotExist
 
 from apps.shared.exceptions import ClickHouseUnavailableError
@@ -269,7 +269,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         WEBSOCKET_CONNECTIONS.inc()
 
         available_flows = ["sim"]
-        if getattr(settings, "KAFKA_AVAILABLE", False):
+        if cache.get("kafka_available", False):
             available_flows.append("live")
 
         logger.debug("WebSocket client authenticated: %s (org=%s)", user.username, self._org_id)

@@ -10,6 +10,7 @@ import time
 
 from django.core.cache import cache as django_cache
 from drf_spectacular.utils import OpenApiParameter, extend_schema
+from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -153,9 +154,10 @@ class IncidentListView(APIView):
                 except ImportError:
                     pass
             if incidents is None:
-                # ClickHouse is down and simulation has no incidents yet —
-                # return empty rather than 503 to avoid console errors on page load.
-                incidents = []
+                return Response(
+                    {"detail": "ClickHouse unavailable", "code": "clickhouse_unavailable"},
+                    status=503,
+                )
 
         has_more = len(incidents) > limit
         page = incidents[:limit]
@@ -316,7 +318,7 @@ class IncidentSnapshotView(APIView):
         if fiber_ids is not None:
             plain_fid = strip_directional_suffix(sim_incident["fiberLine"])
             if plain_fid not in fiber_ids:
-                return None
+                raise NotFound({"detail": "Incident not found", "code": "incident_not_found"})
 
         snapshot = get_simulation_snapshot(incident_id)
         points = snapshot["points"] if snapshot else []

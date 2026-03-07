@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import type { DataFlow } from '@/context/RealtimeContext'
 
@@ -7,9 +8,10 @@ interface FlowToggleProps {
   onToggle: (flow: DataFlow) => void
 }
 
-const labels: Record<DataFlow, string> = { live: 'Live', sim: 'Sim' }
+const flowKeys: Record<DataFlow, string> = { live: 'flow.live', sim: 'flow.sim' }
 
 export function FlowToggle({ flow, availableFlows, onToggle }: FlowToggleProps) {
+  const { t } = useTranslation()
   const options: DataFlow[] = ['live', 'sim']
 
   return (
@@ -17,12 +19,13 @@ export function FlowToggle({ flow, availableFlows, onToggle }: FlowToggleProps) 
       {options.map(opt => {
         const active = flow === opt
         const disabled = !availableFlows.includes(opt)
+        const label = t(flowKeys[opt])
         return (
           <button
             key={opt}
             onClick={() => !disabled && onToggle(opt)}
             disabled={disabled}
-            title={disabled ? `${labels[opt]} data source unavailable` : `Switch to ${labels[opt]} data`}
+            title={disabled ? t('flow.unavailable', { label }) : t('flow.switchTo', { label })}
             className={cn(
               'px-2.5 py-0.5 text-[11px] font-medium rounded transition-colors cursor-pointer',
               active && 'bg-[var(--proto-surface-raised)] text-[var(--proto-text)]',
@@ -38,7 +41,7 @@ export function FlowToggle({ flow, availableFlows, onToggle }: FlowToggleProps) 
                 )}
               />
             )}
-            {labels[opt]}
+            {label}
           </button>
         )
       })}
