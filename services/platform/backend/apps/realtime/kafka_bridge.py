@@ -340,11 +340,11 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
     )
 
     # State for incident polling and SHM
-    shm_state = {}
+    shm_state: dict[str, dict] = {}
     last_incident_check = time.time()
     known_incident_ids: dict[str, str] = {}  # {incident_id: fiberLine}
-    last_shm_broadcast = 0
-    last_batch_cleanup = 0
+    last_shm_broadcast: float = 0
+    last_batch_cleanup: float = 0
 
     # Start the replay drain task
     drain_task = asyncio.create_task(replay_buffer.drain(broadcast))

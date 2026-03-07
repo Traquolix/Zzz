@@ -18,7 +18,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, TypedDict
 
 from channels.layers import get_channel_layer
 
@@ -180,7 +180,23 @@ DAILY_TRAFFIC = [
 
 BASE_SPAWN_RATES = {"low": 4, "medium": 10, "high": 20}
 
-INCIDENT_CONFIGS = [
+
+class _IncidentConfig(TypedDict):
+    type: str
+    prob: float
+    dur: tuple[int, int]
+    weights: list[float]
+
+
+class _SpawnPoint(TypedDict):
+    fiber: str
+    ch: int
+    dir: int
+    rate: float
+    last: float
+
+
+INCIDENT_CONFIGS: list[_IncidentConfig] = [
     {
         "type": "slowdown",
         "prob": 0.3,
@@ -215,7 +231,7 @@ SNAPSHOT_WINDOW_S = 60  # Record ±60s around incident detected_at
 INFRA_BASE_FREQ = {"bridge": 5.0, "tunnel": 15.0}
 
 
-def _weighted_choice(items, weights):
+def _weighted_choice(items: list[str], weights: list[float]) -> str:
     total = sum(weights)
     r = random.random() * total
     for item, w in zip(items, weights):
@@ -479,7 +495,7 @@ class SimulationEngine:
             self.shm_phase[iid] = random.random() * math.pi * 2
 
         # Spawn points
-        self.spawn_points = []
+        self.spawn_points: list[_SpawnPoint] = []
         for fiber in fibers:
             rate = BASE_SPAWN_RATES.get(fiber.traffic_density, 10)
             self.spawn_points.append(
@@ -568,8 +584,8 @@ class SimulationEngine:
         self._record_incident_detections(detections, now_ms)
 
         # Resolve expired incidents + maybe create new ones
-        new_incidents = []
-        resolved_incidents = []
+        new_incidents: list[Incident] = []
+        resolved_incidents: list[Incident] = []
 
         for inc in self.incidents:
             if inc.status == "active" and inc.duration:
@@ -890,7 +906,7 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
             # Check alerts for detections (per-org)
             org_detections: dict[str, list[dict]] = {}
             for det in detection_dicts:
-                fid = det.get("fiberLine", "")
+                fid = str(det.get("fiberLine", ""))
                 parent_fid = fid.rsplit(":", 1)[0] if ":" in fid else fid
                 for org_id in fiber_org_map.get(parent_fid, []):
                     org_detections.setdefault(org_id, []).append(det)
@@ -914,7 +930,7 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
                 # Group SHM readings by org based on infrastructure ownership
                 org_shm: dict[str, list[dict]] = {}
                 for shm in shm_dicts:
-                    org_id = infra_org_map.get(shm["infrastructureId"], "")
+                    org_id = infra_org_map.get(str(shm["infrastructureId"]), "")
                     if org_id:
                         org_shm.setdefault(org_id, []).append(shm)
 

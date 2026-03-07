@@ -1279,7 +1279,7 @@ function IncidentDetail({
 
   // Fetch snapshot data from API — polls every 1s until snapshot is complete
   const [snapshotData, setSnapshotData] = useState<
-    { time: string; speed: number; flow: number; occupancy: number }[] | null
+    { time: string; speed?: number; flow?: number; occupancy?: number }[] | null
   >(null)
   const [snapshotLoading, setSnapshotLoading] = useState(false)
   const [snapshotComplete, setSnapshotComplete] = useState(false)
@@ -1288,32 +1288,39 @@ function IncidentDetail({
     let mounted = true
     let timer: ReturnType<typeof setTimeout> | null = null
 
+    const formatTime = (d: Date) =>
+      d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+
     const processSnapshot = (snapshot: import('@/types/incident').IncidentSnapshot) => {
-      // Group detections by second, compute avg speed and count
-      const bySecond = new Map<string, { speeds: number[]; count: number }>()
-      for (const d of snapshot.detections) {
-        const t = new Date(d.timestamp)
-        const key = t.toLocaleTimeString([], {
-          hour: '2-digit',
-          minute: '2-digit',
-          second: '2-digit',
-          hour12: false,
-        })
-        let bucket = bySecond.get(key)
-        if (!bucket) {
-          bucket = { speeds: [], count: 0 }
-          bySecond.set(key, bucket)
-        }
-        bucket.speeds.push(d.speed)
-        bucket.count += d.count
+      // Build the full 2-minute window (incident ± 60s) so the X-axis is fixed
+      // and the incident marker stays centered from the start
+      const incidentMs = new Date(incident.timestamp).getTime()
+      const windowStart = incidentMs - 60_000
+      const windowEnd = incidentMs + 60_000
+
+      // Pre-fill all 120 seconds as empty slots
+      const slotMap = new Map<string, { speeds: number[]; count: number }>()
+      for (let ms = windowStart; ms < windowEnd; ms += 1000) {
+        slotMap.set(formatTime(new Date(ms)), { speeds: [], count: 0 })
       }
-      const points = [...bySecond.entries()]
+
+      // Merge actual detection data into the slots
+      for (const d of snapshot.detections) {
+        const key = formatTime(new Date(d.timestamp))
+        const bucket = slotMap.get(key)
+        if (bucket) {
+          bucket.speeds.push(d.speed)
+          bucket.count += d.count
+        }
+      }
+
+      const points = [...slotMap.entries()]
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([time, { speeds, count }]) => ({
           time,
-          speed: Math.round(speeds.reduce((a, b) => a + b, 0) / speeds.length),
-          flow: count,
-          occupancy: 0,
+          speed: speeds.length > 0 ? Math.round(speeds.reduce((a, b) => a + b, 0) / speeds.length) : undefined,
+          flow: count || undefined,
+          occupancy: undefined,
         }))
       return { points, complete: snapshot.complete }
     }
@@ -1323,7 +1330,7 @@ function IncidentDetail({
         .then(snapshot => {
           if (!mounted) return
           const { points, complete } = processSnapshot(snapshot)
-          setSnapshotData(points.length > 0 ? points : null)
+          setSnapshotData(points)
           setSnapshotComplete(complete)
           setSnapshotLoading(false)
           if (!complete) {
@@ -1345,6 +1352,7 @@ function IncidentDetail({
       mounted = false
       if (timer) clearTimeout(timer)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- incident.timestamp is derived from incident.id; refetch only on id change
   }, [incident.id])
 
   const [editing, setEditing] = useState(false)
@@ -1555,6 +1563,7 @@ function ThresholdEditor({
   // Sync draft when thresholds change externally (e.g. switching sections)
   useEffect(() => {
     setDraft(thresholds)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- list individual fields to avoid re-render when object ref changes but values are the same
   }, [thresholds.green, thresholds.yellow, thresholds.orange])
 
   const fields: { key: keyof SpeedThresholds; label: string; color: string }[] = [
@@ -3316,6 +3325,11 @@ function ComparisonSection({
   }, [mode, referenceDate])
 
   // Fetch comparison data
+  const rangeAFromMs = rangeA.from.getTime()
+  const rangeAToMs = rangeA.to.getTime()
+  const rangeBFromMs = rangeB.from.getTime()
+  const rangeBToMs = rangeB.to.getTime()
+
   useEffect(() => {
     let cancelled = false
     setWindowA({ data: null, loading: true })
@@ -3329,7 +3343,8 @@ function ComparisonSection({
     return () => {
       cancelled = true
     }
-  }, [rangeA.from.getTime(), rangeA.to.getTime()])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rangeA.from/to are Date objects; use ms timestamps for stable comparison
+  }, [rangeAFromMs, rangeAToMs])
 
   useEffect(() => {
     let cancelled = false
@@ -3344,7 +3359,8 @@ function ComparisonSection({
     return () => {
       cancelled = true
     }
-  }, [rangeB.from.getTime(), rangeB.to.getTime()])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- rangeB.from/to are Date objects; use ms timestamps for stable comparison
+  }, [rangeBFromMs, rangeBToMs])
 
   // Stats
   const stats = useMemo(() => {

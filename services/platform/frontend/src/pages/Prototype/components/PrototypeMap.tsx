@@ -90,6 +90,10 @@ const getPosition = (d: VehiclePosition) => d.position
 const getOrientation = (d: VehiclePosition): [number, number, number] => [0, -d.angle, 0]
 const getScale = (): [number, number, number] => [3, 6, 2]
 
+// Zoom expressions for fiber lines — module-level constants (used in addLayer + clearHighlight)
+const FIBER_WIDTH_EXPR: mapboxgl.Expression = ['interpolate', ['linear'], ['zoom'], 10, 1.5, 12, 2, 14, 2.5]
+const FIBER_OPACITY_EXPR: mapboxgl.Expression = ['interpolate', ['linear'], ['zoom'], 10, 0.5, 12.5, 0.7, 14, 0.8]
+
 export const PrototypeMap = memo(
   forwardRef<PrototypeMapHandle, PrototypeMapProps>(function PrototypeMap(
     {
@@ -187,10 +191,6 @@ export const PrototypeMap = memo(
     const onStructureClickRef = useRef(onStructureClick)
     onStructureClickRef.current = onStructureClick
 
-    // Zoom expressions for fiber lines (must match addLayer definitions)
-    const fiberWidthExpr: mapboxgl.Expression = ['interpolate', ['linear'], ['zoom'], 10, 1.5, 12, 2, 14, 2.5]
-    const fiberOpacityExpr: mapboxgl.Expression = ['interpolate', ['linear'], ['zoom'], 10, 0.5, 12.5, 0.7, 14, 0.8]
-
     const clearHighlightImpl = useCallback(() => {
       const map = mapRef.current
       if (!map) return
@@ -201,8 +201,8 @@ export const PrototypeMap = memo(
       }
       // Restore fiber layer to default zoom-driven expressions
       if (map.getLayer('fiber-lines')) {
-        map.setPaintProperty('fiber-lines', 'line-width', fiberWidthExpr)
-        map.setPaintProperty('fiber-lines', 'line-opacity', fiberOpacityExpr)
+        map.setPaintProperty('fiber-lines', 'line-width', FIBER_WIDTH_EXPR)
+        map.setPaintProperty('fiber-lines', 'line-opacity', FIBER_OPACITY_EXPR)
       }
       // Clear hover-highlight source
       const src = map.getSource('hover-highlight') as mapboxgl.GeoJSONSource | undefined

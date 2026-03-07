@@ -415,7 +415,14 @@ export function Prototype() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [state.sectionCreationMode, state.showNamingDialog, state.selectedIncidentId, state.selectedSectionId])
+  }, [
+    state.sectionCreationMode,
+    state.showNamingDialog,
+    state.selectedIncidentId,
+    state.selectedSectionId,
+    state.selectedChannel,
+    state.selectedStructureId,
+  ])
 
   return (
     <div className="prototype w-screen h-screen relative overflow-hidden">

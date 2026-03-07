@@ -56,9 +56,9 @@ export interface Incident {
 
 export interface TimeSeriesPoint {
   time: string
-  speed: number
-  flow: number
-  occupancy: number
+  speed?: number
+  flow?: number
+  occupancy?: number
 }
 
 export interface PendingPoint {
