@@ -46,6 +46,25 @@ def strip_directional_suffix(fiber_id: str) -> str:
     return fiber_id.rsplit(":", 1)[0] if ":" in fiber_id else fiber_id
 
 
+def parse_directional_fiber_id(fiber_id: str) -> tuple[str, int | None]:
+    """
+    Parse a potentially directional fiber ID into ``(parent_id, direction)``.
+
+    ``"carros:0"`` → ``("carros", 0)``
+    ``"carros"``   → ``("carros", None)``
+
+    Used by queries that need to filter ClickHouse by both ``fiber_id`` (plain)
+    and ``direction`` (separate column).
+    """
+    if ":" in fiber_id:
+        parts = fiber_id.rsplit(":", 1)
+        try:
+            return parts[0], int(parts[1])
+        except ValueError:
+            pass
+    return fiber_id, None
+
+
 # ---------------------------------------------------------------------------
 # Transform — ONE implementation for all paths
 # ---------------------------------------------------------------------------

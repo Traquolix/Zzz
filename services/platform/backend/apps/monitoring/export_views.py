@@ -20,6 +20,7 @@ from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
 from apps.fibers.utils import get_org_fiber_ids
+from apps.monitoring.incident_service import parse_directional_fiber_id
 from apps.shared.clickhouse import get_client
 from apps.shared.exceptions import ClickHouseUnavailableError
 from apps.shared.permissions import IsActiveUser
@@ -145,6 +146,9 @@ class ExportIncidentsView(APIView):
         if not _check_fiber_access(request.user, fiber_id):
             return Response({"detail": "Access denied for this fiber"}, status=403)
 
+        # Strip directional suffix — fiber_incidents uses plain fiber_id
+        parent_fid, _ = parse_directional_fiber_id(fiber_id)
+
         try:
             client = get_client()
             result = client.query(
@@ -159,7 +163,7 @@ class ExportIncidentsView(APIView):
                 ORDER BY detected_at DESC
                 LIMIT 100000
                 """,
-                parameters={"fid": fiber_id, "start": start, "end": end},
+                parameters={"fid": parent_fid, "start": start, "end": end},
             )
         except ClickHouseUnavailableError:
             return Response({"detail": "Analytics service temporarily unavailable"}, status=503)
@@ -198,27 +202,32 @@ class ExportDetectionsView(APIView):
         if tier_error:
             return Response({"detail": tier_error}, status=400)
 
+        # Parse direction from fiber_id (e.g. "carros:0" → direction 0)
+        parent_fid, direction = parse_directional_fiber_id(fiber_id)
+        dir_clause = f"AND direction = {direction}" if direction is not None else ""
+
         try:
             client = get_client()
 
             if tier == "hires":
                 result = client.query(
-                    """
+                    f"""
                     SELECT toString(ts) as ts, fiber_id, ch as channel,
                            direction, speed, vehicle_count, n_cars, n_trucks,
                            lng, lat
                     FROM sequoia.detection_hires
-                    WHERE fiber_id = {fid:String}
-                      AND ts >= {start:DateTime64(3)}
-                      AND ts <= {end:DateTime64(3)}
+                    WHERE fiber_id = {{fid:String}}
+                      AND ts >= {{start:DateTime64(3)}}
+                      AND ts <= {{end:DateTime64(3)}}
+                      {dir_clause}
                     ORDER BY ts
                     LIMIT 500000
                     """,
-                    parameters={"fid": fiber_id, "start": start, "end": end},
+                    parameters={"fid": parent_fid, "start": start, "end": end},
                 )
             elif tier == "1m":
                 result = client.query(
-                    """
+                    f"""
                     SELECT toString(ts) as ts, fiber_id, ch as channel,
                            direction,
                            avgMerge(speed_avg_state) as speed_avg,
@@ -227,18 +236,19 @@ class ExportDetectionsView(APIView):
                            sumMerge(trucks_sum_state) as n_trucks,
                            sumMerge(samples_state) as sample_count
                     FROM sequoia.detection_1m
-                    WHERE fiber_id = {fid:String}
-                      AND ts >= {start:DateTime64(3)}
-                      AND ts <= {end:DateTime64(3)}
+                    WHERE fiber_id = {{fid:String}}
+                      AND ts >= {{start:DateTime64(3)}}
+                      AND ts <= {{end:DateTime64(3)}}
+                      {dir_clause}
                     GROUP BY ts, fiber_id, ch, direction
                     ORDER BY ts
                     LIMIT 500000
                     """,
-                    parameters={"fid": fiber_id, "start": start, "end": end},
+                    parameters={"fid": parent_fid, "start": start, "end": end},
                 )
             else:  # 1h
                 result = client.query(
-                    """
+                    f"""
                     SELECT toString(ts) as ts, fiber_id, ch as channel,
                            direction,
                            avgMerge(speed_avg_state) as speed_avg,
@@ -247,14 +257,15 @@ class ExportDetectionsView(APIView):
                            sumMerge(trucks_sum_state) as n_trucks,
                            sumMerge(samples_state) as sample_count
                     FROM sequoia.detection_1h
-                    WHERE fiber_id = {fid:String}
-                      AND ts >= {start:DateTime64(3)}
-                      AND ts <= {end:DateTime64(3)}
+                    WHERE fiber_id = {{fid:String}}
+                      AND ts >= {{start:DateTime64(3)}}
+                      AND ts <= {{end:DateTime64(3)}}
+                      {dir_clause}
                     GROUP BY ts, fiber_id, ch, direction
                     ORDER BY ts
                     LIMIT 500000
                     """,
-                    parameters={"fid": fiber_id, "start": start, "end": end},
+                    parameters={"fid": parent_fid, "start": start, "end": end},
                 )
         except ClickHouseUnavailableError:
             return Response({"detail": "Analytics service temporarily unavailable"}, status=503)

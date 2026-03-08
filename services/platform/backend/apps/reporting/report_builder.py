@@ -13,6 +13,7 @@ from datetime import timedelta
 from django.template.loader import render_to_string
 from django.utils.translation import gettext as _
 
+from apps.monitoring.incident_service import parse_directional_fiber_id
 from apps.shared.clickhouse import query
 from apps.shared.exceptions import ClickHouseUnavailableError
 
@@ -71,8 +72,45 @@ def build_report_html(report) -> str:
     return str(render_to_string("reporting/report.html", context))
 
 
+def _expand_fiber_ids_for_incidents(fiber_ids: list[str]) -> list[str]:
+    """Expand fiber IDs for the incidents table, which has no direction column.
+
+    ``fiber_incidents.fiber_id`` stores plain IDs (``"carros"``), so directional
+    IDs (``"carros:0"``) must be stripped to their parent.  We also keep the
+    original in case the table ever stores directional IDs.
+    """
+    expanded = set(fiber_ids)
+    for fid in fiber_ids:
+        parent, _ = parse_directional_fiber_id(fid)
+        expanded.add(parent)
+    return list(expanded)
+
+
+def _build_direction_filter(fiber_ids: list[str]) -> tuple[list[str], str]:
+    """Build a direction clause for detection-tier queries.
+
+    Returns ``(parent_fids, dir_clause)`` where ``dir_clause`` is either empty
+    or an ``AND direction = N`` filter.  When fiber_ids contain mixed or no
+    directions, no direction filter is applied.
+    """
+    parents = set()
+    directions = set()
+    for fid in fiber_ids:
+        parent, direction = parse_directional_fiber_id(fid)
+        parents.add(parent)
+        if direction is not None:
+            directions.add(direction)
+
+    # Only filter by direction when ALL fiber_ids share the same direction
+    if len(directions) == 1:
+        d = next(iter(directions))
+        return list(parents), f"AND direction = {d}"
+    return list(parents), ""
+
+
 def _query_incidents(report) -> list[dict]:
     """Incident summary grouped by type and severity."""
+    fids = _expand_fiber_ids_for_incidents(report.fiber_ids)
     try:
         rows = query(
             """
@@ -87,7 +125,7 @@ def _query_incidents(report) -> list[dict]:
             ORDER BY total DESC
             """,
             parameters={
-                "fids": report.fiber_ids,
+                "fids": fids,
                 "start": report.start_time,
                 "end": report.end_time,
             },
@@ -108,11 +146,12 @@ def _query_incidents(report) -> list[dict]:
 def _query_speed_stats(report) -> list[dict]:
     """Average speed per fiber, using the appropriate detection tier."""
     tier = _select_tier(report.start_time, report.end_time)
+    parent_fids, dir_clause = _build_direction_filter(report.fiber_ids)
 
     try:
         if tier == "hires":
             rows = query(
-                """
+                f"""
                 SELECT
                     fiber_id,
                     round(avg(abs(speed)), 1) AS avg_speed,
@@ -120,13 +159,14 @@ def _query_speed_stats(report) -> list[dict]:
                     round(max(abs(speed)), 1) AS max_speed,
                     count() AS sample_count
                 FROM sequoia.detection_hires
-                WHERE fiber_id IN {fids:Array(String)}
-                  AND ts BETWEEN {start:DateTime64(3)} AND {end:DateTime64(3)}
+                WHERE fiber_id IN {{fids:Array(String)}}
+                  AND ts BETWEEN {{start:DateTime64(3)}} AND {{end:DateTime64(3)}}
+                  {dir_clause}
                 GROUP BY fiber_id
                 ORDER BY fiber_id
                 """,
                 parameters={
-                    "fids": report.fiber_ids,
+                    "fids": parent_fids,
                     "start": report.start_time,
                     "end": report.end_time,
                 },
@@ -144,11 +184,12 @@ def _query_speed_stats(report) -> list[dict]:
                 FROM sequoia.{table}
                 WHERE fiber_id IN {{fids:Array(String)}}
                   AND ts BETWEEN {{start:DateTime64(3)}} AND {{end:DateTime64(3)}}
+                  {dir_clause}
                 GROUP BY fiber_id
                 ORDER BY fiber_id
                 """,
                 parameters={
-                    "fids": report.fiber_ids,
+                    "fids": parent_fids,
                     "start": report.start_time,
                     "end": report.end_time,
                 },
@@ -171,23 +212,25 @@ def _query_speed_stats(report) -> list[dict]:
 def _query_volume(report) -> list[dict]:
     """Hourly vehicle count per fiber, using the appropriate detection tier."""
     tier = _select_tier(report.start_time, report.end_time)
+    parent_fids, dir_clause = _build_direction_filter(report.fiber_ids)
 
     try:
         if tier == "hires":
             rows = query(
-                """
+                f"""
                 SELECT
                     fiber_id,
                     toStartOfHour(ts) AS hour,
                     sum(vehicle_count) AS total_vehicles
                 FROM sequoia.detection_hires
-                WHERE fiber_id IN {fids:Array(String)}
-                  AND ts BETWEEN {start:DateTime64(3)} AND {end:DateTime64(3)}
+                WHERE fiber_id IN {{fids:Array(String)}}
+                  AND ts BETWEEN {{start:DateTime64(3)}} AND {{end:DateTime64(3)}}
+                  {dir_clause}
                 GROUP BY fiber_id, hour
                 ORDER BY fiber_id, hour
                 """,
                 parameters={
-                    "fids": report.fiber_ids,
+                    "fids": parent_fids,
                     "start": report.start_time,
                     "end": report.end_time,
                 },
@@ -203,11 +246,12 @@ def _query_volume(report) -> list[dict]:
                 FROM sequoia.{table}
                 WHERE fiber_id IN {{fids:Array(String)}}
                   AND ts BETWEEN {{start:DateTime64(3)}} AND {{end:DateTime64(3)}}
+                  {dir_clause}
                 GROUP BY fiber_id, hour
                 ORDER BY fiber_id, hour
                 """,
                 parameters={
-                    "fids": report.fiber_ids,
+                    "fids": parent_fids,
                     "start": report.start_time,
                     "end": report.end_time,
                 },

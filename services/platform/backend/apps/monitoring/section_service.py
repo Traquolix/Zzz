@@ -157,11 +157,20 @@ def query_section_history(
     - ≤5 min → ``detection_hires`` grouped by second (1s resolution)
     - >5 min → ``detection_1m`` with ``-Merge`` combinators (1min resolution)
 
+    ``fiber_id`` may include a directional suffix (e.g. ``"carros:0"``).
+    If present, only detections in that direction are included.
+
     Returns ``[{time, speed, speedMax, samples}, ...]``.
     """
+    from apps.monitoring.incident_service import parse_directional_fiber_id
+
+    parent_fid, direction = parse_directional_fiber_id(fiber_id)
+    dir_clause = f"AND direction = {direction}" if direction is not None else ""
     if minutes <= 5:
-        return _query_section_history_hires(fiber_id, channel_start, channel_end, minutes)
-    return _query_section_history_1m(fiber_id, channel_start, channel_end, minutes)
+        return _query_section_history_hires(
+            parent_fid, channel_start, channel_end, minutes, dir_clause
+        )
+    return _query_section_history_1m(parent_fid, channel_start, channel_end, minutes, dir_clause)
 
 
 def _query_section_history_hires(
@@ -169,19 +178,21 @@ def _query_section_history_hires(
     channel_start: int,
     channel_end: int,
     minutes: int,
+    dir_clause: str,
 ) -> list[dict]:
     """Query detection_hires at 1-second resolution for short windows (≤5 min)."""
     rows = query(
-        """
+        f"""
         SELECT
             toUnixTimestamp(toStartOfSecond(ts)) * 1000 AS time_ms,
             avg(speed) AS speed,
             max(speed) AS speed_max,
             count() AS samples
         FROM sequoia.detection_hires
-        WHERE fiber_id = {fid:String}
-          AND ch BETWEEN {cs:UInt16} AND {ce:UInt16}
-          AND ts >= now() - INTERVAL {mins:UInt32} MINUTE
+        WHERE fiber_id = {{fid:String}}
+          AND ch BETWEEN {{cs:UInt16}} AND {{ce:UInt16}}
+          AND ts >= now() - INTERVAL {{mins:UInt32}} MINUTE
+          {dir_clause}
         GROUP BY toStartOfSecond(ts)
         ORDER BY toStartOfSecond(ts)
         """,
@@ -201,19 +212,21 @@ def _query_section_history_1m(
     channel_start: int,
     channel_end: int,
     minutes: int,
+    dir_clause: str,
 ) -> list[dict]:
     """Query detection_1m at 1-minute resolution using -Merge combinators."""
     rows = query(
-        """
+        f"""
         SELECT
             toUnixTimestamp(ts) * 1000 AS time_ms,
             avgMerge(speed_avg_state) AS speed,
             maxMerge(speed_max_state) AS speed_max,
             sumMerge(samples_state) AS samples
         FROM sequoia.detection_1m
-        WHERE fiber_id = {fid:String}
-          AND ch BETWEEN {cs:UInt16} AND {ce:UInt16}
-          AND ts >= now() - INTERVAL {mins:UInt32} MINUTE
+        WHERE fiber_id = {{fid:String}}
+          AND ch BETWEEN {{cs:UInt16}} AND {{ce:UInt16}}
+          AND ts >= now() - INTERVAL {{mins:UInt32}} MINUTE
+          {dir_clause}
         GROUP BY ts
         ORDER BY ts
         """,

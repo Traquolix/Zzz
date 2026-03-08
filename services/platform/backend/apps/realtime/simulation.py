@@ -87,6 +87,10 @@ def get_simulation_section_history(
     - ≤5 min → per-second buffer (1s resolution)
     - >5 min → per-minute buffer (1min resolution)
 
+    ``fiber_id`` may be directional (e.g. ``"carros:0"``) or plain (``"carros"``).
+    Buffer keys are always directional. If a plain fiber_id is given, entries
+    from all directions are included.
+
     Returns ``[{time, speed, speedMax, samples}, ...]`` matching the live query shape.
     """
     if minutes <= 5:
@@ -97,13 +101,26 @@ def get_simulation_section_history(
     if not buf:
         return []
 
+    # Buffer keys are directional (e.g. "carros:0"). If the caller passes a
+    # directional ID, match exactly; if plain, match all directions.
+    if ":" in fiber_id:
+        match_fid = fiber_id
+    else:
+        match_fid = None  # Will prefix-match below
+
     now_ms = int(time.time() * 1000)
     cutoff_ms = now_ms - minutes * 60 * 1000
     points: list[dict] = []
 
     for (fid, ch), entries in buf.items():
-        if fid != fiber_id:
-            continue
+        if match_fid is not None:
+            if fid != match_fid:
+                continue
+        else:
+            # Plain fiber_id — match any direction (e.g. "carros" matches "carros:0", "carros:1")
+            parent = fid.rsplit(":", 1)[0] if ":" in fid else fid
+            if parent != fiber_id:
+                continue
         if ch < channel_start or ch > channel_end:
             continue
         for entry in entries:
@@ -817,10 +834,11 @@ class SimulationEngine:
         self._sec_accum_bucket = bucket_ms
 
         for d in detections:
-            # Strip directional suffix (e.g. "carros:0" → "carros") so buffer keys
-            # match the parent fiber IDs used by query_sections() / ClickHouse.
-            parent_fid = d.fiber_line.rsplit(":", 1)[0] if ":" in d.fiber_line else d.fiber_line
-            key = (parent_fid, d.channel)
+            # Keep directional fiber ID (e.g. "carros:0") as buffer key so that
+            # section history queries can filter by direction. Sections are placed
+            # on a specific direction, and should only see data from that direction.
+            fid = f"{d.fiber_line}:{d.direction}"
+            key = (fid, d.channel)
             if key not in self._sec_accum:
                 self._sec_accum[key] = {
                     "speed_sum": 0.0,

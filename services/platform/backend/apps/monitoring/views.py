@@ -17,6 +17,7 @@ from rest_framework.views import APIView
 from apps.fibers.utils import fiber_belongs_to_org, get_org_fiber_ids
 from apps.monitoring.incident_service import (
     _ensure_directional_fiber_id,
+    parse_directional_fiber_id,
 )
 from apps.monitoring.incident_service import (
     query_by_id as incident_query_by_id,
@@ -244,12 +245,16 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
         center_ch = (incident["channel_start"] + incident["channel_end"]) // 2
         ts_ns = incident["timestamp_ns"]
 
+        # Parse direction from fiber_id if available (e.g. "carros:0" → direction 0)
+        parent_fid, direction = parse_directional_fiber_id(fiber_id)
+        dir_clause = f"AND direction = {direction}" if direction is not None else ""
+
         # Aggregate into 1-second buckets server-side
         window_start_ns = ts_ns - 60_000_000_000
         window_end_ns = ts_ns + 60_000_000_000
         try:
             agg_rows = query(
-                """
+                f"""
                 SELECT
                     toUnixTimestamp64Milli(
                         toStartOfInterval(ts, INTERVAL 1 second)
@@ -257,15 +262,16 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
                     avg(abs(speed)) AS avg_speed,
                     sum(vehicle_count) AS total_count
                 FROM sequoia.detection_hires
-                WHERE fiber_id = {fid:String}
-                  AND ch BETWEEN {ch_min:UInt16} AND {ch_max:UInt16}
-                  AND ts BETWEEN fromUnixTimestamp64Nano({ts_start:UInt64})
-                              AND fromUnixTimestamp64Nano({ts_end:UInt64})
+                WHERE fiber_id = {{fid:String}}
+                  AND ch BETWEEN {{ch_min:UInt16}} AND {{ch_max:UInt16}}
+                  AND ts BETWEEN fromUnixTimestamp64Nano({{ts_start:UInt64}})
+                              AND fromUnixTimestamp64Nano({{ts_end:UInt64}})
+                  {dir_clause}
                 GROUP BY bucket_ms
                 ORDER BY bucket_ms
                 """,
                 parameters={
-                    "fid": fiber_id,
+                    "fid": parent_fid,
                     "ch_min": max(0, center_ch - 50),
                     "ch_max": center_ch + 50,
                     "ts_start": window_start_ns,
