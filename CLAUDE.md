@@ -83,7 +83,7 @@ If the user doesn't specify a branch name, ask for one. Never work directly on m
 - **One concern per PR.** If you notice an unrelated issue while working, create a separate issue and branch for it. Never bundle unrelated fixes.
 - **Keep PRs reviewable.** If the diff exceeds ~500 lines of logic changes, consider splitting into smaller PRs. Formatting-only changes (reindentation, import reordering) should be a separate commit so reviewers can skip them.
 - **No cross-contamination between sim and live paths.** Every REST endpoint and WebSocket handler that can serve both simulation and live data must be flow-aware. Never fall back from one data source to the other without checking the user's active flow.
-- **Use existing patterns.** Before writing inline error handling, check if a decorator or helper already exists (e.g., `@clickhouse_fallback`). Before writing inline broadcasts, use the broadcast helpers (`_broadcast_per_org`, `_org_broadcast`). Consistency matters more than local convenience.
+- **Use existing patterns.** Before writing inline error handling, check if a decorator or helper already exists (e.g., `@clickhouse_fallback`). Before writing inline broadcasts, use the shared broadcast helpers (`broadcast_per_org`, `broadcast_to_orgs`, `broadcast_shm` from `apps.realtime.broadcast`). Consistency matters more than local convenience.
 
 ### After Merge — Deploying
 

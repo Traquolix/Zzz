@@ -53,5 +53,5 @@ Completed tasks with dates and commit references.
 - **IncidentListView sim/live cross-contamination** [#3] — IncidentListView fell back to sim data regardless of active flow. Fixed with flow-aware query param check.
   - Closed by PR #2
 
-- **SHM broadcasts use inline group_send** [#4] — extracted `_broadcast_shm` helpers in both `kafka_bridge.py` and `simulation.py`.
+- **SHM broadcasts use inline group_send** [#4] — extracted `broadcast_shm` helper into `apps.realtime.broadcast`, used by both `kafka_bridge.py` and `simulation.py`.
   - Closed by PR #2
