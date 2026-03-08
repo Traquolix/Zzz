@@ -27,6 +27,7 @@
 - [ ] **Log retention** [#18] — config committed (otelcol-config.yaml filelog receiver) but needs deploy verification on production server
 - [ ] **Enable stricter ruff rules** [#19] — add `UP`, `B`, `SIM`, `RUF`, `C4` to both `pyproject.toml` configs. Pipeline: 326 violations (230 auto-fixable, mostly `UP` type hint modernization). Backend: 139 violations (75 are `RUF012` Django model false positives — ignore). Ignore `RUF012` and `RUF002` (French text) in backend config. Run `ruff check --fix` for the bulk, then manual fixes for the rest.
 - [ ] **Build per-service PR review checklists** [#29] — document service-specific review rules (backend: flow-aware endpoints, `@clickhouse_fallback`, broadcast helpers, i18n; pipeline: Avro compat, config hot-reload; frontend: TBD). Grows organically as patterns are discovered in reviews.
+- [ ] **Rework WebSocket reconnecting banner visual** [#37] — the current reconnecting/disconnected banner is visually intrusive. Redesign to be less obtrusive (subtle top bar or toast) while still clearly communicating connection state.
 - [ ] **Show version on BETA tag hover** [#30] — hovering the BETA tag in the UI should display the current version of pipeline, backend, and frontend. Versions injected at build/deploy time from a single source of truth.
 
 ## Low Priority — Language Migrations
