@@ -53,6 +53,7 @@ from apps.monitoring.workflow import (
 from apps.shared.clickhouse import clickhouse_fallback, query, query_scalar
 from apps.shared.exceptions import ClickHouseUnavailableError
 from apps.shared.permissions import IsActiveUser, IsNotViewer
+from apps.shared.utils import build_org_cache_key
 
 logger = logging.getLogger("sequoia")
 
@@ -68,18 +69,6 @@ def _get_fiber_ids_or_none(user):
     if user.is_superuser:
         return None
     return get_org_fiber_ids(user.organization)
-
-
-def _incidents_cache_key(user):
-    if user.is_superuser:
-        return "incidents:all"
-    return f"incidents:org:{user.organization_id}"
-
-
-def _stats_cache_key(user):
-    if user.is_superuser:
-        return "stats:all"
-    return f"stats:org:{user.organization_id}"
 
 
 def _verify_infrastructure_access(user, infrastructure_id):
@@ -116,7 +105,7 @@ class IncidentListView(FlowAwareMixin, APIView):
         except (ValueError, TypeError):
             limit = 100
 
-        cache_key = f"{_incidents_cache_key(request.user)}:{limit}"
+        cache_key = f"{build_org_cache_key('incidents', request.user)}:{limit}"
         cached = django_cache.get(cache_key)
         if cached is not None:
             return Response(cached)
@@ -133,9 +122,9 @@ class IncidentListView(FlowAwareMixin, APIView):
         except ClickHouseUnavailableError:
             incidents = None
 
-        # Simulation keeps incidents in memory only — fall back when
-        # ClickHouse is unavailable or returned no results.
-        if not incidents:
+        # Simulation fallback: only when ClickHouse is unavailable.
+        # An empty result from ClickHouse is valid ("no incidents").
+        if incidents is None:
             from apps.realtime.simulation import get_simulation_incidents
 
             sim_incidents = self.get_sim_fallback(request, get_simulation_incidents)
@@ -148,7 +137,6 @@ class IncidentListView(FlowAwareMixin, APIView):
                 django_cache.set(cache_key, result, FALLBACK_CACHE_TTL)
                 return Response(result)
 
-        if incidents is None:
             return Response(
                 {"detail": "ClickHouse unavailable", "code": "clickhouse_unavailable"},
                 status=503,
@@ -507,7 +495,7 @@ class StatsView(APIView):
     )
     @clickhouse_fallback()
     def get(self, request):
-        cache_key = _stats_cache_key(request.user)
+        cache_key = build_org_cache_key("stats", request.user)
         cached = django_cache.get(cache_key)
         if cached is not None:
             return Response(cached)
