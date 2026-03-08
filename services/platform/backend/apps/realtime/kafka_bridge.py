@@ -28,8 +28,10 @@ import time
 
 from channels.layers import get_channel_layer
 from django.conf import settings
+from django.core.cache import cache
 
 from apps.alerting.integration import check_alerts_for_detections, check_alerts_for_incident
+from apps.realtime.broadcast import broadcast_shm
 from apps.shared.constants import MAP_REFRESH_INTERVAL
 
 logger = logging.getLogger("sequoia.kafka_bridge")
@@ -210,7 +212,9 @@ def _load_infra_org_map(infrastructure: list[dict]) -> dict[str, str]:
     return {infra["id"]: infra.get("organization_id", "") for infra in infrastructure}
 
 
-async def _org_broadcast(channel_layer, channel: str, data, fiber_org_map: dict[str, list[str]]):
+async def _org_broadcast(
+    channel_layer, channel: str, data, fiber_org_map: dict[str, list[str]], flow: str = "live"
+):
     """
     Broadcast data to org-scoped groups based on fiberLine field.
 
@@ -220,7 +224,7 @@ async def _org_broadcast(channel_layer, channel: str, data, fiber_org_map: dict[
     """
     # Always send to superuser group
     await channel_layer.group_send(
-        f"realtime_{channel}_org___all__",
+        f"realtime_{flow}_{channel}_org___all__",
         {
             "type": "broadcast_message",
             "channel": channel,
@@ -239,7 +243,7 @@ async def _org_broadcast(channel_layer, channel: str, data, fiber_org_map: dict[
 
         for org_id, org_data in org_items.items():
             await channel_layer.group_send(
-                f"realtime_{channel}_org_{org_id}",
+                f"realtime_{flow}_{channel}_org_{org_id}",
                 {
                     "type": "broadcast_message",
                     "channel": channel,
@@ -251,7 +255,7 @@ async def _org_broadcast(channel_layer, channel: str, data, fiber_org_map: dict[
         parent_fid = fid.rsplit(":", 1)[0] if ":" in fid else fid
         for org_id in fiber_org_map.get(parent_fid, []):
             await channel_layer.group_send(
-                f"realtime_{channel}_org_{org_id}",
+                f"realtime_{flow}_{channel}_org_{org_id}",
                 {
                     "type": "broadcast_message",
                     "channel": channel,
@@ -299,7 +303,7 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
 
     # Org-aware broadcast helper for the replay buffer drain
     async def broadcast(channel: str, data):
-        await _org_broadcast(channel_layer, channel, data, fiber_org_map)
+        await _org_broadcast(channel_layer, channel, data, fiber_org_map, flow="live")
         # Check alerts for detections (per-org)
         if channel == "detections" and isinstance(data, list):
             org_detections: dict[str, list[dict]] = {}
@@ -330,6 +334,10 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
     )
     consumer.subscribe(["das.detections"])
 
+    # Bounded TTL so a crashed bridge is detected within 10s.
+    # Refreshed every 5s; cost is negligible for Redis.
+    KAFKA_AVAILABLE_TTL = 10
+    cache.set("kafka_available", True, timeout=KAFKA_AVAILABLE_TTL)
     logger.info(
         "Kafka bridge started (time-shifted replay): %s, topic: das.detections, %d org mappings",
         bootstrap_servers,
@@ -337,11 +345,12 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
     )
 
     # State for incident polling and SHM
-    shm_state = {}
+    shm_state: dict[str, dict] = {}
     last_incident_check = time.time()
     known_incident_ids: dict[str, str] = {}  # {incident_id: fiberLine}
-    last_shm_broadcast = 0
-    last_batch_cleanup = 0
+    last_shm_broadcast: float = 0
+    last_batch_cleanup: float = 0
+    last_kafka_flag_refresh: float = time.time()
 
     # Start the replay drain task
     drain_task = asyncio.create_task(replay_buffer.drain(broadcast))
@@ -355,6 +364,11 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
                 fiber_org_map = await _load_fiber_org_map()
                 infra_org_map = _load_infra_org_map(infrastructure)
                 last_map_refresh = loop_start
+
+            # Refresh bounded TTL every 5s so the flag expires if we crash
+            if loop_start - last_kafka_flag_refresh > 5:
+                cache.set("kafka_available", True, timeout=KAFKA_AVAILABLE_TTL)
+                last_kafka_flag_refresh = loop_start
 
             # --- Poll Kafka (non-blocking) ---
             try:
@@ -398,28 +412,7 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
                 last_shm_broadcast = now
                 readings = generate_shm_readings(infrastructure, shm_state)
                 if readings:
-                    # Group by org via infrastructure ownership
-                    org_shm: dict[str, list[dict]] = {}
-                    for shm in readings:
-                        org_id = infra_org_map.get(shm["infrastructureId"], "")
-                        if org_id:
-                            org_shm.setdefault(org_id, []).append(shm)
-
-                    # Superuser group gets all
-                    await channel_layer.group_send(
-                        "realtime_shm_readings_org___all__",
-                        {"type": "broadcast_message", "channel": "shm_readings", "data": readings},
-                    )
-                    # Per-org
-                    for org_id, org_readings in org_shm.items():
-                        await channel_layer.group_send(
-                            f"realtime_shm_readings_org_{org_id}",
-                            {
-                                "type": "broadcast_message",
-                                "channel": "shm_readings",
-                                "data": org_readings,
-                            },
-                        )
+                    await broadcast_shm(channel_layer, readings, infra_org_map, flow="live")
 
             # --- Cleanup stale batch trackers every 30s ---
             if (now - last_batch_cleanup) >= 30:
@@ -439,6 +432,7 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
     except KeyboardInterrupt:
         logger.info("Kafka bridge shutting down...")
     finally:
+        cache.set("kafka_available", False, timeout=None)
         replay_buffer.stop()
         drain_task.cancel()
         try:
@@ -500,7 +494,7 @@ async def _poll_incidents(
 
         if iid not in known_incidents:
             # New incident -- broadcast to owning orgs
-            await _org_broadcast(channel_layer, "incidents", inc_data, fiber_org_map)
+            await _org_broadcast(channel_layer, "incidents", inc_data, fiber_org_map, flow="live")
             # Check alerts for incident
             await check_alerts_for_incident(inc_data, fiber_org_map)
 
@@ -517,7 +511,7 @@ async def _poll_incidents(
             "detectedAt": "",
             "duration": None,
         }
-        await _org_broadcast(channel_layer, "incidents", resolved_data, fiber_org_map)
+        await _org_broadcast(channel_layer, "incidents", resolved_data, fiber_org_map, flow="live")
 
     known_incidents.clear()
     known_incidents.update(current_incidents)

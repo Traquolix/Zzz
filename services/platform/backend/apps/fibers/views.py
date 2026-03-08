@@ -28,6 +28,7 @@ from apps.fibers.utils import get_org_fiber_ids
 from apps.shared.clickhouse import get_client
 from apps.shared.exceptions import ClickHouseUnavailableError
 from apps.shared.permissions import IsActiveUser
+from apps.shared.utils import build_org_cache_key
 
 FIBERS_CACHE_TTL = 5 * 60  # 5 minutes
 
@@ -62,12 +63,6 @@ _CABLE_FILES = [
     "promenade.json",
     "mathis.json",
 ]
-
-
-def _fiber_cache_key(user):
-    if user.is_superuser:
-        return "fibers:all"
-    return f"fibers:org:{user.organization_id}"
 
 
 def _get_cables_dir() -> Path:
@@ -202,7 +197,7 @@ class FiberListView(APIView):
         tags=["fibers"],
     )
     def get(self, request):
-        cache_key = _fiber_cache_key(request.user)
+        cache_key = build_org_cache_key("fibers", request.user)
 
         cached = cache.get(cache_key)
         if cached is not None:

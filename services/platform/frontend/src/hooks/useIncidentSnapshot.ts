@@ -1,58 +1,73 @@
-import { useState, useCallback, useRef } from 'react'
-import { useTranslation } from 'react-i18next'
+import { useState, useEffect, useRef } from 'react'
 import type { IncidentSnapshot } from '@/types/incident'
 import { fetchIncidentSnapshot } from '@/api/incidents'
-import { ApiError } from '@/api/client'
+import type { DataFlow } from '@/context/RealtimeContext'
 
-type UseIncidentSnapshotResult = {
-  snapshot: IncidentSnapshot | null
-  loading: boolean
-  error: string | null
-  fetchSnapshot: (incidentId: string) => Promise<void>
-  clearSnapshot: () => void
+export type SnapshotPoint = {
+  time: string
+  speed?: number
+  flow?: number
+  occupancy?: number
 }
 
-export function useIncidentSnapshot(): UseIncidentSnapshotResult {
-  const { t } = useTranslation()
-  const [snapshot, setSnapshot] = useState<IncidentSnapshot | null>(null)
+type UseIncidentSnapshotResult = {
+  points: SnapshotPoint[] | null
+  loading: boolean
+  complete: boolean
+}
+
+/**
+ * Fetch and poll an incident snapshot until it's complete.
+ *
+ * Polls every 1s while `complete` is false. Cancels on unmount
+ * or when `incidentId`/`flow` changes (stale-request safe).
+ */
+export function useIncidentSnapshot(incidentId: string, flow: DataFlow): UseIncidentSnapshotResult {
+  const [points, setPoints] = useState<SnapshotPoint[] | null>(null)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  // Track the latest request to ignore stale responses
-  const requestIdRef = useRef(0)
+  const [complete, setComplete] = useState(false)
+  const cancelledRef = useRef(false)
 
-  const fetchSnapshotFn = useCallback(
-    async (incidentId: string) => {
-      const thisRequest = ++requestIdRef.current
+  useEffect(() => {
+    cancelledRef.current = false
+    let timer: ReturnType<typeof setTimeout> | null = null
 
-      setLoading(true)
-      setError(null)
+    const formatTime = (d: Date) =>
+      d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
 
-      try {
-        const data = await fetchIncidentSnapshot(incidentId)
-        if (thisRequest === requestIdRef.current) {
-          setSnapshot(data)
-        }
-      } catch (e) {
-        if (thisRequest !== requestIdRef.current) return
-        if (e instanceof ApiError && e.status === 404) {
-          setError(t('common.noSnapshot'))
-        } else if (e instanceof ApiError || typeof e === 'object') {
-          setError(t('common.somethingWentWrong'))
-        }
-        setSnapshot(null)
-      } finally {
-        if (thisRequest === requestIdRef.current) {
+    const poll = () => {
+      fetchIncidentSnapshot(incidentId, flow)
+        .then((snapshot: IncidentSnapshot) => {
+          if (cancelledRef.current) return
+          const mapped = snapshot.points.map(p => ({
+            time: formatTime(new Date(p.time)),
+            speed: p.speed ?? undefined,
+            flow: p.flow ?? undefined,
+            occupancy: p.occupancy ?? undefined,
+          }))
+          setPoints(mapped)
+          setComplete(snapshot.complete)
           setLoading(false)
-        }
-      }
-    },
-    [t],
-  )
+          if (!snapshot.complete) {
+            timer = setTimeout(poll, 1000)
+          }
+        })
+        .catch(() => {
+          if (cancelledRef.current) return
+          setPoints(null)
+          setLoading(false)
+        })
+    }
 
-  const clearSnapshot = useCallback(() => {
-    setSnapshot(null)
-    setError(null)
-  }, [])
+    setLoading(true)
+    setComplete(false)
+    poll()
 
-  return { snapshot, loading, error, fetchSnapshot: fetchSnapshotFn, clearSnapshot }
+    return () => {
+      cancelledRef.current = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [incidentId, flow])
+
+  return { points, loading, complete }
 }

@@ -54,6 +54,41 @@ def get_fiber_org_map() -> dict[str, list[str]]:
     return mapping
 
 
+def filter_by_org(
+    items: list[dict],
+    fiber_ids: list[str],
+    fiber_key: str = "fiberLine",
+) -> list[dict]:
+    """Filter a list of dicts to only items whose fiber belongs to the given org.
+
+    Strips the directional suffix (e.g. ``"carros:0"`` → ``"carros"``) before
+    matching against ``fiber_ids`` from ``FiberAssignment``.
+
+    Args:
+        items: List of dicts, each containing a fiber identifier.
+        fiber_ids: Allowed fiber IDs for the user's org (from ``get_org_fiber_ids``).
+        fiber_key: Key in each dict that holds the directional fiber ID.
+    """
+    from apps.monitoring.incident_service import strip_directional_suffix
+
+    allowed = set(fiber_ids)
+    return [item for item in items if strip_directional_suffix(item.get(fiber_key, "")) in allowed]
+
+
+def fiber_belongs_to_org(fiber_id: str, fiber_ids: list[str]) -> bool:
+    """Check if a single fiber ID belongs to the given org's fiber set.
+
+    Strips the directional suffix before matching.
+
+    Args:
+        fiber_id: Directional fiber ID (e.g. ``"carros:0"``).
+        fiber_ids: Allowed fiber IDs for the user's org.
+    """
+    from apps.monitoring.incident_service import strip_directional_suffix
+
+    return strip_directional_suffix(fiber_id) in set(fiber_ids)
+
+
 def invalidate_org_fiber_cache(org_id):
     """Invalidate all fiber caches related to an org after admin changes."""
     cache.delete(f"org_fibers:{org_id}")

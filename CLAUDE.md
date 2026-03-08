@@ -194,6 +194,12 @@ backend venv on first run, but `make lint` and `make typecheck` expect venvs to 
 6. **ServiceBase pattern** — all pipeline services inherit from `shared.service_base.ServiceBase`.
 7. **Transformer hierarchy** — Consumer → Producer → Transformer → MultiTransformer → BufferedTransformer → RollingBufferedTransformer. Choose the right level for new services.
 
+## PR Reviews
+
+When asked to review a PR, follow the review format and checklist in `tools/prompts/pr-review-agent.md`.
+That prompt covers hard rules (blocking), architectural invariants, code quality, and performance concerns
+tailored to this project.
+
 ## Outstanding Tasks
 
 Consult `TODO.md` at the start of each session for pending infrastructure, security, and cleanup tasks.

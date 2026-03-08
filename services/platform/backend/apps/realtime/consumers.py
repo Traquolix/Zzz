@@ -25,6 +25,7 @@ import time
 
 from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
+from django.core.cache import cache
 from django.core.exceptions import ObjectDoesNotExist
 
 from apps.shared.exceptions import ClickHouseUnavailableError
@@ -50,9 +51,9 @@ RATE_LIMIT_WINDOW_SECONDS = 10
 AUTH_TIMEOUT_SECONDS = 15
 
 
-def _org_group_name(channel: str, org_id: str) -> str:
-    """Build the org-scoped Channels group name."""
-    return f"realtime_{channel}_org_{org_id}"
+def _org_group_name(channel: str, org_id: str, flow: str) -> str:
+    """Build the flow-prefixed, org-scoped Channels group name."""
+    return f"realtime_{flow}_{channel}_org_{org_id}"
 
 
 class RealtimeConsumer(AsyncJsonWebsocketConsumer):
@@ -115,23 +116,27 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         self.subscriptions = set()
         self._user = user
         self._authenticated = True
+        self._flow = "sim"  # Default flow; updated after auth based on availability
         # Rate limiting state
         self._message_times = []
         # Superusers see all data; regular users scoped to their org
         if user.is_superuser:
             self._org_id = "__all__"
+            self._org = None
         else:
             self._org_id = str(user.organization_id)
+            self._org = user.organization
 
     async def disconnect(self, close_code):
         # Cancel auth timeout if still pending
         if getattr(self, "_auth_timeout_task", None) and not self._auth_timeout_task.done():
             self._auth_timeout_task.cancel()
 
-        # Leave all channel groups
+        # Leave all flow-prefixed channel groups
+        flow = getattr(self, "_flow", "sim")
         for channel in list(self.subscriptions):
             await self.channel_layer.group_discard(
-                _org_group_name(channel, self._org_id), self.channel_name
+                _org_group_name(channel, self._org_id, flow=flow), self.channel_name
             )
         self.subscriptions.clear()
         if getattr(self, "_authenticated", False):
@@ -172,6 +177,15 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             await self.send_json({"action": "error", "message": "Authentication required"})
             return
 
+        # Handle flow switching
+        if action == "set_flow":
+            new_flow = content.get("flow")
+            if new_flow not in ("sim", "live"):
+                await self.send_json({"action": "error", "message": "Invalid flow"})
+                return
+            await self._switch_flow(new_flow)
+            return
+
         # Rate limit check
         if self._is_rate_limited():
             logger.warning(
@@ -193,9 +207,11 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             if channel not in self.subscriptions:
                 self.subscriptions.add(channel)
                 await self.channel_layer.group_add(
-                    _org_group_name(channel, self._org_id), self.channel_name
+                    _org_group_name(channel, self._org_id, flow=self._flow), self.channel_name
                 )
-                logger.debug("Client subscribed to: %s (org=%s)", channel, self._org_id)
+                logger.debug(
+                    "Client subscribed to: %s (org=%s, flow=%s)", channel, self._org_id, self._flow
+                )
 
                 # Send initial data for certain channels
                 if channel == "incidents":
@@ -207,7 +223,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             if channel in self.subscriptions:
                 self.subscriptions.discard(channel)
                 await self.channel_layer.group_discard(
-                    _org_group_name(channel, self._org_id), self.channel_name
+                    _org_group_name(channel, self._org_id, flow=self._flow), self.channel_name
                 )
                 logger.debug("Client unsubscribed from: %s", channel)
 
@@ -251,8 +267,49 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         from apps.shared.metrics import WEBSOCKET_CONNECTIONS
 
         WEBSOCKET_CONNECTIONS.inc()
+
+        available_flows = ["sim"]
+        if cache.get("kafka_available", False):
+            available_flows.append("live")
+
         logger.debug("WebSocket client authenticated: %s (org=%s)", user.username, self._org_id)
-        await self.send_json({"action": "authenticated", "success": True})
+        await self.send_json(
+            {
+                "action": "authenticated",
+                "success": True,
+                "available_flows": available_flows,
+            }
+        )
+
+    async def _switch_flow(self, new_flow: str):
+        """Switch client from current flow to new_flow, re-joining all groups."""
+        old_flow = self._flow
+        if old_flow == new_flow:
+            await self.send_json({"action": "flow_changed", "flow": new_flow})
+            return
+
+        # Leave all old flow groups
+        for channel in self.subscriptions:
+            await self.channel_layer.group_discard(
+                _org_group_name(channel, self._org_id, flow=old_flow), self.channel_name
+            )
+
+        self._flow = new_flow
+
+        # Join all new flow groups
+        for channel in self.subscriptions:
+            await self.channel_layer.group_add(
+                _org_group_name(channel, self._org_id, flow=new_flow), self.channel_name
+            )
+
+        await self.send_json({"action": "flow_changed", "flow": new_flow})
+        logger.debug("Client switched flow: %s -> %s (org=%s)", old_flow, new_flow, self._org_id)
+
+        # Re-send initial data for subscribed channels
+        if "incidents" in self.subscriptions:
+            await self._send_initial_incidents()
+        if "fibers" in self.subscriptions:
+            await self._send_initial_fibers()
 
     # ----- Group message handlers -----
     # These are called when the Channels layer routes a group_send to this consumer
@@ -298,11 +355,30 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             await self.send_json({"channel": "incidents", "data": []})
 
     def _query_initial_incidents(self):
-        """Synchronous ClickHouse query for initial incidents (org-scoped).
+        """Synchronous query for initial incidents (org-scoped, flow-aware).
 
-        Falls back to simulation cache when ClickHouse is unavailable or
-        returns no results (simulation keeps incidents in memory only).
+        In 'sim' flow: returns simulation cache (org-filtered).
+        In 'live' flow: queries ClickHouse only (no sim fallback).
         """
+        if self._flow == "sim":
+            from apps.realtime.simulation_manager import SimulationManager
+
+            if SimulationManager.instance().is_running:
+                from apps.realtime.simulation import get_simulation_incidents
+
+                incidents = get_simulation_incidents()
+                # Org-scope: filter sim incidents to user's fibers
+                if self._org_id != "__all__":
+                    from apps.fibers.utils import filter_by_org, get_org_fiber_ids
+
+                    fiber_ids = get_org_fiber_ids(self._org)
+                    if not fiber_ids:
+                        return []
+                    incidents = filter_by_org(incidents, fiber_ids)
+                return incidents
+            return []
+
+        # 'live' flow — ClickHouse only
         from apps.monitoring.incident_service import query_active
 
         try:
@@ -310,26 +386,14 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
                 incidents = query_active(fiber_ids=None, limit=100)
             else:
                 from apps.fibers.utils import get_org_fiber_ids
-                from apps.organizations.models import Organization
 
-                org = Organization.objects.get(pk=self._org_id)
-                fiber_ids = get_org_fiber_ids(org)
+                fiber_ids = get_org_fiber_ids(self._org)
                 if not fiber_ids:
                     return []
                 incidents = query_active(fiber_ids=fiber_ids, limit=100)
-            if incidents:
-                return incidents
+            return incidents or []
         except ClickHouseUnavailableError:
-            pass
-
-        # Fallback: simulation keeps incidents in memory, not in ClickHouse
-        from apps.realtime.simulation_manager import SimulationManager
-
-        if SimulationManager.instance().is_running:
-            from apps.realtime.simulation import get_simulation_incidents
-
-            return get_simulation_incidents()
-        return []
+            return []
 
     async def _send_initial_fibers(self):
         """Send fiber configuration on subscribe.
@@ -360,10 +424,8 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             fiber_ids = None
             if self._org_id != "__all__":
                 from apps.fibers.utils import get_org_fiber_ids
-                from apps.organizations.models import Organization
 
-                org = Organization.objects.get(pk=self._org_id)
-                fiber_ids = get_org_fiber_ids(org)
+                fiber_ids = get_org_fiber_ids(self._org)
             fibers = await sync_to_async(_load_fibers_from_json)(fiber_ids)
             await self.send_json({"channel": "fibers", "data": fibers})
         except FileNotFoundError as e:
@@ -390,10 +452,8 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             """)
         else:
             from apps.fibers.utils import get_org_fiber_ids
-            from apps.organizations.models import Organization
 
-            org = Organization.objects.get(pk=self._org_id)
-            fiber_ids = get_org_fiber_ids(org)
+            fiber_ids = get_org_fiber_ids(self._org)
             if not fiber_ids:
                 return []
             result = client.query(

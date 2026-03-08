@@ -34,7 +34,7 @@ def snap_coordinates(
     access_token: str,
     profile: str = "driving",
     radius: int = DEFAULT_RADIUS,
-) -> Optional[list[list[float]]]:
+) -> Optional[list[list[float | None]]]:
     """
     Snap a list of [lng, lat] coordinates to the nearest road geometry.
 
@@ -49,7 +49,7 @@ def snap_coordinates(
     for i, coord in enumerate(coordinates):
         if coord and coord[0] is not None and coord[1] is not None:
             valid_indices.append(i)
-            valid_coords.append(coord)
+            valid_coords.append([coord[0], coord[1]])
 
     if len(valid_coords) < 2:
         logger.warning("Not enough valid coordinates to snap (%d)", len(valid_coords))
@@ -64,7 +64,8 @@ def snap_coordinates(
     result: list[list[float | None]] = [[None, None] for _ in range(len(coordinates))]
     for i, orig_idx in enumerate(valid_indices):
         if i < len(snapped_valid):
-            result[orig_idx] = snapped_valid[i]
+            s = snapped_valid[i]
+            result[orig_idx] = [s[0], s[1]]
 
     return result
 
@@ -233,10 +234,11 @@ def snap_directional_segmented(
             continue
 
         # Snap each direction independently
-        for direction, offset, result_arr in [
+        dir_configs: list[tuple[str, float, list[list[float | None]]]] = [
             ("0", d0_off, result_0),
             ("1", d1_off, result_1),
-        ]:
+        ]
+        for direction, offset, result_arr in dir_configs:
             offset_slice = _offset_coords(slice_coords, offset)
             snapped = snap_coordinates(offset_slice, access_token, radius=radius)
             if snapped is None:
@@ -267,7 +269,7 @@ def _offset_coords(
     Positive offset = right side of travel direction.
     Negative offset = left side.
     """
-    result = []
+    result: list[list[float | None]] = []
     # Collect valid coords for bearing computation
     valid = [
         (i, c) for i, c in enumerate(coordinates) if c and c[0] is not None and c[1] is not None
@@ -289,8 +291,9 @@ def _offset_coords(
 
         # Perpendicular bearing (90 degrees clockwise)
         perp_bearing = bearing + math.pi / 2
-        offset_coord = _offset_point(coord, perp_bearing, offset_meters)
-        result.append(offset_coord)
+        coord_f: list[float] = [coord[0], coord[1]]
+        oc = _offset_point(coord_f, perp_bearing, offset_meters)
+        result.append([oc[0], oc[1]])
 
     return result
 
@@ -298,30 +301,32 @@ def _offset_coords(
 def _local_bearing(coordinates: list[list[float | None]], index: int) -> Optional[float]:
     """Compute the local bearing at a given index along the coordinate list."""
     # Look for the nearest valid neighbor forward and backward
-    prev = None
+    prev: list[float] | None = None
     for j in range(index - 1, -1, -1):
         c = coordinates[j]
         if c and c[0] is not None and c[1] is not None:
-            prev = c
+            prev = [c[0], c[1]]
             break
 
-    nxt = None
+    nxt: list[float] | None = None
     for j in range(index + 1, len(coordinates)):
         c = coordinates[j]
         if c and c[0] is not None and c[1] is not None:
-            nxt = c
+            nxt = [c[0], c[1]]
             break
 
     if prev is None and nxt is None:
         return None
 
-    current = coordinates[index]
+    cur = coordinates[index]
+    current: list[float] = [cur[0] or 0.0, cur[1] or 0.0] if cur else [0.0, 0.0]
     if prev is not None and nxt is not None:
         # Average of bearing from prev→current and current→next
         return _bearing(prev, nxt)
     elif nxt is not None:
         return _bearing(current, nxt)
     else:
+        assert prev is not None
         return _bearing(prev, current)
 
 
