@@ -31,7 +31,13 @@ from django.conf import settings
 from django.core.cache import cache
 
 from apps.alerting.integration import check_alerts_for_detections, check_alerts_for_incident
-from apps.realtime.broadcast import broadcast_shm
+from apps.realtime.broadcast import (
+    broadcast_per_org,
+    broadcast_shm,
+    broadcast_to_orgs,
+    load_fiber_org_map,
+    load_infra_org_map,
+)
 from apps.shared.constants import MAP_REFRESH_INTERVAL
 
 logger = logging.getLogger("sequoia.kafka_bridge")
@@ -189,82 +195,6 @@ def generate_shm_readings(infrastructure: list[dict], shm_state: dict) -> list[d
 
 
 # ============================================================================
-# ORG-SCOPED BROADCAST HELPERS
-# ============================================================================
-
-
-def _load_fiber_org_map_sync() -> dict[str, list[str]]:
-    """Load fiber->org mapping from DB (sync version)."""
-    from apps.fibers.utils import get_fiber_org_map
-
-    return get_fiber_org_map()
-
-
-async def _load_fiber_org_map() -> dict[str, list[str]]:
-    """Load fiber->org mapping from DB (async-safe)."""
-    from asgiref.sync import sync_to_async
-
-    return await sync_to_async(_load_fiber_org_map_sync, thread_sensitive=True)()
-
-
-def _load_infra_org_map(infrastructure: list[dict]) -> dict[str, str]:
-    """Build infrastructure_id -> org_id mapping from infrastructure list."""
-    return {infra["id"]: infra.get("organization_id", "") for infra in infrastructure}
-
-
-async def _org_broadcast(
-    channel_layer, channel: str, data, fiber_org_map: dict[str, list[str]], flow: str = "live"
-):
-    """
-    Broadcast data to org-scoped groups based on fiberLine field.
-
-    For list data: groups items by fiber_id, sends each org only their items.
-    For dict data (single item): sends to orgs that own the fiber.
-    Always sends full data to __all__ group.
-    """
-    # Always send to superuser group
-    await channel_layer.group_send(
-        f"realtime_{flow}_{channel}_org___all__",
-        {
-            "type": "broadcast_message",
-            "channel": channel,
-            "data": data,
-        },
-    )
-
-    if isinstance(data, list):
-        # Group items by org (strip directional suffix for org lookup)
-        org_items: dict[str, list[dict]] = {}
-        for item in data:
-            fid = item.get("fiberLine", "")
-            parent_fid = fid.rsplit(":", 1)[0] if ":" in fid else fid
-            for org_id in fiber_org_map.get(parent_fid, []):
-                org_items.setdefault(org_id, []).append(item)
-
-        for org_id, org_data in org_items.items():
-            await channel_layer.group_send(
-                f"realtime_{flow}_{channel}_org_{org_id}",
-                {
-                    "type": "broadcast_message",
-                    "channel": channel,
-                    "data": org_data,
-                },
-            )
-    elif isinstance(data, dict):
-        fid = data.get("fiberLine", "")
-        parent_fid = fid.rsplit(":", 1)[0] if ":" in fid else fid
-        for org_id in fiber_org_map.get(parent_fid, []):
-            await channel_layer.group_send(
-                f"realtime_{flow}_{channel}_org_{org_id}",
-                {
-                    "type": "broadcast_message",
-                    "channel": channel,
-                    "data": data,
-                },
-            )
-
-
-# ============================================================================
 # KAFKA BRIDGE LOOP (time-shifted replay)
 # ============================================================================
 
@@ -297,13 +227,14 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
     channel_layer = get_channel_layer()
 
     # Load fiber->org mapping (refreshed periodically)
-    fiber_org_map = await _load_fiber_org_map()
-    infra_org_map = _load_infra_org_map(infrastructure)
+    fiber_org_map = await load_fiber_org_map()
+    infra_org_map = load_infra_org_map(infrastructure)
     last_map_refresh = time.time()
 
     # Org-aware broadcast helper for the replay buffer drain
     async def broadcast(channel: str, data):
-        await _org_broadcast(channel_layer, channel, data, fiber_org_map, flow="live")
+        nonlocal fiber_org_map
+        await broadcast_per_org(channel_layer, channel, data, fiber_org_map, flow="live")
         # Check alerts for detections (per-org)
         if channel == "detections" and isinstance(data, list):
             org_detections: dict[str, list[dict]] = {}
@@ -361,8 +292,8 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
 
             # Refresh fiber->org mapping periodically
             if loop_start - last_map_refresh > MAP_REFRESH_INTERVAL:
-                fiber_org_map = await _load_fiber_org_map()
-                infra_org_map = _load_infra_org_map(infrastructure)
+                fiber_org_map = await load_fiber_org_map()
+                infra_org_map = load_infra_org_map(infrastructure)
                 last_map_refresh = loop_start
 
             # Refresh bounded TTL every 5s so the flag expires if we crash
@@ -494,7 +425,14 @@ async def _poll_incidents(
 
         if iid not in known_incidents:
             # New incident -- broadcast to owning orgs
-            await _org_broadcast(channel_layer, "incidents", inc_data, fiber_org_map, flow="live")
+            await broadcast_to_orgs(
+                channel_layer,
+                "incidents",
+                inc_data,
+                fiber_org_map,
+                fiber_ids={inc_data["fiberLine"]},
+                flow="live",
+            )
             # Check alerts for incident
             await check_alerts_for_incident(inc_data, fiber_org_map)
 
@@ -511,7 +449,14 @@ async def _poll_incidents(
             "detectedAt": "",
             "duration": None,
         }
-        await _org_broadcast(channel_layer, "incidents", resolved_data, fiber_org_map, flow="live")
+        await broadcast_to_orgs(
+            channel_layer,
+            "incidents",
+            resolved_data,
+            fiber_org_map,
+            fiber_ids={resolved_data["fiberLine"]},
+            flow="live",
+        )
 
     known_incidents.clear()
     known_incidents.update(current_incidents)

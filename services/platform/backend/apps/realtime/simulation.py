@@ -22,7 +22,13 @@ from typing import Optional, TypedDict
 from channels.layers import get_channel_layer
 
 from apps.alerting.integration import check_alerts_for_detections, check_alerts_for_incident
-from apps.realtime.broadcast import broadcast_shm
+from apps.realtime.broadcast import (
+    broadcast_per_org,
+    broadcast_shm,
+    broadcast_to_orgs,
+    load_fiber_org_map,
+    load_infra_org_map,
+)
 from apps.shared.constants import MAP_REFRESH_INTERVAL
 
 logger = logging.getLogger("sequoia.simulation")
@@ -391,123 +397,6 @@ def _update_vehicle(
     v.speed = new_speed
     v.channel += ch_delta
     return v
-
-
-# ============================================================================
-# ORG-SCOPED BROADCAST HELPERS
-# ============================================================================
-
-
-async def _load_fiber_org_map() -> dict[str, list[str]]:
-    """Load fiber→org mapping from DB (cached)."""
-    from asgiref.sync import sync_to_async
-
-    from apps.fibers.utils import get_fiber_org_map
-
-    return await sync_to_async(get_fiber_org_map)()
-
-
-def _load_infra_org_map(infrastructure: list[dict]) -> dict[str, str]:
-    """Build infrastructure_id → org_id mapping from infrastructure list."""
-    return {infra["id"]: infra.get("organization_id", "") for infra in infrastructure}
-
-
-async def _broadcast_to_orgs(
-    channel_layer,
-    channel: str,
-    data,
-    fiber_org_map: dict[str, list[str]],
-    fiber_ids: set[str] | None = None,
-    flow: str = "sim",
-):
-    """
-    Send data to all org groups that own the given fibers, plus __all__.
-
-    Args:
-        channel_layer: Django Channels layer
-        channel: Channel name (e.g. 'detections')
-        data: Payload to send
-        fiber_org_map: fiber_id → [org_id, ...] mapping
-        fiber_ids: Set of fiber_ids in this data batch (None = send to all orgs)
-        flow: Flow prefix for group names ('sim' or 'live')
-    """
-    message = {
-        "type": "broadcast_message",
-        "channel": channel,
-        "data": data,
-    }
-
-    # Always send to superuser group
-    await channel_layer.group_send(f"realtime_{flow}_{channel}_org___all__", message)
-
-    if fiber_ids is None:
-        # Broadcast to all known orgs
-        sent_orgs = set()
-        for org_ids in fiber_org_map.values():
-            for org_id in org_ids:
-                if org_id not in sent_orgs:
-                    sent_orgs.add(org_id)
-                    await channel_layer.group_send(
-                        f"realtime_{flow}_{channel}_org_{org_id}", message
-                    )
-    else:
-        # Broadcast to orgs that own these specific fibers
-        # Strip directional suffix for org lookup
-        sent_orgs = set()
-        for fid in fiber_ids:
-            parent_fid = fid.rsplit(":", 1)[0] if ":" in fid else fid
-            for org_id in fiber_org_map.get(parent_fid, []):
-                if org_id not in sent_orgs:
-                    sent_orgs.add(org_id)
-                    await channel_layer.group_send(
-                        f"realtime_{flow}_{channel}_org_{org_id}", message
-                    )
-
-
-async def _broadcast_per_org(
-    channel_layer,
-    channel: str,
-    items: list[dict],
-    fiber_org_map: dict[str, list[str]],
-    fiber_key: str = "fiberLine",
-    flow: str = "sim",
-):
-    """
-    Group items by fiber_id, then send each org only the items from their fibers.
-
-    Used for detections and counts where different items belong to different fibers.
-    Always sends the full set to the __all__ group.
-    """
-    if not items:
-        return
-
-    # Always send full data to superuser group
-    await channel_layer.group_send(
-        f"realtime_{flow}_{channel}_org___all__",
-        {
-            "type": "broadcast_message",
-            "channel": channel,
-            "data": items,
-        },
-    )
-
-    # Group items by org (strip directional suffix for org lookup)
-    org_items: dict[str, list[dict]] = {}
-    for item in items:
-        fid = item.get(fiber_key, "")
-        parent_fid = fid.rsplit(":", 1)[0] if ":" in fid else fid
-        for org_id in fiber_org_map.get(parent_fid, []):
-            org_items.setdefault(org_id, []).append(item)
-
-    for org_id, org_data in org_items.items():
-        await channel_layer.group_send(
-            f"realtime_{flow}_{channel}_org_{org_id}",
-            {
-                "type": "broadcast_message",
-                "channel": channel,
-                "data": org_data,
-            },
-        )
 
 
 # ============================================================================
@@ -883,8 +772,8 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
     engine = SimulationEngine(fibers, infrastructure)
 
     # Load fiber→org mapping (refreshed every 5 minutes)
-    fiber_org_map = await _load_fiber_org_map()
-    infra_org_map = _load_infra_org_map(infrastructure)
+    fiber_org_map = await load_fiber_org_map()
+    infra_org_map = load_infra_org_map(infrastructure)
     last_map_refresh = time.time()
 
     logger.info(
@@ -919,8 +808,8 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
 
         # Refresh fiber→org mapping periodically
         if tick_start - last_map_refresh > MAP_REFRESH_INTERVAL:
-            fiber_org_map = await _load_fiber_org_map()
-            infra_org_map = _load_infra_org_map(infrastructure)
+            fiber_org_map = await load_fiber_org_map()
+            infra_org_map = load_infra_org_map(infrastructure)
             last_map_refresh = tick_start
 
         detections, new_incidents, resolved_incidents = engine.tick(tick_interval * 1000)
@@ -953,7 +842,7 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
                 for d in pending_detections
             ]
             pending_detections.clear()
-            await _broadcast_per_org(
+            await broadcast_per_org(
                 channel_layer,
                 "detections",
                 detection_dicts,
@@ -1000,7 +889,7 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
             for inc in pending_new_incidents + pending_resolved_incidents:
                 inc_data = transform_simulation_incident(inc)
                 directional_fid = inc_data["fiberLine"]
-                await _broadcast_to_orgs(
+                await broadcast_to_orgs(
                     channel_layer,
                     "incidents",
                     inc_data,
@@ -1018,7 +907,7 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
             count_counter = 0
             counts = _compute_section_counts(engine)
             if counts:
-                await _broadcast_per_org(
+                await broadcast_per_org(
                     channel_layer,
                     "counts",
                     counts,

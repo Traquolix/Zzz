@@ -37,5 +37,5 @@ Closes #
 - [ ] No unrelated changes bundled (one concern per PR)
 - [ ] REST endpoints touching sim + live data are flow-aware (`?flow=` param or equivalent)
 - [ ] ClickHouse error handling uses `@clickhouse_fallback` where applicable (not manual try/except)
-- [ ] Broadcasts use shared helpers (`_broadcast_per_org`, `_org_broadcast`), not inline `group_send`
+- [ ] Broadcasts use shared helpers (`broadcast_per_org`, `broadcast_to_orgs`, `broadcast_shm`), not inline `group_send`
 - [ ] All user-visible strings in both `en.json` and `fr.json`
