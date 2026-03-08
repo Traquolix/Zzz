@@ -695,10 +695,11 @@ class SimulationEngine:
             self._init_snapshot(inc)  # Seed with pre-incident data from rolling buffer
             new_incidents.append(inc)
 
-        # Prune old resolved (keep last 50)
+        # Prune old resolved — keep ~1 month of history (~360 incidents/day)
+        # Each incident + snapshot ≈ 5.5 KB, so 10 000 ≈ 55 MB
         resolved_all = [i for i in self.incidents if i.status == "resolved"]
-        if len(resolved_all) > 50:
-            to_remove = set(id(i) for i in resolved_all[:-50])
+        if len(resolved_all) > 10_000:
+            to_remove = set(id(i) for i in resolved_all[:-10_000])
             removed_ids = {i.id for i in self.incidents if id(i) in to_remove}
             self.incidents = [i for i in self.incidents if id(i) not in to_remove]
             # Clean up snapshots for pruned incidents

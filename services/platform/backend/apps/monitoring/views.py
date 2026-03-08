@@ -144,6 +144,13 @@ class IncidentListView(APIView):
                     from apps.realtime.simulation import get_simulation_incidents
 
                     sim_incidents = get_simulation_incidents()
+                    # Org-scope: filter sim incidents to user's fibers
+                    if fiber_ids is not None:
+                        sim_incidents = [
+                            i
+                            for i in sim_incidents
+                            if strip_directional_suffix(i.get("fiberLine", "")) in fiber_ids
+                        ]
                     if sim_incidents:
                         result = {
                             "results": sim_incidents,
