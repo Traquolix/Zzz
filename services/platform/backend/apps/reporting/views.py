@@ -25,16 +25,9 @@ from apps.reporting.serializers import (
 )
 from apps.reporting.task_runner import enqueue_report_generation
 from apps.shared.permissions import IsActiveUser, IsNotViewer
+from apps.shared.utils import org_filter_queryset
 
 logger = logging.getLogger("sequoia.reporting")
-
-
-def _get_org_reports(user):
-    """Return queryset of reports scoped to the user's org."""
-    qs = Report.objects.select_related("created_by")
-    if not user.is_superuser:
-        qs = qs.filter(organization=user.organization)
-    return qs
 
 
 class ReportListView(APIView):
@@ -51,7 +44,11 @@ class ReportListView(APIView):
             limit = min(int(request.query_params.get("limit", 50)), 200)
         except (ValueError, TypeError):
             limit = 50
-        reports = list(_get_org_reports(request.user)[: limit + 1])
+        reports = list(
+            org_filter_queryset(Report.objects.select_related("created_by"), request.user)[
+                : limit + 1
+            ]
+        )
         has_more = len(reports) > limit
         page = reports[:limit]
         serializer = ReportSerializer(page, many=True)
@@ -148,7 +145,9 @@ class ReportDetailView(APIView):
     )
     def get(self, request, report_id):
         try:
-            report = _get_org_reports(request.user).get(pk=report_id)
+            report = org_filter_queryset(
+                Report.objects.select_related("created_by"), request.user
+            ).get(pk=report_id)
         except Report.DoesNotExist:
             return Response({"detail": "Report not found", "code": "report_not_found"}, status=404)
 
@@ -169,7 +168,9 @@ class ReportSendView(APIView):
     )
     def post(self, request, report_id):
         try:
-            report = _get_org_reports(request.user).get(pk=report_id)
+            report = org_filter_queryset(
+                Report.objects.select_related("created_by"), request.user
+            ).get(pk=report_id)
         except Report.DoesNotExist:
             return Response({"detail": "Report not found", "code": "report_not_found"}, status=404)
 
@@ -208,14 +209,6 @@ class ReportSendView(APIView):
         return Response({"sent": True})
 
 
-def _get_org_schedules(user):
-    """Return queryset of schedules scoped to the user's org."""
-    qs = ReportSchedule.objects.select_related("created_by")
-    if not user.is_superuser:
-        qs = qs.filter(organization=user.organization)
-    return qs
-
-
 class ReportScheduleListView(APIView):
     """GET /api/reports/schedules — list schedules; POST — create new schedule."""
 
@@ -234,7 +227,11 @@ class ReportScheduleListView(APIView):
             limit = min(int(request.query_params.get("limit", 50)), 200)
         except (ValueError, TypeError):
             limit = 50
-        schedules = list(_get_org_schedules(request.user)[: limit + 1])
+        schedules = list(
+            org_filter_queryset(ReportSchedule.objects.select_related("created_by"), request.user)[
+                : limit + 1
+            ]
+        )
         has_more = len(schedules) > limit
         page = schedules[:limit]
         serializer = ReportScheduleSerializer(page, many=True)
@@ -321,7 +318,9 @@ class ReportScheduleDetailView(APIView):
     )
     def delete(self, request, schedule_id):
         try:
-            schedule = _get_org_schedules(request.user).get(pk=schedule_id)
+            schedule = org_filter_queryset(
+                ReportSchedule.objects.select_related("created_by"), request.user
+            ).get(pk=schedule_id)
         except ReportSchedule.DoesNotExist:
             return Response(
                 {"detail": "Schedule not found", "code": "schedule_not_found"}, status=404

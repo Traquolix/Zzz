@@ -207,13 +207,15 @@ dev-backend: ## Start backend dev server (auto-setup on first run)
 	@echo "==> Starting backend on http://localhost:8001"
 	cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/daphne -b 127.0.0.1 -p 8001 sequoia.asgi:application
 
-dev-frontend: ## Start frontend dev server (auto-setup on first run)
+dev-frontend: ## Build and preview frontend locally (auto-setup on first run)
 	@if [ ! -d "$(FRONTEND_DIR)/node_modules" ]; then \
 		echo "==> Installing frontend dependencies..."; \
 		cd $(FRONTEND_DIR) && npm install; \
 	fi
-	@echo "==> Starting frontend on http://localhost:5173"
-	cd $(FRONTEND_DIR) && npm run dev
+	@echo "==> Building frontend..."
+	cd $(FRONTEND_DIR) && unset VITE_API_URL VITE_WS_URL VITE_MAPBOX_TOKEN && npm run build
+	@echo "==> Serving frontend on http://localhost:4173"
+	cd $(FRONTEND_DIR) && npm run preview
 
 # ---------------------------------------------------------------------------
 # Backup & Restore (run on the backend server)

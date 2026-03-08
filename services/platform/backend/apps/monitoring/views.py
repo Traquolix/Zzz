@@ -10,13 +10,13 @@ import time
 
 from django.core.cache import cache as django_cache
 from drf_spectacular.utils import OpenApiParameter, extend_schema
+from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.fibers.utils import get_org_fiber_ids
+from apps.fibers.utils import fiber_belongs_to_org, get_org_fiber_ids
 from apps.monitoring.incident_service import (
     _ensure_directional_fiber_id,
-    strip_directional_suffix,
 )
 from apps.monitoring.incident_service import (
     query_by_id as incident_query_by_id,
@@ -24,6 +24,7 @@ from apps.monitoring.incident_service import (
 from apps.monitoring.incident_service import (
     query_recent as incident_query_recent,
 )
+from apps.monitoring.mixins import FlowAwareMixin
 from apps.monitoring.models import IncidentAction, Infrastructure
 from apps.monitoring.section_service import (
     delete_section,
@@ -52,13 +53,14 @@ from apps.monitoring.workflow import (
 from apps.shared.clickhouse import clickhouse_fallback, query, query_scalar
 from apps.shared.exceptions import ClickHouseUnavailableError
 from apps.shared.permissions import IsActiveUser, IsNotViewer
+from apps.shared.utils import build_org_cache_key
 
 logger = logging.getLogger("sequoia")
+
 _PROCESS_START_TIME = time.time()
 
 INCIDENTS_CACHE_TTL = 10  # 10 seconds
 STATS_CACHE_TTL = 5  # 5 seconds
-FALLBACK_CACHE_TTL = 60  # 60 seconds when ClickHouse unavailable (reduce log spam)
 
 
 def _get_fiber_ids_or_none(user):
@@ -66,18 +68,6 @@ def _get_fiber_ids_or_none(user):
     if user.is_superuser:
         return None
     return get_org_fiber_ids(user.organization)
-
-
-def _incidents_cache_key(user):
-    if user.is_superuser:
-        return "incidents:all"
-    return f"incidents:org:{user.organization_id}"
-
-
-def _stats_cache_key(user):
-    if user.is_superuser:
-        return "stats:all"
-    return f"stats:org:{user.organization_id}"
 
 
 def _verify_infrastructure_access(user, infrastructure_id):
@@ -95,9 +85,13 @@ def _verify_infrastructure_access(user, infrastructure_id):
     return None
 
 
-class IncidentListView(APIView):
+class IncidentListView(FlowAwareMixin, APIView):
     """
-    GET /api/incidents — returns active + recent incidents from ClickHouse.
+    GET /api/incidents — returns active + recent incidents.
+
+    Strict flow isolation:
+    - ``flow=sim`` → simulation cache only (never ClickHouse)
+    - ``flow=live`` → ClickHouse only (503 if unavailable, never sim)
 
     Org-scoped: only incidents from the user's assigned fibers.
     """
@@ -114,7 +108,8 @@ class IncidentListView(APIView):
         except (ValueError, TypeError):
             limit = 100
 
-        cache_key = f"{_incidents_cache_key(request.user)}:{limit}"
+        flow = self._get_flow(request)
+        cache_key = f"{build_org_cache_key('incidents', request.user)}:{flow}:{limit}"
         cached = django_cache.get(cache_key)
         if cached is not None:
             return Response(cached)
@@ -125,37 +120,34 @@ class IncidentListView(APIView):
             django_cache.set(cache_key, result, INCIDENTS_CACHE_TTL)
             return Response(result)
 
+        if self._is_sim(request):
+            return self._get_sim_incidents(request, cache_key, limit)
+
+        return self._get_live_incidents(request, cache_key, limit, fiber_ids)
+
+    def _get_sim_incidents(self, request, cache_key: str, limit: int):
+        """Sim flow: return incidents from simulation cache only."""
+        from apps.realtime.simulation import get_simulation_incidents
+
+        sim_incidents = self._get_sim_data(request, get_simulation_incidents)
+        page = sim_incidents[:limit]
+        result = {
+            "results": page,
+            "hasMore": len(sim_incidents) > limit,
+            "limit": limit,
+        }
+        django_cache.set(cache_key, result, INCIDENTS_CACHE_TTL)
+        return Response(result)
+
+    def _get_live_incidents(self, request, cache_key: str, limit: int, fiber_ids):
+        """Live flow: return incidents from ClickHouse only."""
         try:
-            # Fetch one extra to detect if there's a next page
             incidents = incident_query_recent(fiber_ids=fiber_ids, hours=24, limit=limit + 1)
         except ClickHouseUnavailableError:
-            incidents = None
-
-        # Simulation keeps incidents in memory only — fall back when
-        # ClickHouse is unavailable or returned no results.
-        if not incidents:
-            from apps.realtime.simulation_manager import SimulationManager
-
-            if SimulationManager.instance().is_running:
-                try:
-                    from apps.realtime.simulation import get_simulation_incidents
-
-                    sim_incidents = get_simulation_incidents()
-                    if sim_incidents:
-                        result = {
-                            "results": sim_incidents,
-                            "hasMore": False,
-                            "limit": len(sim_incidents),
-                        }
-                        django_cache.set(cache_key, result, FALLBACK_CACHE_TTL)
-                        return Response(result)
-                except ImportError:
-                    pass
-            if incidents is None:
-                return Response(
-                    {"detail": "ClickHouse unavailable", "code": "clickhouse_unavailable"},
-                    status=503,
-                )
+            return Response(
+                {"detail": "ClickHouse unavailable", "code": "clickhouse_unavailable"},
+                status=503,
+            )
 
         has_more = len(incidents) > limit
         page = incidents[:limit]
@@ -168,15 +160,15 @@ class IncidentListView(APIView):
         return Response(result)
 
 
-class IncidentSnapshotView(APIView):
+class IncidentSnapshotView(FlowAwareMixin, APIView):
     """
     GET /api/incidents/<id>/snapshot — high-res speed data around an incident.
 
-    Org-scoped: verifies the incident's fiber belongs to the user's org.
+    Strict flow isolation:
+    - ``flow=sim`` → simulation snapshot cache only
+    - ``flow=live`` → ClickHouse only (503 if unavailable)
 
-    Note: snapshots are empty in simulation mode because the simulation engine
-    does not write to the detection_hires ClickHouse table. Snapshots require live
-    pipeline data flowing through Kafka -> ClickHouse.
+    Org-scoped: verifies the incident's fiber belongs to the user's org.
     """
 
     permission_classes = [IsActiveUser]
@@ -186,6 +178,42 @@ class IncidentSnapshotView(APIView):
         tags=["incidents"],
     )
     def get(self, request, incident_id):
+        if self._is_sim(request):
+            return self._get_sim_snapshot(request, incident_id)
+
+        return self._get_live_snapshot(request, incident_id)
+
+    def _get_sim_snapshot(self, request, incident_id: str):
+        """Sim flow: return snapshot from simulation cache only."""
+        from apps.realtime.simulation import get_simulation_incidents, get_simulation_snapshot
+
+        sim_incidents = get_simulation_incidents()
+        sim_incident = next((i for i in sim_incidents if i["id"] == incident_id), None)
+        if sim_incident is None:
+            raise NotFound({"detail": "Incident not found", "code": "incident_not_found"})
+
+        # Org-scoping: verify fiber belongs to user's org
+        fiber_ids = _get_fiber_ids_or_none(request.user)
+        if fiber_ids is not None and not fiber_belongs_to_org(sim_incident["fiberLine"], fiber_ids):
+            raise NotFound({"detail": "Incident not found", "code": "incident_not_found"})
+
+        snapshot = get_simulation_snapshot(incident_id)
+        points = snapshot["points"] if snapshot else []
+        complete = snapshot["complete"] if snapshot else True
+
+        return Response(
+            {
+                "incidentId": incident_id,
+                "fiberLine": sim_incident["fiberLine"],
+                "centerChannel": sim_incident["channel"],
+                "capturedAt": int(time.time() * 1000),
+                "points": points,
+                "complete": complete,
+            }
+        )
+
+    def _get_live_snapshot(self, request, incident_id: str):
+        """Live flow: return snapshot from ClickHouse only."""
         try:
             incident_rows = query(
                 """
@@ -203,48 +231,45 @@ class IncidentSnapshotView(APIView):
             )
 
         if not incident_rows:
-            return Response(
-                {"detail": "Incident not found", "code": "incident_not_found"}, status=404
-            )
+            raise NotFound({"detail": "Incident not found", "code": "incident_not_found"})
 
         incident = incident_rows[0]
         fiber_id = incident["fiber_id"]
 
         # Org-scoping: verify the incident's fiber belongs to user's org
-        # fiber_id from ClickHouse may be directional ("carros:0") while
-        # fiber_ids from FiberAssignment are plain ("carros") — strip suffix
         fiber_ids = _get_fiber_ids_or_none(request.user)
-        if fiber_ids is not None:
-            plain_fiber_id = strip_directional_suffix(fiber_id)
-            if plain_fiber_id not in fiber_ids:
-                return Response(
-                    {"detail": "Incident not found", "code": "incident_not_found"}, status=404
-                )
+        if fiber_ids is not None and not fiber_belongs_to_org(fiber_id, fiber_ids):
+            raise NotFound({"detail": "Incident not found", "code": "incident_not_found"})
 
         center_ch = (incident["channel_start"] + incident["channel_end"]) // 2
         ts_ns = incident["timestamp_ns"]
 
+        # Aggregate into 1-second buckets server-side
+        window_start_ns = ts_ns - 60_000_000_000
+        window_end_ns = ts_ns + 60_000_000_000
         try:
-            detection_rows = query(
+            agg_rows = query(
                 """
                 SELECT
-                    fiber_id, ch, speed, direction,
-                    vehicle_count, n_cars, n_trucks,
-                    toUnixTimestamp64Milli(ts) AS timestamp
+                    toUnixTimestamp64Milli(
+                        toStartOfInterval(ts, INTERVAL 1 second)
+                    ) AS bucket_ms,
+                    avg(abs(speed)) AS avg_speed,
+                    sum(vehicle_count) AS total_count
                 FROM sequoia.detection_hires
                 WHERE fiber_id = {fid:String}
                   AND ch BETWEEN {ch_min:UInt16} AND {ch_max:UInt16}
                   AND ts BETWEEN fromUnixTimestamp64Nano({ts_start:UInt64})
                               AND fromUnixTimestamp64Nano({ts_end:UInt64})
-                ORDER BY ts
-                LIMIT 50000
+                GROUP BY bucket_ms
+                ORDER BY bucket_ms
                 """,
                 parameters={
                     "fid": fiber_id,
                     "ch_min": max(0, center_ch - 50),
                     "ch_max": center_ch + 50,
-                    "ts_start": ts_ns - 60_000_000_000,
-                    "ts_end": ts_ns + 60_000_000_000,
+                    "ts_start": window_start_ns,
+                    "ts_end": window_end_ns,
                 },
             )
         except ClickHouseUnavailableError:
@@ -252,23 +277,33 @@ class IncidentSnapshotView(APIView):
                 {"detail": "ClickHouse unavailable", "code": "clickhouse_unavailable"}, status=503
             )
 
-        detections = []
-        for row in detection_rows:
-            # Map AI engine direction (1=fwd, 2=rev) to frontend (0, 1)
-            raw_direction = row.get("direction", 0)
-            direction = max(0, raw_direction - 1)  # 1->0, 2->1, 0->0
-            detections.append(
-                {
-                    "fiberLine": f"{row['fiber_id']}:{direction}",
-                    "channel": row["ch"],
-                    "speed": abs(row["speed"]),
-                    "count": row.get("vehicle_count", 1),
-                    "nCars": row.get("n_cars", 0),
-                    "nTrucks": row.get("n_trucks", 0),
-                    "direction": direction,
-                    "timestamp": row["timestamp"],
-                }
+        # Build lookup from aggregated rows
+        avg_vehicle_length_m = 6
+        bucket_lookup = {}
+        for row in agg_rows:
+            avg_spd = round(row["avg_speed"])
+            flow_count = int(row["total_count"])
+            speed_ms = avg_spd * (1000 / 3600)
+            occ = (
+                min(100, round((flow_count * 3600 * avg_vehicle_length_m) / (speed_ms * 1000)))
+                if speed_ms > 0
+                else None
             )
+            bucket_lookup[int(row["bucket_ms"])] = {
+                "speed": avg_spd,
+                "flow": flow_count,
+                "occupancy": occ,
+            }
+
+        # Fill all 120 second slots
+        window_start_ms = ts_ns // 1_000_000 - 60_000
+        points = []
+        for s in range(120):
+            t = window_start_ms + s * 1000
+            if t in bucket_lookup:
+                points.append({"time": t, **bucket_lookup[t]})
+            else:
+                points.append({"time": t, "speed": None, "flow": None, "occupancy": None})
 
         return Response(
             {
@@ -276,7 +311,8 @@ class IncidentSnapshotView(APIView):
                 "fiberLine": _ensure_directional_fiber_id(fiber_id),
                 "centerChannel": center_ch,
                 "capturedAt": int(time.time() * 1000),
-                "detections": detections,
+                "points": points,
+                "complete": True,
             }
         )
 
@@ -314,13 +350,11 @@ class IncidentActionView(APIView):
 
         # Org-scoping
         fiber_ids = _get_fiber_ids_or_none(request.user)
-        if fiber_ids is not None:
-            plain_fiber_id = strip_directional_suffix(incident["fiber_id"])
-            if plain_fiber_id not in fiber_ids:
-                return None, Response(
-                    {"detail": "Incident not found", "code": "incident_not_found"},
-                    status=404,
-                )
+        if fiber_ids is not None and not fiber_belongs_to_org(incident["fiber_id"], fiber_ids):
+            return None, Response(
+                {"detail": "Incident not found", "code": "incident_not_found"},
+                status=404,
+            )
 
         return incident, None
 
@@ -450,9 +484,13 @@ class InfrastructureListView(APIView):
         return Response({"results": data, "hasMore": False, "limit": len(data)})
 
 
-class StatsView(APIView):
+class StatsView(FlowAwareMixin, APIView):
     """
     GET /api/stats — system-level statistics.
+
+    Strict flow isolation:
+    - ``flow=sim`` → stats derived from simulation caches
+    - ``flow=live`` → stats from ClickHouse (503 if unavailable)
 
     Org-scoped: counts only fibers/channels/incidents/detections from
     the user's assigned fibers.
@@ -466,11 +504,39 @@ class StatsView(APIView):
     )
     @clickhouse_fallback()
     def get(self, request):
-        cache_key = _stats_cache_key(request.user)
+        flow = self._get_flow(request)
+        cache_key = f"{build_org_cache_key('stats', request.user)}:{flow}"
         cached = django_cache.get(cache_key)
         if cached is not None:
             return Response(cached)
 
+        if self._is_sim(request):
+            data = self._get_sim_stats(request)
+        else:
+            data = self._get_live_stats(request)
+
+        django_cache.set(cache_key, data, STATS_CACHE_TTL)
+        return Response(data)
+
+    def _get_sim_stats(self, request) -> dict:
+        """Sim flow: derive stats from simulation caches."""
+        from apps.realtime.simulation import get_simulation_incidents, get_simulation_stats
+
+        sim_incidents = self._get_sim_data(request, get_simulation_incidents)
+        active_incidents = sum(1 for i in sim_incidents if i.get("status") == "active")
+        stats = get_simulation_stats()
+
+        return {
+            "fiberCount": stats.get("fiber_count", 0),
+            "totalChannels": stats.get("total_channels", 0),
+            "activeVehicles": stats.get("active_vehicles", 0),
+            "detectionsPerSecond": 0,
+            "activeIncidents": active_incidents,
+            "systemUptime": int(time.time() - _PROCESS_START_TIME),
+        }
+
+    def _get_live_stats(self, request) -> dict:
+        """Live flow: query ClickHouse for real stats."""
         fiber_ids = _get_fiber_ids_or_none(request.user)
 
         if fiber_ids is not None:
@@ -565,7 +631,7 @@ class StatsView(APIView):
                 or 0
             )
 
-        data = {
+        return {
             "fiberCount": fiber_count,
             "totalChannels": total_channels,
             "activeVehicles": int(active_vehicles),
@@ -573,8 +639,6 @@ class StatsView(APIView):
             "activeIncidents": active_incidents,
             "systemUptime": int(time.time() - _PROCESS_START_TIME),
         }
-        django_cache.set(cache_key, data, STATS_CACHE_TTL)
-        return Response(data)
 
 
 class SectionListView(APIView):
@@ -591,7 +655,7 @@ class SectionListView(APIView):
         responses={200: SectionSerializer(many=True)},
         tags=["sections"],
     )
-    @clickhouse_fallback()
+    @clickhouse_fallback(fallback_fn=lambda self, request, *a, **kw: Response({"results": []}))
     def get(self, request):
         fiber_ids = _get_fiber_ids_or_none(request.user)
         if fiber_ids is not None and not fiber_ids:
@@ -617,13 +681,11 @@ class SectionListView(APIView):
 
         # Org-scoping: verify the fiber belongs to user's org
         fiber_ids = _get_fiber_ids_or_none(request.user)
-        if fiber_ids is not None:
-            plain_fiber_id = strip_directional_suffix(fiber_id)
-            if plain_fiber_id not in fiber_ids:
-                return Response(
-                    {"detail": "Fiber not found", "code": "not_found"},
-                    status=404,
-                )
+        if fiber_ids is not None and not fiber_belongs_to_org(fiber_id, fiber_ids):
+            return Response(
+                {"detail": "Fiber not found", "code": "not_found"},
+                status=404,
+            )
 
         section = insert_section(
             fiber_id=fiber_id,
@@ -657,12 +719,11 @@ class SectionDeleteView(APIView):
 
         # Org-scoping
         fiber_ids = _get_fiber_ids_or_none(request.user)
-        if fiber_ids is not None:
-            if strip_directional_suffix(section["fiberId"]) not in fiber_ids:
-                return Response(
-                    {"detail": "Section not found", "code": "not_found"},
-                    status=404,
-                )
+        if fiber_ids is not None and not fiber_belongs_to_org(section["fiberId"], fiber_ids):
+            return Response(
+                {"detail": "Section not found", "code": "not_found"},
+                status=404,
+            )
 
         delete_section(section_id, section["fiberId"])
         return Response(status=204)
@@ -704,12 +765,11 @@ class SectionHistoryView(APIView):
 
         # Org-scoping
         fiber_ids = _get_fiber_ids_or_none(request.user)
-        if fiber_ids is not None:
-            if strip_directional_suffix(section["fiberId"]) not in fiber_ids:
-                return Response(
-                    {"detail": "Section not found", "code": "not_found"},
-                    status=404,
-                )
+        if fiber_ids is not None and not fiber_belongs_to_org(section["fiberId"], fiber_ids):
+            return Response(
+                {"detail": "Section not found", "code": "not_found"},
+                status=404,
+            )
 
         history = query_section_history(
             fiber_id=section["fiberId"],

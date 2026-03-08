@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback } from 'react'
 import { useRealtime } from '@/hooks/useRealtime'
+import { useFlowReset } from '@/hooks/useFlowReset'
 import { parseDetections } from '@/lib/parseMessage'
 import { channelToCoord } from '../data'
 
@@ -16,7 +17,7 @@ const DOT_TTL = 1000 // ms
 const GEOJSON_THROTTLE_MS = 100 // rebuild GeoJSON at most 10Hz (not 60fps)
 
 export function useDetections() {
-  const { connected, subscribe, onFlowChange } = useRealtime()
+  const { connected, subscribe } = useRealtime()
   const dotsRef = useRef(new Map<string, LiveDot>())
   const dirtyRef = useRef(false)
   const cachedGeoJSON = useRef<GeoJSON.FeatureCollection>({
@@ -27,14 +28,12 @@ export function useDetections() {
   const lastDetectionTsRef = useRef(0)
 
   // Clear accumulated state on flow switch
-  useEffect(() => {
-    return onFlowChange(() => {
-      dotsRef.current.clear()
-      dirtyRef.current = true
-      lastDetectionTsRef.current = 0
-      cachedGeoJSON.current = { type: 'FeatureCollection', features: [] }
-    })
-  }, [onFlowChange])
+  useFlowReset(() => {
+    dotsRef.current.clear()
+    dirtyRef.current = true
+    lastDetectionTsRef.current = 0
+    cachedGeoJSON.current = { type: 'FeatureCollection', features: [] }
+  })
 
   useEffect(() => {
     // Pre-allocate a reusable key buffer to avoid per-detection string allocation

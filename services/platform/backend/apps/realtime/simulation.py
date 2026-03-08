@@ -14,28 +14,53 @@ import asyncio
 import logging
 import math
 import random
-import threading
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Optional
+from typing import Optional, TypedDict
 
 from channels.layers import get_channel_layer
 
 from apps.alerting.integration import check_alerts_for_detections, check_alerts_for_incident
+from apps.realtime.broadcast import broadcast_shm
 from apps.shared.constants import MAP_REFRESH_INTERVAL
 
 logger = logging.getLogger("sequoia.simulation")
 
-# Global cache for simulation incidents (used by REST API fallback)
+# Global cache for simulation incidents (used by REST API fallback).
+# Written by the async simulation loop, read by sync REST views.
+# Uses atomic reference swap (GIL-safe) instead of locks to avoid
+# blocking the event loop on contention.
 _simulation_incidents_cache: list = []
-_simulation_incidents_lock = threading.Lock()
+
+# Global cache for incident snapshots — recorded detections near each incident.
+# Each entry: {"points": [...], "complete": bool}
+_simulation_snapshots: dict[str, dict] = {}
+
+# Global cache for simulation-wide stats (fiber/channel/vehicle counts).
+_simulation_stats: dict[str, int] = {}
 
 
 def get_simulation_incidents() -> list:
     """Get current simulation incidents for REST API fallback."""
-    with _simulation_incidents_lock:
-        return list(_simulation_incidents_cache)
+    return list(_simulation_incidents_cache)
+
+
+def get_simulation_snapshot(incident_id: str) -> dict | None:
+    """Get recorded snapshot for a simulated incident, or None.
+
+    Returns {"points": [...], "complete": bool} or None.
+    Each point: {"time": epoch_ms, "speed": float|null, "flow": int|null, "occupancy": float|null}
+    """
+    entry = _simulation_snapshots.get(incident_id)
+    if entry is not None:
+        return {"points": list(entry["points"]), "complete": entry["complete"]}
+    return None
+
+
+def get_simulation_stats() -> dict[str, int]:
+    """Get simulation-wide stats (fiber count, channel count, active vehicles)."""
+    return dict(_simulation_stats)
 
 
 def _update_simulation_incidents_cache(incidents: list):
@@ -43,8 +68,58 @@ def _update_simulation_incidents_cache(incidents: list):
     from apps.monitoring.incident_service import transform_simulation_incident
 
     global _simulation_incidents_cache
-    with _simulation_incidents_lock:
-        _simulation_incidents_cache = [transform_simulation_incident(i) for i in incidents]
+    _simulation_incidents_cache = [transform_simulation_incident(i) for i in incidents]
+
+
+def _buckets_to_points(snap: dict, now_ms: float) -> list[dict]:
+    """Convert aggregation buckets to time-series points.
+
+    Skips the bucket currently being filled (partial second) to avoid
+    showing artificially low values that get corrected on the next poll.
+    """
+    start_ms = snap["start_ms"]
+    # Bucket index of the current (incomplete) second
+    current_bucket = int((now_ms - start_ms) / 1000) if not snap["complete"] else -1
+    points = []
+    for s in range(SNAPSHOT_WINDOW_S * 2):
+        b = snap["buckets"][s]
+        t = start_ms + s * 1000
+        if s == current_bucket or b["speed_count"] == 0:
+            points.append({"time": t, "speed": None, "flow": None, "occupancy": None})
+        else:
+            avg_speed = round(b["speed_sum"] / b["speed_count"])
+            flow = b["vehicle_count"]
+            speed_ms = avg_speed * (1000 / 3600)
+            occupancy = (
+                min(100, round((flow * 3600 * AVG_VEHICLE_LENGTH_M) / (speed_ms * 1000)))
+                if speed_ms > 0
+                else None
+            )
+            points.append({"time": t, "speed": avg_speed, "flow": flow, "occupancy": occupancy})
+    return points
+
+
+def _update_simulation_stats(engine: "SimulationEngine"):
+    """Update the global stats cache from the simulation engine."""
+    global _simulation_stats
+    _simulation_stats = {
+        "fiber_count": len(engine.fibers),
+        "total_channels": sum(f.channel_count for f in engine.fibers),
+        "active_vehicles": len(engine.vehicles),
+    }
+
+
+def _update_simulation_snapshots(snapshots: dict[str, dict]):
+    """Replace the global snapshots cache with the engine's aggregated points."""
+    global _simulation_snapshots
+    now_ms = time.time() * 1000
+    converted = {}
+    for iid, snap in snapshots.items():
+        converted[iid] = {
+            "points": _buckets_to_points(snap, now_ms),
+            "complete": snap["complete"],
+        }
+    _simulation_snapshots = converted
 
 
 # ============================================================================
@@ -98,6 +173,7 @@ class Incident:
     fiber_line: str
     channel: int
     detected_at: str
+    detected_at_ms: float  # Wall-clock ms at creation (avoids UTC/local parsing bugs)
     status: str = "active"
     duration: Optional[float] = None
 
@@ -155,7 +231,23 @@ DAILY_TRAFFIC = [
 
 BASE_SPAWN_RATES = {"low": 4, "medium": 10, "high": 20}
 
-INCIDENT_CONFIGS = [
+
+class _IncidentConfig(TypedDict):
+    type: str
+    prob: float
+    dur: tuple[int, int]
+    weights: list[float]
+
+
+class _SpawnPoint(TypedDict):
+    fiber: str
+    ch: int
+    dir: int
+    rate: float
+    last: float
+
+
+INCIDENT_CONFIGS: list[_IncidentConfig] = [
     {
         "type": "slowdown",
         "prob": 0.3,
@@ -183,10 +275,14 @@ INCIDENT_CONFIGS = [
 ]
 SEVERITIES = ["low", "medium", "high", "critical"]
 
+SNAPSHOT_CHANNEL_RADIUS = 100  # ±100 channels (~1km) around incident center
+SNAPSHOT_WINDOW_S = 60  # Record ±60s around incident detected_at
+AVG_VEHICLE_LENGTH_M = 6  # For occupancy estimation
+
 INFRA_BASE_FREQ = {"bridge": 5.0, "tunnel": 15.0}
 
 
-def _weighted_choice(items, weights):
+def _weighted_choice(items: list[str], weights: list[float]) -> str:
     total = sum(weights)
     r = random.random() * total
     for item, w in zip(items, weights):
@@ -322,6 +418,7 @@ async def _broadcast_to_orgs(
     data,
     fiber_org_map: dict[str, list[str]],
     fiber_ids: set[str] | None = None,
+    flow: str = "sim",
 ):
     """
     Send data to all org groups that own the given fibers, plus __all__.
@@ -332,6 +429,7 @@ async def _broadcast_to_orgs(
         data: Payload to send
         fiber_org_map: fiber_id → [org_id, ...] mapping
         fiber_ids: Set of fiber_ids in this data batch (None = send to all orgs)
+        flow: Flow prefix for group names ('sim' or 'live')
     """
     message = {
         "type": "broadcast_message",
@@ -340,7 +438,7 @@ async def _broadcast_to_orgs(
     }
 
     # Always send to superuser group
-    await channel_layer.group_send(f"realtime_{channel}_org___all__", message)
+    await channel_layer.group_send(f"realtime_{flow}_{channel}_org___all__", message)
 
     if fiber_ids is None:
         # Broadcast to all known orgs
@@ -349,7 +447,9 @@ async def _broadcast_to_orgs(
             for org_id in org_ids:
                 if org_id not in sent_orgs:
                     sent_orgs.add(org_id)
-                    await channel_layer.group_send(f"realtime_{channel}_org_{org_id}", message)
+                    await channel_layer.group_send(
+                        f"realtime_{flow}_{channel}_org_{org_id}", message
+                    )
     else:
         # Broadcast to orgs that own these specific fibers
         # Strip directional suffix for org lookup
@@ -359,7 +459,9 @@ async def _broadcast_to_orgs(
             for org_id in fiber_org_map.get(parent_fid, []):
                 if org_id not in sent_orgs:
                     sent_orgs.add(org_id)
-                    await channel_layer.group_send(f"realtime_{channel}_org_{org_id}", message)
+                    await channel_layer.group_send(
+                        f"realtime_{flow}_{channel}_org_{org_id}", message
+                    )
 
 
 async def _broadcast_per_org(
@@ -368,6 +470,7 @@ async def _broadcast_per_org(
     items: list[dict],
     fiber_org_map: dict[str, list[str]],
     fiber_key: str = "fiberLine",
+    flow: str = "sim",
 ):
     """
     Group items by fiber_id, then send each org only the items from their fibers.
@@ -380,7 +483,7 @@ async def _broadcast_per_org(
 
     # Always send full data to superuser group
     await channel_layer.group_send(
-        f"realtime_{channel}_org___all__",
+        f"realtime_{flow}_{channel}_org___all__",
         {
             "type": "broadcast_message",
             "channel": channel,
@@ -398,7 +501,7 @@ async def _broadcast_per_org(
 
     for org_id, org_data in org_items.items():
         await channel_layer.group_send(
-            f"realtime_{channel}_org_{org_id}",
+            f"realtime_{flow}_{channel}_org_{org_id}",
             {
                 "type": "broadcast_message",
                 "channel": channel,
@@ -424,6 +527,14 @@ class SimulationEngine:
         self.hour_advance_rate = 30  # 30x speed
         self.tick_count = 0
 
+        # Recorded detections near each incident: incident_id → {detections, complete, start_ms, end_ms}
+        # Fixed window: detected_at ± SNAPSHOT_WINDOW_S, capped at SNAPSHOT_MAX_DETECTIONS
+        self.incident_snapshots: dict[str, dict] = {}
+
+        # Rolling detection buffer per fiber — always keeps last SNAPSHOT_WINDOW_S seconds
+        # Used to seed snapshots with pre-incident data when a new incident spawns
+        self._detection_ring: dict[str, list[dict]] = {f.id: [] for f in fibers}
+
         # SHM state
         self.shm_base_freq = {}
         self.shm_phase = {}
@@ -435,7 +546,7 @@ class SimulationEngine:
             self.shm_phase[iid] = random.random() * math.pi * 2
 
         # Spawn points
-        self.spawn_points = []
+        self.spawn_points: list[_SpawnPoint] = []
         for fiber in fibers:
             rate = BASE_SPAWN_RATES.get(fiber.traffic_density, 10)
             self.spawn_points.append(
@@ -459,72 +570,10 @@ class SimulationEngine:
                     {"fiber": fiber.id, "ch": mid, "dir": 1, "rate": rate * 0.3, "last": 0}
                 )
 
-        # Pre-generate historical incidents
-        self._generate_historical_incidents()
-
-        # Generate startup incidents (5-10 active incidents in first minute)
-        self._generate_startup_incidents()
-
-    def _generate_startup_incidents(self):
-        """Generate 5-10 active incidents to populate the UI at startup."""
-        now_ms = time.time() * 1000
-        num_incidents = random.randint(5, 10)
-
-        for i in range(num_incidents):
-            fiber = random.choice(self.fibers)
-            ch = 50 + random.randint(0, max(1, fiber.channel_count - 100))
-            cfg = random.choice(INCIDENT_CONFIGS)
-            severity = _weighted_choice(SEVERITIES, cfg["weights"])
-
-            # Incidents detected within the last 0-60 seconds (staggered)
-            seconds_ago = (i / num_incidents) * 60  # Spread over first minute
-            detected_at = now_ms - seconds_ago * 1000
-
-            # Long duration to ensure they stay active
-            dur = cfg["dur"][1]  # Use max duration
-
-            self.incidents.append(
-                Incident(
-                    id=f"inc-startup-{i}-{uuid.uuid4().hex[:4]}",
-                    type=cfg["type"],
-                    severity=severity,
-                    fiber_line=fiber.id,
-                    channel=ch,
-                    detected_at=time.strftime(
-                        "%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(detected_at / 1000)
-                    ),
-                    status="active",
-                    duration=dur,
-                )
-            )
-
-        logger.info("Generated %d startup incidents", num_incidents)
-
-    def _generate_historical_incidents(self):
-        now_ms = time.time() * 1000
-        for i in range(50):
-            fiber = random.choice(self.fibers)
-            ch = 50 + random.randint(0, max(1, fiber.channel_count - 100))
-            cfg = random.choice(INCIDENT_CONFIGS)
-            severity = _weighted_choice(SEVERITIES, cfg["weights"])
-            hours_ago = (random.random() ** 2) * 168
-            detected_at = now_ms - hours_ago * 3_600_000
-            dur = cfg["dur"][0] + random.random() * (cfg["dur"][1] - cfg["dur"][0])
-            elapsed = now_ms - detected_at
-            self.incidents.append(
-                Incident(
-                    id=f"inc-hist-{i}-{uuid.uuid4().hex[:4]}",
-                    type=cfg["type"],
-                    severity=severity,
-                    fiber_line=fiber.id,
-                    channel=ch,
-                    detected_at=time.strftime(
-                        "%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(detected_at / 1000)
-                    ),
-                    status="resolved" if elapsed > dur else "active",
-                    duration=dur,
-                )
-            )
+        # Track when simulation started — incidents only spawn after warmup period
+        # so snapshot data has time to accumulate
+        self._started_at = time.time()
+        self._incident_warmup_s = 180  # 3 minutes
 
     def _density_multiplier(self) -> float:
         h = int(self.simulated_hour) % 24
@@ -582,21 +631,26 @@ class SimulationEngine:
         # Generate detections (group nearby vehicles)
         detections = self._generate_detections()
 
+        # Record detections near active incidents for snapshot queries
+        self._record_incident_detections(detections, now_ms)
+
         # Resolve expired incidents + maybe create new ones
-        new_incidents = []
-        resolved_incidents = []
+        new_incidents: list[Incident] = []
+        resolved_incidents: list[Incident] = []
 
         for inc in self.incidents:
             if inc.status == "active" and inc.duration:
-                try:
-                    detected_ts = (
-                        time.mktime(time.strptime(inc.detected_at[:19], "%Y-%m-%dT%H:%M:%S")) * 1000
-                    )
-                except ValueError:
-                    detected_ts = now_ms
-                if now_ms - detected_ts > inc.duration:
+                if now_ms - inc.detected_at_ms > inc.duration:
                     inc.status = "resolved"
                     resolved_incidents.append(inc)
+
+        # Only generate new incidents after warmup (so snapshot data can accumulate)
+        if now - self._started_at < self._incident_warmup_s:
+            return detections, new_incidents, resolved_incidents
+
+        if not hasattr(self, "_warmup_logged"):
+            self._warmup_logged = True
+            logger.info("Warmup complete (%ds), incidents will now spawn", self._incident_warmup_s)
 
         # Maybe generate new incidents (15x multiplier for dev testing)
         hours_frac = delta_ms / 3_600_000 * 15
@@ -604,9 +658,16 @@ class SimulationEngine:
             if random.random() > cfg["prob"] * hours_frac:
                 continue
             fiber = random.choice(self.fibers)
-            ch = random.randint(10, max(11, fiber.channel_count - 10))
+            # Place incident near an existing vehicle so snapshots have data
+            fiber_vehicles = [v for v in self.vehicles if v.fiber_line == fiber.id]
+            if fiber_vehicles:
+                target = random.choice(fiber_vehicles)
+                ch = max(10, min(fiber.channel_count - 10, round(target.channel)))
+            else:
+                continue  # No vehicles on this fiber — skip
             severity = _weighted_choice(SEVERITIES, cfg["weights"])
             dur = (cfg["dur"][0] + random.random() * (cfg["dur"][1] - cfg["dur"][0])) / 15
+            dur = max(dur, 120_000)  # Minimum 2 minutes real-time so incidents are visible
             inc = Incident(
                 id=f"inc-{int(now_ms)}-{uuid.uuid4().hex[:4]}",
                 type=cfg["type"],
@@ -614,17 +675,24 @@ class SimulationEngine:
                 fiber_line=fiber.id,
                 channel=ch,
                 detected_at=time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(now)),
+                detected_at_ms=now_ms,
                 status="active",
                 duration=dur,
             )
             self.incidents.append(inc)
+            self._init_snapshot(inc)  # Seed with pre-incident data from rolling buffer
             new_incidents.append(inc)
 
-        # Prune old resolved (keep last 50)
+        # Prune old resolved — keep ~1 month of history (~360 incidents/day)
+        # Each incident + snapshot ≈ 5.5 KB, so 10 000 ≈ 55 MB
         resolved_all = [i for i in self.incidents if i.status == "resolved"]
-        if len(resolved_all) > 50:
-            to_remove = set(id(i) for i in resolved_all[:-50])
+        if len(resolved_all) > 10_000:
+            to_remove = set(id(i) for i in resolved_all[:-10_000])
+            removed_ids = {i.id for i in self.incidents if id(i) in to_remove}
             self.incidents = [i for i in self.incidents if id(i) not in to_remove]
+            # Clean up snapshots for pruned incidents
+            for rid in removed_ids:
+                self.incident_snapshots.pop(rid, None)
 
         return detections, new_incidents, resolved_incidents
 
@@ -652,8 +720,11 @@ class SimulationEngine:
             avg_sp = sum(o.speed for o in nearby) / len(nearby)
             for o in nearby:
                 processed.add(o.id)
-            ch_noise = (random.random() - 0.5) * 4
-            sp_noise = (random.random() - 0.5) * 10
+            # Noise disabled — keep detections clean and smooth for now
+            # ch_noise = (random.random() - 0.5) * 4
+            # sp_noise = (random.random() - 0.5) * 10
+            ch_noise = 0
+            sp_noise = 0
             count = len(nearby)
             detections.append(
                 Detection(
@@ -668,6 +739,104 @@ class SimulationEngine:
                 )
             )
         return detections
+
+    def _update_detection_ring(self, detections: list[Detection], now_ms: float):
+        """Maintain a rolling buffer of recent detections per fiber (last SNAPSHOT_WINDOW_S)."""
+        cutoff_ms = now_ms - SNAPSHOT_WINDOW_S * 1000
+
+        for d in detections:
+            ring = self._detection_ring.get(d.fiber_line)
+            if ring is None:
+                continue
+            ring.append(
+                {
+                    "fiberLine": f"{d.fiber_line}:{d.direction}",
+                    "channel": d.channel,
+                    "speed": round(d.speed, 1),
+                    "count": d.count,
+                    "nCars": d.n_cars,
+                    "nTrucks": d.n_trucks,
+                    "direction": d.direction,
+                    "timestamp": d.timestamp,
+                }
+            )
+
+        # Evict old entries from all rings
+        for fid in self._detection_ring:
+            ring = self._detection_ring[fid]
+            if ring and ring[0]["timestamp"] < cutoff_ms:
+                self._detection_ring[fid] = [det for det in ring if det["timestamp"] >= cutoff_ms]
+
+    def _init_snapshot(self, inc: Incident):
+        """Initialize a snapshot for a new incident, seeding with pre-incident data from the ring."""
+        start_ms = inc.detected_at_ms - SNAPSHOT_WINDOW_S * 1000
+        end_ms = inc.detected_at_ms + SNAPSHOT_WINDOW_S * 1000
+
+        # Pre-fill all 120 one-second buckets so the time axis is always complete
+        # Key: seconds offset from start (0..119) → {speed_sum, speed_count, vehicle_count}
+        buckets: dict[int, dict] = {}
+        for s in range(SNAPSHOT_WINDOW_S * 2):
+            buckets[s] = {"speed_sum": 0.0, "speed_count": 0, "vehicle_count": 0}
+
+        # Seed from rolling buffer: detections near this incident's channel
+        ring = self._detection_ring.get(inc.fiber_line, [])
+        for det in ring:
+            if abs(det["channel"] - inc.channel) > SNAPSHOT_CHANNEL_RADIUS:
+                continue
+            if det["timestamp"] < start_ms:
+                continue
+            s = int((det["timestamp"] - start_ms) / 1000)
+            if 0 <= s < SNAPSHOT_WINDOW_S * 2:
+                buckets[s]["speed_sum"] += det["speed"]
+                buckets[s]["speed_count"] += 1
+                buckets[s]["vehicle_count"] += det["count"]
+
+        self.incident_snapshots[inc.id] = {
+            "buckets": buckets,
+            "complete": False,
+            "start_ms": start_ms,
+            "end_ms": end_ms,
+            "fiber_line": inc.fiber_line,
+            "channel": inc.channel,
+        }
+
+    def _record_incident_detections(self, detections: list[Detection], now_ms: float):
+        """Aggregate detections into 1-second snapshot buckets.
+
+        Each snapshot has a fixed window: detected_at ± SNAPSHOT_WINDOW_S.
+        Pre-incident data is seeded from the rolling detection buffer.
+        Once now_ms exceeds end_ms, the snapshot is marked complete.
+        """
+        # Always update the rolling buffer (needed for pre-incident seeding)
+        self._update_detection_ring(detections, now_ms)
+
+        if not detections:
+            return
+
+        # Only scan incomplete snapshots — avoids iterating all 10k+ resolved incidents
+        for snap in self.incident_snapshots.values():
+            if snap["complete"]:
+                continue
+
+            if now_ms > snap["end_ms"]:
+                snap["complete"] = True
+                continue
+
+            buckets = snap["buckets"]
+            start_ms = snap["start_ms"]
+
+            for d in detections:
+                if d.fiber_line != snap["fiber_line"]:
+                    continue
+                if abs(d.channel - snap["channel"]) > SNAPSHOT_CHANNEL_RADIUS:
+                    continue
+                if d.timestamp < start_ms or d.timestamp > snap["end_ms"]:
+                    continue
+                s = int((d.timestamp - start_ms) / 1000)
+                if 0 <= s < SNAPSHOT_WINDOW_S * 2:
+                    buckets[s]["speed_sum"] += d.speed
+                    buckets[s]["speed_count"] += 1
+                    buckets[s]["vehicle_count"] += d.count
 
     def generate_shm_readings(self) -> list[SHMReading]:
         """Generate SHM frequency readings for all infrastructure."""
@@ -726,21 +895,16 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
         len(fiber_org_map),
     )
 
-    # Broadcast initial incidents (to all orgs) and update cache for REST API
     from apps.monitoring.incident_service import transform_simulation_incident
 
-    initial_incidents = [transform_simulation_incident(i) for i in engine.incidents]
-    await _broadcast_per_org(
-        channel_layer,
-        "incidents",
-        initial_incidents,
-        fiber_org_map,
-    )
+    # No initial incidents — they spawn after the warmup period so
+    # snapshot data has time to accumulate from the vehicle simulation
     _update_simulation_incidents_cache(engine.incidents)
 
     tick_interval = 0.05  # 50ms ticks (20 Hz physics)
     shm_counter = 0
     incident_counter = 0
+    snapshot_counter = 0
     count_counter = 0
     last_detection_broadcast = time.time()
     detection_broadcast_interval = 0.1  # 100ms (10 Hz)
@@ -762,6 +926,7 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
         detections, new_incidents, resolved_incidents = engine.tick(tick_interval * 1000)
         shm_counter += 1
         incident_counter += 1
+        snapshot_counter += 1
         count_counter += 1
 
         # Accumulate detections
@@ -793,11 +958,12 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
                 "detections",
                 detection_dicts,
                 fiber_org_map,
+                flow="sim",
             )
             # Check alerts for detections (per-org)
             org_detections: dict[str, list[dict]] = {}
             for det in detection_dicts:
-                fid = det.get("fiberLine", "")
+                fid = str(det.get("fiberLine", ""))
                 parent_fid = fid.rsplit(":", 1)[0] if ":" in fid else fid
                 for org_id in fiber_org_map.get(parent_fid, []):
                     org_detections.setdefault(org_id, []).append(det)
@@ -818,34 +984,19 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
                     }
                     for r in readings
                 ]
-                # Group SHM readings by org based on infrastructure ownership
-                org_shm: dict[str, list[dict]] = {}
-                for shm in shm_dicts:
-                    org_id = infra_org_map.get(shm["infrastructureId"], "")
-                    if org_id:
-                        org_shm.setdefault(org_id, []).append(shm)
+                await broadcast_shm(channel_layer, shm_dicts, infra_org_map, flow="sim")
 
-                # Send to superuser group
-                await channel_layer.group_send(
-                    "realtime_shm_readings_org___all__",
-                    {"type": "broadcast_message", "channel": "shm_readings", "data": shm_dicts},
-                )
-                # Send per-org
-                for org_id, org_readings in org_shm.items():
-                    await channel_layer.group_send(
-                        f"realtime_shm_readings_org_{org_id}",
-                        {
-                            "type": "broadcast_message",
-                            "channel": "shm_readings",
-                            "data": org_readings,
-                        },
-                    )
+        # Sync snapshot cache every 20 ticks (1s) so frontend polling gets fresh data
+        if snapshot_counter >= 20:
+            snapshot_counter = 0
+            _update_simulation_snapshots(engine.incident_snapshots)
 
         # Broadcast incidents every 100 ticks (5 seconds) — per-org
         if incident_counter >= 100:
             incident_counter = 0
-            # Update cache for REST API fallback
+            # Update caches for REST API fallback
             _update_simulation_incidents_cache(engine.incidents)
+            _update_simulation_stats(engine)
             for inc in pending_new_incidents + pending_resolved_incidents:
                 inc_data = transform_simulation_incident(inc)
                 directional_fid = inc_data["fiberLine"]
@@ -855,6 +1006,7 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
                     inc_data,
                     fiber_org_map,
                     fiber_ids={directional_fid},
+                    flow="sim",
                 )
                 # Check alerts for incident
                 await check_alerts_for_incident(inc_data, fiber_org_map)
@@ -871,6 +1023,7 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
                     "counts",
                     counts,
                     fiber_org_map,
+                    flow="sim",
                 )
 
         # Log stats periodically

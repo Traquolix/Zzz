@@ -27,14 +27,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
     restoreSession()
   }, [])
 
-  // Proactively refresh access token before it expires (every 12 minutes)
+  // Proactively refresh the access token before it expires.
+  // The access token lifetime is 15 minutes; refresh every 12 minutes so the
+  // token is always valid and we never trigger a 401 → refresh → retry cycle.
   useEffect(() => {
     if (!isAuthenticated) return
 
     const interval = setInterval(
       async () => {
-        const result = await authApi.verifyToken()
-        if (!result.valid) {
+        const refreshed = await authApi.attemptTokenRefresh()
+        if (!refreshed) {
           authApi.clearAuthToken()
           setIsAuthenticated(false)
           setUsername(null)

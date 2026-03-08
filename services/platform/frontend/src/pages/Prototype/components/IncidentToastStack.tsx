@@ -13,11 +13,12 @@ export function IncidentToastStack({ toasts, onDismiss }: Props) {
   const [now, setNow] = useState(Date.now())
 
   // Tick every second to drive progress bar
+  const hasToasts = toasts.length > 0
   useEffect(() => {
-    if (toasts.length === 0) return
+    if (!hasToasts) return
     const timer = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(timer)
-  }, [toasts.length > 0])
+  }, [hasToasts])
 
   if (toasts.length === 0) return null
 

@@ -30,7 +30,9 @@ develop-eggs/
 downloads/
 eggs/
 .eggs/
-lib/
+# Python compiled C extensions — use root-anchored pattern to avoid
+# ignoring frontend src/lib/
+/lib/
 lib64/
 parts/
 sdist/

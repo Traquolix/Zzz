@@ -68,7 +68,7 @@ def build_report_html(report) -> str:
                 }
             )
 
-    return render_to_string("reporting/report.html", context)
+    return str(render_to_string("reporting/report.html", context))
 
 
 def _query_incidents(report) -> list[dict]:

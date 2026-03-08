@@ -48,14 +48,14 @@ class Command(BaseCommand):
         """Load fiber configs from JSON data files."""
         data_dir = self._get_data_dir()
 
-        fiber_files = [
-            ("carros.json", {"lanes": 6, "speed_limit": 110, "traffic_density": "high"}),
-            ("promenade.json", {"lanes": 4, "speed_limit": 50, "traffic_density": "medium"}),
-            ("mathis.json", {"lanes": 4, "speed_limit": 90, "traffic_density": "low"}),
+        fiber_files: list[tuple[str, int, float, str]] = [
+            ("carros.json", 6, 110, "high"),
+            ("promenade.json", 4, 50, "medium"),
+            ("mathis.json", 4, 90, "low"),
         ]
 
         fibers = []
-        for filename, config in fiber_files:
+        for filename, lanes, speed_limit, traffic_density in fiber_files:
             path = data_dir / filename
             if not path.exists():
                 self.stderr.write(f"Warning: {path} not found, skipping")
@@ -73,7 +73,9 @@ class Command(BaseCommand):
                     color=data.get("color", "#000000"),
                     coordinates=coords,
                     channel_count=len(coords),
-                    **config,
+                    lanes=lanes,
+                    speed_limit=speed_limit,
+                    traffic_density=traffic_density,
                 )
             )
             self.stdout.write(f"  Loaded {data['name']} ({len(coords)} channels)")
@@ -91,4 +93,4 @@ class Command(BaseCommand):
             data = json.load(f)
 
         self.stdout.write(f"  Loaded {len(data)} infrastructure items")
-        return data
+        return list(data)

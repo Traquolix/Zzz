@@ -60,8 +60,9 @@ export function useUnseenIncidents(incidents: Incident[], loading: boolean) {
   }, [incidents, loading])
 
   // Auto-dismiss toasts after 60s
+  const hasToasts = toasts.length > 0
   useEffect(() => {
-    if (toasts.length === 0) return
+    if (!hasToasts) return
     const timer = setInterval(() => {
       const cutoff = Date.now() - 60_000
       setToasts(prev => {
@@ -70,7 +71,7 @@ export function useUnseenIncidents(incidents: Incident[], loading: boolean) {
       })
     }, 1000)
     return () => clearInterval(timer)
-  }, [toasts.length > 0])
+  }, [hasToasts])
 
   const markSeen = useCallback((id: string) => {
     setUnseenIds(prev => {

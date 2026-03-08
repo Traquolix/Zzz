@@ -2,6 +2,7 @@ import { useRef, useEffect, useState, useCallback } from 'react'
 import { CircularBuffer } from '@/lib/CircularBuffer'
 import { parseDetections } from '@/lib/parseMessage'
 import { useRealtime } from '@/hooks/useRealtime'
+import { useFlowReset } from '@/hooks/useFlowReset'
 import type { Detection } from '@/types/realtime'
 import type { Section } from '../types'
 import type { SectionDataPoint, LiveSectionStats } from '../types'
@@ -16,7 +17,7 @@ interface SectionBuffer {
 }
 
 export function useLiveStats(sections: Section[]) {
-  const { subscribe, onFlowChange } = useRealtime()
+  const { subscribe } = useRealtime()
   const pendingRef = useRef<Detection[]>([])
   const sectionsRef = useRef(sections)
   sectionsRef.current = sections
@@ -28,15 +29,13 @@ export function useLiveStats(sections: Section[]) {
   const [seriesData, setSeriesData] = useState<Map<string, SectionDataPoint[]>>(() => new Map())
 
   // Clear accumulated state on flow switch
-  useEffect(() => {
-    return onFlowChange(() => {
-      pendingRef.current = []
-      buffersRef.current.clear()
-      statsRef.current = new Map()
-      setStats(new Map())
-      setSeriesData(new Map())
-    })
-  }, [onFlowChange])
+  useFlowReset(() => {
+    pendingRef.current = []
+    buffersRef.current.clear()
+    statsRef.current = new Map()
+    setStats(new Map())
+    setSeriesData(new Map())
+  })
 
   // Ensure buffers exist for all sections
   const ensureBuffers = useCallback((secs: Section[]) => {

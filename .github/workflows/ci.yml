@@ -42,9 +42,8 @@ jobs:
       - name: Lint frontend
         run: cd services/platform/frontend && npm run lint
 
-      # TODO: restore frontend typecheck once src/lib/ modules are committed
-      # - name: Typecheck frontend
-      #   run: cd services/platform/frontend && npx tsc -p tsconfig.app.json --noEmit
+      - name: Typecheck frontend
+        run: cd services/platform/frontend && npx tsc -p tsconfig.app.json --noEmit
 
   # ---------- UNIT TESTS ----------
   # Temporarily removed — tests being rewritten (see TODO.md)
