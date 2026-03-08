@@ -1,27 +1,22 @@
 ---
-name: Feature
-about: New feature or enhancement
-title: "feat: "
+name: Feature / Enhancement
+about: New feature or improvement to existing functionality
+title: ""
 labels: enhancement
 ---
 
-## Description
+## Problem
 
-<!-- What should this feature do? -->
+<!-- What's missing or insufficient? Why does this matter? -->
+
+## Proposed Solution
+
+<!-- How to implement it. Optional for investigation issues — write "Needs investigation" instead. -->
+
+## Files Involved
+
+<!-- Key files that will need changes (optional) -->
 
 ## Acceptance Criteria
 
-- [ ] <!-- Criterion 1 -->
-- [ ] <!-- Criterion 2 -->
-
-## Affected Services
-
-<!-- Which services will be modified? -->
-
-## Files in Scope
-
-<!-- Key files that will need changes -->
-
-## Related Integration Tests
-
-<!-- Which existing integration tests cover this area? -->
+- [ ] <!-- When is this done? -->

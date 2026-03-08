@@ -54,21 +54,36 @@ To set up a new server from scratch: `./scripts/server-setup.sh --role <backend|
 
 ## Workflow
 
-Every task follows this pattern:
+### Issue-Driven Development
 
-1. **Create a branch** from main: `feat/description`, `fix/description`, or `refactor/description`
+Work is tracked through GitHub issues. Before starting any task:
+
+1. **Find or create the GitHub issue.** One issue per concern. Label it (`bug`, `enhancement`, `refactor`, `tech-debt`, `infrastructure`). Use the standard format from `.github/ISSUE_TEMPLATE/` — every issue has four sections: **Problem**, **Proposed Solution**, **Files Involved**, **Acceptance Criteria**.
+2. **`TODO.md` is for multi-issue epics and roadmap items** (e.g., "Realistic simulation engine" spanning multiple PRs). Single-task work items are GitHub issues, not TODO entries.
+3. **Branch names reference the issue:** `feat/42-flow-switching`, `fix/15-token-refresh`.
+
+### Task Pattern
+
+1. **Create a branch** from main: `feat/N-description`, `fix/N-description`, or `refactor/N-description` (where N is the issue number)
 2. **Write tests first** when adding features or fixing bugs
 3. **Implement** the change
 4. **Validate**: run `make lint && make typecheck`
 5. **Commit** with conventional message: `feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, `test:`
 6. **Push**: `git push -u origin <branch>`
-7. **Open a PR**: `gh pr create --title "short title" --body "## Summary\n- what changed\n- why"`
+7. **Open a PR**: `gh pr create --title "short title" --body "Closes #N\n\n## Summary\n- what changed\n- why"`
 8. **Never merge** — the human reviews and merges PRs
 9. **Address PR feedback** — when asked to fix PR comments, read them with
    `gh api repos/Traquolix/Sequoia/pulls/<number>/comments` and
    `gh pr view <number> --comments`, then fix, commit, and push
 
 If the user doesn't specify a branch name, ask for one. Never work directly on main.
+
+### PR Hygiene
+
+- **One concern per PR.** If you notice an unrelated issue while working, create a separate issue and branch for it. Never bundle unrelated fixes.
+- **Keep PRs reviewable.** If the diff exceeds ~500 lines of logic changes, consider splitting into smaller PRs. Formatting-only changes (reindentation, import reordering) should be a separate commit so reviewers can skip them.
+- **No cross-contamination between sim and live paths.** Every REST endpoint and WebSocket handler that can serve both simulation and live data must be flow-aware. Never fall back from one data source to the other without checking the user's active flow.
+- **Use existing patterns.** Before writing inline error handling, check if a decorator or helper already exists (e.g., `@clickhouse_fallback`). Before writing inline broadcasts, use the broadcast helpers (`_broadcast_per_org`, `_org_broadcast`). Consistency matters more than local convenience.
 
 ### After Merge — Deploying
 
