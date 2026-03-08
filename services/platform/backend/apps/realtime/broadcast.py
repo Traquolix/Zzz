@@ -58,7 +58,8 @@ async def broadcast_to_orgs(
     data,
     fiber_org_map: dict[str, list[str]],
     fiber_ids: set[str] | None = None,
-    flow: str = "sim",
+    *,
+    flow: str,
 ):
     """
     Send the same payload to all org groups that own the given fibers, plus ``__all__``.
@@ -109,7 +110,8 @@ async def broadcast_per_org(
     items: list[dict],
     fiber_org_map: dict[str, list[str]],
     fiber_key: str = "fiberLine",
-    flow: str = "sim",
+    *,
+    flow: str,
 ):
     """
     Split items by fiber ownership and send each org only their items.
@@ -161,6 +163,7 @@ async def broadcast_shm(
     channel_layer,
     readings: list[dict],
     infra_org_map: dict[str, str],
+    *,
     flow: str,
 ):
     """
