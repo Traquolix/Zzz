@@ -23,6 +23,7 @@
 - [ ] **Unify broadcast helpers** [#17] — `kafka_bridge._org_broadcast` and `simulation._broadcast_to_orgs` / `_broadcast_per_org` implement the same org-scoped broadcast pattern with slightly different signatures. Extract a single shared implementation (e.g., `apps/realtime/broadcast.py`) that both files import. SHM broadcast (`_broadcast_shm`) was deduplicated within each file but is also duplicated across the two files — include it in the unification. Also eliminate the separate `infra_org_map` — infrastructure items already have a `fiber_id`, so SHM org-scoping can be derived from `fiber_org_map` instead of maintaining a redundant mapping.
 - [ ] **Log retention** [#18] — config committed (otelcol-config.yaml filelog receiver) but needs deploy verification on production server
 - [ ] **Enable stricter ruff rules** [#19] — add `UP`, `B`, `SIM`, `RUF`, `C4` to both `pyproject.toml` configs. Pipeline: 326 violations (230 auto-fixable, mostly `UP` type hint modernization). Backend: 139 violations (75 are `RUF012` Django model false positives — ignore). Ignore `RUF012` and `RUF002` (French text) in backend config. Run `ruff check --fix` for the bulk, then manual fixes for the rest.
+- [ ] **Build per-service PR review checklists** [#29] — document service-specific review rules (backend: flow-aware endpoints, `@clickhouse_fallback`, broadcast helpers, i18n; pipeline: Avro compat, config hot-reload; frontend: TBD). Grows organically as patterns are discovered in reviews.
 
 ## Low Priority — Language Migrations
 
