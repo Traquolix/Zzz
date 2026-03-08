@@ -10,7 +10,7 @@ import time
 
 from django.core.cache import cache as django_cache
 from drf_spectacular.utils import OpenApiParameter, extend_schema
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, ParseError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -317,13 +317,14 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
         )
 
 
-class IncidentActionView(APIView):
+class IncidentActionView(FlowAwareMixin, APIView):
     """
     GET  /api/incidents/<id>/actions — action history for an incident.
     POST /api/incidents/<id>/actions — record a workflow transition.
 
     Org-scoped: verifies the incident's fiber belongs to the user's org.
     POST requires non-viewer role (API keys are viewer-only).
+    Live flow only — sim incidents are ephemeral and don't support workflow actions.
     """
 
     def get_permissions(self):
@@ -331,6 +332,11 @@ class IncidentActionView(APIView):
         if self.request.method == "POST":
             perms.append(IsNotViewer())
         return perms
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if self._is_sim(request):
+            raise ParseError("Workflow actions are not supported for simulated incidents")
 
     def _get_incident_or_404(self, incident_id, request):
         """Fetch incident from ClickHouse and verify org access."""
