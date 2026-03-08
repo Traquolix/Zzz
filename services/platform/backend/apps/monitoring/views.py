@@ -10,7 +10,7 @@ import time
 
 from django.core.cache import cache as django_cache
 from drf_spectacular.utils import OpenApiParameter, extend_schema
-from rest_framework.exceptions import NotFound
+from rest_framework.exceptions import NotFound, ParseError
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -333,6 +333,11 @@ class IncidentActionView(FlowAwareMixin, APIView):
             perms.append(IsNotViewer())
         return perms
 
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if self._is_sim(request):
+            raise ParseError("Workflow actions are not supported for simulated incidents")
+
     def _get_incident_or_404(self, incident_id, request):
         """Fetch incident from ClickHouse and verify org access."""
         try:
@@ -364,12 +369,6 @@ class IncidentActionView(FlowAwareMixin, APIView):
         tags=["incidents"],
     )
     def get(self, request, incident_id):
-        if self._is_sim(request):
-            return Response(
-                {"detail": "Workflow actions are not supported for simulated incidents"},
-                status=400,
-            )
-
         incident, error_resp = self._get_incident_or_404(incident_id, request)
         if error_resp:
             return error_resp
@@ -393,12 +392,6 @@ class IncidentActionView(FlowAwareMixin, APIView):
         tags=["incidents"],
     )
     def post(self, request, incident_id):
-        if self._is_sim(request):
-            return Response(
-                {"detail": "Workflow actions are not supported for simulated incidents"},
-                status=400,
-            )
-
         from django.db import transaction
 
         input_serializer = IncidentActionInputSerializer(data=request.data)
