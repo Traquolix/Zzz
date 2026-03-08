@@ -124,8 +124,10 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         # Superusers see all data; regular users scoped to their org
         if user.is_superuser:
             self._org_id = "__all__"
+            self._org = None
         else:
             self._org_id = str(user.organization_id)
+            self._org = user.organization
 
     async def disconnect(self, close_code):
         # Cancel auth timeout if still pending
@@ -370,10 +372,8 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
                 # Org-scope: filter sim incidents to user's fibers
                 if self._org_id != "__all__":
                     from apps.fibers.utils import filter_by_org, get_org_fiber_ids
-                    from apps.organizations.models import Organization
 
-                    org = Organization.objects.get(pk=self._org_id)
-                    fiber_ids = get_org_fiber_ids(org)
+                    fiber_ids = get_org_fiber_ids(self._org)
                     if not fiber_ids:
                         return []
                     incidents = filter_by_org(incidents, fiber_ids)
@@ -388,10 +388,8 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
                 incidents = query_active(fiber_ids=None, limit=100)
             else:
                 from apps.fibers.utils import get_org_fiber_ids
-                from apps.organizations.models import Organization
 
-                org = Organization.objects.get(pk=self._org_id)
-                fiber_ids = get_org_fiber_ids(org)
+                fiber_ids = get_org_fiber_ids(self._org)
                 if not fiber_ids:
                     return []
                 incidents = query_active(fiber_ids=fiber_ids, limit=100)
@@ -428,10 +426,8 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             fiber_ids = None
             if self._org_id != "__all__":
                 from apps.fibers.utils import get_org_fiber_ids
-                from apps.organizations.models import Organization
 
-                org = Organization.objects.get(pk=self._org_id)
-                fiber_ids = get_org_fiber_ids(org)
+                fiber_ids = get_org_fiber_ids(self._org)
             fibers = await sync_to_async(_load_fibers_from_json)(fiber_ids)
             await self.send_json({"channel": "fibers", "data": fibers})
         except FileNotFoundError as e:
@@ -458,10 +454,8 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             """)
         else:
             from apps.fibers.utils import get_org_fiber_ids
-            from apps.organizations.models import Organization
 
-            org = Organization.objects.get(pk=self._org_id)
-            fiber_ids = get_org_fiber_ids(org)
+            fiber_ids = get_org_fiber_ids(self._org)
             if not fiber_ids:
                 return []
             result = client.query(

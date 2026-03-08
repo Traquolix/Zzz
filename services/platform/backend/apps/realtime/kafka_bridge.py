@@ -360,7 +360,10 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
     )
     consumer.subscribe(["das.detections"])
 
-    cache.set("kafka_available", True, timeout=None)
+    # Bounded TTL so a crashed bridge is detected within 60s.
+    # Refreshed every loop iteration (~50 times/s); cost is negligible for Redis.
+    KAFKA_AVAILABLE_TTL = 60
+    cache.set("kafka_available", True, timeout=KAFKA_AVAILABLE_TTL)
     logger.info(
         "Kafka bridge started (time-shifted replay): %s, topic: das.detections, %d org mappings",
         bootstrap_servers,
@@ -373,6 +376,7 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
     known_incident_ids: dict[str, str] = {}  # {incident_id: fiberLine}
     last_shm_broadcast: float = 0
     last_batch_cleanup: float = 0
+    last_kafka_flag_refresh: float = time.time()
 
     # Start the replay drain task
     drain_task = asyncio.create_task(replay_buffer.drain(broadcast))
@@ -386,6 +390,11 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
                 fiber_org_map = await _load_fiber_org_map()
                 infra_org_map = _load_infra_org_map(infrastructure)
                 last_map_refresh = loop_start
+
+            # Refresh bounded TTL every 30s so the flag expires if we crash
+            if loop_start - last_kafka_flag_refresh > 30:
+                cache.set("kafka_available", True, timeout=KAFKA_AVAILABLE_TTL)
+                last_kafka_flag_refresh = loop_start
 
             # --- Poll Kafka (non-blocking) ---
             try:
