@@ -7,7 +7,7 @@
 
 1. [x] **Unify broadcast helpers** [#17] — PR #44, merged
 2. [x] **IncidentActionView not flow-aware** [#35] — PR #48, merged
-3. [ ] **Extract `group_by_org` helper** [#45] — deduplicate alert grouping logic
+3. [x] **Extract `group_by_org` helper** [#45] — PR #51, merged
 4. [ ] **Route SHM broadcasts via `fiber_org_map`** [#46] — eliminate redundant `infra_org_map`
 5. [ ] **SectionHistoryView not flow-aware** [#40] — bug, sim/live cross-contamination
 6. [ ] **Consolidate dual Incident type definitions** [#42] — refactor, prototype vs canonical
