@@ -24,6 +24,7 @@ from apps.monitoring.incident_service import (
 from apps.monitoring.incident_service import (
     query_recent as incident_query_recent,
 )
+from apps.monitoring.mixins import FlowAwareMixin
 from apps.monitoring.models import IncidentAction, Infrastructure
 from apps.monitoring.section_service import (
     delete_section,
@@ -51,7 +52,6 @@ from apps.monitoring.workflow import (
 )
 from apps.shared.clickhouse import clickhouse_fallback, query, query_scalar
 from apps.shared.exceptions import ClickHouseUnavailableError
-from apps.shared.mixins import FlowAwareMixin
 from apps.shared.permissions import IsActiveUser, IsNotViewer
 
 logger = logging.getLogger("sequoia")

@@ -1,5 +1,5 @@
 """
-Shared view mixins for the SequoIA platform.
+View mixins for the monitoring app.
 """
 
 from __future__ import annotations
