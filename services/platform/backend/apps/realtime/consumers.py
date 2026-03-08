@@ -51,11 +51,9 @@ RATE_LIMIT_WINDOW_SECONDS = 10
 AUTH_TIMEOUT_SECONDS = 15
 
 
-def _org_group_name(channel: str, org_id: str, flow: str = "") -> str:
-    """Build the org-scoped Channels group name, optionally flow-prefixed."""
-    if flow:
-        return f"realtime_{flow}_{channel}_org_{org_id}"
-    return f"realtime_{channel}_org_{org_id}"
+def _org_group_name(channel: str, org_id: str, flow: str) -> str:
+    """Build the flow-prefixed, org-scoped Channels group name."""
+    return f"realtime_{flow}_{channel}_org_{org_id}"
 
 
 class RealtimeConsumer(AsyncJsonWebsocketConsumer):

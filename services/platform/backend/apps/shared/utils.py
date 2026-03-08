@@ -2,8 +2,15 @@
 Shared utilities for DRF views — pagination, cache keys, org-scoped querysets.
 """
 
+from __future__ import annotations
 
-def build_org_cache_key(prefix: str, user) -> str:
+from typing import Any
+
+from django.db.models import QuerySet
+from rest_framework.request import Request
+
+
+def build_org_cache_key(prefix: str, user: Any) -> str:
     """Build an org-scoped cache key.
 
     Returns ``"<prefix>:all"`` for superusers,
@@ -14,7 +21,9 @@ def build_org_cache_key(prefix: str, user) -> str:
     return f"{prefix}:org:{user.organization_id}"
 
 
-def paginate_queryset(request, queryset, default_limit=50):
+def paginate_queryset(
+    request: Request, queryset: QuerySet, default_limit: int = 50
+) -> tuple[list, dict[str, Any]]:
     """Apply search, offset, and limit to a queryset.
 
     Returns: (page, pagination_data)
@@ -57,7 +66,7 @@ def paginate_queryset(request, queryset, default_limit=50):
     }
 
 
-def org_filter_queryset(queryset, user):
+def org_filter_queryset(queryset: QuerySet, user: Any) -> QuerySet:
     """Filter a Django queryset to the user's organization.
 
     Superusers see all records. Regular users see only their org's records.

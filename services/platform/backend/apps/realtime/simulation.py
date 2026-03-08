@@ -14,7 +14,6 @@ import asyncio
 import logging
 import math
 import random
-import threading
 import time
 import uuid
 from dataclasses import dataclass
@@ -23,24 +22,28 @@ from typing import Optional, TypedDict
 from channels.layers import get_channel_layer
 
 from apps.alerting.integration import check_alerts_for_detections, check_alerts_for_incident
+from apps.realtime.broadcast import broadcast_shm
 from apps.shared.constants import MAP_REFRESH_INTERVAL
 
 logger = logging.getLogger("sequoia.simulation")
 
-# Global cache for simulation incidents (used by REST API fallback)
+# Global cache for simulation incidents (used by REST API fallback).
+# Written by the async simulation loop, read by sync REST views.
+# Uses atomic reference swap (GIL-safe) instead of locks to avoid
+# blocking the event loop on contention.
 _simulation_incidents_cache: list = []
-_simulation_incidents_lock = threading.Lock()
 
-# Global cache for incident snapshots — recorded detections near each incident
-# Each entry: {"detections": [...], "complete": bool}
+# Global cache for incident snapshots — recorded detections near each incident.
+# Each entry: {"points": [...], "complete": bool}
 _simulation_snapshots: dict[str, dict] = {}
-_simulation_snapshots_lock = threading.Lock()
+
+# Global cache for simulation-wide stats (fiber/channel/vehicle counts).
+_simulation_stats: dict[str, int] = {}
 
 
 def get_simulation_incidents() -> list:
     """Get current simulation incidents for REST API fallback."""
-    with _simulation_incidents_lock:
-        return list(_simulation_incidents_cache)
+    return list(_simulation_incidents_cache)
 
 
 def get_simulation_snapshot(incident_id: str) -> dict | None:
@@ -49,11 +52,15 @@ def get_simulation_snapshot(incident_id: str) -> dict | None:
     Returns {"points": [...], "complete": bool} or None.
     Each point: {"time": epoch_ms, "speed": float|null, "flow": int|null, "occupancy": float|null}
     """
-    with _simulation_snapshots_lock:
-        entry = _simulation_snapshots.get(incident_id)
-        if entry is not None:
-            return {"points": list(entry["points"]), "complete": entry["complete"]}
-        return None
+    entry = _simulation_snapshots.get(incident_id)
+    if entry is not None:
+        return {"points": list(entry["points"]), "complete": entry["complete"]}
+    return None
+
+
+def get_simulation_stats() -> dict[str, int]:
+    """Get simulation-wide stats (fiber count, channel count, active vehicles)."""
+    return dict(_simulation_stats)
 
 
 def _update_simulation_incidents_cache(incidents: list):
@@ -61,8 +68,7 @@ def _update_simulation_incidents_cache(incidents: list):
     from apps.monitoring.incident_service import transform_simulation_incident
 
     global _simulation_incidents_cache
-    with _simulation_incidents_lock:
-        _simulation_incidents_cache = [transform_simulation_incident(i) for i in incidents]
+    _simulation_incidents_cache = [transform_simulation_incident(i) for i in incidents]
 
 
 def _buckets_to_points(snap: dict, now_ms: float) -> list[dict]:
@@ -93,6 +99,16 @@ def _buckets_to_points(snap: dict, now_ms: float) -> list[dict]:
     return points
 
 
+def _update_simulation_stats(engine: "SimulationEngine"):
+    """Update the global stats cache from the simulation engine."""
+    global _simulation_stats
+    _simulation_stats = {
+        "fiber_count": len(engine.fibers),
+        "total_channels": sum(f.channel_count for f in engine.fibers),
+        "active_vehicles": len(engine.vehicles),
+    }
+
+
 def _update_simulation_snapshots(snapshots: dict[str, dict]):
     """Replace the global snapshots cache with the engine's aggregated points."""
     global _simulation_snapshots
@@ -103,8 +119,7 @@ def _update_simulation_snapshots(snapshots: dict[str, dict]):
             "points": _buckets_to_points(snap, now_ms),
             "complete": snap["complete"],
         }
-    with _simulation_snapshots_lock:
-        _simulation_snapshots = converted
+    _simulation_snapshots = converted
 
 
 # ============================================================================
@@ -492,33 +507,6 @@ async def _broadcast_per_org(
                 "channel": channel,
                 "data": org_data,
             },
-        )
-
-
-async def _broadcast_shm(
-    channel_layer,
-    readings: list[dict],
-    infra_org_map: dict[str, str],
-    flow: str = "sim",
-):
-    """Broadcast SHM readings to org-scoped groups via infrastructure ownership."""
-    message = {
-        "type": "broadcast_message",
-        "channel": "shm_readings",
-        "data": readings,
-    }
-    await channel_layer.group_send(f"realtime_{flow}_shm_readings_org___all__", message)
-
-    org_readings: dict[str, list[dict]] = {}
-    for shm in readings:
-        org_id = infra_org_map.get(str(shm["infrastructureId"]), "")
-        if org_id:
-            org_readings.setdefault(org_id, []).append(shm)
-
-    for org_id, org_data in org_readings.items():
-        await channel_layer.group_send(
-            f"realtime_{flow}_shm_readings_org_{org_id}",
-            {"type": "broadcast_message", "channel": "shm_readings", "data": org_data},
         )
 
 
@@ -996,7 +984,7 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
                     }
                     for r in readings
                 ]
-                await _broadcast_shm(channel_layer, shm_dicts, infra_org_map, flow="sim")
+                await broadcast_shm(channel_layer, shm_dicts, infra_org_map, flow="sim")
 
         # Sync snapshot cache every 20 ticks (1s) so frontend polling gets fresh data
         if snapshot_counter >= 20:
@@ -1008,6 +996,7 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
             incident_counter = 0
             # Update caches for REST API fallback
             _update_simulation_incidents_cache(engine.incidents)
+            _update_simulation_stats(engine)
             for inc in pending_new_incidents + pending_resolved_incidents:
                 inc_data = transform_simulation_incident(inc)
                 directional_fid = inc_data["fiberLine"]

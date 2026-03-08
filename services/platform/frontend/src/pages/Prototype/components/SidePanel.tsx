@@ -11,7 +11,7 @@ import {
   defaultSpeedThresholds,
   resolveDirectionalFiber,
 } from '../data'
-import { fetchIncidentSnapshot } from '@/api/incidents'
+import { useIncidentSnapshot } from '@/hooks/useIncidentSnapshot'
 import { fetchSectionHistory } from '@/api/sections'
 import type { Incident } from '../types'
 import type {
@@ -1281,53 +1281,11 @@ function IncidentDetail({
   )
 
   // Fetch snapshot data from API — polls every 1s until snapshot is complete
-  const [snapshotData, setSnapshotData] = useState<
-    { time: string; speed?: number; flow?: number; occupancy?: number }[] | null
-  >(null)
-  const [snapshotLoading, setSnapshotLoading] = useState(false)
-  const [snapshotComplete, setSnapshotComplete] = useState(false)
-
-  useEffect(() => {
-    let mounted = true
-    let timer: ReturnType<typeof setTimeout> | null = null
-
-    const formatTime = (d: Date) =>
-      d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
-
-    const poll = () => {
-      fetchIncidentSnapshot(incident.id, flow)
-        .then(snapshot => {
-          if (!mounted) return
-          // Backend returns pre-aggregated 1-second points with epoch ms timestamps
-          const points = snapshot.points.map(p => ({
-            time: formatTime(new Date(p.time)),
-            speed: p.speed ?? undefined,
-            flow: p.flow ?? undefined,
-            occupancy: p.occupancy ?? undefined,
-          }))
-          setSnapshotData(points)
-          setSnapshotComplete(snapshot.complete)
-          setSnapshotLoading(false)
-          if (!snapshot.complete) {
-            timer = setTimeout(poll, 1000)
-          }
-        })
-        .catch(() => {
-          if (!mounted) return
-          setSnapshotData(null)
-          setSnapshotLoading(false)
-        })
-    }
-
-    setSnapshotLoading(true)
-    setSnapshotComplete(false)
-    poll()
-
-    return () => {
-      mounted = false
-      if (timer) clearTimeout(timer)
-    }
-  }, [incident.id, flow])
+  const {
+    points: snapshotData,
+    loading: snapshotLoading,
+    complete: snapshotComplete,
+  } = useIncidentSnapshot(incident.id, flow)
 
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(incident.description)

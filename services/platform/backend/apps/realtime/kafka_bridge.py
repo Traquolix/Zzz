@@ -31,6 +31,7 @@ from django.conf import settings
 from django.core.cache import cache
 
 from apps.alerting.integration import check_alerts_for_detections, check_alerts_for_incident
+from apps.realtime.broadcast import broadcast_shm
 from apps.shared.constants import MAP_REFRESH_INTERVAL
 
 logger = logging.getLogger("sequoia.kafka_bridge")
@@ -263,33 +264,6 @@ async def _org_broadcast(
             )
 
 
-async def _broadcast_shm(
-    channel_layer,
-    readings: list[dict],
-    infra_org_map: dict[str, str],
-    flow: str = "live",
-):
-    """Broadcast SHM readings to org-scoped groups via infrastructure ownership."""
-    message = {
-        "type": "broadcast_message",
-        "channel": "shm_readings",
-        "data": readings,
-    }
-    await channel_layer.group_send(f"realtime_{flow}_shm_readings_org___all__", message)
-
-    org_readings: dict[str, list[dict]] = {}
-    for shm in readings:
-        org_id = infra_org_map.get(shm["infrastructureId"], "")
-        if org_id:
-            org_readings.setdefault(org_id, []).append(shm)
-
-    for org_id, org_data in org_readings.items():
-        await channel_layer.group_send(
-            f"realtime_{flow}_shm_readings_org_{org_id}",
-            {"type": "broadcast_message", "channel": "shm_readings", "data": org_data},
-        )
-
-
 # ============================================================================
 # KAFKA BRIDGE LOOP (time-shifted replay)
 # ============================================================================
@@ -360,9 +334,9 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
     )
     consumer.subscribe(["das.detections"])
 
-    # Bounded TTL so a crashed bridge is detected within 60s.
-    # Refreshed every loop iteration (~50 times/s); cost is negligible for Redis.
-    KAFKA_AVAILABLE_TTL = 60
+    # Bounded TTL so a crashed bridge is detected within 10s.
+    # Refreshed every 5s; cost is negligible for Redis.
+    KAFKA_AVAILABLE_TTL = 10
     cache.set("kafka_available", True, timeout=KAFKA_AVAILABLE_TTL)
     logger.info(
         "Kafka bridge started (time-shifted replay): %s, topic: das.detections, %d org mappings",
@@ -391,8 +365,8 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
                 infra_org_map = _load_infra_org_map(infrastructure)
                 last_map_refresh = loop_start
 
-            # Refresh bounded TTL every 30s so the flag expires if we crash
-            if loop_start - last_kafka_flag_refresh > 30:
+            # Refresh bounded TTL every 5s so the flag expires if we crash
+            if loop_start - last_kafka_flag_refresh > 5:
                 cache.set("kafka_available", True, timeout=KAFKA_AVAILABLE_TTL)
                 last_kafka_flag_refresh = loop_start
 
@@ -438,7 +412,7 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
                 last_shm_broadcast = now
                 readings = generate_shm_readings(infrastructure, shm_state)
                 if readings:
-                    await _broadcast_shm(channel_layer, readings, infra_org_map, flow="live")
+                    await broadcast_shm(channel_layer, readings, infra_org_map, flow="live")
 
             # --- Cleanup stale batch trackers every 30s ---
             if (now - last_batch_cleanup) >= 30:

@@ -484,9 +484,13 @@ class InfrastructureListView(APIView):
         return Response({"results": data, "hasMore": False, "limit": len(data)})
 
 
-class StatsView(APIView):
+class StatsView(FlowAwareMixin, APIView):
     """
     GET /api/stats — system-level statistics.
+
+    Strict flow isolation:
+    - ``flow=sim`` → stats derived from simulation caches
+    - ``flow=live`` → stats from ClickHouse (503 if unavailable)
 
     Org-scoped: counts only fibers/channels/incidents/detections from
     the user's assigned fibers.
@@ -500,11 +504,39 @@ class StatsView(APIView):
     )
     @clickhouse_fallback()
     def get(self, request):
-        cache_key = build_org_cache_key("stats", request.user)
+        flow = self._get_flow(request)
+        cache_key = f"{build_org_cache_key('stats', request.user)}:{flow}"
         cached = django_cache.get(cache_key)
         if cached is not None:
             return Response(cached)
 
+        if self._is_sim(request):
+            data = self._get_sim_stats(request)
+        else:
+            data = self._get_live_stats(request)
+
+        django_cache.set(cache_key, data, STATS_CACHE_TTL)
+        return Response(data)
+
+    def _get_sim_stats(self, request) -> dict:
+        """Sim flow: derive stats from simulation caches."""
+        from apps.realtime.simulation import get_simulation_incidents, get_simulation_stats
+
+        sim_incidents = self._get_sim_data(request, get_simulation_incidents)
+        active_incidents = sum(1 for i in sim_incidents if i.get("status") == "active")
+        stats = get_simulation_stats()
+
+        return {
+            "fiberCount": stats.get("fiber_count", 0),
+            "totalChannels": stats.get("total_channels", 0),
+            "activeVehicles": stats.get("active_vehicles", 0),
+            "detectionsPerSecond": 0,
+            "activeIncidents": active_incidents,
+            "systemUptime": int(time.time() - _PROCESS_START_TIME),
+        }
+
+    def _get_live_stats(self, request) -> dict:
+        """Live flow: query ClickHouse for real stats."""
         fiber_ids = _get_fiber_ids_or_none(request.user)
 
         if fiber_ids is not None:
@@ -599,7 +631,7 @@ class StatsView(APIView):
                 or 0
             )
 
-        data = {
+        return {
             "fiberCount": fiber_count,
             "totalChannels": total_channels,
             "activeVehicles": int(active_vehicles),
@@ -607,8 +639,6 @@ class StatsView(APIView):
             "activeIncidents": active_incidents,
             "systemUptime": int(time.time() - _PROCESS_START_TIME),
         }
-        django_cache.set(cache_key, data, STATS_CACHE_TTL)
-        return Response(data)
 
 
 class SectionListView(APIView):

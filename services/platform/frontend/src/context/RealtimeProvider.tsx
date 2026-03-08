@@ -165,13 +165,18 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
               const flows: DataFlow[] = parsed.available_flows ?? ['sim']
               setAvailableFlows(flows)
 
-              // Default to 'live' if available, else 'sim'
-              const defaultFlow: DataFlow = flows.includes('live') ? 'live' : 'sim'
-              flowRef.current = defaultFlow
-              setFlowState(defaultFlow)
+              // Preserve user's flow choice across reconnects; fall back if unavailable
+              const preferred = flowRef.current
+              const resolvedFlow: DataFlow = flows.includes(preferred)
+                ? preferred
+                : flows.includes('live')
+                  ? 'live'
+                  : 'sim'
+              flowRef.current = resolvedFlow
+              setFlowState(resolvedFlow)
 
               // Send initial set_flow to backend
-              ws.send(JSON.stringify({ action: 'set_flow', flow: defaultFlow }))
+              ws.send(JSON.stringify({ action: 'set_flow', flow: resolvedFlow }))
 
               // Now send queued subscriptions
               for (const channel of pendingSubscriptionsRef.current) {
