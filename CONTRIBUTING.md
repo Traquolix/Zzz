@@ -47,7 +47,24 @@ This installs commit hooks (auto-fix lint) and push hooks (read-only lint check 
 ## Development Workflow
 
 ### 1. Create an issue
-Describe what you're building or fixing. Include acceptance criteria.
+
+Every task starts with a GitHub issue. Use the templates in `.github/ISSUE_TEMPLATE/` (bug, feature, or task). All templates follow the same structure:
+
+```markdown
+## Problem
+What needs to change and why.
+
+## Proposed Solution
+How to fix/implement it. Write "Needs investigation" if unknown.
+
+## Files Involved
+Key files to look at. (optional)
+
+## Acceptance Criteria
+- [ ] Bullet list: when is this done?
+```
+
+Label it (`bug`, `enhancement`, `refactor`, `tech-debt`, `infrastructure`). Include enough context that someone can pick it up cold.
 
 ### 2. Create a branch
 ```bash
