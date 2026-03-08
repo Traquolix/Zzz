@@ -317,13 +317,14 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
         )
 
 
-class IncidentActionView(APIView):
+class IncidentActionView(FlowAwareMixin, APIView):
     """
     GET  /api/incidents/<id>/actions — action history for an incident.
     POST /api/incidents/<id>/actions — record a workflow transition.
 
     Org-scoped: verifies the incident's fiber belongs to the user's org.
     POST requires non-viewer role (API keys are viewer-only).
+    Live flow only — sim incidents are ephemeral and don't support workflow actions.
     """
 
     def get_permissions(self):
@@ -363,6 +364,12 @@ class IncidentActionView(APIView):
         tags=["incidents"],
     )
     def get(self, request, incident_id):
+        if self._is_sim(request):
+            return Response(
+                {"detail": "Workflow actions are not supported for simulated incidents"},
+                status=400,
+            )
+
         incident, error_resp = self._get_incident_or_404(incident_id, request)
         if error_resp:
             return error_resp
@@ -386,6 +393,12 @@ class IncidentActionView(APIView):
         tags=["incidents"],
     )
     def post(self, request, incident_id):
+        if self._is_sim(request):
+            return Response(
+                {"detail": "Workflow actions are not supported for simulated incidents"},
+                status=400,
+            )
+
         from django.db import transaction
 
         input_serializer = IncidentActionInputSerializer(data=request.data)
