@@ -1,7 +1,7 @@
 import { useReducer, useEffect, useCallback, useRef, useState, useMemo } from 'react'
 import { toast } from 'sonner'
 import type { ProtoState, ProtoAction, Incident, PendingPoint } from './types'
-import { fibers, defaultSpeedThresholds, buildThresholdLookup, resolveDirectionalFiber, channelToCoord } from './data'
+import { fibers, defaultSpeedThresholds, buildThresholdLookup, fiberLineId, channelToCoord } from './data'
 import { PrototypeMap, type PrototypeMapHandle } from './components/PrototypeMap'
 import { StatusBar } from './components/StatusBar'
 import { Legend } from './components/Legend'
@@ -19,10 +19,10 @@ import './prototype.css'
 
 /** Map an API incident to the prototype Incident shape. */
 function toProtoIncident(api: ApiIncident): Incident {
-  const fiberId = api.fiberLine
-  const dirFiber = resolveDirectionalFiber(fiberId)
+  const dirFiber = fiberLineId(api.fiberId, api.direction)
   const loc = channelToCoord(dirFiber, api.channel)
-  const fiberName = fibers.find(f => f.id === dirFiber)?.name ?? fibers.find(f => f.id === fiberId)?.name ?? fiberId
+  const fiberName =
+    fibers.find(f => f.id === dirFiber)?.name ?? fibers.find(f => f.parentCableId === api.fiberId)?.name ?? api.fiberId
   const typeLabel = api.type.charAt(0).toUpperCase() + api.type.slice(1)
   const title = `${typeLabel} — ${fiberName}`
 
@@ -33,7 +33,7 @@ function toProtoIncident(api: ApiIncident): Incident {
 
   return {
     id: api.id,
-    fiberId,
+    fiberId: dirFiber,
     type: api.type as Incident['type'],
     severity: api.severity as Incident['severity'],
     title,
@@ -349,7 +349,7 @@ export function Prototype() {
     if (!state.selectedStructureId) return
     const structure = structureData.structures.find(s => s.id === state.selectedStructureId)
     if (!structure) return
-    const dirFiber = resolveDirectionalFiber(structure.fiberId)
+    const dirFiber = fiberLineId(structure.fiberId, structure.direction ?? 0)
     const midChannel = Math.floor((structure.startChannel + structure.endChannel) / 2)
     const coord = channelToCoord(dirFiber, midChannel)
     if (coord) {

@@ -14,7 +14,7 @@ import {
   getSpeedColor,
   getSectionCoords,
   getSpeedColorRGBA,
-  resolveDirectionalFiber,
+  fiberLineId,
   channelToCoord,
 } from '../data'
 import type { Section, PendingPoint, LiveSectionStats, SpeedThresholds, Incident } from '../types'
@@ -299,7 +299,7 @@ export const PrototypeMap = memo(
         clearHighlightImpl()
         const structure = structures.find(s => s.id === structureId)
         if (!structure) return
-        const dirFiber = resolveDirectionalFiber(structure.fiberId)
+        const dirFiber = fiberLineId(structure.fiberId, structure.direction ?? 0)
         const coords = getSectionCoords(dirFiber, structure.startChannel, structure.endChannel)
         if (coords.length < 2) return
         const typeColor = structure.type === 'bridge' ? '#f59e0b' : '#6366f1'
@@ -803,7 +803,7 @@ export const PrototypeMap = memo(
                 if (lookup) {
                   for (const f of geojson.features) {
                     const p = f.properties!
-                    const t = lookup(p.fiberLine, p.channel)
+                    const t = lookup(`${p.fiberId}:${p.direction}`, p.channel)
                     p.color = getSpeedColor(p.speed, t)
                   }
                 } else {
@@ -1048,7 +1048,7 @@ export const PrototypeMap = memo(
 
         const features = structures
           .map(s => {
-            const dirFiber = resolveDirectionalFiber(s.fiberId)
+            const dirFiber = fiberLineId(s.fiberId, s.direction ?? 0)
             const coords = getSectionCoords(dirFiber, s.startChannel, s.endChannel)
             if (coords.length < 2) return null
             const color = s.type === 'bridge' ? '#f59e0b' : '#6366f1'
@@ -1084,7 +1084,7 @@ export const PrototypeMap = memo(
       const shmStatusColors: Record<string, string> = { nominal: '#22c55e', warning: '#f59e0b', critical: '#ef4444' }
 
       for (const s of structures) {
-        const dirFiber = resolveDirectionalFiber(s.fiberId)
+        const dirFiber = fiberLineId(s.fiberId, s.direction ?? 0)
         const midChannel = Math.floor((s.startChannel + s.endChannel) / 2)
         const coord = channelToCoord(dirFiber, midChannel)
         if (!coord) continue

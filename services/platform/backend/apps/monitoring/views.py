@@ -16,9 +16,6 @@ from rest_framework.views import APIView
 
 from apps.fibers.utils import fiber_belongs_to_org, get_org_fiber_ids
 from apps.monitoring.incident_service import (
-    _ensure_directional_fiber_id,
-)
-from apps.monitoring.incident_service import (
     query_by_id as incident_query_by_id,
 )
 from apps.monitoring.incident_service import (
@@ -194,7 +191,7 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
 
         # Org-scoping: verify fiber belongs to user's org
         fiber_ids = _get_fiber_ids_or_none(request.user)
-        if fiber_ids is not None and not fiber_belongs_to_org(sim_incident["fiberLine"], fiber_ids):
+        if fiber_ids is not None and not fiber_belongs_to_org(sim_incident["fiberId"], fiber_ids):
             raise NotFound({"detail": "Incident not found", "code": "incident_not_found"})
 
         snapshot = get_simulation_snapshot(incident_id)
@@ -204,7 +201,8 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
         return Response(
             {
                 "incidentId": incident_id,
-                "fiberLine": sim_incident["fiberLine"],
+                "fiberId": sim_incident["fiberId"],
+                "direction": sim_incident["direction"],
                 "centerChannel": sim_incident["channel"],
                 "capturedAt": int(time.time() * 1000),
                 "points": points,
@@ -217,7 +215,7 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
         try:
             incident_rows = query(
                 """
-                SELECT fiber_id, channel_start, channel_end, timestamp_ns
+                SELECT fiber_id, direction, channel_start, channel_end, timestamp_ns
                 FROM sequoia.fiber_incidents
                 FINAL
                 WHERE incident_id = {id:String}
@@ -308,7 +306,8 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
         return Response(
             {
                 "incidentId": incident_id,
-                "fiberLine": _ensure_directional_fiber_id(fiber_id),
+                "fiberId": fiber_id,
+                "direction": incident.get("direction", 0),
                 "centerChannel": center_ch,
                 "capturedAt": int(time.time() * 1000),
                 "points": points,
@@ -482,6 +481,7 @@ class InfrastructureListView(APIView):
                     "type": item.type,
                     "name": item.name,
                     "fiberId": item.fiber_id,
+                    "direction": item.direction,
                     "startChannel": item.start_channel,
                     "endChannel": item.end_channel,
                     "imageUrl": image_url,
@@ -790,6 +790,7 @@ class SectionHistoryView(FlowAwareMixin, APIView):
         else:
             history = query_section_history(
                 fiber_id=section["fiberId"],
+                direction=section.get("direction", 0),
                 channel_start=section["channelStart"],
                 channel_end=section["channelEnd"],
                 minutes=minutes,
@@ -809,6 +810,7 @@ class SectionHistoryView(FlowAwareMixin, APIView):
 
         return get_simulation_section_history(
             fiber_id=section["fiberId"],
+            direction=section.get("direction", 0),
             channel_start=section["channelStart"],
             channel_end=section["channelEnd"],
             minutes=minutes,

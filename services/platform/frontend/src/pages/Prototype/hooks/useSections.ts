@@ -1,16 +1,13 @@
 import { useEffect, useState, useCallback } from 'react'
 import { fetchSections, createSection, deleteSection, type ApiSection } from '@/api/sections'
 import type { Section } from '../types'
-import { defaultSpeedThresholds } from '../data'
+import { defaultSpeedThresholds, fiberLineId } from '../data'
 
 /** Map an API section to the prototype Section shape. */
 function toProtoSection(api: ApiSection): Section {
-  // API stores plain fiber IDs (e.g. "carros"), prototype expects directional
-  const fiberId = api.fiberId.includes(':') ? api.fiberId : `${api.fiberId}:0`
-
   return {
     id: api.id,
-    fiberId,
+    fiberId: fiberLineId(api.fiberId, api.direction),
     name: api.name,
     startChannel: api.channelStart,
     endChannel: api.channelEnd,

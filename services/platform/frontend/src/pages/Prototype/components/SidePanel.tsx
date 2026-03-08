@@ -3,14 +3,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import {
-  severityColor,
-  fibers,
-  getSpeedColor,
-  chartColors,
-  defaultSpeedThresholds,
-  resolveDirectionalFiber,
-} from '../data'
+import { severityColor, fibers, getSpeedColor, chartColors, defaultSpeedThresholds, fiberLineId } from '../data'
 import { useIncidentSnapshot } from '@/hooks/useIncidentSnapshot'
 import { fetchSectionHistory } from '@/api/sections'
 import type { Incident } from '../types'
@@ -870,7 +863,7 @@ function ChannelDetail({
       const now = Date.now()
 
       for (const d of detections) {
-        if (d.fiberLine !== channel.fiberId) continue
+        if (fiberLineId(d.fiberId, d.direction) !== channel.fiberId) continue
         if (Math.abs(d.channel - channel.channel) > NEIGHBOR_RANGE) continue
         dotsRef.current.push({ time: now, speed: d.speed })
       }
@@ -2084,7 +2077,7 @@ function StructureList({
   const q = search.toLowerCase()
   const filtered = q
     ? structures.filter(s => {
-        const dirFiber = resolveDirectionalFiber(s.fiberId)
+        const dirFiber = fiberLineId(s.fiberId, s.direction ?? 0)
         const fiberName = fibers.find(f => f.id === dirFiber)?.name ?? s.fiberId
         return (
           s.name.toLowerCase().includes(q) || s.type.toLowerCase().includes(q) || fiberName.toLowerCase().includes(q)
@@ -2101,7 +2094,7 @@ function StructureList({
       ) : (
         filtered.map(structure => {
           const typeStyle = structureTypeColors[structure.type] ?? structureTypeColors.bridge
-          const dirFiber = resolveDirectionalFiber(structure.fiberId)
+          const dirFiber = fiberLineId(structure.fiberId, structure.direction ?? 0)
           const fiber = fibers.find(f => f.id === dirFiber)
           const status = allStatuses.get(structure.id)
           const dotColor = status ? (statusColors[status.status] ?? '#64748b') : '#64748b'
@@ -2212,7 +2205,7 @@ function StructureDetail({
   }
 
   const typeStyle = structureTypeColors[structure.type] ?? structureTypeColors.bridge
-  const dirFiber = resolveDirectionalFiber(structure.fiberId)
+  const dirFiber = fiberLineId(structure.fiberId, structure.direction ?? 0)
   const fiber = fibers.find(f => f.id === dirFiber)
   const statusColor = shmStatus ? (statusColors[shmStatus.status] ?? statusColors.nominal) : '#64748b'
 

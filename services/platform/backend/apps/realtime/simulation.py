@@ -46,12 +46,12 @@ _simulation_snapshots: dict[str, dict] = {}
 # Global cache for simulation-wide stats (fiber/channel/vehicle counts).
 _simulation_stats: dict[str, int] = {}
 
-# Section history buffers — keyed by (fiber_id, channel).
+# Section history buffers — keyed by (fiber_id, direction, channel).
 # Per-second: 5 min retention, aggregated once per second.
 # Per-minute: 60 min retention, aggregated from per-second every 60s.
 # Each entry: {time: epoch_ms, speed: float, speedMax: float, samples: int}
-_simulation_per_second_buffer: dict[tuple[str, int], list[dict]] = {}
-_simulation_per_minute_buffer: dict[tuple[str, int], list[dict]] = {}
+_simulation_per_second_buffer: dict[tuple[str, int, int], list[dict]] = {}
+_simulation_per_minute_buffer: dict[tuple[str, int, int], list[dict]] = {}
 
 
 def get_simulation_incidents() -> list:
@@ -78,6 +78,7 @@ def get_simulation_stats() -> dict[str, int]:
 
 def get_simulation_section_history(
     fiber_id: str,
+    direction: int,
     channel_start: int,
     channel_end: int,
     minutes: int,
@@ -101,8 +102,8 @@ def get_simulation_section_history(
     cutoff_ms = now_ms - minutes * 60 * 1000
     points: list[dict] = []
 
-    for (fid, ch), entries in buf.items():
-        if fid != fiber_id:
+    for (fid, d, ch), entries in buf.items():
+        if fid != fiber_id or d != direction:
             continue
         if ch < channel_start or ch > channel_end:
             continue
@@ -249,6 +250,7 @@ class Incident:
     channel: int
     detected_at: str
     detected_at_ms: float  # Wall-clock ms at creation (avoids UTC/local parsing bugs)
+    direction: int = 0
     status: str = "active"
     duration: Optional[float] = None
 
@@ -529,8 +531,8 @@ class SimulationEngine:
                 )
 
         # Section history: per-channel per-second accumulator
-        # Keyed by (fiber_id, channel), accumulates within the current second
-        self._sec_accum: dict[tuple[str, int], dict] = {}
+        # Keyed by (fiber_id, direction, channel), accumulates within the current second
+        self._sec_accum: dict[tuple[str, int, int], dict] = {}
         self._sec_accum_bucket: int = 0  # Current second bucket (epoch_ms, floored)
         self._last_minute_rollup: float = 0.0  # Last time we rolled up per-minute data
 
@@ -640,6 +642,7 @@ class SimulationEngine:
                 channel=ch,
                 detected_at=time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(now)),
                 detected_at_ms=now_ms,
+                direction=target.direction,
                 status="active",
                 duration=dur,
             )
@@ -714,13 +717,13 @@ class SimulationEngine:
                 continue
             ring.append(
                 {
-                    "fiberLine": f"{d.fiber_line}:{d.direction}",
+                    "fiberId": d.fiber_line,
+                    "direction": d.direction,
                     "channel": d.channel,
                     "speed": round(d.speed, 1),
                     "count": d.count,
                     "nCars": d.n_cars,
                     "nTrucks": d.n_trucks,
-                    "direction": d.direction,
                     "timestamp": d.timestamp,
                 }
             )
@@ -817,10 +820,7 @@ class SimulationEngine:
         self._sec_accum_bucket = bucket_ms
 
         for d in detections:
-            # Strip directional suffix (e.g. "carros:0" → "carros") so buffer keys
-            # match the parent fiber IDs used by query_sections() / ClickHouse.
-            parent_fid = d.fiber_line.rsplit(":", 1)[0] if ":" in d.fiber_line else d.fiber_line
-            key = (parent_fid, d.channel)
+            key = (d.fiber_line, d.direction, d.channel)
             if key not in self._sec_accum:
                 self._sec_accum[key] = {
                     "speed_sum": 0.0,
@@ -838,7 +838,7 @@ class SimulationEngine:
         bucket_ms = self._sec_accum_bucket
         cutoff_ms = bucket_ms - 5 * 60 * 1000  # 5 min retention
 
-        for (fid, ch), acc in self._sec_accum.items():
+        for key, acc in self._sec_accum.items():
             if acc["count"] == 0:
                 continue
             entry = {
@@ -847,7 +847,6 @@ class SimulationEngine:
                 "speedMax": round(acc["speed_max"], 1),
                 "samples": acc["count"],
             }
-            key = (fid, ch)
             if key not in _simulation_per_second_buffer:
                 _simulation_per_second_buffer[key] = []
             buf = _simulation_per_second_buffer[key]
@@ -1010,13 +1009,13 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
             last_detection_broadcast = tick_start
             detection_dicts = [
                 {
-                    "fiberLine": f"{d.fiber_line}:{d.direction}",
+                    "fiberId": d.fiber_line,
+                    "direction": d.direction,
                     "channel": d.channel,
                     "speed": round(d.speed, 1),
                     "count": d.count,
                     "nCars": d.n_cars,
                     "nTrucks": d.n_trucks,
-                    "direction": d.direction,
                     "timestamp": d.timestamp,
                 }
                 for d in pending_detections
@@ -1063,13 +1062,12 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
             _update_simulation_stats(engine)
             for inc in pending_new_incidents + pending_resolved_incidents:
                 inc_data = transform_simulation_incident(inc)
-                directional_fid = inc_data["fiberLine"]
                 await broadcast_to_orgs(
                     channel_layer,
                     "incidents",
                     inc_data,
                     fiber_org_map,
-                    fiber_ids={directional_fid},
+                    fiber_ids={inc_data["fiberId"]},
                     flow="sim",
                 )
                 # Check alerts for incident
@@ -1133,7 +1131,8 @@ def _compute_section_counts(engine: SimulationEngine) -> list[dict]:
                 if vehicle_count > 0:
                     counts.append(
                         {
-                            "fiberLine": f"{fiber.id}:{direction}",
+                            "fiberId": fiber.id,
+                            "direction": direction,
                             "channelStart": start_ch,
                             "channelEnd": end_ch,
                             "vehicleCount": float(vehicle_count),

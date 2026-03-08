@@ -18,11 +18,6 @@ import logging
 logger = logging.getLogger("sequoia.broadcast")
 
 
-def _strip_directional_suffix(fid: str) -> str:
-    """Strip directional suffix (e.g. ``"carros:0"`` → ``"carros"``)."""
-    return fid.rsplit(":", 1)[0] if ":" in fid else fid
-
-
 # ============================================================================
 # ORG MAP LOADERS
 # ============================================================================
@@ -50,13 +45,12 @@ async def load_fiber_org_map() -> dict[str, list[str]]:
 def group_by_org(
     items: list[dict],
     fiber_org_map: dict[str, list[str]],
-    fiber_key: str = "fiberLine",
+    fiber_key: str = "fiberId",
 ) -> dict[str, list[dict]]:
     """
     Group items by org ownership based on their fiber ID.
 
-    Strips directional suffixes (e.g. ``"carros:0"`` → ``"carros"``) before
-    looking up the org map. Used by ``broadcast_per_org`` and alerting code.
+    Items are expected to have a plain ``fiberId`` field (no directional suffix).
 
     Returns:
         ``{org_id: [items belonging to that org]}``
@@ -64,8 +58,7 @@ def group_by_org(
     org_items: dict[str, list[dict]] = {}
     for item in items:
         fid = item.get(fiber_key, "")
-        parent_fid = _strip_directional_suffix(fid)
-        for org_id in fiber_org_map.get(parent_fid, []):
+        for org_id in fiber_org_map.get(fid, []):
             org_items.setdefault(org_id, []).append(item)
     return org_items
 
@@ -92,7 +85,7 @@ async def broadcast_to_orgs(
         channel: Channel name (e.g. ``"incidents"``).
         data: Payload to send (dict or list — sent as-is to each group).
         fiber_org_map: ``{fiber_id: [org_id, ...]}`` mapping.
-        fiber_ids: Fiber IDs in this payload. ``None`` = send to all known orgs.
+        fiber_ids: Plain fiber IDs in this payload. ``None`` = send to all known orgs.
         flow: ``"sim"`` or ``"live"`` — determines group name prefix.
     """
     message = {
@@ -118,8 +111,7 @@ async def broadcast_to_orgs(
         # Broadcast to orgs that own these specific fibers
         sent_orgs = set()
         for fid in fiber_ids:
-            parent_fid = _strip_directional_suffix(fid)
-            for org_id in fiber_org_map.get(parent_fid, []):
+            for org_id in fiber_org_map.get(fid, []):
                 if org_id not in sent_orgs:
                     sent_orgs.add(org_id)
                     await channel_layer.group_send(
@@ -132,7 +124,7 @@ async def broadcast_per_org(
     channel: str,
     items: list[dict],
     fiber_org_map: dict[str, list[str]],
-    fiber_key: str = "fiberLine",
+    fiber_key: str = "fiberId",
     *,
     flow: str,
 ):
@@ -145,9 +137,9 @@ async def broadcast_per_org(
     Args:
         channel_layer: Django Channels layer.
         channel: Channel name (e.g. ``"detections"``).
-        items: List of dicts, each containing a fiber identifier.
+        items: List of dicts, each containing a ``fiberId`` field.
         fiber_org_map: ``{fiber_id: [org_id, ...]}`` mapping.
-        fiber_key: Key in each item dict that holds the directional fiber ID.
+        fiber_key: Key in each item dict that holds the plain fiber ID.
         flow: ``"sim"`` or ``"live"`` — determines group name prefix.
     """
     if not items:

@@ -3,6 +3,7 @@ import { CircularBuffer } from '@/lib/CircularBuffer'
 import { parseDetections } from '@/lib/parseMessage'
 import { useRealtime } from '@/hooks/useRealtime'
 import { useFlowReset } from '@/hooks/useFlowReset'
+import { fiberLineId } from '../data'
 import type { Detection } from '@/types/realtime'
 import type { Section } from '../types'
 import type { SectionDataPoint, LiveSectionStats } from '../types'
@@ -91,7 +92,10 @@ export function useLiveStats(sections: Section[]) {
       for (const sec of secs) {
         // Filter detections belonging to this section
         const matching = batch.filter(
-          d => d.fiberLine === sec.fiberId && d.channel >= sec.startChannel && d.channel <= sec.endChannel,
+          d =>
+            fiberLineId(d.fiberId, d.direction) === sec.fiberId &&
+            d.channel >= sec.startChannel &&
+            d.channel <= sec.endChannel,
         )
 
         const sb = buffersRef.current.get(sec.id)

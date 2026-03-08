@@ -86,7 +86,7 @@ def transform_detection_message(data: dict) -> list[dict]:
         ]}
 
     Frontend Detection:
-        { fiberLine, channel, speed, count, nCars, nTrucks, direction, timestamp }
+        { fiberId, direction, channel, speed, count, nCars, nTrucks, timestamp }
 
     Direction convention:
         AI engine sends direction 1 (forward) / 2 (reverse).
@@ -115,13 +115,13 @@ def transform_detection_message(data: dict) -> list[dict]:
 
         results.append(
             {
-                "fiberLine": f"{fiber_id}:{direction}",
+                "fiberId": fiber_id,
+                "direction": direction,
                 "channel": int(channel),
                 "speed": round(abs(speed), 1),
                 "count": round(float(vehicle_count), 1),
                 "nCars": round(float(n_cars), 1),
                 "nTrucks": round(float(n_trucks), 1),
-                "direction": direction,
                 "timestamp": timestamp_ms,
             }
         )
@@ -272,7 +272,7 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
     # State for incident polling and SHM
     shm_state: dict[str, dict] = {}
     last_incident_check = time.time()
-    known_incident_ids: dict[str, str] = {}  # {incident_id: fiberLine}
+    known_incident_ids: dict[str, str] = {}  # {incident_id: fiberId}
     last_shm_broadcast: float = 0
     last_batch_cleanup: float = 0
     last_kafka_flag_refresh: float = time.time()
@@ -397,8 +397,8 @@ async def _poll_incidents(
     new incidents and resolutions.
 
     Args:
-        known_incidents: Dict of {incident_id: fiberLine} for currently tracked
-            incidents. Stores fiberLine so resolved notifications can be routed
+        known_incidents: Dict of {incident_id: fiberId} for currently tracked
+            incidents. Stores fiberId so resolved notifications can be routed
             to the correct org groups.
     """
     from apps.monitoring.incident_service import query_active_raw
@@ -414,7 +414,7 @@ async def _poll_incidents(
     for row in rows:
         iid = row["incident_id"]
         inc_data = transform_incident_row(row)
-        current_incidents[iid] = inc_data["fiberLine"]
+        current_incidents[iid] = inc_data["fiberId"]
 
         if iid not in known_incidents:
             # New incident -- broadcast to owning orgs
@@ -423,7 +423,7 @@ async def _poll_incidents(
                 "incidents",
                 inc_data,
                 fiber_org_map,
-                fiber_ids={inc_data["fiberLine"]},
+                fiber_ids={inc_data["fiberId"]},
                 flow="live",
             )
             # Check alerts for incident
@@ -437,7 +437,8 @@ async def _poll_incidents(
             "status": "resolved",
             "type": "",
             "severity": "",
-            "fiberLine": known_incidents[rid],  # Preserved from when incident was active
+            "fiberId": known_incidents[rid],  # Preserved from when incident was active
+            "direction": 0,
             "channel": 0,
             "detectedAt": "",
             "duration": None,
@@ -447,7 +448,7 @@ async def _poll_incidents(
             "incidents",
             resolved_data,
             fiber_org_map,
-            fiber_ids={resolved_data["fiberLine"]},
+            fiber_ids={resolved_data["fiberId"]},
             flow="live",
         )
 

@@ -89,9 +89,7 @@ def _check_fiber_access(user, fiber_id):
     if user.is_superuser:
         return True
     fiber_ids = get_org_fiber_ids(user.organization)
-    # Strip directional suffix for comparison
-    plain_id = fiber_id.rsplit(":", 1)[0] if ":" in fiber_id else fiber_id
-    return plain_id in fiber_ids
+    return fiber_id in fiber_ids
 
 
 def _select_tier(start, end, explicit_tier=None):

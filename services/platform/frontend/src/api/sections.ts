@@ -3,6 +3,7 @@ import { apiRequest } from './client'
 export interface ApiSection {
   id: string
   fiberId: string
+  direction: number
   name: string
   channelStart: number
   channelEnd: number

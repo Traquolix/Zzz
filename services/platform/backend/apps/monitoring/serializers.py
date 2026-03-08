@@ -12,7 +12,8 @@ class IncidentSerializer(serializers.Serializer):
     id = serializers.CharField()
     type = serializers.CharField()
     severity = serializers.CharField()
-    fiberLine = serializers.CharField()
+    fiberId = serializers.CharField()
+    direction = serializers.IntegerField()
     channel = serializers.IntegerField()
     detectedAt = serializers.CharField()
     status = serializers.CharField()
@@ -28,7 +29,8 @@ class SnapshotPointSerializer(serializers.Serializer):
 
 class IncidentSnapshotSerializer(serializers.Serializer):
     incidentId = serializers.CharField()
-    fiberLine = serializers.CharField()
+    fiberId = serializers.CharField()
+    direction = serializers.IntegerField()
     centerChannel = serializers.IntegerField()
     capturedAt = serializers.IntegerField()
     points = SnapshotPointSerializer(many=True)
@@ -40,6 +42,7 @@ class InfrastructureSerializer(serializers.Serializer):
     type = serializers.CharField()
     name = serializers.CharField()
     fiberId = serializers.CharField()
+    direction = serializers.IntegerField(allow_null=True)
     startChannel = serializers.IntegerField()
     endChannel = serializers.IntegerField()
     imageUrl = serializers.SerializerMethodField()
@@ -84,6 +87,7 @@ class SectionInputSerializer(serializers.Serializer):
     """Validates incoming section creation requests."""
 
     fiberId = serializers.CharField()
+    direction = serializers.IntegerField(default=0)
     name = serializers.CharField()
     channelStart = serializers.IntegerField()
     channelEnd = serializers.IntegerField()
@@ -94,6 +98,7 @@ class SectionSerializer(serializers.Serializer):
 
     id = serializers.CharField()
     fiberId = serializers.CharField()
+    direction = serializers.IntegerField()
     name = serializers.CharField()
     channelStart = serializers.IntegerField()
     channelEnd = serializers.IntegerField()

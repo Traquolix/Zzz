@@ -32,13 +32,13 @@ function isObject(v: unknown): v is Record<string, unknown> {
 function isDetection(d: unknown): d is Detection {
   return (
     isObject(d) &&
-    typeof d.fiberLine === 'string' &&
+    typeof d.fiberId === 'string' &&
+    typeof d.direction === 'number' &&
     typeof d.channel === 'number' &&
     typeof d.speed === 'number' &&
     typeof d.count === 'number' &&
     typeof d.nCars === 'number' &&
     typeof d.nTrucks === 'number' &&
-    typeof d.direction === 'number' &&
     typeof d.timestamp === 'number'
   )
 }
@@ -46,7 +46,8 @@ function isDetection(d: unknown): d is Detection {
 function isVehicleCount(d: unknown): d is VehicleCount {
   return (
     isObject(d) &&
-    typeof d.fiberLine === 'string' &&
+    typeof d.fiberId === 'string' &&
+    typeof d.direction === 'number' &&
     typeof d.channelStart === 'number' &&
     typeof d.channelEnd === 'number' &&
     typeof d.vehicleCount === 'number' &&
@@ -60,7 +61,8 @@ function isIncident(d: unknown): d is Incident {
     typeof d.id === 'string' &&
     typeof d.type === 'string' &&
     typeof d.severity === 'string' &&
-    typeof d.fiberLine === 'string' &&
+    typeof d.fiberId === 'string' &&
+    typeof d.direction === 'number' &&
     typeof d.channel === 'number' &&
     typeof d.detectedAt === 'string' &&
     typeof d.status === 'string'

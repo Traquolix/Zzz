@@ -2,6 +2,7 @@ import { useRef, useEffect } from 'react'
 import { useRealtime } from '@/hooks/useRealtime'
 import { useFlowReset } from '@/hooks/useFlowReset'
 import { parseDetections } from '@/lib/parseMessage'
+import { fiberLineId } from '../data'
 
 export interface WaterfallDot {
   channel: number
@@ -38,7 +39,7 @@ export function useWaterfallBuffer(fiberFilter: string, windowMs = DEFAULT_WINDO
       if (detections.length === 0) return
 
       for (const d of detections) {
-        if (d.fiberLine !== fiberFilter) continue
+        if (fiberLineId(d.fiberId, d.direction) !== fiberFilter) continue
         dotsRef.current.push({
           channel: d.channel,
           speed: d.speed,

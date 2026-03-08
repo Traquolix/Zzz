@@ -42,7 +42,7 @@ class FlowAwareMixin:
         self,
         request,
         sim_fn: Callable[[], list[dict]],
-        fiber_key: str = "fiberLine",
+        fiber_key: str = "fiberId",
     ) -> list[dict]:
         """
         Get data from the simulation cache, org-filtered.
