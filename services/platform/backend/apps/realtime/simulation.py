@@ -817,7 +817,10 @@ class SimulationEngine:
         self._sec_accum_bucket = bucket_ms
 
         for d in detections:
-            key = (d.fiber_line, d.channel)
+            # Strip directional suffix (e.g. "carros:0" → "carros") so buffer keys
+            # match the parent fiber IDs used by query_sections() / ClickHouse.
+            parent_fid = d.fiber_line.rsplit(":", 1)[0] if ":" in d.fiber_line else d.fiber_line
+            key = (parent_fid, d.channel)
             if key not in self._sec_accum:
                 self._sec_accum[key] = {
                     "speed_sum": 0.0,
@@ -960,6 +963,11 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
     # No initial incidents — they spawn after the warmup period so
     # snapshot data has time to accumulate from the vehicle simulation
     _update_simulation_incidents_cache(engine.incidents)
+
+    # Clear stale history buffers from any previous simulation run
+    global _simulation_per_second_buffer, _simulation_per_minute_buffer
+    _simulation_per_second_buffer = {}
+    _simulation_per_minute_buffer = {}
 
     tick_interval = 0.05  # 50ms ticks (20 Hz physics)
     shm_counter = 0
