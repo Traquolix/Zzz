@@ -329,7 +329,7 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
 
     # Org-aware broadcast helper for the replay buffer drain
     async def broadcast(channel: str, data):
-        await _org_broadcast(channel_layer, channel, data, fiber_org_map)
+        await _org_broadcast(channel_layer, channel, data, fiber_org_map, flow="live")
         # Check alerts for detections (per-org)
         if channel == "detections" and isinstance(data, list):
             org_detections: dict[str, list[dict]] = {}
@@ -520,7 +520,7 @@ async def _poll_incidents(
 
         if iid not in known_incidents:
             # New incident -- broadcast to owning orgs
-            await _org_broadcast(channel_layer, "incidents", inc_data, fiber_org_map)
+            await _org_broadcast(channel_layer, "incidents", inc_data, fiber_org_map, flow="live")
             # Check alerts for incident
             await check_alerts_for_incident(inc_data, fiber_org_map)
 
@@ -537,7 +537,7 @@ async def _poll_incidents(
             "detectedAt": "",
             "duration": None,
         }
-        await _org_broadcast(channel_layer, "incidents", resolved_data, fiber_org_map)
+        await _org_broadcast(channel_layer, "incidents", resolved_data, fiber_org_map, flow="live")
 
     known_incidents.clear()
     known_incidents.update(current_incidents)

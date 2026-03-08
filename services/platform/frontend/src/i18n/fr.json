@@ -152,6 +152,7 @@
     "max": "Max"
   },
   "flow": {
+    "label": "Source de données",
     "live": "Live",
     "sim": "Sim",
     "unavailable": "Source de données {{label}} indisponible",

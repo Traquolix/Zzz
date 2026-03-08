@@ -967,6 +967,7 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
                 "detections",
                 detection_dicts,
                 fiber_org_map,
+                flow="sim",
             )
             # Check alerts for detections (per-org)
             org_detections: dict[str, list[dict]] = {}
@@ -1013,6 +1014,7 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
                     inc_data,
                     fiber_org_map,
                     fiber_ids={directional_fid},
+                    flow="sim",
                 )
                 # Check alerts for incident
                 await check_alerts_for_incident(inc_data, fiber_org_map)
@@ -1029,6 +1031,7 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
                     "counts",
                     counts,
                     fiber_org_map,
+                    flow="sim",
                 )
 
         # Log stats periodically

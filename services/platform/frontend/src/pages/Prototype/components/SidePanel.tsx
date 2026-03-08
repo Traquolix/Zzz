@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import {
   severityColor,
@@ -1740,6 +1741,7 @@ function SettingsPanel({
   availableFlows: DataFlow[]
   onFlowToggle: (flow: DataFlow) => void
 }) {
+  const { t } = useTranslation()
   const [colorPickerOpen, setColorPickerOpen] = useState<string | null>(null)
 
   // Group fibers by cable
@@ -1760,7 +1762,7 @@ function SettingsPanel({
     <div className="px-4 py-4 flex flex-col gap-5">
       {/* Data source */}
       <div className="flex flex-col gap-2">
-        <span className="text-xs text-[var(--proto-text-secondary)]">Data Source</span>
+        <span className="text-xs text-[var(--proto-text-secondary)]">{t('flow.label')}</span>
         <FlowToggle flow={flow} availableFlows={availableFlows} onToggle={onFlowToggle} />
       </div>
 
