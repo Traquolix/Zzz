@@ -732,8 +732,11 @@ class SimulationEngine:
             avg_sp = sum(o.speed for o in nearby) / len(nearby)
             for o in nearby:
                 processed.add(o.id)
-            ch_noise = (random.random() - 0.5) * 4
-            sp_noise = (random.random() - 0.5) * 10
+            # Noise disabled — keep detections clean and smooth for now
+            # ch_noise = (random.random() - 0.5) * 4
+            # sp_noise = (random.random() - 0.5) * 10
+            ch_noise = 0
+            sp_noise = 0
             count = len(nearby)
             detections.append(
                 Detection(
