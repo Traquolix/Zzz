@@ -735,8 +735,7 @@ const ChannelIcon = () => (
 
 const FIBER_OPTIONS = fibers
   .filter(
-    (_, i, arr) =>
-      i === arr.findIndex(f2 => f2.id.split(':')[0] === _.id.split(':')[0] && f2.direction === _.direction),
+    (_, i, arr) => i === arr.findIndex(f2 => f2.parentCableId === _.parentCableId && f2.direction === _.direction),
   )
   .map(f => ({ id: f.id, label: `${f.name}:${f.direction}` }))
 
