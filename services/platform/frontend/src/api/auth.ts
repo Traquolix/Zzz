@@ -81,4 +81,4 @@ export async function logout(): Promise<void> {
 }
 
 // Re-export token utilities for direct access
-export { getAuthToken, setAuthToken, clearAuthToken }
+export { getAuthToken, setAuthToken, clearAuthToken, attemptTokenRefresh }
