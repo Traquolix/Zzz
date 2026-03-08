@@ -7,8 +7,6 @@ from __future__ import annotations
 import logging
 from typing import Callable
 
-from apps.monitoring.incident_service import strip_directional_suffix
-
 logger = logging.getLogger("sequoia")
 
 
@@ -78,16 +76,12 @@ class FlowAwareMixin:
             return None
 
         # Org-scope: filter to user's assigned fibers
-        from apps.fibers.utils import get_org_fiber_ids
-
         if not request.user.is_superuser:
+            from apps.fibers.utils import filter_by_org, get_org_fiber_ids
+
             fiber_ids = get_org_fiber_ids(request.user.organization)
             if not fiber_ids:
                 return []
-            data = [
-                item
-                for item in data
-                if strip_directional_suffix(item.get(fiber_key, "")) in fiber_ids
-            ]
+            data = filter_by_org(data, fiber_ids, fiber_key=fiber_key)
 
         return data if data else None

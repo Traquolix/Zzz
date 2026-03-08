@@ -14,10 +14,9 @@ from rest_framework.exceptions import NotFound
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.fibers.utils import get_org_fiber_ids
+from apps.fibers.utils import fiber_belongs_to_org, get_org_fiber_ids
 from apps.monitoring.incident_service import (
     _ensure_directional_fiber_id,
-    strip_directional_suffix,
 )
 from apps.monitoring.incident_service import (
     query_by_id as incident_query_by_id,
@@ -215,15 +214,11 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
         fiber_id = incident["fiber_id"]
 
         # Org-scoping: verify the incident's fiber belongs to user's org
-        # fiber_id from ClickHouse may be directional ("carros:0") while
-        # fiber_ids from FiberAssignment are plain ("carros") — strip suffix
         fiber_ids = _get_fiber_ids_or_none(request.user)
-        if fiber_ids is not None:
-            plain_fiber_id = strip_directional_suffix(fiber_id)
-            if plain_fiber_id not in fiber_ids:
-                return Response(
-                    {"detail": "Incident not found", "code": "incident_not_found"}, status=404
-                )
+        if fiber_ids is not None and not fiber_belongs_to_org(fiber_id, fiber_ids):
+            return Response(
+                {"detail": "Incident not found", "code": "incident_not_found"}, status=404
+            )
 
         center_ch = (incident["channel_start"] + incident["channel_end"]) // 2
         ts_ns = incident["timestamp_ns"]
@@ -312,10 +307,8 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
 
         # Org-scoping: verify fiber belongs to user's org
         fiber_ids = _get_fiber_ids_or_none(request.user)
-        if fiber_ids is not None:
-            plain_fid = strip_directional_suffix(sim_incident["fiberLine"])
-            if plain_fid not in fiber_ids:
-                raise NotFound({"detail": "Incident not found", "code": "incident_not_found"})
+        if fiber_ids is not None and not fiber_belongs_to_org(sim_incident["fiberLine"], fiber_ids):
+            raise NotFound({"detail": "Incident not found", "code": "incident_not_found"})
 
         snapshot = get_simulation_snapshot(incident_id)
         points = snapshot["points"] if snapshot else []
@@ -364,13 +357,11 @@ class IncidentActionView(APIView):
 
         # Org-scoping
         fiber_ids = _get_fiber_ids_or_none(request.user)
-        if fiber_ids is not None:
-            plain_fiber_id = strip_directional_suffix(incident["fiber_id"])
-            if plain_fiber_id not in fiber_ids:
-                return None, Response(
-                    {"detail": "Incident not found", "code": "incident_not_found"},
-                    status=404,
-                )
+        if fiber_ids is not None and not fiber_belongs_to_org(incident["fiber_id"], fiber_ids):
+            return None, Response(
+                {"detail": "Incident not found", "code": "incident_not_found"},
+                status=404,
+            )
 
         return incident, None
 
@@ -667,13 +658,11 @@ class SectionListView(APIView):
 
         # Org-scoping: verify the fiber belongs to user's org
         fiber_ids = _get_fiber_ids_or_none(request.user)
-        if fiber_ids is not None:
-            plain_fiber_id = strip_directional_suffix(fiber_id)
-            if plain_fiber_id not in fiber_ids:
-                return Response(
-                    {"detail": "Fiber not found", "code": "not_found"},
-                    status=404,
-                )
+        if fiber_ids is not None and not fiber_belongs_to_org(fiber_id, fiber_ids):
+            return Response(
+                {"detail": "Fiber not found", "code": "not_found"},
+                status=404,
+            )
 
         section = insert_section(
             fiber_id=fiber_id,
@@ -707,12 +696,11 @@ class SectionDeleteView(APIView):
 
         # Org-scoping
         fiber_ids = _get_fiber_ids_or_none(request.user)
-        if fiber_ids is not None:
-            if strip_directional_suffix(section["fiberId"]) not in fiber_ids:
-                return Response(
-                    {"detail": "Section not found", "code": "not_found"},
-                    status=404,
-                )
+        if fiber_ids is not None and not fiber_belongs_to_org(section["fiberId"], fiber_ids):
+            return Response(
+                {"detail": "Section not found", "code": "not_found"},
+                status=404,
+            )
 
         delete_section(section_id, section["fiberId"])
         return Response(status=204)
@@ -754,12 +742,11 @@ class SectionHistoryView(APIView):
 
         # Org-scoping
         fiber_ids = _get_fiber_ids_or_none(request.user)
-        if fiber_ids is not None:
-            if strip_directional_suffix(section["fiberId"]) not in fiber_ids:
-                return Response(
-                    {"detail": "Section not found", "code": "not_found"},
-                    status=404,
-                )
+        if fiber_ids is not None and not fiber_belongs_to_org(section["fiberId"], fiber_ids):
+            return Response(
+                {"detail": "Section not found", "code": "not_found"},
+                status=404,
+            )
 
         history = query_section_history(
             fiber_id=section["fiberId"],

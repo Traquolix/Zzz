@@ -357,7 +357,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
     def _query_initial_incidents(self):
         """Synchronous query for initial incidents (org-scoped, flow-aware).
 
-        In 'sim' flow: returns simulation cache directly.
+        In 'sim' flow: returns simulation cache (org-filtered).
         In 'live' flow: queries ClickHouse only (no sim fallback).
         """
         if self._flow == "sim":
@@ -366,7 +366,18 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             if SimulationManager.instance().is_running:
                 from apps.realtime.simulation import get_simulation_incidents
 
-                return get_simulation_incidents()
+                incidents = get_simulation_incidents()
+                # Org-scope: filter sim incidents to user's fibers
+                if self._org_id != "__all__":
+                    from apps.fibers.utils import filter_by_org, get_org_fiber_ids
+                    from apps.organizations.models import Organization
+
+                    org = Organization.objects.get(pk=self._org_id)
+                    fiber_ids = get_org_fiber_ids(org)
+                    if not fiber_ids:
+                        return []
+                    incidents = filter_by_org(incidents, fiber_ids)
+                return incidents
             return []
 
         # 'live' flow — ClickHouse only
