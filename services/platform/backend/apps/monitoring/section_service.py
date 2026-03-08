@@ -152,11 +152,57 @@ def query_section_history(
     minutes: int = 60,
 ) -> list[dict]:
     """
-    Aggregate detection_1m data over a section's channel range.
+    Query section history with resolution-aware table selection.
 
-    Returns one point per minute with avg speed, max speed, and sample count.
-    Uses -Merge combinators to finalize AggregatingMergeTree states.
+    - ≤5 min → ``detection_hires`` grouped by second (1s resolution)
+    - >5 min → ``detection_1m`` with ``-Merge`` combinators (1min resolution)
+
+    Returns ``[{time, speed, speedMax, samples}, ...]``.
     """
+    if minutes <= 5:
+        return _query_section_history_hires(fiber_id, channel_start, channel_end, minutes)
+    return _query_section_history_1m(fiber_id, channel_start, channel_end, minutes)
+
+
+def _query_section_history_hires(
+    fiber_id: str,
+    channel_start: int,
+    channel_end: int,
+    minutes: int,
+) -> list[dict]:
+    """Query detection_hires at 1-second resolution for short windows (≤5 min)."""
+    rows = query(
+        """
+        SELECT
+            toUnixTimestamp(toStartOfSecond(ts)) * 1000 AS time_ms,
+            avg(speed) AS speed,
+            max(speed) AS speed_max,
+            count() AS samples
+        FROM sequoia.detection_hires
+        WHERE fiber_id = {fid:String}
+          AND ch BETWEEN {cs:UInt16} AND {ce:UInt16}
+          AND ts >= now() - INTERVAL {mins:UInt32} MINUTE
+        GROUP BY toStartOfSecond(ts)
+        ORDER BY toStartOfSecond(ts)
+        """,
+        parameters={
+            "fid": fiber_id,
+            "cs": channel_start,
+            "ce": channel_end,
+            "mins": minutes,
+        },
+    )
+
+    return _transform_history_rows(rows)
+
+
+def _query_section_history_1m(
+    fiber_id: str,
+    channel_start: int,
+    channel_end: int,
+    minutes: int,
+) -> list[dict]:
+    """Query detection_1m at 1-minute resolution using -Merge combinators."""
     rows = query(
         """
         SELECT
@@ -179,6 +225,11 @@ def query_section_history(
         },
     )
 
+    return _transform_history_rows(rows)
+
+
+def _transform_history_rows(rows: list[dict]) -> list[dict]:
+    """Transform raw query rows into the section history response shape."""
     return [
         {
             "time": int(r["time_ms"]),

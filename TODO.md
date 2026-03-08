@@ -8,11 +8,13 @@
 1. [x] **Unify broadcast helpers** [#17] — PR #44, merged
 2. [x] **IncidentActionView not flow-aware** [#35] — PR #48, merged
 3. [x] **Extract `group_by_org` helper** [#45] — PR #51, merged
-4. [ ] **Route SHM broadcasts via `fiber_org_map`** [#46] — eliminate redundant `infra_org_map`
+4. [x] **Route SHM broadcasts via `fiber_org_map`** [#46] — PR #52, merged
 5. [ ] **SectionHistoryView not flow-aware** [#40] — bug, sim/live cross-contamination
-6. [ ] **Consolidate dual Incident type definitions** [#42] — refactor, prototype vs canonical
-7. [ ] **Sim stats: `detectionsPerSecond` always 0** [#41] — enhancement
-8. [ ] **Optimistic flow switch rollback** [#15] — bug, frontend/backend flow state desync
+6. [ ] **Direction filtering missing from queries and sim buffers** [#56] — bug, both directions mixed in snapshots/history/exports/reports
+7. [ ] **Frontend: poll section history API** [#54] — enhancement, replace client-side accumulation with periodic API polling
+8. [ ] **Consolidate dual Incident type definitions** [#42] — refactor, prototype vs canonical
+9. [ ] **Sim stats: `detectionsPerSecond` always 0** [#41] — enhancement
+10. [ ] **Optimistic flow switch rollback** [#15] — bug, frontend/backend flow state desync
 
 ## High Priority
 
