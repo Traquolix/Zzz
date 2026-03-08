@@ -48,6 +48,34 @@ async def load_fiber_org_map() -> dict[str, list[str]]:
 
 
 # ============================================================================
+# ORG GROUPING
+# ============================================================================
+
+
+def group_by_org(
+    items: list[dict],
+    fiber_org_map: dict[str, list[str]],
+    fiber_key: str = "fiberLine",
+) -> dict[str, list[dict]]:
+    """
+    Group items by org ownership based on their fiber ID.
+
+    Strips directional suffixes (e.g. ``"carros:0"`` → ``"carros"``) before
+    looking up the org map. Used by ``broadcast_per_org`` and alerting code.
+
+    Returns:
+        ``{org_id: [items belonging to that org]}``
+    """
+    org_items: dict[str, list[dict]] = {}
+    for item in items:
+        fid = item.get(fiber_key, "")
+        parent_fid = _strip_directional_suffix(fid)
+        for org_id in fiber_org_map.get(parent_fid, []):
+            org_items.setdefault(org_id, []).append(item)
+    return org_items
+
+
+# ============================================================================
 # BROADCAST HELPERS
 # ============================================================================
 
@@ -140,15 +168,7 @@ async def broadcast_per_org(
         },
     )
 
-    # Group items by org
-    org_items: dict[str, list[dict]] = {}
-    for item in items:
-        fid = item.get(fiber_key, "")
-        parent_fid = _strip_directional_suffix(fid)
-        for org_id in fiber_org_map.get(parent_fid, []):
-            org_items.setdefault(org_id, []).append(item)
-
-    for org_id, org_data in org_items.items():
+    for org_id, org_data in group_by_org(items, fiber_org_map, fiber_key).items():
         await channel_layer.group_send(
             f"realtime_{flow}_{channel}_org_{org_id}",
             {

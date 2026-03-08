@@ -6,7 +6,7 @@
 ## Current Sprint
 
 1. [x] **Unify broadcast helpers** [#17] — PR #44, merged
-2. [ ] **IncidentActionView not flow-aware** [#35] — bug, sim/live cross-contamination
+2. [x] **IncidentActionView not flow-aware** [#35] — PR #48, merged
 3. [ ] **Extract `group_by_org` helper** [#45] — deduplicate alert grouping logic
 4. [ ] **Route SHM broadcasts via `fiber_org_map`** [#46] — eliminate redundant `infra_org_map`
 5. [ ] **SectionHistoryView not flow-aware** [#40] — bug, sim/live cross-contamination
