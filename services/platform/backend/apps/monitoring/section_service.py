@@ -145,21 +145,6 @@ def delete_section(section_id: str, fiber_id: str) -> None:
     )
 
 
-def _parse_directional_fiber_id(fiber_id: str) -> tuple[str, int | None]:
-    """Parse a potentially directional fiber ID into (parent_id, direction).
-
-    ``"carros:0"`` → ``("carros", 0)``
-    ``"carros"``   → ``("carros", None)``
-    """
-    if ":" in fiber_id:
-        parts = fiber_id.rsplit(":", 1)
-        try:
-            return parts[0], int(parts[1])
-        except ValueError:
-            pass
-    return fiber_id, None
-
-
 def query_section_history(
     fiber_id: str,
     channel_start: int,
@@ -172,24 +157,11 @@ def query_section_history(
     - ≤5 min → ``detection_hires`` grouped by second (1s resolution)
     - >5 min → ``detection_1m`` with ``-Merge`` combinators (1min resolution)
 
-    ``fiber_id`` may include a directional suffix (e.g. ``"carros:0"``).
-    If present, only detections in that direction are included.
-
     Returns ``[{time, speed, speedMax, samples}, ...]``.
     """
-    parent_fid, direction = _parse_directional_fiber_id(fiber_id)
     if minutes <= 5:
-        return _query_section_history_hires(
-            parent_fid, channel_start, channel_end, minutes, direction
-        )
-    return _query_section_history_1m(parent_fid, channel_start, channel_end, minutes, direction)
-
-
-def _direction_clause(direction: int | None) -> str:
-    """Return a SQL AND clause for direction filtering, or empty string."""
-    if direction is not None:
-        return f"AND direction = {direction}"
-    return ""
+        return _query_section_history_hires(fiber_id, channel_start, channel_end, minutes)
+    return _query_section_history_1m(fiber_id, channel_start, channel_end, minutes)
 
 
 def _query_section_history_hires(
@@ -197,21 +169,19 @@ def _query_section_history_hires(
     channel_start: int,
     channel_end: int,
     minutes: int,
-    direction: int | None,
 ) -> list[dict]:
     """Query detection_hires at 1-second resolution for short windows (≤5 min)."""
     rows = query(
-        f"""
+        """
         SELECT
             toUnixTimestamp(toStartOfSecond(ts)) * 1000 AS time_ms,
             avg(speed) AS speed,
             max(speed) AS speed_max,
             count() AS samples
         FROM sequoia.detection_hires
-        WHERE fiber_id = {{fid:String}}
-          AND ch BETWEEN {{cs:UInt16}} AND {{ce:UInt16}}
-          AND ts >= now() - INTERVAL {{mins:UInt32}} MINUTE
-          {_direction_clause(direction)}
+        WHERE fiber_id = {fid:String}
+          AND ch BETWEEN {cs:UInt16} AND {ce:UInt16}
+          AND ts >= now() - INTERVAL {mins:UInt32} MINUTE
         GROUP BY toStartOfSecond(ts)
         ORDER BY toStartOfSecond(ts)
         """,
@@ -231,21 +201,19 @@ def _query_section_history_1m(
     channel_start: int,
     channel_end: int,
     minutes: int,
-    direction: int | None,
 ) -> list[dict]:
     """Query detection_1m at 1-minute resolution using -Merge combinators."""
     rows = query(
-        f"""
+        """
         SELECT
             toUnixTimestamp(ts) * 1000 AS time_ms,
             avgMerge(speed_avg_state) AS speed,
             maxMerge(speed_max_state) AS speed_max,
             sumMerge(samples_state) AS samples
         FROM sequoia.detection_1m
-        WHERE fiber_id = {{fid:String}}
-          AND ch BETWEEN {{cs:UInt16}} AND {{ce:UInt16}}
-          AND ts >= now() - INTERVAL {{mins:UInt32}} MINUTE
-          {_direction_clause(direction)}
+        WHERE fiber_id = {fid:String}
+          AND ch BETWEEN {cs:UInt16} AND {ce:UInt16}
+          AND ts >= now() - INTERVAL {mins:UInt32} MINUTE
         GROUP BY ts
         ORDER BY ts
         """,

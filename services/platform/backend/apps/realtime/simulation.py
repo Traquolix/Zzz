@@ -76,20 +76,6 @@ def get_simulation_stats() -> dict[str, int]:
     return dict(_simulation_stats)
 
 
-def _match_fiber_id(buffer_fid: str, query_fid: str) -> bool:
-    """Check if a buffer's directional fiber ID matches the query fiber ID.
-
-    Buffer keys are always directional (e.g. ``"carros:0"``).
-    Query fiber ID may be directional (``"carros:0"`` — exact match)
-    or plain (``"carros"`` — matches any direction on that fiber).
-    """
-    if ":" in query_fid:
-        return buffer_fid == query_fid
-    # Plain fiber ID: match if the buffer key's parent matches
-    parent = buffer_fid.rsplit(":", 1)[0] if ":" in buffer_fid else buffer_fid
-    return parent == query_fid
-
-
 def get_simulation_section_history(
     fiber_id: str,
     channel_start: int,
@@ -100,9 +86,6 @@ def get_simulation_section_history(
 
     - ≤5 min → per-second buffer (1s resolution)
     - >5 min → per-minute buffer (1min resolution)
-
-    ``fiber_id`` may be directional (``"carros:0"``) or plain (``"carros"``).
-    Directional matches only that direction; plain matches both.
 
     Returns ``[{time, speed, speedMax, samples}, ...]`` matching the live query shape.
     """
@@ -119,7 +102,7 @@ def get_simulation_section_history(
     points: list[dict] = []
 
     for (fid, ch), entries in buf.items():
-        if not _match_fiber_id(fid, fiber_id):
+        if fid != fiber_id:
             continue
         if ch < channel_start or ch > channel_end:
             continue
@@ -834,10 +817,10 @@ class SimulationEngine:
         self._sec_accum_bucket = bucket_ms
 
         for d in detections:
-            # Keep directional fiber ID (e.g. "carros:0") as buffer key — sections
-            # are direction-specific, and get_simulation_section_history matches
-            # using the directional fiber_id from the section.
-            key = (d.fiber_line, d.channel)
+            # Strip directional suffix (e.g. "carros:0" → "carros") so buffer keys
+            # match the parent fiber IDs used by query_sections() / ClickHouse.
+            parent_fid = d.fiber_line.rsplit(":", 1)[0] if ":" in d.fiber_line else d.fiber_line
+            key = (parent_fid, d.channel)
             if key not in self._sec_accum:
                 self._sec_accum[key] = {
                     "speed_sum": 0.0,
