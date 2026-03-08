@@ -135,7 +135,8 @@ class IncidentListView(APIView):
 
         # Simulation keeps incidents in memory only — fall back when
         # ClickHouse is unavailable or returned no results.
-        if not incidents:
+        # Skip sim fallback when client is explicitly on the live flow.
+        if not incidents and request.query_params.get("flow") != "live":
             from apps.realtime.simulation_manager import SimulationManager
 
             if SimulationManager.instance().is_running:
@@ -153,11 +154,11 @@ class IncidentListView(APIView):
                         return Response(result)
                 except ImportError:
                     pass
-            if incidents is None:
-                return Response(
-                    {"detail": "ClickHouse unavailable", "code": "clickhouse_unavailable"},
-                    status=503,
-                )
+        if incidents is None:
+            return Response(
+                {"detail": "ClickHouse unavailable", "code": "clickhouse_unavailable"},
+                status=503,
+            )
 
         has_more = len(incidents) > limit
         page = incidents[:limit]

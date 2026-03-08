@@ -6,8 +6,9 @@ import type { Incident, IncidentSnapshot, IncidentActionHistory, IncidentAction 
  * Fetch incidents from the paginated endpoint.
  * Returns the full paginated response so callers can check hasMore.
  */
-export async function fetchIncidents(): Promise<PaginatedResponse<Incident>> {
-  return apiPaginatedRequest<Incident>('/api/incidents')
+export async function fetchIncidents(flow?: DataFlow): Promise<PaginatedResponse<Incident>> {
+  const params = flow ? `?flow=${flow}` : ''
+  return apiPaginatedRequest<Incident>(`/api/incidents${params}`)
 }
 
 /**

@@ -9,7 +9,7 @@ import { logger } from '@/lib/logger'
 const NEW_INCIDENT_DURATION = 30_000
 
 export function useIncidents() {
-  const { subscribe, connected, onFlowChange } = useRealtime()
+  const { subscribe, connected, onFlowChange, flow } = useRealtime()
   const [incidents, setIncidents] = useState<Incident[]>([])
   const [loading, setLoading] = useState(true)
   // Track when incidents were received client-side (for "new" indicator)
@@ -40,7 +40,7 @@ export function useIncidents() {
   useEffect(() => {
     let mounted = true
 
-    fetchIncidents()
+    fetchIncidents(flow)
       .then(response => {
         if (mounted) {
           setIncidents(response.results)
@@ -57,7 +57,7 @@ export function useIncidents() {
     return () => {
       mounted = false
     }
-  }, [])
+  }, [flow])
 
   useEffect(() => {
     if (!connected) return

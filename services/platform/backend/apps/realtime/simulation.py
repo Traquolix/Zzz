@@ -495,6 +495,33 @@ async def _broadcast_per_org(
         )
 
 
+async def _broadcast_shm(
+    channel_layer,
+    readings: list[dict],
+    infra_org_map: dict[str, str],
+    flow: str = "sim",
+):
+    """Broadcast SHM readings to org-scoped groups via infrastructure ownership."""
+    message = {
+        "type": "broadcast_message",
+        "channel": "shm_readings",
+        "data": readings,
+    }
+    await channel_layer.group_send(f"realtime_{flow}_shm_readings_org___all__", message)
+
+    org_readings: dict[str, list[dict]] = {}
+    for shm in readings:
+        org_id = infra_org_map.get(str(shm["infrastructureId"]), "")
+        if org_id:
+            org_readings.setdefault(org_id, []).append(shm)
+
+    for org_id, org_data in org_readings.items():
+        await channel_layer.group_send(
+            f"realtime_{flow}_shm_readings_org_{org_id}",
+            {"type": "broadcast_message", "channel": "shm_readings", "data": org_data},
+        )
+
+
 # ============================================================================
 # SIMULATION ENGINE
 # ============================================================================
@@ -967,28 +994,7 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
                     }
                     for r in readings
                 ]
-                # Group SHM readings by org based on infrastructure ownership
-                org_shm: dict[str, list[dict]] = {}
-                for shm in shm_dicts:
-                    org_id = infra_org_map.get(str(shm["infrastructureId"]), "")
-                    if org_id:
-                        org_shm.setdefault(org_id, []).append(shm)
-
-                # Send to superuser group
-                await channel_layer.group_send(
-                    "realtime_sim_shm_readings_org___all__",
-                    {"type": "broadcast_message", "channel": "shm_readings", "data": shm_dicts},
-                )
-                # Send per-org
-                for org_id, org_readings in org_shm.items():
-                    await channel_layer.group_send(
-                        f"realtime_sim_shm_readings_org_{org_id}",
-                        {
-                            "type": "broadcast_message",
-                            "channel": "shm_readings",
-                            "data": org_readings,
-                        },
-                    )
+                await _broadcast_shm(channel_layer, shm_dicts, infra_org_map, flow="sim")
 
         # Sync snapshot cache every 20 ticks (1s) so frontend polling gets fresh data
         if snapshot_counter >= 20:

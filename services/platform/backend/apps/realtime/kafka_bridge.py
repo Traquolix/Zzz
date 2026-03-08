@@ -263,6 +263,33 @@ async def _org_broadcast(
             )
 
 
+async def _broadcast_shm(
+    channel_layer,
+    readings: list[dict],
+    infra_org_map: dict[str, str],
+    flow: str = "live",
+):
+    """Broadcast SHM readings to org-scoped groups via infrastructure ownership."""
+    message = {
+        "type": "broadcast_message",
+        "channel": "shm_readings",
+        "data": readings,
+    }
+    await channel_layer.group_send(f"realtime_{flow}_shm_readings_org___all__", message)
+
+    org_readings: dict[str, list[dict]] = {}
+    for shm in readings:
+        org_id = infra_org_map.get(shm["infrastructureId"], "")
+        if org_id:
+            org_readings.setdefault(org_id, []).append(shm)
+
+    for org_id, org_data in org_readings.items():
+        await channel_layer.group_send(
+            f"realtime_{flow}_shm_readings_org_{org_id}",
+            {"type": "broadcast_message", "channel": "shm_readings", "data": org_data},
+        )
+
+
 # ============================================================================
 # KAFKA BRIDGE LOOP (time-shifted replay)
 # ============================================================================
@@ -402,28 +429,7 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
                 last_shm_broadcast = now
                 readings = generate_shm_readings(infrastructure, shm_state)
                 if readings:
-                    # Group by org via infrastructure ownership
-                    org_shm: dict[str, list[dict]] = {}
-                    for shm in readings:
-                        org_id = infra_org_map.get(shm["infrastructureId"], "")
-                        if org_id:
-                            org_shm.setdefault(org_id, []).append(shm)
-
-                    # Superuser group gets all
-                    await channel_layer.group_send(
-                        "realtime_live_shm_readings_org___all__",
-                        {"type": "broadcast_message", "channel": "shm_readings", "data": readings},
-                    )
-                    # Per-org
-                    for org_id, org_readings in org_shm.items():
-                        await channel_layer.group_send(
-                            f"realtime_live_shm_readings_org_{org_id}",
-                            {
-                                "type": "broadcast_message",
-                                "channel": "shm_readings",
-                                "data": org_readings,
-                            },
-                        )
+                    await _broadcast_shm(channel_layer, readings, infra_org_map, flow="live")
 
             # --- Cleanup stale batch trackers every 30s ---
             if (now - last_batch_cleanup) >= 30:
