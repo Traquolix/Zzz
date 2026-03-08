@@ -46,6 +46,13 @@ _simulation_snapshots: dict[str, dict] = {}
 # Global cache for simulation-wide stats (fiber/channel/vehicle counts).
 _simulation_stats: dict[str, int] = {}
 
+# Section history buffers — keyed by (fiber_id, channel).
+# Per-second: 5 min retention, aggregated once per second.
+# Per-minute: 60 min retention, aggregated from per-second every 60s.
+# Each entry: {time: epoch_ms, speed: float, speedMax: float, samples: int}
+_simulation_per_second_buffer: dict[tuple[str, int], list[dict]] = {}
+_simulation_per_minute_buffer: dict[tuple[str, int], list[dict]] = {}
+
 
 def get_simulation_incidents() -> list:
     """Get current simulation incidents for REST API fallback."""
@@ -67,6 +74,68 @@ def get_simulation_snapshot(incident_id: str) -> dict | None:
 def get_simulation_stats() -> dict[str, int]:
     """Get simulation-wide stats (fiber count, channel count, active vehicles)."""
     return dict(_simulation_stats)
+
+
+def get_simulation_section_history(
+    fiber_id: str,
+    channel_start: int,
+    channel_end: int,
+    minutes: int,
+) -> list[dict]:
+    """Query in-memory simulation buffers for section history.
+
+    - ≤5 min → per-second buffer (1s resolution)
+    - >5 min → per-minute buffer (1min resolution)
+
+    Returns ``[{time, speed, speedMax, samples}, ...]`` matching the live query shape.
+    """
+    if minutes <= 5:
+        buf = _simulation_per_second_buffer
+    else:
+        buf = _simulation_per_minute_buffer
+
+    if not buf:
+        return []
+
+    now_ms = int(time.time() * 1000)
+    cutoff_ms = now_ms - minutes * 60 * 1000
+    points: list[dict] = []
+
+    for (fid, ch), entries in buf.items():
+        if fid != fiber_id:
+            continue
+        if ch < channel_start or ch > channel_end:
+            continue
+        for entry in entries:
+            if entry["time"] < cutoff_ms:
+                continue
+            points.append(entry)
+
+    # Aggregate by time bucket (multiple channels contribute to the same second/minute)
+    buckets: dict[int, dict] = {}
+    for p in points:
+        t = p["time"]
+        if t not in buckets:
+            buckets[t] = {"speed_sum": 0.0, "speed_max": 0.0, "count": 0, "samples": 0}
+        b = buckets[t]
+        b["speed_sum"] += p["speed"] * p["samples"]
+        b["speed_max"] = max(b["speed_max"], p["speedMax"])
+        b["count"] += p["samples"]
+        b["samples"] += p["samples"]
+
+    result = []
+    for t in sorted(buckets):
+        b = buckets[t]
+        avg_speed = b["speed_sum"] / b["count"] if b["count"] > 0 else 0
+        result.append(
+            {
+                "time": t,
+                "speed": round(avg_speed, 1),
+                "speedMax": round(b["speed_max"], 1),
+                "samples": b["samples"],
+            }
+        )
+    return result
 
 
 def _update_simulation_incidents_cache(incidents: list):
@@ -459,6 +528,12 @@ class SimulationEngine:
                     {"fiber": fiber.id, "ch": mid, "dir": 1, "rate": rate * 0.3, "last": 0}
                 )
 
+        # Section history: per-channel per-second accumulator
+        # Keyed by (fiber_id, channel), accumulates within the current second
+        self._sec_accum: dict[tuple[str, int], dict] = {}
+        self._sec_accum_bucket: int = 0  # Current second bucket (epoch_ms, floored)
+        self._last_minute_rollup: float = 0.0  # Last time we rolled up per-minute data
+
         # Track when simulation started — incidents only spawn after warmup period
         # so snapshot data has time to accumulate
         self._started_at = time.time()
@@ -727,6 +802,102 @@ class SimulationEngine:
                     buckets[s]["speed_count"] += 1
                     buckets[s]["vehicle_count"] += d.count
 
+    def accumulate_detections_for_history(self, detections: list[Detection], now_ms: float):
+        """Accumulate detections into per-second buckets for section history.
+
+        When the second boundary changes, flushes the previous second's data
+        into the global per-second buffer.
+        """
+        bucket_ms = int(now_ms // 1000) * 1000
+
+        # Second boundary crossed — flush previous accumulator
+        if bucket_ms != self._sec_accum_bucket and self._sec_accum:
+            self._flush_second_buffer()
+
+        self._sec_accum_bucket = bucket_ms
+
+        for d in detections:
+            key = (d.fiber_line, d.channel)
+            if key not in self._sec_accum:
+                self._sec_accum[key] = {
+                    "speed_sum": 0.0,
+                    "speed_max": 0.0,
+                    "count": 0,
+                }
+            acc = self._sec_accum[key]
+            acc["speed_sum"] += d.speed
+            acc["speed_max"] = max(acc["speed_max"], d.speed)
+            acc["count"] += 1
+
+    def _flush_second_buffer(self):
+        """Flush accumulated per-second data to the global buffer and evict old entries."""
+        global _simulation_per_second_buffer
+        bucket_ms = self._sec_accum_bucket
+        cutoff_ms = bucket_ms - 5 * 60 * 1000  # 5 min retention
+
+        for (fid, ch), acc in self._sec_accum.items():
+            if acc["count"] == 0:
+                continue
+            entry = {
+                "time": bucket_ms,
+                "speed": round(acc["speed_sum"] / acc["count"], 1),
+                "speedMax": round(acc["speed_max"], 1),
+                "samples": acc["count"],
+            }
+            key = (fid, ch)
+            if key not in _simulation_per_second_buffer:
+                _simulation_per_second_buffer[key] = []
+            buf = _simulation_per_second_buffer[key]
+            buf.append(entry)
+
+            # Evict old entries
+            if buf and buf[0]["time"] < cutoff_ms:
+                _simulation_per_second_buffer[key] = [e for e in buf if e["time"] >= cutoff_ms]
+
+        self._sec_accum.clear()
+
+    def rollup_minute_buffer(self, now: float):
+        """Roll up per-second buffer into per-minute buffer every 60 seconds."""
+        if now - self._last_minute_rollup < 60:
+            return
+        self._last_minute_rollup = now
+
+        global _simulation_per_minute_buffer
+        now_ms = int(now * 1000)
+        minute_ms = int(now_ms // 60_000) * 60_000 - 60_000  # Previous completed minute
+        cutoff_ms = now_ms - 60 * 60 * 1000  # 60 min retention
+
+        for key, entries in _simulation_per_second_buffer.items():
+            # Aggregate all entries in the previous minute
+            speed_sum = 0.0
+            speed_max = 0.0
+            total_samples = 0
+            for e in entries:
+                e_minute = int(e["time"] // 60_000) * 60_000
+                if e_minute == minute_ms:
+                    speed_sum += e["speed"] * e["samples"]
+                    speed_max = max(speed_max, e["speedMax"])
+                    total_samples += e["samples"]
+
+            if total_samples == 0:
+                continue
+
+            entry = {
+                "time": minute_ms,
+                "speed": round(speed_sum / total_samples, 1),
+                "speedMax": round(speed_max, 1),
+                "samples": total_samples,
+            }
+
+            if key not in _simulation_per_minute_buffer:
+                _simulation_per_minute_buffer[key] = []
+            buf = _simulation_per_minute_buffer[key]
+            buf.append(entry)
+
+            # Evict old entries
+            if buf and buf[0]["time"] < cutoff_ms:
+                _simulation_per_minute_buffer[key] = [e for e in buf if e["time"] >= cutoff_ms]
+
     def generate_shm_readings(self) -> list[SHMReading]:
         """Generate SHM frequency readings for all infrastructure."""
         now_ms = int(time.time() * 1000)
@@ -812,6 +983,8 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
             last_map_refresh = tick_start
 
         detections, new_incidents, resolved_incidents = engine.tick(tick_interval * 1000)
+        engine.accumulate_detections_for_history(detections, tick_start * 1000)
+        engine.rollup_minute_buffer(tick_start)
         shm_counter += 1
         incident_counter += 1
         snapshot_counter += 1

@@ -735,11 +735,15 @@ class SectionDeleteView(APIView):
         return Response(status=204)
 
 
-class SectionHistoryView(APIView):
+class SectionHistoryView(FlowAwareMixin, APIView):
     """
     GET /api/sections/<id>/history?minutes=60 — speed time-series for a section.
 
-    Aggregates speed_1m data over the section's channel range.
+    Strict flow isolation:
+    - ``flow=sim`` → in-memory simulation buffers (per-second ≤5min, per-minute >5min)
+    - ``flow=live`` → ClickHouse (``detection_hires`` ≤5min, ``detection_1m`` >5min)
+
+    Org-scoped via fiber assignment.
     """
 
     permission_classes = [IsActiveUser]
@@ -760,6 +764,10 @@ class SectionHistoryView(APIView):
         except (ValueError, TypeError):
             minutes = 60
 
+        # Sim flow: cap at 60 min (buffer limit)
+        if self._is_sim(request):
+            minutes = min(minutes, 60)
+
         sections = query_sections()
 
         section = next((s for s in sections if s["id"] == section_id), None)
@@ -777,12 +785,15 @@ class SectionHistoryView(APIView):
                 status=404,
             )
 
-        history = query_section_history(
-            fiber_id=section["fiberId"],
-            channel_start=section["channelStart"],
-            channel_end=section["channelEnd"],
-            minutes=minutes,
-        )
+        if self._is_sim(request):
+            history = self._get_sim_history(section, minutes)
+        else:
+            history = query_section_history(
+                fiber_id=section["fiberId"],
+                channel_start=section["channelStart"],
+                channel_end=section["channelEnd"],
+                minutes=minutes,
+            )
 
         return Response(
             {
@@ -790,6 +801,17 @@ class SectionHistoryView(APIView):
                 "minutes": minutes,
                 "points": history,
             }
+        )
+
+    def _get_sim_history(self, section: dict, minutes: int) -> list[dict]:
+        """Sim flow: query in-memory simulation detection buffers."""
+        from apps.realtime.simulation import get_simulation_section_history
+
+        return get_simulation_section_history(
+            fiber_id=section["fiberId"],
+            channel_start=section["channelStart"],
+            channel_end=section["channelEnd"],
+            minutes=minutes,
         )
 
 
