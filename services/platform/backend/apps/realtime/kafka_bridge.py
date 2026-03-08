@@ -37,7 +37,6 @@ from apps.realtime.broadcast import (
     broadcast_to_orgs,
     group_by_org,
     load_fiber_org_map,
-    load_infra_org_map,
 )
 from apps.shared.constants import MAP_REFRESH_INTERVAL
 
@@ -186,6 +185,7 @@ def generate_shm_readings(infrastructure: list[dict], shm_state: dict) -> list[d
         readings.append(
             {
                 "infrastructureId": iid,
+                "fiberId": infra.get("fiber_id", ""),
                 "frequency": round(freq, 2),
                 "amplitude": round(amp, 2),
                 "timestamp": now_ms,
@@ -229,7 +229,6 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
 
     # Load fiber->org mapping (refreshed periodically)
     fiber_org_map = await load_fiber_org_map()
-    infra_org_map = load_infra_org_map(infrastructure)
     last_map_refresh = time.time()
 
     # Org-aware broadcast helper for the replay buffer drain
@@ -288,7 +287,6 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
             # Refresh fiber->org mapping periodically
             if loop_start - last_map_refresh > MAP_REFRESH_INTERVAL:
                 fiber_org_map = await load_fiber_org_map()
-                infra_org_map = load_infra_org_map(infrastructure)
                 last_map_refresh = loop_start
 
             # Refresh bounded TTL every 5s so the flag expires if we crash
@@ -338,7 +336,7 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
                 last_shm_broadcast = now
                 readings = generate_shm_readings(infrastructure, shm_state)
                 if readings:
-                    await broadcast_shm(channel_layer, readings, infra_org_map, flow="live")
+                    await broadcast_shm(channel_layer, readings, fiber_org_map, flow="live")
 
             # --- Cleanup stale batch trackers every 30s ---
             if (now - last_batch_cleanup) >= 30:

@@ -10,7 +10,7 @@ Three broadcast patterns:
   (used for single incidents, vehicle counts).
 - ``broadcast_per_org``: split a list of items so each org only gets their own fibers'
   items (used for detections, counts).
-- ``broadcast_shm``: route SHM readings by infrastructure ownership instead of fiber.
+- ``broadcast_shm``: route SHM readings by fiber ownership (via ``fiberId`` on each reading).
 """
 
 import logging
@@ -26,11 +26,6 @@ def _strip_directional_suffix(fid: str) -> str:
 # ============================================================================
 # ORG MAP LOADERS
 # ============================================================================
-
-
-def load_infra_org_map(infrastructure: list[dict]) -> dict[str, str]:
-    """Build infrastructure_id → org_id mapping from infrastructure list."""
-    return {infra["id"]: infra.get("organization_id", "") for infra in infrastructure}
 
 
 def _load_fiber_org_map_sync() -> dict[str, list[str]]:
@@ -182,30 +177,25 @@ async def broadcast_per_org(
 async def broadcast_shm(
     channel_layer,
     readings: list[dict],
-    infra_org_map: dict[str, str],
+    fiber_org_map: dict[str, list[str]],
     *,
     flow: str,
 ):
     """
-    Broadcast SHM readings to org-scoped groups via infrastructure ownership.
+    Broadcast SHM readings to org-scoped groups via fiber ownership.
 
-    Unlike fiber-based broadcasts, SHM readings are keyed by ``infrastructureId``,
-    so org routing uses ``infra_org_map`` instead of ``fiber_org_map``.
+    Each reading must include a ``fiberId`` field (the fiber the infrastructure
+    sits on). Org routing uses ``fiber_org_map``, same as all other broadcasts.
     """
-    message = {
-        "type": "broadcast_message",
-        "channel": "shm_readings",
-        "data": readings,
-    }
-    await channel_layer.group_send(f"realtime_{flow}_shm_readings_org___all__", message)
+    if not readings:
+        return
 
-    org_readings: dict[str, list[dict]] = {}
-    for shm in readings:
-        org_id = infra_org_map.get(str(shm["infrastructureId"]), "")
-        if org_id:
-            org_readings.setdefault(org_id, []).append(shm)
+    await channel_layer.group_send(
+        f"realtime_{flow}_shm_readings_org___all__",
+        {"type": "broadcast_message", "channel": "shm_readings", "data": readings},
+    )
 
-    for org_id, org_data in org_readings.items():
+    for org_id, org_data in group_by_org(readings, fiber_org_map, fiber_key="fiberId").items():
         await channel_layer.group_send(
             f"realtime_{flow}_shm_readings_org_{org_id}",
             {"type": "broadcast_message", "channel": "shm_readings", "data": org_data},
