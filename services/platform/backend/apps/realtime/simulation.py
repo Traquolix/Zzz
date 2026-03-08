@@ -26,6 +26,7 @@ from apps.realtime.broadcast import (
     broadcast_per_org,
     broadcast_shm,
     broadcast_to_orgs,
+    group_by_org,
     load_fiber_org_map,
     load_infra_org_map,
 )
@@ -850,13 +851,7 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
                 flow="sim",
             )
             # Check alerts for detections (per-org)
-            org_detections: dict[str, list[dict]] = {}
-            for det in detection_dicts:
-                fid = str(det.get("fiberLine", ""))
-                parent_fid = fid.rsplit(":", 1)[0] if ":" in fid else fid
-                for org_id in fiber_org_map.get(parent_fid, []):
-                    org_detections.setdefault(org_id, []).append(det)
-            for org_id, org_dets in org_detections.items():
+            for org_id, org_dets in group_by_org(detection_dicts, fiber_org_map).items():
                 await check_alerts_for_detections(org_dets, org_id)
 
         # Broadcast SHM every 20 ticks (1 Hz) — per-org via infrastructure ownership
