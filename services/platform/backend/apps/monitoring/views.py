@@ -61,7 +61,6 @@ _PROCESS_START_TIME = time.time()
 
 INCIDENTS_CACHE_TTL = 10  # 10 seconds
 STATS_CACHE_TTL = 5  # 5 seconds
-FALLBACK_CACHE_TTL = 60  # 60 seconds when ClickHouse unavailable (reduce log spam)
 
 
 def _get_fiber_ids_or_none(user):
@@ -88,7 +87,11 @@ def _verify_infrastructure_access(user, infrastructure_id):
 
 class IncidentListView(FlowAwareMixin, APIView):
     """
-    GET /api/incidents — returns active + recent incidents from ClickHouse.
+    GET /api/incidents — returns active + recent incidents.
+
+    Strict flow isolation:
+    - ``flow=sim`` → simulation cache only (never ClickHouse)
+    - ``flow=live`` → ClickHouse only (503 if unavailable, never sim)
 
     Org-scoped: only incidents from the user's assigned fibers.
     """
@@ -105,7 +108,8 @@ class IncidentListView(FlowAwareMixin, APIView):
         except (ValueError, TypeError):
             limit = 100
 
-        cache_key = f"{build_org_cache_key('incidents', request.user)}:{limit}"
+        flow = self._get_flow(request)
+        cache_key = f"{build_org_cache_key('incidents', request.user)}:{flow}:{limit}"
         cached = django_cache.get(cache_key)
         if cached is not None:
             return Response(cached)
@@ -116,27 +120,30 @@ class IncidentListView(FlowAwareMixin, APIView):
             django_cache.set(cache_key, result, INCIDENTS_CACHE_TTL)
             return Response(result)
 
+        if self._is_sim(request):
+            return self._get_sim_incidents(request, cache_key, limit)
+
+        return self._get_live_incidents(request, cache_key, limit, fiber_ids)
+
+    def _get_sim_incidents(self, request, cache_key: str, limit: int):
+        """Sim flow: return incidents from simulation cache only."""
+        from apps.realtime.simulation import get_simulation_incidents
+
+        sim_incidents = self._get_sim_data(request, get_simulation_incidents)
+        page = sim_incidents[:limit]
+        result = {
+            "results": page,
+            "hasMore": len(sim_incidents) > limit,
+            "limit": limit,
+        }
+        django_cache.set(cache_key, result, INCIDENTS_CACHE_TTL)
+        return Response(result)
+
+    def _get_live_incidents(self, request, cache_key: str, limit: int, fiber_ids):
+        """Live flow: return incidents from ClickHouse only."""
         try:
-            # Fetch one extra to detect if there's a next page
             incidents = incident_query_recent(fiber_ids=fiber_ids, hours=24, limit=limit + 1)
         except ClickHouseUnavailableError:
-            incidents = None
-
-        # Simulation fallback: only when ClickHouse is unavailable.
-        # An empty result from ClickHouse is valid ("no incidents").
-        if incidents is None:
-            from apps.realtime.simulation import get_simulation_incidents
-
-            sim_incidents = self.get_sim_fallback(request, get_simulation_incidents)
-            if sim_incidents is not None:
-                result = {
-                    "results": sim_incidents,
-                    "hasMore": False,
-                    "limit": len(sim_incidents),
-                }
-                django_cache.set(cache_key, result, FALLBACK_CACHE_TTL)
-                return Response(result)
-
             return Response(
                 {"detail": "ClickHouse unavailable", "code": "clickhouse_unavailable"},
                 status=503,
@@ -157,11 +164,11 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
     """
     GET /api/incidents/<id>/snapshot — high-res speed data around an incident.
 
-    Org-scoped: verifies the incident's fiber belongs to the user's org.
+    Strict flow isolation:
+    - ``flow=sim`` → simulation snapshot cache only
+    - ``flow=live`` → ClickHouse only (503 if unavailable)
 
-    Supports both live (ClickHouse) and simulation (in-memory) incidents.
-    Simulation snapshots contain real recorded detections from the simulation
-    engine — the same vehicles and speeds that were happening near the incident.
+    Org-scoped: verifies the incident's fiber belongs to the user's org.
     """
 
     permission_classes = [IsActiveUser]
@@ -171,12 +178,42 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
         tags=["incidents"],
     )
     def get(self, request, incident_id):
-        # Check simulation cache first (fast path, no ClickHouse needed)
-        if self._allow_sim(request):
-            sim_snapshot = self._get_simulation_snapshot(request, incident_id)
-            if sim_snapshot is not None:
-                return Response(sim_snapshot)
+        if self._is_sim(request):
+            return self._get_sim_snapshot(request, incident_id)
 
+        return self._get_live_snapshot(request, incident_id)
+
+    def _get_sim_snapshot(self, request, incident_id: str):
+        """Sim flow: return snapshot from simulation cache only."""
+        from apps.realtime.simulation import get_simulation_incidents, get_simulation_snapshot
+
+        sim_incidents = get_simulation_incidents()
+        sim_incident = next((i for i in sim_incidents if i["id"] == incident_id), None)
+        if sim_incident is None:
+            raise NotFound({"detail": "Incident not found", "code": "incident_not_found"})
+
+        # Org-scoping: verify fiber belongs to user's org
+        fiber_ids = _get_fiber_ids_or_none(request.user)
+        if fiber_ids is not None and not fiber_belongs_to_org(sim_incident["fiberLine"], fiber_ids):
+            raise NotFound({"detail": "Incident not found", "code": "incident_not_found"})
+
+        snapshot = get_simulation_snapshot(incident_id)
+        points = snapshot["points"] if snapshot else []
+        complete = snapshot["complete"] if snapshot else True
+
+        return Response(
+            {
+                "incidentId": incident_id,
+                "fiberLine": sim_incident["fiberLine"],
+                "centerChannel": sim_incident["channel"],
+                "capturedAt": int(time.time() * 1000),
+                "points": points,
+                "complete": complete,
+            }
+        )
+
+    def _get_live_snapshot(self, request, incident_id: str):
+        """Live flow: return snapshot from ClickHouse only."""
         try:
             incident_rows = query(
                 """
@@ -194,9 +231,7 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
             )
 
         if not incident_rows:
-            return Response(
-                {"detail": "Incident not found", "code": "incident_not_found"}, status=404
-            )
+            raise NotFound({"detail": "Incident not found", "code": "incident_not_found"})
 
         incident = incident_rows[0]
         fiber_id = incident["fiber_id"]
@@ -204,9 +239,7 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
         # Org-scoping: verify the incident's fiber belongs to user's org
         fiber_ids = _get_fiber_ids_or_none(request.user)
         if fiber_ids is not None and not fiber_belongs_to_org(fiber_id, fiber_ids):
-            return Response(
-                {"detail": "Incident not found", "code": "incident_not_found"}, status=404
-            )
+            raise NotFound({"detail": "Incident not found", "code": "incident_not_found"})
 
         center_ch = (incident["channel_start"] + incident["channel_end"]) // 2
         ts_ns = incident["timestamp_ns"]
@@ -249,16 +282,16 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
         bucket_lookup = {}
         for row in agg_rows:
             avg_spd = round(row["avg_speed"])
-            flow = int(row["total_count"])
+            flow_count = int(row["total_count"])
             speed_ms = avg_spd * (1000 / 3600)
             occ = (
-                min(100, round((flow * 3600 * avg_vehicle_length_m) / (speed_ms * 1000)))
+                min(100, round((flow_count * 3600 * avg_vehicle_length_m) / (speed_ms * 1000)))
                 if speed_ms > 0
                 else None
             )
             bucket_lookup[int(row["bucket_ms"])] = {
                 "speed": avg_spd,
-                "flow": flow,
+                "flow": flow_count,
                 "occupancy": occ,
             }
 
@@ -282,34 +315,6 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
                 "complete": True,
             }
         )
-
-    def _get_simulation_snapshot(self, request, incident_id: str) -> dict | None:
-        """Return snapshot from simulation cache, or None to fall through to ClickHouse."""
-        from apps.realtime.simulation import get_simulation_incidents, get_simulation_snapshot
-
-        # Find the incident in simulation cache
-        sim_incidents = get_simulation_incidents()
-        sim_incident = next((i for i in sim_incidents if i["id"] == incident_id), None)
-        if sim_incident is None:
-            return None
-
-        # Org-scoping: verify fiber belongs to user's org
-        fiber_ids = _get_fiber_ids_or_none(request.user)
-        if fiber_ids is not None and not fiber_belongs_to_org(sim_incident["fiberLine"], fiber_ids):
-            raise NotFound({"detail": "Incident not found", "code": "incident_not_found"})
-
-        snapshot = get_simulation_snapshot(incident_id)
-        points = snapshot["points"] if snapshot else []
-        complete = snapshot["complete"] if snapshot else True
-
-        return {
-            "incidentId": incident_id,
-            "fiberLine": sim_incident["fiberLine"],
-            "centerChannel": sim_incident["channel"],
-            "capturedAt": int(time.time() * 1000),
-            "points": points,
-            "complete": complete,
-        }
 
 
 class IncidentActionView(APIView):

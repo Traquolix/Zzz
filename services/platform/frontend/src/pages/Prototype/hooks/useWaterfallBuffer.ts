@@ -1,5 +1,6 @@
 import { useRef, useEffect } from 'react'
 import { useRealtime } from '@/hooks/useRealtime'
+import { useFlowReset } from '@/hooks/useFlowReset'
 import { parseDetections } from '@/lib/parseMessage'
 
 export interface WaterfallDot {
@@ -12,19 +13,17 @@ export interface WaterfallDot {
 const DEFAULT_WINDOW_MS = 120_000
 
 export function useWaterfallBuffer(fiberFilter: string, windowMs = DEFAULT_WINDOW_MS) {
-  const { subscribe, onFlowChange } = useRealtime()
+  const { subscribe } = useRealtime()
   const dotsRef = useRef<WaterfallDot[]>([])
   const dirtyRef = useRef(false)
   const lastTsRef = useRef(0)
 
   // Clear buffer on flow switch
-  useEffect(() => {
-    return onFlowChange(() => {
-      dotsRef.current = []
-      lastTsRef.current = 0
-      dirtyRef.current = true
-    })
-  }, [onFlowChange])
+  useFlowReset(() => {
+    dotsRef.current = []
+    lastTsRef.current = 0
+    dirtyRef.current = true
+  })
 
   // Clear buffer when fiber changes
   useEffect(() => {

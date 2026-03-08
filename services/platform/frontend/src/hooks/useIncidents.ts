@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRealtime } from '@/hooks/useRealtime'
+import { useFlowReset } from '@/hooks/useFlowReset'
 import type { Incident, IncidentStatus } from '@/types/incident'
 import { fetchIncidents } from '@/api/incidents'
 import { parseIncident } from '@/lib/parseMessage'
@@ -9,7 +10,7 @@ import { logger } from '@/lib/logger'
 const NEW_INCIDENT_DURATION = 30_000
 
 export function useIncidents() {
-  const { subscribe, connected, onFlowChange, flow } = useRealtime()
+  const { subscribe, connected, flow } = useRealtime()
   const [incidents, setIncidents] = useState<Incident[]>([])
   const [loading, setLoading] = useState(true)
   // Track when incidents were received client-side (for "new" indicator)
@@ -18,12 +19,10 @@ export function useIncidents() {
   const [, forceUpdate] = useState(0)
 
   // Clear accumulated state on flow switch (backend re-sends initial incidents)
-  useEffect(() => {
-    return onFlowChange(() => {
-      setIncidents([])
-      receivedAtRef.current.clear()
-    })
-  }, [onFlowChange])
+  useFlowReset(() => {
+    setIncidents([])
+    receivedAtRef.current.clear()
+  })
 
   // Check if an incident is "new" (received recently via WebSocket)
   const isNewIncident = useCallback((incidentId: string) => {

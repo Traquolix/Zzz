@@ -822,11 +822,8 @@ class SimulationEngine:
         if not detections:
             return
 
-        for inc in self.incidents:
-            snap = self.incident_snapshots.get(inc.id)
-            if snap is None:
-                continue
-
+        # Only scan incomplete snapshots — avoids iterating all 10k+ resolved incidents
+        for snap in self.incident_snapshots.values():
             if snap["complete"]:
                 continue
 

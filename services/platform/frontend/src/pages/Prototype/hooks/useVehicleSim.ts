@@ -4,6 +4,7 @@ import type { SensorEvent } from '@/lib/vehicleSim/types'
 import { parseDetections } from '@/lib/parseMessage'
 import { getFiberOffsetCoords } from '@/lib/geoUtils'
 import { useRealtime } from '@/hooks/useRealtime'
+import { useFlowReset } from '@/hooks/useFlowReset'
 import { fibers } from '../data'
 
 export interface VehiclePosition {
@@ -50,17 +51,15 @@ function interpCoord(coords: [number, number][], index: number): [number, number
 export function useVehicleSim(): {
   tickAndCollect: (now: number, deltaMs: number) => VehiclePosition[]
 } {
-  const { subscribe, onFlowChange } = useRealtime()
+  const { subscribe } = useRealtime()
   const enginesRef = useRef<FiberEngine[]>([])
 
   // Clear all engine state on flow switch
-  useEffect(() => {
-    return onFlowChange(() => {
-      for (const fe of enginesRef.current) {
-        fe.engine.reset()
-      }
-    })
-  }, [onFlowChange])
+  useFlowReset(() => {
+    for (const fe of enginesRef.current) {
+      fe.engine.reset()
+    }
+  })
 
   // Initialize engines once
   if (enginesRef.current.length === 0) {

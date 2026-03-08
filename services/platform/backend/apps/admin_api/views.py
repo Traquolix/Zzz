@@ -23,6 +23,7 @@ from apps.fibers.utils import invalidate_fiber_org_map, invalidate_org_fiber_cac
 from apps.monitoring.models import Infrastructure
 from apps.organizations.models import Organization, OrganizationSettings
 from apps.shared.admin_permissions import IsAdminOrSuperuser, IsSuperuser
+from apps.shared.utils import org_filter_queryset, paginate_queryset
 
 logger = logging.getLogger("sequoia.admin")
 
@@ -47,56 +48,6 @@ def add_cache_control(max_age=300):
         return wrapper
 
     return decorator
-
-
-def _get_org_scope(user):
-    """Return org queryset filter for non-superusers."""
-    if user.is_superuser:
-        return {}
-    return {"organization": user.organization}
-
-
-def paginate_queryset(request, queryset, default_limit=50):
-    """Apply search, offset, and limit to a queryset.
-
-    Returns: (page, pagination_data)
-        page: queryset slice for this page
-        pagination_data: dict with hasMore, limit, offset, total
-
-    Optimized: Single query approach.
-    - Fetches limit+1 items to determine hasMore
-    - Computes total = offset + len(items_fetched) if we got exactly limit+1
-    - Only calls count() when we fetch fewer than limit+1 items (last page)
-    """
-    _search = request.GET.get("search", "").strip()  # noqa: F841 — reserved for future filtering
-    try:
-        offset = max(0, int(request.GET.get("offset", 0)))
-    except (ValueError, TypeError):
-        offset = 0
-    try:
-        limit = min(int(request.GET.get("limit", default_limit)), 200)
-    except (ValueError, TypeError):
-        limit = default_limit
-
-    # Fetch limit+1 to determine if there are more results (single query)
-    fetch_limit = limit + 1
-    items = list(queryset[offset : offset + fetch_limit])
-
-    # Check if we got more than limit (indicates more results exist)
-    has_more = len(items) > limit
-    page = items[:limit]
-
-    # On the last page (no more results), we know the exact total.
-    # When there are more results, we only know a lower bound; report it
-    # so the frontend can show "50+" style counts without a count() query.
-    total = offset + len(items)
-
-    return page, {
-        "hasMore": has_more,
-        "limit": limit,
-        "offset": offset,
-        "total": total,
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -303,9 +254,8 @@ class UserListView(APIView):
 
     @add_cache_control()
     def get(self, request):
-        scope = _get_org_scope(request.user)
         search = request.GET.get("search", "").strip()
-        users = User.objects.filter(**scope).select_related("organization")
+        users = org_filter_queryset(User.objects.select_related("organization"), request.user)
 
         # Apply search filter
         if search:
@@ -412,9 +362,8 @@ class UserDetailView(APIView):
     permission_classes = [IsAdminOrSuperuser]
 
     def patch(self, request, user_id):
-        scope = _get_org_scope(request.user)
         try:
-            user = User.objects.get(pk=user_id, **scope)
+            user = org_filter_queryset(User.objects.all(), request.user).get(pk=user_id)
         except User.DoesNotExist:
             return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -491,9 +440,8 @@ class InfrastructureAdminListView(APIView):
 
     @add_cache_control()
     def get(self, request):
-        scope = _get_org_scope(request.user)
         search = request.GET.get("search", "").strip()
-        items = Infrastructure.objects.filter(**scope)
+        items = org_filter_queryset(Infrastructure.objects.all(), request.user)
 
         # Apply search filter
         if search:
@@ -588,9 +536,8 @@ class InfrastructureAdminDetailView(APIView):
     permission_classes = [IsAdminOrSuperuser]
 
     def delete(self, request, infra_id):
-        scope = _get_org_scope(request.user)
         try:
-            item = Infrastructure.objects.get(id=infra_id, **scope)
+            item = org_filter_queryset(Infrastructure.objects.all(), request.user).get(id=infra_id)
         except Infrastructure.DoesNotExist:
             return Response(
                 {"detail": "Not found", "code": "not_found"},
@@ -610,9 +557,8 @@ class AlertRuleListView(APIView):
 
     @add_cache_control()
     def get(self, request):
-        scope = _get_org_scope(request.user)
         search = request.GET.get("search", "").strip()
-        rules = AlertRule.objects.filter(**scope)
+        rules = org_filter_queryset(AlertRule.objects.all(), request.user)
 
         # Apply search filter
         if search:
@@ -736,9 +682,8 @@ class AlertRuleDetailView(APIView):
     permission_classes = [IsAdminOrSuperuser]
 
     def _get_rule(self, request, rule_id):
-        scope = _get_org_scope(request.user)
         try:
-            return AlertRule.objects.get(pk=rule_id, **scope), None
+            return org_filter_queryset(AlertRule.objects.all(), request.user).get(pk=rule_id), None
         except AlertRule.DoesNotExist:
             return None, Response(
                 {"detail": "Not found", "code": "not_found"},
@@ -930,8 +875,7 @@ class APIKeyListView(APIView):
     permission_classes = [IsAdminOrSuperuser]
 
     def get(self, request):
-        scope = _get_org_scope(request.user)
-        keys = APIKey.objects.filter(**scope, is_active=True)
+        keys = org_filter_queryset(APIKey.objects.filter(is_active=True), request.user)
         results = [
             {
                 "id": str(k.pk),
@@ -992,9 +936,8 @@ class APIKeyDetailView(APIView):
     permission_classes = [IsAdminOrSuperuser]
 
     def delete(self, request, key_id):
-        scope = _get_org_scope(request.user)
         try:
-            key_obj = APIKey.objects.get(pk=key_id, **scope)
+            key_obj = org_filter_queryset(APIKey.objects.all(), request.user).get(pk=key_id)
         except APIKey.DoesNotExist:
             return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
         key_obj.is_active = False
@@ -1006,9 +949,8 @@ class APIKeyRotateView(APIView):
     permission_classes = [IsAdminOrSuperuser]
 
     def post(self, request, key_id):
-        scope = _get_org_scope(request.user)
         try:
-            old_key = APIKey.objects.get(pk=key_id, **scope)
+            old_key = org_filter_queryset(APIKey.objects.all(), request.user).get(pk=key_id)
         except APIKey.DoesNotExist:
             return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
 
@@ -1040,9 +982,8 @@ class AlertRuleTestView(APIView):
     permission_classes = [IsAdminOrSuperuser]
 
     def post(self, request, rule_id):
-        scope = _get_org_scope(request.user)
         try:
-            rule = AlertRule.objects.get(pk=rule_id, **scope)
+            rule = org_filter_queryset(AlertRule.objects.all(), request.user).get(pk=rule_id)
         except AlertRule.DoesNotExist:
             return Response({"detail": "Not found"}, status=status.HTTP_404_NOT_FOUND)
 
