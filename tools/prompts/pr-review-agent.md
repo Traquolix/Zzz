@@ -29,6 +29,11 @@ Data flow: DAS Interrogator → Kafka → Processor → Kafka → AI Engine → 
 
 ### Architectural Invariants (flag violations)
 
+- **Strict sim/live flow isolation.** Sim data must never leak into the live flow and vice versa. Every REST endpoint and WebSocket handler that can serve both sources must be flow-aware (`?flow=` param or WebSocket `_flow` state). No fallback from one data source to the other. Broadcast calls must pass `flow=` explicitly — never rely on default parameter values.
+- **Org-scoped broadcasts.** WebSocket broadcasts must route to org-specific Channels groups (`realtime_{flow}_{channel}_org_{org_id}`), not raw channel names. Use the shared broadcast helpers (`_broadcast_per_org`, `_org_broadcast`, `_broadcast_shm`), not inline `group_send`.
+- **No blocking in async code paths.** The simulation engine, WebSocket consumers, and Kafka bridge run in async event loops. Synchronous DB queries, file I/O, or lock acquisitions in these paths will block the event loop. Use `sync_to_async` for DB access, `asyncio.Lock` instead of `threading.Lock` where contention is possible.
+- **Bounded in-memory caches.** Any in-memory buffer or cache (detection rings, incident snapshots, simulation state) must have both a size cap and a TTL or time-window eviction. Unbounded growth will eventually OOM the server.
+- **Org-scoped cache keys.** Cache keys for per-user or per-org data must include the org ID (use `build_org_cache_key`). Cache keys for flow-dependent data must include the flow. A cache key without scoping is a cross-tenant or cross-flow data leak.
 - **One Kafka partition per fiber** — strict message ordering. Anything that could cause out-of-order processing is a bug.
 - **Per-fiber service instances** — Processor and AI Engine run for one fiber only (`FIBER_ID` env var). Code must not assume multiple fibers in a single instance.
 - **Config hot-reload** — `FiberConfigManager` watches `fibers.yaml`. Flag any module-level caching of fiber config.
