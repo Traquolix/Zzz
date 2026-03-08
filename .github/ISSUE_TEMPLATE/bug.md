@@ -1,39 +1,22 @@
 ---
 name: Bug
 about: Report a bug
-title: "fix: "
+title: ""
 labels: bug
 ---
 
-## Steps to Reproduce
+## Problem
 
-1.
-2.
-3.
+<!-- What's broken? Include steps to reproduce if applicable. -->
 
 ## Expected Behavior
 
-<!-- What should happen? -->
+<!-- What should happen instead? -->
 
-## Actual Behavior
+## Files Involved
 
-<!-- What actually happens? -->
+<!-- Key files to look at (optional) -->
 
-## Affected Service
+## Acceptance Criteria
 
-- [ ] Pipeline — Processor
-- [ ] Pipeline — AI Engine
-- [ ] Platform — Backend
-- [ ] Platform — Frontend
-
-## Logs / Error Output
-
-```
-paste logs here
-```
-
-## Environment
-
-- Branch/commit:
-- Server: backend / frontend
-- Docker Compose version:
+- [ ] <!-- When is this fixed? -->

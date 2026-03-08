@@ -58,7 +58,7 @@ To set up a new server from scratch: `./scripts/server-setup.sh --role <backend|
 
 Work is tracked through GitHub issues. Before starting any task:
 
-1. **Find or create the GitHub issue.** One issue per concern. Label it (`bug`, `enhancement`, `refactor`). Include enough context (files, lines, expected behavior) that someone can pick it up cold.
+1. **Find or create the GitHub issue.** One issue per concern. Label it (`bug`, `enhancement`, `refactor`, `tech-debt`, `infrastructure`). Use the standard format from `.github/ISSUE_TEMPLATE/` — every issue has four sections: **Problem**, **Proposed Solution**, **Files Involved**, **Acceptance Criteria**.
 2. **`TODO.md` is for multi-issue epics and roadmap items** (e.g., "Realistic simulation engine" spanning multiple PRs). Single-task work items are GitHub issues, not TODO entries.
 3. **Branch names reference the issue:** `feat/42-flow-switching`, `fix/15-token-refresh`.
 
