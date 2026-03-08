@@ -28,7 +28,6 @@ from apps.realtime.broadcast import (
     broadcast_to_orgs,
     group_by_org,
     load_fiber_org_map,
-    load_infra_org_map,
 )
 from apps.shared.constants import MAP_REFRESH_INTERVAL
 
@@ -774,7 +773,7 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
 
     # Load fiber→org mapping (refreshed every 5 minutes)
     fiber_org_map = await load_fiber_org_map()
-    infra_org_map = load_infra_org_map(infrastructure)
+    infra_fiber = {i["id"]: i.get("fiber_id", "") for i in infrastructure}
     last_map_refresh = time.time()
 
     logger.info(
@@ -810,7 +809,6 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
         # Refresh fiber→org mapping periodically
         if tick_start - last_map_refresh > MAP_REFRESH_INTERVAL:
             fiber_org_map = await load_fiber_org_map()
-            infra_org_map = load_infra_org_map(infrastructure)
             last_map_refresh = tick_start
 
         detections, new_incidents, resolved_incidents = engine.tick(tick_interval * 1000)
@@ -862,13 +860,14 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
                 shm_dicts = [
                     {
                         "infrastructureId": r.infrastructure_id,
+                        "fiberId": infra_fiber.get(r.infrastructure_id, ""),
                         "frequency": r.frequency,
                         "amplitude": r.amplitude,
                         "timestamp": r.timestamp,
                     }
                     for r in readings
                 ]
-                await broadcast_shm(channel_layer, shm_dicts, infra_org_map, flow="sim")
+                await broadcast_shm(channel_layer, shm_dicts, fiber_org_map, flow="sim")
 
         # Sync snapshot cache every 20 ticks (1s) so frontend polling gets fresh data
         if snapshot_counter >= 20:
