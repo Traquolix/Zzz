@@ -52,6 +52,7 @@ from apps.monitoring.workflow import (
 )
 from apps.shared.clickhouse import clickhouse_fallback, query, query_scalar
 from apps.shared.exceptions import ClickHouseUnavailableError
+from apps.shared.mixins import FlowAwareMixin
 from apps.shared.permissions import IsActiveUser, IsNotViewer
 
 logger = logging.getLogger("sequoia")
@@ -97,7 +98,7 @@ def _verify_infrastructure_access(user, infrastructure_id):
     return None
 
 
-class IncidentListView(APIView):
+class IncidentListView(FlowAwareMixin, APIView):
     """
     GET /api/incidents — returns active + recent incidents from ClickHouse.
 
@@ -135,32 +136,19 @@ class IncidentListView(APIView):
 
         # Simulation keeps incidents in memory only — fall back when
         # ClickHouse is unavailable or returned no results.
-        # Skip sim fallback when client is explicitly on the live flow.
-        if not incidents and request.query_params.get("flow") != "live":
-            from apps.realtime.simulation_manager import SimulationManager
+        if not incidents:
+            from apps.realtime.simulation import get_simulation_incidents
 
-            if SimulationManager.instance().is_running:
-                try:
-                    from apps.realtime.simulation import get_simulation_incidents
+            sim_incidents = self.get_sim_fallback(request, get_simulation_incidents)
+            if sim_incidents is not None:
+                result = {
+                    "results": sim_incidents,
+                    "hasMore": False,
+                    "limit": len(sim_incidents),
+                }
+                django_cache.set(cache_key, result, FALLBACK_CACHE_TTL)
+                return Response(result)
 
-                    sim_incidents = get_simulation_incidents()
-                    # Org-scope: filter sim incidents to user's fibers
-                    if fiber_ids is not None:
-                        sim_incidents = [
-                            i
-                            for i in sim_incidents
-                            if strip_directional_suffix(i.get("fiberLine", "")) in fiber_ids
-                        ]
-                    if sim_incidents:
-                        result = {
-                            "results": sim_incidents,
-                            "hasMore": False,
-                            "limit": len(sim_incidents),
-                        }
-                        django_cache.set(cache_key, result, FALLBACK_CACHE_TTL)
-                        return Response(result)
-                except ImportError:
-                    pass
         if incidents is None:
             return Response(
                 {"detail": "ClickHouse unavailable", "code": "clickhouse_unavailable"},
@@ -178,7 +166,7 @@ class IncidentListView(APIView):
         return Response(result)
 
 
-class IncidentSnapshotView(APIView):
+class IncidentSnapshotView(FlowAwareMixin, APIView):
     """
     GET /api/incidents/<id>/snapshot — high-res speed data around an incident.
 
@@ -197,8 +185,7 @@ class IncidentSnapshotView(APIView):
     )
     def get(self, request, incident_id):
         # Check simulation cache first (fast path, no ClickHouse needed)
-        # Skip sim cache when client is explicitly on the live flow
-        if request.query_params.get("flow") != "live":
+        if self._allow_sim(request):
             sim_snapshot = self._get_simulation_snapshot(request, incident_id)
             if sim_snapshot is not None:
                 return Response(sim_snapshot)
