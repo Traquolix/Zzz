@@ -55,3 +55,6 @@ Completed tasks with dates and commit references.
 
 - **SHM broadcasts use inline group_send** [#4] — extracted `broadcast_shm` helper into `apps.realtime.broadcast`, used by both `kafka_bridge.py` and `simulation.py`.
   - Closed by PR #2
+
+- **Unify broadcast helpers** [#17] — extracted `broadcast_to_orgs`, `broadcast_per_org`, `broadcast_shm`, `load_fiber_org_map`, `load_infra_org_map` into `apps/realtime/broadcast.py`. Removed ~200 lines of duplication across `kafka_bridge.py` and `simulation.py`. Made `flow` a required keyword-only parameter on all broadcast functions. Fixed stale closure bug in kafka bridge's `broadcast` callback via `nonlocal`. Updated doc references in CLAUDE.md, pr-review-agent.md, PR template, and history.
+  - Closed by PR #44
