@@ -33,6 +33,7 @@ function toProtoIncident(api: ApiIncident): ProtoIncident {
 
   return {
     ...api,
+    fiberId: dirFiber,
     title,
     description,
     location: loc ?? [7.24, 43.72],
