@@ -730,8 +730,9 @@ const MetricIcon = ({ metric }: { metric: MetricKey }) => {
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        <path d="M12 12l4-4" />
-        <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
+        <path d="M2 16a10 10 0 0 1 20 0" />
+        <path d="M12 16l-3.5-6" />
+        <circle cx="12" cy="16" r="1.5" fill={color} />
       </svg>
     )
   if (metric === 'flow')
@@ -742,12 +743,16 @@ const MetricIcon = ({ metric }: { metric: MetricKey }) => {
         viewBox="0 0 24 24"
         fill="none"
         stroke={color}
-        strokeWidth="2"
+        strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
       >
-        <path d="M5 12h14" />
-        <path d="M12 5l7 7-7 7" />
+        <line x1="4" y1="5" x2="13" y2="5" />
+        <polyline points="11,3 13,5 11,7" />
+        <line x1="7" y1="12" x2="17" y2="12" />
+        <polyline points="15,10 17,12 15,14" />
+        <line x1="3" y1="19" x2="14" y2="19" />
+        <polyline points="12,17 14,19 12,21" />
       </svg>
     )
   return (
@@ -761,9 +766,8 @@ const MetricIcon = ({ metric }: { metric: MetricKey }) => {
       strokeLinecap="round"
       strokeLinejoin="round"
     >
-      <rect x="3" y="12" width="4" height="9" rx="1" />
-      <rect x="10" y="7" width="4" height="14" rx="1" />
-      <rect x="17" y="3" width="4" height="18" rx="1" />
+      <rect x="4" y="3" width="16" height="18" rx="2" />
+      <rect x="4" y="11" width="16" height="10" rx="0" fill={color} fillOpacity="0.35" stroke="none" />
     </svg>
   )
 }
