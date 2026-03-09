@@ -217,7 +217,7 @@ export function SidePanel({
             <button
               title={sidebarExpanded ? 'Collapse panel' : 'Expand panel'}
               onClick={() => dispatch({ type: 'TOGGLE_SIDEBAR_EXPANDED' })}
-              className="group/exp flex items-center justify-center w-[56px] h-5 hover:h-7 rounded-l-lg border border-r-0 border-transparent bg-[var(--proto-surface)]/40 text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)] hover:bg-[var(--proto-surface)]/80 transition-all cursor-pointer"
+              className="group/exp flex items-center justify-center self-end w-[32px] hover:w-full h-7 rounded-l-lg border border-r-0 border-transparent bg-[var(--proto-surface)]/40 text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)] hover:bg-[var(--proto-surface)]/80 transition-all cursor-pointer"
             >
               <ExpandIcon expanded={!!sidebarExpanded} />
             </button>
@@ -2800,7 +2800,7 @@ function SpectralHeatmapCanvas({ data }: { data: SpectralTimeSeries }) {
       const { spectra, freqs } = data
       if (!spectra.length || !freqs.length) return
 
-      const margin = { top: 4, right: 8, bottom: 24, left: 56 }
+      const margin = { top: 4, right: 8, bottom: 24, left: 36 }
       const plotW = width - margin.left - margin.right
       const plotH = height - margin.top - margin.bottom
 
