@@ -879,7 +879,10 @@ class RoadEventManager:
                         v.forced_speed = None
         self.events = [e for e in self.events if now - e.created_at <= e.duration_s]
 
-        # Enforce road events on nearby vehicles
+        # Enforce road events on nearby vehicles.
+        # Track which vehicles are currently in any event's zone so we can
+        # release those that have moved past all zones.
+        affected_vehicle_ids: set[str] = set()
         for e in self.events:
             for v in vehicles:
                 if v.fiber_line != e.fiber_id or v.direction != e.direction:
@@ -892,28 +895,41 @@ class RoadEventManager:
                 if e.event_type == "stopped_vehicle":
                     if v.lane == e.affected_lane and dist < 5:
                         v.forced_speed = 0.0
+                        affected_vehicle_ids.add(v.id)
                     elif dist < 40 and upstream:
                         # All lanes slow in the upstream approach zone
                         # Closer = slower (linear gradient)
                         approach_speed = 5.0 + (dist / 40) * 25.0  # 5-30 km/h
                         v.forced_speed = min(v.forced_speed or 999, approach_speed)
+                        affected_vehicle_ids.add(v.id)
                     elif dist < 15:
                         # Downstream/adjacent rubbernecking
                         v.forced_speed = min(v.forced_speed or 999, 25.0)
+                        affected_vehicle_ids.add(v.id)
                 elif e.event_type == "slow_vehicle":
                     if v.lane == e.affected_lane and dist < 10:
                         v.forced_speed = e.forced_speed
+                        affected_vehicle_ids.add(v.id)
                     elif dist < 30 and upstream:
                         approach_speed = e.forced_speed + (dist / 30) * 15.0
                         v.forced_speed = min(v.forced_speed or 999, approach_speed)
+                        affected_vehicle_ids.add(v.id)
                 elif e.event_type == "lane_closure":
                     if v.lane == e.affected_lane and dist < 10:
                         v.forced_speed = 0.0
+                        affected_vehicle_ids.add(v.id)
                     elif dist < 50 and upstream:
                         approach_speed = 5.0 + (dist / 50) * 25.0
                         v.forced_speed = min(v.forced_speed or 999, approach_speed)
+                        affected_vehicle_ids.add(v.id)
                     elif dist < 20:
                         v.forced_speed = min(v.forced_speed or 999, 15.0)
+                        affected_vehicle_ids.add(v.id)
+
+        # Release vehicles that have moved past all event zones
+        for v in vehicles:
+            if v.forced_speed is not None and v.id not in affected_vehicle_ids:
+                v.forced_speed = None
 
         # Maybe spawn new events (probability per sim-hour, scaled by density)
         density = _get_density_multiplier(sim_hour, None)
