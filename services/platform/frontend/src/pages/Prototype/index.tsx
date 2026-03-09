@@ -1,7 +1,7 @@
 import { useReducer, useEffect, useCallback, useRef, useState, useMemo } from 'react'
 import { toast } from 'sonner'
 import type { ProtoState, ProtoAction, ProtoIncident, PendingPoint } from './types'
-import { fibers, defaultSpeedThresholds, buildThresholdLookup, fiberLineId, channelToCoord } from './data'
+import { fibers, defaultSpeedThresholds, buildThresholdLookup, findFiber, channelToCoord } from './data'
 import { PrototypeMap, type PrototypeMapHandle } from './components/PrototypeMap'
 import { StatusBar } from './components/StatusBar'
 import { Legend } from './components/Legend'
@@ -19,10 +19,9 @@ import './prototype.css'
 
 /** Enrich an API incident with display fields computed from fiber geometry. */
 function toProtoIncident(api: ApiIncident): ProtoIncident {
-  const dirFiber = fiberLineId(api.fiberId, api.direction)
-  const loc = channelToCoord(dirFiber, api.channel)
-  const fiberName =
-    fibers.find(f => f.id === dirFiber)?.name ?? fibers.find(f => f.parentCableId === api.fiberId)?.name ?? api.fiberId
+  const fiber = findFiber(api.fiberId, api.direction)
+  const loc = fiber ? channelToCoord(fiber.id, api.channel) : null
+  const fiberName = fiber?.name ?? api.fiberId
   const typeLabel = api.type.charAt(0).toUpperCase() + api.type.slice(1)
   const title = `${typeLabel} — ${fiberName}`
 
@@ -33,7 +32,6 @@ function toProtoIncident(api: ApiIncident): ProtoIncident {
 
   return {
     ...api,
-    fiberId: dirFiber,
     title,
     description,
     location: loc ?? [7.24, 43.72],
@@ -333,7 +331,7 @@ export function Prototype() {
     if (!state.selectedSectionId) return
     const sec = state.sections.find(s => s.id === state.selectedSectionId)
     if (!sec) return
-    const fiber = fibers.find(f => f.id === sec.fiberId)
+    const fiber = findFiber(sec.fiberId, sec.direction)
     if (!fiber) return
     const midChannel = Math.floor((sec.startChannel + sec.endChannel) / 2)
     const coord = fiber.coordinates[midChannel]
@@ -347,9 +345,9 @@ export function Prototype() {
     if (!state.selectedStructureId) return
     const structure = structureData.structures.find(s => s.id === state.selectedStructureId)
     if (!structure) return
-    const dirFiber = fiberLineId(structure.fiberId, structure.direction ?? 0)
+    const fiber = findFiber(structure.fiberId, structure.direction ?? 0)
     const midChannel = Math.floor((structure.startChannel + structure.endChannel) / 2)
-    const coord = channelToCoord(dirFiber, midChannel)
+    const coord = fiber ? channelToCoord(fiber.id, midChannel) : null
     if (coord) {
       mapRef.current?.flyTo(coord, 14)
     }
@@ -547,8 +545,7 @@ function NamingDialog({
   onCancel: () => void
 }) {
   const [name, setName] = useState('')
-  const dirId = fiberLineId(pendingSection.fiberId, pendingSection.direction)
-  const fiber = fibers.find(f => f.id === dirId)
+  const fiber = findFiber(pendingSection.fiberId, pendingSection.direction)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">

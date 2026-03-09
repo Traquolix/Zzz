@@ -24,6 +24,7 @@ export interface SpeedThresholds {
 export interface Section {
   id: string
   fiberId: string
+  direction: number
   name: string
   startChannel: number
   endChannel: number
@@ -45,7 +46,6 @@ export interface TimeSeriesPoint {
 
 export interface PendingPoint {
   fiberId: string
-  parentCableId: string
   direction: number
   channel: number
   lng: number
@@ -54,6 +54,7 @@ export interface PendingPoint {
 
 export interface SelectedChannel {
   fiberId: string
+  direction: number
   channel: number
   lng: number
   lat: number

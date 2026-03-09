@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import { severityColor, fibers, getSpeedColor, chartColors, defaultSpeedThresholds, fiberLineId } from '../data'
+import { severityColor, fibers, getSpeedColor, chartColors, defaultSpeedThresholds, findFiber } from '../data'
 import { useIncidentSnapshot } from '@/hooks/useIncidentSnapshot'
 import { fetchSectionHistory } from '@/api/sections'
 import type {
@@ -828,13 +828,17 @@ function ChannelDetail({
   dispatch: React.Dispatch<ProtoAction>
   fiberColors: Record<string, string>
 }) {
-  const fiber = fibers.find(f => f.id === channel.fiberId)
-  const fiberColor = fiberColors[channel.fiberId] ?? fiber?.color ?? '#6366f1'
+  const fiber = findFiber(channel.fiberId, channel.direction)
+  const fiberColor = fiber ? (fiberColors[fiber.id] ?? fiber.color) : '#6366f1'
   const directionLabel = fiber?.direction === 0 ? 'Dir A' : 'Dir B'
 
   // Find sections containing this channel
   const containingSections = sections.filter(
-    s => s.fiberId === channel.fiberId && channel.channel >= s.startChannel && channel.channel <= s.endChannel,
+    s =>
+      s.fiberId === channel.fiberId &&
+      s.direction === channel.direction &&
+      channel.channel >= s.startChannel &&
+      channel.channel <= s.endChannel,
   )
 
   // Live speed data from WebSocket
@@ -862,13 +866,13 @@ function ChannelDetail({
       const now = Date.now()
 
       for (const d of detections) {
-        if (fiberLineId(d.fiberId, d.direction) !== channel.fiberId) continue
+        if (d.fiberId !== channel.fiberId || d.direction !== channel.direction) continue
         if (Math.abs(d.channel - channel.channel) > NEIGHBOR_RANGE) continue
         dotsRef.current.push({ time: now, speed: d.speed })
       }
     })
     return unsub
-  }, [subscribe, channel.fiberId, channel.channel])
+  }, [subscribe, channel.fiberId, channel.direction, channel.channel])
 
   // Canvas render loop + stats update
   useEffect(() => {
@@ -1028,7 +1032,8 @@ function ChannelDetail({
           {containingSections.length > 0 ? (
             <div className="flex flex-col gap-1.5">
               {containingSections.map(sec => {
-                const secColor = fiberColors[sec.fiberId] ?? fiber?.color ?? '#888'
+                const secFiber = findFiber(sec.fiberId, sec.direction)
+                const secColor = (secFiber ? fiberColors[secFiber.id] : undefined) ?? secFiber?.color ?? '#888'
                 return (
                   <button
                     key={sec.id}
@@ -1175,7 +1180,7 @@ function SectionList({
       ) : (
         <div className="flex flex-col px-3 py-1">
           {sections.map(section => {
-            const fiber = fibers.find(f => f.id === section.fiberId)
+            const fiber = findFiber(section.fiberId, section.direction)
             const live = liveStats.get(section.id)
             const liveSeries = liveSeriesData.get(section.id)
 
@@ -1208,7 +1213,7 @@ function SectionList({
                   <div className="flex items-center gap-2 mb-1">
                     <span
                       className="shrink-0 w-2 h-2 rounded-full"
-                      style={{ backgroundColor: fiberColors[section.fiberId] ?? fiber?.color }}
+                      style={{ backgroundColor: (fiber ? fiberColors[fiber.id] : undefined) ?? fiber?.color }}
                     />
                     <span className="text-sm text-[var(--proto-text)] font-medium truncate">{section.name}</span>
                   </div>
@@ -1269,7 +1274,11 @@ function IncidentDetail({
 
   // Find containing section by channel range
   const relatedSection = sections.find(
-    s => s.fiberId === incident.fiberId && incident.channel >= s.startChannel && incident.channel <= s.endChannel,
+    s =>
+      s.fiberId === incident.fiberId &&
+      s.direction === incident.direction &&
+      incident.channel >= s.startChannel &&
+      incident.channel <= s.endChannel,
   )
 
   // Fetch snapshot data from API — polls every 1s until snapshot is complete
@@ -1835,8 +1844,8 @@ function SectionDetail({
   dispatch: React.Dispatch<ProtoAction>
   fiberColors: Record<string, string>
 }) {
-  const fiber = fibers.find(f => f.id === section.fiberId)
-  const fiberColor = fiberColors[section.fiberId] ?? fiber?.color ?? '#6366f1'
+  const fiber = findFiber(section.fiberId, section.direction)
+  const fiberColor = (fiber ? fiberColors[fiber.id] : undefined) ?? fiber?.color ?? '#6366f1'
 
   const live = liveStats.get(section.id)
   const liveSeries = liveSeriesData.get(section.id)
@@ -2076,8 +2085,7 @@ function StructureList({
   const q = search.toLowerCase()
   const filtered = q
     ? structures.filter(s => {
-        const dirFiber = fiberLineId(s.fiberId, s.direction ?? 0)
-        const fiberName = fibers.find(f => f.id === dirFiber)?.name ?? s.fiberId
+        const fiberName = findFiber(s.fiberId, s.direction ?? 0)?.name ?? s.fiberId
         return (
           s.name.toLowerCase().includes(q) || s.type.toLowerCase().includes(q) || fiberName.toLowerCase().includes(q)
         )
@@ -2093,8 +2101,7 @@ function StructureList({
       ) : (
         filtered.map(structure => {
           const typeStyle = structureTypeColors[structure.type] ?? structureTypeColors.bridge
-          const dirFiber = fiberLineId(structure.fiberId, structure.direction ?? 0)
-          const fiber = fibers.find(f => f.id === dirFiber)
+          const fiber = findFiber(structure.fiberId, structure.direction ?? 0)
           const status = allStatuses.get(structure.id)
           const dotColor = status ? (statusColors[status.status] ?? '#64748b') : '#64748b'
 
@@ -2204,8 +2211,7 @@ function StructureDetail({
   }
 
   const typeStyle = structureTypeColors[structure.type] ?? structureTypeColors.bridge
-  const dirFiber = fiberLineId(structure.fiberId, structure.direction ?? 0)
-  const fiber = fibers.find(f => f.id === dirFiber)
+  const fiber = findFiber(structure.fiberId, structure.direction ?? 0)
   const statusColor = shmStatus ? (statusColors[shmStatus.status] ?? statusColors.nominal) : '#64748b'
 
   const kpis = [
