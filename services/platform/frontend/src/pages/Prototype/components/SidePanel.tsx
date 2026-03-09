@@ -64,6 +64,7 @@ interface StructureDataProp {
 interface SidePanelProps {
   state: ProtoState
   dispatch: React.Dispatch<ProtoAction>
+  panelRef: React.RefObject<HTMLDivElement | null>
   liveStats: Map<string, LiveSectionStats>
   liveSeriesData: Map<string, SectionDataPoint[]>
   onHighlightFiber?: (fiberId: string) => void
@@ -83,6 +84,7 @@ type TimeRange = '1m' | '5m' | '15m' | '1h'
 export function SidePanel({
   state,
   dispatch,
+  panelRef,
   liveStats,
   liveSeriesData,
   onHighlightFiber,
@@ -123,7 +125,6 @@ export function SidePanel({
 
   // Track when the slide transition finishes so we can delay showing/hiding elements
   const [fullyClosed, setFullyClosed] = useState(!sidebarOpen)
-  const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (sidebarOpen) {
@@ -2552,19 +2553,23 @@ function computeHourTicks(tMin: number, tMax: number): { frac: number; label: st
   else if (durH > 24) interval = 6
   else if (durH > 12) interval = 3
   else if (durH > 6) interval = 2
-  const cur = new Date(tMin)
-  cur.setMinutes(0, 0, 0)
-  if (cur.getTime() < tMin) cur.setHours(cur.getHours() + 1)
-  const aligned = Math.ceil(cur.getHours() / interval) * interval
-  cur.setHours(aligned)
-  while (cur.getTime() <= tMax) {
-    if (cur.getTime() >= tMin) {
+  // Align to the first interval-boundary hour at or after tMin.
+  // Use local time only for alignment, then advance by fixed ms to avoid DST skips.
+  const d = new Date(tMin)
+  d.setMinutes(0, 0, 0)
+  if (d.getTime() < tMin) d.setHours(d.getHours() + 1)
+  const aligned = Math.ceil(d.getHours() / interval) * interval
+  d.setHours(aligned)
+  const intervalMs = interval * 3600_000
+  let ts = d.getTime()
+  while (ts <= tMax) {
+    if (ts >= tMin) {
       ticks.push({
-        frac: (cur.getTime() - tMin) / (tMax - tMin || 1),
-        label: `${cur.getHours().toString().padStart(2, '0')}:00`,
+        frac: (ts - tMin) / (tMax - tMin || 1),
+        label: `${new Date(ts).getHours().toString().padStart(2, '0')}:00`,
       })
     }
-    cur.setHours(cur.getHours() + interval)
+    ts += intervalMs
   }
   return ticks
 }

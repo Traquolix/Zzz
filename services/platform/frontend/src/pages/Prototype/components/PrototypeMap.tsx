@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useMemo, forwardRef, useImperativeHandle, memo } from 'react'
+import { useEffect, useRef, useCallback, useMemo, useContext, forwardRef, useImperativeHandle, memo } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { MapboxOverlay } from '@deck.gl/mapbox'
@@ -22,7 +22,7 @@ import {
 import type { Fiber, Section, PendingPoint, LiveSectionStats, SpeedThresholds, ProtoIncident } from '../types'
 import type { Infrastructure } from '@/types/infrastructure'
 import type { VehiclePosition } from '../hooks/useVehicleSim'
-import { getSidebarWidth } from '../hooks/useSidebarWidth'
+import { getSidebarWidth, SidebarRefContext } from '../hooks/useSidebarWidth'
 
 export interface PrototypeMapHandle {
   flyTo: (center: [number, number], zoom?: number) => void
@@ -151,6 +151,7 @@ export const PrototypeMap = memo(
     },
     ref,
   ) {
+    const sidebarRef = useContext(SidebarRefContext)
     const containerRef = useRef<HTMLDivElement>(null)
     const mapRef = useRef<mapboxgl.Map | null>(null)
     const markersRef = useRef<Map<string, mapboxgl.Marker>>(new Map())
@@ -260,7 +261,7 @@ export const PrototypeMap = memo(
       flyTo: (center: [number, number], zoom = 14) => {
         // When the sidebar is open, pad the right side so the target
         // centers in the visible map area rather than behind the panel.
-        const sidebarW = !sidebarOpenRef.current ? 0 : getSidebarWidth()
+        const sidebarW = !sidebarOpenRef.current ? 0 : getSidebarWidth(sidebarRef)
         mapRef.current?.flyTo({
           center,
           zoom,
