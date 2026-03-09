@@ -1,7 +1,7 @@
 import { useReducer, useEffect, useCallback, useRef, useState, useMemo } from 'react'
 import { toast } from 'sonner'
-import type { ProtoState, ProtoAction, Incident, PendingPoint } from './types'
-import { fibers, defaultSpeedThresholds, buildThresholdLookup, fiberLineId, channelToCoord } from './data'
+import type { ProtoState, ProtoAction, ProtoIncident, PendingPoint } from './types'
+import { fibers, defaultSpeedThresholds, buildThresholdLookup, findFiber, channelToCoord } from './data'
 import { PrototypeMap, type PrototypeMapHandle } from './components/PrototypeMap'
 import { StatusBar } from './components/StatusBar'
 import { Legend } from './components/Legend'
@@ -17,12 +17,11 @@ import { IncidentToastStack } from './components/IncidentToastStack'
 import type { Incident as ApiIncident } from '@/types/incident'
 import './prototype.css'
 
-/** Map an API incident to the prototype Incident shape. */
-function toProtoIncident(api: ApiIncident): Incident {
-  const dirFiber = fiberLineId(api.fiberId, api.direction)
-  const loc = channelToCoord(dirFiber, api.channel)
-  const fiberName =
-    fibers.find(f => f.id === dirFiber)?.name ?? fibers.find(f => f.parentCableId === api.fiberId)?.name ?? api.fiberId
+/** Enrich an API incident with display fields computed from fiber geometry. */
+function toProtoIncident(api: ApiIncident): ProtoIncident {
+  const fiber = findFiber(api.fiberId, api.direction)
+  const loc = fiber ? channelToCoord(fiber, api.channel) : null
+  const fiberName = fiber?.name ?? api.fiberId
   const typeLabel = api.type.charAt(0).toUpperCase() + api.type.slice(1)
   const title = `${typeLabel} — ${fiberName}`
 
@@ -32,22 +31,11 @@ function toProtoIncident(api: ApiIncident): Incident {
   }
 
   return {
-    id: api.id,
-    fiberId: dirFiber,
-    type: api.type as Incident['type'],
-    severity: api.severity as Incident['severity'],
+    ...api,
     title,
     description,
     location: loc ?? [7.24, 43.72],
-    timestamp: api.detectedAt,
     resolved: api.status !== 'active',
-    channel: api.channel,
-    channelEnd: api.channelEnd,
-    status: api.status,
-    duration: api.duration,
-    speedBefore: api.speedBefore,
-    speedDuring: api.speedDuring,
-    speedDropPercent: api.speedDropPercent,
   }
 }
 
@@ -312,7 +300,7 @@ export function Prototype() {
   }, [])
 
   const handleSectionComplete = useCallback(
-    (fiberId: string, direction: number, startChannel: number, endChannel: number) => {
+    (fiberId: string, direction: 0 | 1, startChannel: number, endChannel: number) => {
       dispatch({ type: 'OPEN_NAMING_DIALOG', fiberId, direction, startChannel, endChannel })
     },
     [],
@@ -326,7 +314,7 @@ export function Prototype() {
     dispatch({ type: 'SELECT_CHANNEL', channel: point })
   }, [])
 
-  const emptyIncidents = useMemo(() => [] as Incident[], [])
+  const emptyIncidents = useMemo(() => [] as ProtoIncident[], [])
   const visibleIncidents = state.showIncidentsOnMap ? state.incidents : emptyIncidents
 
   // FlyTo on incident selection
@@ -343,12 +331,12 @@ export function Prototype() {
     if (!state.selectedSectionId) return
     const sec = state.sections.find(s => s.id === state.selectedSectionId)
     if (!sec) return
-    const fiber = fibers.find(f => f.id === sec.fiberId)
-    if (!fiber) return
+    const secFiber = findFiber(sec.fiberId, sec.direction)
+    if (!secFiber) return
     const midChannel = Math.floor((sec.startChannel + sec.endChannel) / 2)
-    const coord = fiber.coordinates[midChannel]
-    if (coord && coord[0] != null && coord[1] != null) {
-      mapRef.current?.flyTo(coord as [number, number], 13)
+    const coord = channelToCoord(secFiber, midChannel)
+    if (coord) {
+      mapRef.current?.flyTo(coord, 13)
     }
   }, [state.selectedSectionId, state.sections])
 
@@ -357,9 +345,9 @@ export function Prototype() {
     if (!state.selectedStructureId) return
     const structure = structureData.structures.find(s => s.id === state.selectedStructureId)
     if (!structure) return
-    const dirFiber = fiberLineId(structure.fiberId, structure.direction ?? 0)
+    const sFiber = findFiber(structure.fiberId, structure.direction ?? 0)
     const midChannel = Math.floor((structure.startChannel + structure.endChannel) / 2)
-    const coord = channelToCoord(dirFiber, midChannel)
+    const coord = sFiber ? channelToCoord(sFiber, midChannel) : null
     if (coord) {
       mapRef.current?.flyTo(coord, 14)
     }
@@ -552,13 +540,12 @@ function NamingDialog({
   onSave,
   onCancel,
 }: {
-  pendingSection: { fiberId: string; direction: number; startChannel: number; endChannel: number }
+  pendingSection: { fiberId: string; direction: 0 | 1; startChannel: number; endChannel: number }
   onSave: (name: string) => void
   onCancel: () => void
 }) {
   const [name, setName] = useState('')
-  const dirId = fiberLineId(pendingSection.fiberId, pendingSection.direction)
-  const fiber = fibers.find(f => f.id === dirId)
+  const fiber = findFiber(pendingSection.fiberId, pendingSection.direction)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">

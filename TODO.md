@@ -10,13 +10,14 @@
 3. [x] **Extract `group_by_org` helper** [#45] — PR #51, merged
 4. [x] **Route SHM broadcasts via `fiber_org_map`** [#46] — PR #52, merged
 5. [x] **SectionHistoryView not flow-aware** [#40] — PR #55, merged
-6. [ ] **Make direction a first-class field everywhere** [#58] — refactor, stop encoding direction in fiber_id strings. Add `direction` column to `fiber_incidents`/`fiber_monitored_sections`/`fiber_danger_zones`. Separate `fiberId` + `direction` fields in all WebSocket messages, REST responses, and frontend types. Supersedes #56.
-7. [ ] **Frontend: poll section history API** [#54] — enhancement, replace client-side accumulation with periodic API polling
-8. [ ] **Consolidate dual Incident type definitions** [#42] — refactor, prototype vs canonical
-9. [ ] **Sim stats: `detectionsPerSecond` always 0** [#41] — enhancement
-10. [ ] **Optimistic flow switch rollback** [#15] — bug, frontend/backend flow state desync
-11. [ ] **Remove dead frontend type files** [#61] — tech-debt, delete unused types in `src/types/` (selection.ts, admin.ts, report.ts, user.ts, section.ts, metrics.ts)
-12. [ ] **Replace `fiberLineId()` composite keys with structured keys** [#62] — refactor, stop re-encoding direction into strings at the display layer
+6. [x] **Make direction a first-class field everywhere** [#58] — PR #59, merged
+7. [x] **Consolidate dual Incident type definitions** [#42] — PR #65
+8. [ ] **Remove dead frontend type files** [#61] — tech-debt, delete unused types in `src/types/` (selection.ts, admin.ts, report.ts, user.ts, section.ts, metrics.ts)
+9. [x] **Replace `fiberLineId()` composite keys with structured keys** [#62] — PR #65
+10. [ ] **Rename Proto-prefixed types** [#66] — refactor, rename ProtoIncident/ProtoState/ProtoAction to meaningful names
+11. [ ] **Frontend: poll section history API** [#54] — enhancement, replace client-side accumulation with periodic API polling
+12. [ ] **Sim stats: `detectionsPerSecond` always 0** [#41] — enhancement
+13. [ ] **Optimistic flow switch rollback** [#15] — bug, frontend/backend flow state desync
 
 ## High Priority
 
@@ -26,6 +27,7 @@
 
 ## Medium Priority
 
+- [ ] **Add direction awareness to backend-only features** [#63] — tech-debt, add direction filtering/grouping to reports, exports, alerting; audit unused WS channels
 - [ ] **Rewrite tests** [#8] — all AI-generated tests removed. Rebuild with meaningful unit, integration, and component tests across pipeline, backend, and frontend. Re-enable `make test` in Makefile/CI/CLAUDE.md when done. See [`TODO/plans/test-strategy.md`](plans/test-strategy.md)
 - [ ] **Incident replay player** [#9] — interactive playback of the full 2-minute snapshot window (±60s around incident). Chart shows the complete window with a vertical incident marker at center; playback slider below the chart scrubs both a chart cursor and the map (detection dots color-coded by speed). Left half (pre-incident) fills immediately from rolling buffer, right half fills progressively as data is collected. See [`TODO/plans/incident-player.md`](TODO/plans/incident-player.md)
 - [ ] **Realistic simulation engine** [#10] — overhaul the traffic simulation to be physically coherent: location-aware speed limits, time-of-day traffic patterns matching real Nice data, incident detection driven by actual vehicle behavior (speed drops, sudden stops) rather than random spawning. Incidents should emerge from the simulation, not be injected. See [`TODO/plans/simulation-overhaul.md`](TODO/plans/simulation-overhaul.md)

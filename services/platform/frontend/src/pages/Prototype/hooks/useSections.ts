@@ -1,13 +1,14 @@
 import { useEffect, useState, useCallback } from 'react'
 import { fetchSections, createSection, deleteSection, type ApiSection } from '@/api/sections'
 import type { Section } from '../types'
-import { defaultSpeedThresholds, fiberLineId } from '../data'
+import { defaultSpeedThresholds } from '../data'
 
 /** Map an API section to the prototype Section shape. */
 function toProtoSection(api: ApiSection): Section {
   return {
     id: api.id,
-    fiberId: fiberLineId(api.fiberId, api.direction),
+    fiberId: api.fiberId,
+    direction: api.direction,
     name: api.name,
     startChannel: api.channelStart,
     endChannel: api.channelEnd,
@@ -43,7 +44,7 @@ export function useSections() {
   }, [])
 
   const addSection = useCallback(
-    async (fiberId: string, direction: number, name: string, startChannel: number, endChannel: number) => {
+    async (fiberId: string, direction: 0 | 1, name: string, startChannel: number, endChannel: number) => {
       const api = await createSection({ fiberId, direction, name, channelStart: startChannel, channelEnd: endChannel })
       const section = toProtoSection(api)
       setSections(prev => [...prev, section])
