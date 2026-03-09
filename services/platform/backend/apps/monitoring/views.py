@@ -233,6 +233,7 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
 
         incident = incident_rows[0]
         fiber_id = incident["fiber_id"]
+        direction = incident["direction"]
 
         # Org-scoping: verify the incident's fiber belongs to user's org
         fiber_ids = _get_fiber_ids_or_none(request.user)
@@ -256,6 +257,7 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
                     sum(vehicle_count) AS total_count
                 FROM sequoia.detection_hires
                 WHERE fiber_id = {fid:String}
+                  AND direction = {dir:UInt8}
                   AND ch BETWEEN {ch_min:UInt16} AND {ch_max:UInt16}
                   AND ts BETWEEN fromUnixTimestamp64Nano({ts_start:UInt64})
                               AND fromUnixTimestamp64Nano({ts_end:UInt64})
@@ -264,6 +266,7 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
                 """,
                 parameters={
                     "fid": fiber_id,
+                    "dir": direction,
                     "ch_min": max(0, center_ch - 50),
                     "ch_max": center_ch + 50,
                     "ts_start": window_start_ns,

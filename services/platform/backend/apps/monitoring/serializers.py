@@ -87,7 +87,7 @@ class SectionInputSerializer(serializers.Serializer):
     """Validates incoming section creation requests."""
 
     fiberId = serializers.CharField()
-    direction = serializers.IntegerField()
+    direction = serializers.IntegerField(min_value=0, max_value=1)
     name = serializers.CharField()
     channelStart = serializers.IntegerField()
     channelEnd = serializers.IntegerField()
