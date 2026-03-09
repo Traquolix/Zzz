@@ -20,6 +20,7 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
   const [flow, setFlowState] = useState<DataFlow>('sim')
   const flowRef = useRef<DataFlow>('sim')
   const [switchingFlow, setSwitchingFlow] = useState(false)
+  const switchingFlowRef = useRef(false)
   const [availableFlows, setAvailableFlows] = useState<DataFlow[]>(['sim'])
   const flowChangeCallbacksRef = useRef<Set<(flow: DataFlow) => void>>(new Set())
   const flowSwitchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -60,23 +61,22 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
     }, PING_INTERVAL_MS)
   }, [])
 
-  const setFlow = useCallback(
-    (newFlow: DataFlow) => {
-      const ws = socketRef.current
-      if (!ws || ws.readyState !== WebSocket.OPEN || !authenticatedRef.current) return
-      if (switchingFlow) return // Ignore if already switching
+  const setFlow = useCallback((newFlow: DataFlow) => {
+    const ws = socketRef.current
+    if (!ws || ws.readyState !== WebSocket.OPEN || !authenticatedRef.current) return
+    if (switchingFlowRef.current) return // Ignore if already switching
 
-      setSwitchingFlow(true)
-      ws.send(JSON.stringify({ action: 'set_flow', flow: newFlow }))
+    switchingFlowRef.current = true
+    setSwitchingFlow(true)
+    ws.send(JSON.stringify({ action: 'set_flow', flow: newFlow }))
 
-      // Timeout: if server doesn't confirm within 5s, revert
-      flowSwitchTimeoutRef.current = setTimeout(() => {
-        logger.error('RealtimeProvider: flow switch timeout, reverting')
-        setSwitchingFlow(false)
-      }, FLOW_SWITCH_TIMEOUT_MS)
-    },
-    [switchingFlow],
-  )
+    // Timeout: if server doesn't confirm within 5s, revert
+    flowSwitchTimeoutRef.current = setTimeout(() => {
+      logger.error('RealtimeProvider: flow switch timeout, reverting')
+      switchingFlowRef.current = false
+      setSwitchingFlow(false)
+    }, FLOW_SWITCH_TIMEOUT_MS)
+  }, [])
 
   const onFlowChange = useCallback((cb: (flow: DataFlow) => void) => {
     flowChangeCallbacksRef.current.add(cb)
@@ -147,6 +147,7 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
         authenticatedRef.current = false
         pendingSubscriptionsRef.current = []
         setConnected(false)
+        switchingFlowRef.current = false
         setSwitchingFlow(false)
         clearTimers()
         scheduleReconnect()
@@ -191,8 +192,11 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
               flowRef.current = resolvedFlow
               setFlowState(resolvedFlow)
 
-              // Send initial set_flow to backend
-              ws.send(JSON.stringify({ action: 'set_flow', flow: resolvedFlow }))
+              // Only send set_flow if the resolved flow differs from the server
+              // default ('sim'). This handles reconnects where the user was on 'live'.
+              if (resolvedFlow !== 'sim') {
+                ws.send(JSON.stringify({ action: 'set_flow', flow: resolvedFlow }))
+              }
 
               // Now send queued subscriptions
               for (const channel of pendingSubscriptionsRef.current) {
@@ -218,6 +222,7 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
             const confirmedFlow = parsed.flow as DataFlow
             flowRef.current = confirmedFlow
             setFlowState(confirmedFlow)
+            switchingFlowRef.current = false
             setSwitchingFlow(false)
             flowChangeCallbacksRef.current.forEach(cb => cb(confirmedFlow))
             return
@@ -229,8 +234,9 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
             if (flowSwitchTimeoutRef.current) {
               clearTimeout(flowSwitchTimeoutRef.current)
               flowSwitchTimeoutRef.current = null
+              switchingFlowRef.current = false
+              setSwitchingFlow(false)
             }
-            setSwitchingFlow(false)
             return
           }
 
