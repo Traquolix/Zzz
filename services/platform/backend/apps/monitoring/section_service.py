@@ -148,6 +148,7 @@ def query_section_history(
     channel_start: int,
     channel_end: int,
     minutes: int = 60,
+    since_ms: int | None = None,
 ) -> list[dict]:
     """
     Query section history with resolution-aware table selection.
@@ -155,15 +156,20 @@ def query_section_history(
     - ≤5 min → ``detection_hires`` grouped by second (1s resolution)
     - >5 min → ``detection_1m`` with ``-Merge`` combinators (1min resolution)
 
-    Filters by ``direction`` in the detection tables.
+    Args:
+        since_ms: If provided, only return points after this timestamp (ms epoch).
+            Used for incremental polling — the frontend sends the timestamp of its
+            last known point and receives only new data.
 
-    Returns ``[{time, speed, speedMax, samples}, ...]``.
+    Returns ``[{time, speed, speedMax, samples, flow, occupancy}, ...]``.
     """
     if minutes <= 5:
         return _query_section_history_hires(
-            fiber_id, direction, channel_start, channel_end, minutes
+            fiber_id, direction, channel_start, channel_end, minutes, since_ms
         )
-    return _query_section_history_1m(fiber_id, direction, channel_start, channel_end, minutes)
+    return _query_section_history_1m(
+        fiber_id, direction, channel_start, channel_end, minutes, since_ms
+    )
 
 
 def _query_section_history_hires(
@@ -172,30 +178,38 @@ def _query_section_history_hires(
     channel_start: int,
     channel_end: int,
     minutes: int,
+    since_ms: int | None = None,
 ) -> list[dict]:
     """Query detection_hires at 1-second resolution for short windows (≤5 min)."""
+    since_clause = ""
+    params: dict = {
+        "fid": fiber_id,
+        "dir": direction,
+        "cs": channel_start,
+        "ce": channel_end,
+        "mins": minutes,
+    }
+    if since_ms is not None:
+        since_clause = "AND ts > fromUnixTimestamp64Milli({since:UInt64})"
+        params["since"] = since_ms
+
     rows = query(
-        """
+        f"""
         SELECT
             toUnixTimestamp(toStartOfSecond(ts)) * 1000 AS time_ms,
             avg(speed) AS speed,
             max(speed) AS speed_max,
             count() AS samples
         FROM sequoia.detection_hires
-        WHERE fiber_id = {fid:String}
-          AND direction = {dir:UInt8}
-          AND ch BETWEEN {cs:UInt16} AND {ce:UInt16}
-          AND ts >= now() - INTERVAL {mins:UInt32} MINUTE
+        WHERE fiber_id = {{fid:String}}
+          AND direction = {{dir:UInt8}}
+          AND ch BETWEEN {{cs:UInt16}} AND {{ce:UInt16}}
+          AND ts >= now() - INTERVAL {{mins:UInt32}} MINUTE
+          {since_clause}
         GROUP BY toStartOfSecond(ts)
         ORDER BY toStartOfSecond(ts)
         """,
-        parameters={
-            "fid": fiber_id,
-            "dir": direction,
-            "cs": channel_start,
-            "ce": channel_end,
-            "mins": minutes,
-        },
+        parameters=params,
     )
 
     return _transform_history_rows(rows)
@@ -207,46 +221,80 @@ def _query_section_history_1m(
     channel_start: int,
     channel_end: int,
     minutes: int,
+    since_ms: int | None = None,
 ) -> list[dict]:
     """Query detection_1m at 1-minute resolution using -Merge combinators."""
+    since_clause = ""
+    params: dict = {
+        "fid": fiber_id,
+        "dir": direction,
+        "cs": channel_start,
+        "ce": channel_end,
+        "mins": minutes,
+    }
+    if since_ms is not None:
+        since_clause = "AND ts > fromUnixTimestamp64Milli({since:UInt64})"
+        params["since"] = since_ms
+
     rows = query(
-        """
+        f"""
         SELECT
             toUnixTimestamp(ts) * 1000 AS time_ms,
             avgMerge(speed_avg_state) AS speed,
             maxMerge(speed_max_state) AS speed_max,
             sumMerge(samples_state) AS samples
         FROM sequoia.detection_1m
-        WHERE fiber_id = {fid:String}
-          AND direction = {dir:UInt8}
-          AND ch BETWEEN {cs:UInt16} AND {ce:UInt16}
-          AND ts >= now() - INTERVAL {mins:UInt32} MINUTE
+        WHERE fiber_id = {{fid:String}}
+          AND direction = {{dir:UInt8}}
+          AND ch BETWEEN {{cs:UInt16}} AND {{ce:UInt16}}
+          AND ts >= now() - INTERVAL {{mins:UInt32}} MINUTE
+          {since_clause}
         GROUP BY ts
         ORDER BY ts
         """,
-        parameters={
-            "fid": fiber_id,
-            "dir": direction,
-            "cs": channel_start,
-            "ce": channel_end,
-            "mins": minutes,
-        },
+        parameters=params,
     )
 
     return _transform_history_rows(rows)
 
 
+AVG_VEHICLE_LENGTH_M = 6  # meters, for occupancy estimation
+
+
 def _transform_history_rows(rows: list[dict]) -> list[dict]:
-    """Transform raw query rows into the section history response shape."""
-    return [
-        {
-            "time": int(r["time_ms"]),
-            "speed": round(float(r["speed"]), 1) if r["speed"] is not None else 0,
-            "speedMax": round(float(r["speed_max"]), 1) if r["speed_max"] is not None else 0,
-            "samples": int(r["samples"]) if r["samples"] is not None else 0,
-        }
-        for r in rows
-    ]
+    """Transform raw query rows into the section history response shape.
+
+    Computes derived metrics:
+    - ``flow``: vehicle count (= samples) per time bucket
+    - ``occupancy``: estimated road occupancy percentage using
+      ``(flow_per_hour * vehicle_length) / (speed_m_s * 1000)``
+    """
+    return [_transform_history_point(r) for r in rows]
+
+
+def _transform_history_point(r: dict) -> dict:
+    speed = round(float(r["speed"]), 1) if r["speed"] is not None else 0.0
+    samples = int(r["samples"]) if r["samples"] is not None else 0
+
+    # Flow = samples per bucket (each row is one time bucket)
+    flow = samples
+
+    # Occupancy: (flow_per_hour * vehicle_length) / (speed_m_s * 1000)
+    speed_ms = speed * (1000 / 3600)
+    if speed_ms > 0 and flow > 0:
+        flow_per_hour = flow * 60  # rough estimate assuming 1-min buckets
+        occupancy = min(100, round((flow_per_hour * AVG_VEHICLE_LENGTH_M) / (speed_ms * 1000)))
+    else:
+        occupancy = 100 if flow > 0 else 0
+
+    return {
+        "time": int(r["time_ms"]),
+        "speed": speed,
+        "speedMax": round(float(r["speed_max"]), 1) if r["speed_max"] is not None else 0,
+        "samples": samples,
+        "flow": flow,
+        "occupancy": occupancy,
+    }
 
 
 def _transform_section(row: dict) -> dict:

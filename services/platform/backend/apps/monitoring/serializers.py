@@ -114,6 +114,8 @@ class SectionHistoryPointSerializer(serializers.Serializer):
     speed = serializers.FloatField()
     speedMax = serializers.FloatField()
     samples = serializers.IntegerField()
+    flow = serializers.IntegerField()
+    occupancy = serializers.IntegerField()
 
 
 class SectionHistorySerializer(serializers.Serializer):

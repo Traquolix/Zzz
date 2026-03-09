@@ -76,19 +76,26 @@ def get_simulation_stats() -> dict[str, int]:
     return dict(_simulation_stats)
 
 
+_AVG_VEHICLE_LENGTH_M = 6  # meters, for occupancy estimation
+
+
 def get_simulation_section_history(
     fiber_id: str,
     direction: int,
     channel_start: int,
     channel_end: int,
     minutes: int,
+    since_ms: int | None = None,
 ) -> list[dict]:
     """Query in-memory simulation buffers for section history.
 
     - ≤5 min → per-second buffer (1s resolution)
     - >5 min → per-minute buffer (1min resolution)
 
-    Returns ``[{time, speed, speedMax, samples}, ...]`` matching the live query shape.
+    Args:
+        since_ms: If provided, only return points after this timestamp (ms epoch).
+
+    Returns ``[{time, speed, speedMax, samples, flow, occupancy}, ...]``.
     """
     if minutes <= 5:
         buf = _simulation_per_second_buffer
@@ -100,6 +107,8 @@ def get_simulation_section_history(
 
     now_ms = int(time.time() * 1000)
     cutoff_ms = now_ms - minutes * 60 * 1000
+    if since_ms is not None:
+        cutoff_ms = max(cutoff_ms, since_ms)
     points: list[dict] = []
 
     for (fid, d, ch), entries in buf.items():
@@ -108,7 +117,7 @@ def get_simulation_section_history(
         if ch < channel_start or ch > channel_end:
             continue
         for entry in entries:
-            if entry["time"] < cutoff_ms:
+            if entry["time"] <= cutoff_ms:
                 continue
             points.append(entry)
 
@@ -128,12 +137,23 @@ def get_simulation_section_history(
     for t in sorted(buckets):
         b = buckets[t]
         avg_speed = b["speed_sum"] / b["count"] if b["count"] > 0 else 0
+        samples = b["samples"]
+        flow = samples
+        speed_ms = avg_speed * (1000 / 3600)
+        if speed_ms > 0 and flow > 0:
+            flow_per_hour = flow * 60
+            occupancy = min(100, round((flow_per_hour * _AVG_VEHICLE_LENGTH_M) / (speed_ms * 1000)))
+        else:
+            occupancy = 100 if flow > 0 else 0
+
         result.append(
             {
                 "time": t,
                 "speed": round(avg_speed, 1),
                 "speedMax": round(b["speed_max"], 1),
-                "samples": b["samples"],
+                "samples": samples,
+                "flow": flow,
+                "occupancy": occupancy,
             }
         )
     return result

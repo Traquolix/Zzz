@@ -13,7 +13,6 @@ import {
   getFiberColor,
 } from '../data'
 import { useIncidentSnapshot } from '@/hooks/useIncidentSnapshot'
-import { fetchSectionHistory } from '@/api/sections'
 import type {
   Fiber,
   ProtoIncident,
@@ -1897,41 +1896,14 @@ function SectionDetail({
 
   const [timeRange, setTimeRange] = useState<TimeRange>('1m')
 
-  // Fetch historical data from API when no live series
-  const [historyData, setHistoryData] = useState<
-    { time: string; speed: number; flow: number; occupancy: number }[] | null
-  >(null)
-
-  useEffect(() => {
-    if (liveSeries?.length) return // live data available, skip API fetch
-    let mounted = true
-    fetchSectionHistory(section.id, 60)
-      .then(res => {
-        if (!mounted) return
-        const points = res.points.map(p => ({
-          time: new Date(p.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
-          speed: p.speed,
-          flow: p.samples,
-          occupancy: 0,
-        }))
-        setHistoryData(points.length > 0 ? points : null)
-      })
-      .catch(() => {
-        if (mounted) setHistoryData(null)
-      })
-    return () => {
-      mounted = false
-    }
-  }, [section.id, liveSeries?.length])
-
-  // Prefer live series data, fall back to API history
+  // Series data comes from useLiveStats polling — no local fetch needed
   const maxPoints = timeRangePoints[timeRange]
   const chartData = liveSeries?.length
     ? liveSeries.slice(-maxPoints).map(p => ({ time: p.time, speed: p.speed, flow: p.flow, occupancy: p.occupancy }))
-    : (historyData ?? [])
+    : []
   const tableData = liveSeries?.length
     ? liveSeries.slice(-10).map(p => ({ time: p.time, speed: p.speed, flow: p.flow, occupancy: p.occupancy }))
-    : (historyData ?? []).slice(-10)
+    : []
 
   return (
     <div className="proto-analysis-enter flex flex-col">
