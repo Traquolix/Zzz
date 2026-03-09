@@ -156,6 +156,12 @@ class Section(models.Model):
 
     class Meta:
         ordering = ["fiber_id", "channel_start"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["organization", "fiber_id", "direction", "channel_start", "channel_end"],
+                name="unique_section_range",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.fiber_id} ch{self.channel_start}-{self.channel_end})"

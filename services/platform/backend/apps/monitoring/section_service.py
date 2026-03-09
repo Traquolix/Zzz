@@ -85,7 +85,7 @@ def delete_section(section_id: str, organization_id: int | None = None) -> bool:
     """
     from apps.monitoring.models import Section
 
-    qs = Section.objects.filter(id=section_id)
+    qs = Section.objects.filter(id=section_id, is_active=True)
     if organization_id is not None:
         qs = qs.filter(organization_id=organization_id)
 

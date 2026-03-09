@@ -691,6 +691,12 @@ class SectionListView(APIView):
         channel_start = serializer.validated_data["channelStart"]
         channel_end = serializer.validated_data["channelEnd"]
 
+        if request.user.organization_id is None:
+            return Response(
+                {"detail": "Cannot create sections without an organization"},
+                status=400,
+            )
+
         # Org-scoping: verify the fiber belongs to user's org
         fiber_ids = _get_fiber_ids_or_none(request.user)
         if fiber_ids is not None and not fiber_belongs_to_org(fiber_id, fiber_ids):
