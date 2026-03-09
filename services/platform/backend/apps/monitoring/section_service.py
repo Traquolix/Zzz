@@ -4,6 +4,7 @@ and detection_1m tables.
 """
 
 import logging
+import math
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -180,14 +181,19 @@ def _query_section_history_hires(
     minutes: int,
     since_ms: int | None = None,
 ) -> list[dict]:
-    """Query detection_hires at 1-second resolution for short windows (≤5 min)."""
+    """Query detection_hires at 1-second resolution for short windows (≤5 min).
+
+    Flow is total detections divided by total section channels (including inactive
+    ones), so a vehicle seen across N channels isn't counted N times.
+    """
+    total_channels = max(1, channel_end - channel_start + 1)
     rows = query(
         """
         SELECT
             toUnixTimestamp(toStartOfSecond(ts)) * 1000 AS time_ms,
             avg(speed) AS speed,
             max(speed) AS speed_max,
-            count() AS samples
+            count() / {n_ch:UInt32} AS samples
         FROM sequoia.detection_hires
         WHERE fiber_id = {fid:String}
           AND direction = {dir:UInt8}
@@ -204,6 +210,7 @@ def _query_section_history_hires(
             "ce": channel_end,
             "mins": minutes,
             "since": since_ms or 0,
+            "n_ch": total_channels,
         },
     )
 
@@ -218,14 +225,18 @@ def _query_section_history_1m(
     minutes: int,
     since_ms: int | None = None,
 ) -> list[dict]:
-    """Query detection_1m at 1-minute resolution using -Merge combinators."""
+    """Query detection_1m at 1-minute resolution using -Merge combinators.
+
+    Flow is total detections divided by total section channels, not sum across all.
+    """
+    total_channels = max(1, channel_end - channel_start + 1)
     rows = query(
         """
         SELECT
             toUnixTimestamp(ts) * 1000 AS time_ms,
             avgMerge(speed_avg_state) AS speed,
             maxMerge(speed_max_state) AS speed_max,
-            sumMerge(samples_state) AS samples
+            sumMerge(samples_state) / {n_ch:UInt32} AS samples
         FROM sequoia.detection_1m
         WHERE fiber_id = {fid:String}
           AND direction = {dir:UInt8}
@@ -242,6 +253,7 @@ def _query_section_history_1m(
             "ce": channel_end,
             "mins": minutes,
             "since": since_ms or 0,
+            "n_ch": total_channels,
         },
     )
 
@@ -251,16 +263,19 @@ def _query_section_history_1m(
 _AVG_VEHICLE_LENGTH_M = 6  # meters, for occupancy estimation
 
 
-def compute_occupancy(speed_kmh: float, flow: int, bucket_seconds: int) -> int:
+def compute_occupancy(speed_kmh: float, flow_vph: float) -> int:
     """Compute road occupancy percentage.
 
-    Uses: (flow_per_hour * vehicle_length) / (speed_m_s * 1000)
+    Args:
+        speed_kmh: Average speed in km/h.
+        flow_vph: Flow in vehicles per hour.
+
+    Uses: occupancy = (flow_vph * vehicle_length) / (speed_m_s * 1000)
     """
     speed_ms = speed_kmh * (1000 / 3600)
-    if speed_ms > 0 and flow > 0:
-        flow_per_hour = flow * (3600 / bucket_seconds)
-        return min(100, round((flow_per_hour * _AVG_VEHICLE_LENGTH_M) / (speed_ms * 1000)))
-    return 100 if flow > 0 else 0
+    if speed_ms > 0 and flow_vph > 0:
+        return min(100, math.ceil((flow_vph * _AVG_VEHICLE_LENGTH_M) / (speed_ms * 1000)))
+    return 100 if flow_vph > 0 else 0
 
 
 def _transform_history_rows(rows: list[dict], bucket_seconds: int = 60) -> list[dict]:
@@ -271,9 +286,9 @@ def _transform_history_rows(rows: list[dict], bucket_seconds: int = 60) -> list[
             Used to correctly scale flow to per-hour for occupancy calculation.
 
     Computes derived metrics:
-    - ``flow``: detection count (= samples) per time bucket
+    - ``flow``: vehicles per hour (``avg_detections_per_channel * 3600 / bucket_seconds``)
     - ``occupancy``: estimated road occupancy percentage using
-      ``(flow_per_hour * vehicle_length) / (speed_m_s * 1000)``
+      ``(flow_vph * vehicle_length) / (speed_m_s * 1000)``
     """
     return [_transform_history_point(r, bucket_seconds) for r in rows]
 
@@ -282,9 +297,9 @@ def _transform_history_point(r: dict, bucket_seconds: int) -> dict:
     speed = round(float(r["speed"]), 1) if r["speed"] is not None else 0.0
     samples = int(r["samples"]) if r["samples"] is not None else 0
 
-    # Flow = samples per bucket (each row is one time bucket)
-    flow = samples
-    occupancy = compute_occupancy(speed, flow, bucket_seconds)
+    # Flow = vehicles per hour (standard traffic engineering unit)
+    flow = round(samples * (3600 / bucket_seconds))
+    occupancy = compute_occupancy(speed, flow)
 
     return {
         "time": int(r["time_ms"]),
