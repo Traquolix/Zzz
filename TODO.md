@@ -5,23 +5,25 @@
 
 ## Current Sprint
 
-1. [x] **Unify broadcast helpers** [#17] — PR #44, merged
-2. [x] **IncidentActionView not flow-aware** [#35] — PR #48, merged
-3. [x] **Extract `group_by_org` helper** [#45] — PR #51, merged
-4. [x] **Route SHM broadcasts via `fiber_org_map`** [#46] — PR #52, merged
-5. [x] **SectionHistoryView not flow-aware** [#40] — PR #55, merged
-6. [x] **Make direction a first-class field everywhere** [#58] — PR #59, merged
+1. [x] **Unify broadcast helpers** [#17] — PR #44
+2. [x] **IncidentActionView not flow-aware** [#35] — PR #48
+3. [x] **Extract `group_by_org` helper** [#45] — PR #51
+4. [x] **Route SHM broadcasts via `fiber_org_map`** [#46] — PR #52
+5. [x] **SectionHistoryView not flow-aware** [#40] — PR #55
+6. [x] **Make direction a first-class field everywhere** [#58] — PR #59
 7. [x] **Consolidate dual Incident type definitions** [#42] — PR #65
 8. [x] **Replace `fiberLineId()` composite keys with structured keys** [#62] — PR #65
-9. [x] **Frontend: poll section history + Redis pub/sub + flow fixes** [#54] — PR #69, merged
-10. [ ] **Optimistic flow switch rollback** [#15] — PR #71, in review
-11. [ ] **Move CRUD config tables to PostgreSQL** [#33] — sections, danger zones, actors out of ClickHouse
+9. [x] **Frontend: poll section history + Redis pub/sub + flow fixes** [#54] — PR #69
+10. [x] **Optimistic flow switch rollback** [#15] — PR #71
+11. [x] **Move CRUD config tables to PostgreSQL** [#33] — sections, danger zones, actors out of ClickHouse
 12. [ ] **Batch section history endpoint** [#70] — reduce N parallel requests to single batch call
 13. [ ] **Real-time SHM data** [#11] — end-to-end SHM data flow (pipeline → simulation → frontend)
 14. [ ] **Fix section creation overlay** [#38] — click position offset on map
 15. [ ] **Expand side panel** [#72] — wider default, more readable charts and data tables
-16. [ ] **Install self-hosted GitHub Actions runners** [#5] — prerequisite for automated deploys
-17. [ ] **Realistic simulation engine** [#10] — physically coherent traffic, location-aware speeds, emergent incidents
+16. [ ] **Make 3D vehicle popups to track their values**
+17. [ ] **Differenciate VL / PL**
+18. [ ] **Install self-hosted GitHub Actions runners** [#5] — prerequisite for automated deploys
+19. [ ] **Realistic simulation engine** [#10] — physically coherent traffic, location-aware speeds, emergent incidents
 
 ## High Priority
 
