@@ -8,7 +8,7 @@ function toProtoSection(api: ApiSection): Section {
   return {
     id: api.id,
     fiberId: api.fiberId,
-    direction: api.direction,
+    direction: api.direction as 0 | 1,
     name: api.name,
     startChannel: api.channelStart,
     endChannel: api.channelEnd,

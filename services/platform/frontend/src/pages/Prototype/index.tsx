@@ -300,7 +300,7 @@ export function Prototype() {
   }, [])
 
   const handleSectionComplete = useCallback(
-    (fiberId: string, direction: number, startChannel: number, endChannel: number) => {
+    (fiberId: string, direction: 0 | 1, startChannel: number, endChannel: number) => {
       dispatch({ type: 'OPEN_NAMING_DIALOG', fiberId, direction, startChannel, endChannel })
     },
     [],

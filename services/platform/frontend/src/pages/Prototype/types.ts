@@ -23,8 +23,8 @@ export interface SpeedThresholds {
 
 export interface Section {
   id: string
-  fiberId: string
-  direction: number
+  fiberId: string // raw cable ID (e.g. "carros"), not the internal composite ID
+  direction: 0 | 1
   name: string
   startChannel: number
   endChannel: number
@@ -45,24 +45,24 @@ export interface TimeSeriesPoint {
 }
 
 export interface PendingPoint {
-  fiberId: string
-  direction: number
+  fiberId: string // raw cable ID (e.g. "carros"), not the internal composite ID
+  direction: 0 | 1
   channel: number
   lng: number
   lat: number
 }
 
 export interface SelectedChannel {
-  fiberId: string
-  direction: number
+  fiberId: string // raw cable ID (e.g. "carros"), not the internal composite ID
+  direction: 0 | 1
   channel: number
   lng: number
   lat: number
 }
 
 export interface PendingSection {
-  fiberId: string
-  direction: number
+  fiberId: string // raw cable ID (e.g. "carros"), not the internal composite ID
+  direction: 0 | 1
   startChannel: number
   endChannel: number
 }
@@ -120,7 +120,7 @@ export type ProtoAction =
   | { type: 'ENTER_SECTION_CREATION' }
   | { type: 'EXIT_SECTION_CREATION' }
   | { type: 'SET_PENDING_POINT'; point: PendingPoint }
-  | { type: 'OPEN_NAMING_DIALOG'; fiberId: string; direction: number; startChannel: number; endChannel: number }
+  | { type: 'OPEN_NAMING_DIALOG'; fiberId: string; direction: 0 | 1; startChannel: number; endChannel: number }
   | { type: 'CLOSE_NAMING_DIALOG' }
   | { type: 'CREATE_SECTION'; section: Section }
   | { type: 'DELETE_SECTION'; id: string }

@@ -40,7 +40,7 @@ interface PrototypeMapProps {
   sections?: Section[]
   selectedSectionId?: string | null
   onFiberClick?: (point: PendingPoint) => void
-  onSectionComplete?: (fiberId: string, direction: number, startChannel: number, endChannel: number) => void
+  onSectionComplete?: (fiberId: string, direction: 0 | 1, startChannel: number, endChannel: number) => void
   buildVehicleGeoJSON?: () => GeoJSON.FeatureCollection
   tickAndCollect?: (now: number, deltaMs: number) => VehiclePosition[]
   displayMode?: 'dots' | 'vehicles'
@@ -64,7 +64,7 @@ interface PrototypeMapProps {
 function findNearestFiberPoint(lngLat: [number, number], maxDistDeg = 0.003) {
   let best: {
     fiberId: string
-    direction: number
+    direction: 0 | 1
     channel: number
     dist: number
     coord: [number, number]

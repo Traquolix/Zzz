@@ -11,9 +11,9 @@
 4. [x] **Route SHM broadcasts via `fiber_org_map`** [#46] — PR #52, merged
 5. [x] **SectionHistoryView not flow-aware** [#40] — PR #55, merged
 6. [x] **Make direction a first-class field everywhere** [#58] — PR #59, merged
-7. [x] **Consolidate dual Incident type definitions** [#42] — PR #65, merged
+7. [x] **Consolidate dual Incident type definitions** [#42] — PR #65
 8. [ ] **Remove dead frontend type files** [#61] — tech-debt, delete unused types in `src/types/` (selection.ts, admin.ts, report.ts, user.ts, section.ts, metrics.ts)
-9. [x] **Replace `fiberLineId()` composite keys with structured keys** [#62] — PR #65, merged
+9. [x] **Replace `fiberLineId()` composite keys with structured keys** [#62] — PR #65
 10. [ ] **Frontend: poll section history API** [#54] — enhancement, replace client-side accumulation with periodic API polling
 11. [ ] **Sim stats: `detectionsPerSecond` always 0** [#41] — enhancement
 12. [ ] **Optimistic flow switch rollback** [#15] — bug, frontend/backend flow state desync

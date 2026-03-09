@@ -5,7 +5,7 @@ import { parseDetections } from '@/lib/parseMessage'
 import { getFiberOffsetCoords } from '@/lib/geoUtils'
 import { useRealtime } from '@/hooks/useRealtime'
 import { useFlowReset } from '@/hooks/useFlowReset'
-import { fibers, findFiber } from '../data'
+import { fibers } from '../data'
 
 export interface VehiclePosition {
   id: string
@@ -13,7 +13,7 @@ export interface VehiclePosition {
   angle: number
   speed: number
   opacity: number
-  fiberId: string
+  fiberId: string // raw cable ID (e.g. "carros"), not the internal composite ID
   direction: 0 | 1
   channel: number
 }
@@ -89,7 +89,7 @@ export function useVehicleSim(): {
       const now = performance.now()
 
       for (const d of detections) {
-        const fe = enginesRef.current.find(e => e.fiberId === findFiber(d.fiberId, d.direction)?.id)
+        const fe = enginesRef.current.find(e => e.cableId === d.fiberId && e.direction === d.direction)
         if (!fe) continue
 
         const event: SensorEvent = {

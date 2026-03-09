@@ -86,30 +86,33 @@ export function buildThresholdLookup(
   sections: Section[],
   fiberThresholds: Record<string, SpeedThresholds>,
 ): (cableId: string, direction: number, channel: number) => SpeedThresholds {
-  // Group sections by cableId:direction key for fast closure lookup (no findFiber in hot path)
-  const byKey = new Map<string, { start: number; end: number; thresholds: SpeedThresholds }[]>()
-  const fallbackByKey = new Map<string, SpeedThresholds>()
+  type SectionRange = { start: number; end: number; thresholds: SpeedThresholds }
+  const byCable = new Map<string, Map<number, { ranges: SectionRange[]; fallback: SpeedThresholds }>>()
+
   for (const sec of sections) {
-    const key = `${sec.fiberId}:${sec.direction}`
-    let list = byKey.get(key)
-    if (!list) {
-      list = []
-      byKey.set(key, list)
-      const fid = findFiber(sec.fiberId, sec.direction)?.id ?? ''
-      fallbackByKey.set(key, fiberThresholds[fid] ?? defaultSpeedThresholds)
+    let byDir = byCable.get(sec.fiberId)
+    if (!byDir) {
+      byDir = new Map()
+      byCable.set(sec.fiberId, byDir)
     }
-    list.push({ start: sec.startChannel, end: sec.endChannel, thresholds: sec.speedThresholds })
+    let entry = byDir.get(sec.direction)
+    if (!entry) {
+      const fid = findFiber(sec.fiberId, sec.direction)?.id ?? ''
+      entry = { ranges: [], fallback: fiberThresholds[fid] ?? defaultSpeedThresholds }
+      byDir.set(sec.direction, entry)
+    }
+    entry.ranges.push({ start: sec.startChannel, end: sec.endChannel, thresholds: sec.speedThresholds })
   }
 
   return (cableId: string, direction: number, channel: number): SpeedThresholds => {
-    const key = `${cableId}:${direction}`
-    const list = byKey.get(key)
-    if (list) {
-      for (const s of list) {
+    const entry = byCable.get(cableId)?.get(direction)
+    if (entry) {
+      for (const s of entry.ranges) {
         if (channel >= s.start && channel <= s.end) return s.thresholds
       }
+      return entry.fallback
     }
-    return fallbackByKey.get(key) ?? defaultSpeedThresholds
+    return defaultSpeedThresholds
   }
 }
 
@@ -136,11 +139,19 @@ for (const fiber of fibers) {
   }
 }
 
-const fiberIndex = new Map(fibers.map(f => [`${f.parentCableId}:${f.direction}`, f]))
+const fiberIndex = new Map<string, Map<number, Fiber>>()
+for (const f of fibers) {
+  let byDir = fiberIndex.get(f.parentCableId)
+  if (!byDir) {
+    byDir = new Map()
+    fiberIndex.set(f.parentCableId, byDir)
+  }
+  byDir.set(f.direction, f)
+}
 
 /** Find the directional fiber entry for a cable ID + direction. */
 export function findFiber(cableId: string, direction: number): Fiber | undefined {
-  return fiberIndex.get(`${cableId}:${direction}`)
+  return fiberIndex.get(cableId)?.get(direction)
 }
 
 export function channelToCoord(fiberLine: string, channel: number): [number, number] | null {
