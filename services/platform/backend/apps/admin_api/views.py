@@ -458,6 +458,7 @@ class InfrastructureAdminListView(APIView):
                     "name": item.name,
                     "type": item.type,
                     "fiberId": item.fiber_id,
+                    "direction": item.direction,
                     "startChannel": item.start_channel,
                     "endChannel": item.end_channel,
                     "organizationId": str(item.organization_id),
@@ -518,6 +519,7 @@ class InfrastructureAdminListView(APIView):
             type=data["type"],
             organization=org,
             fiber_id=data["fiberId"],
+            direction=data.get("direction"),
             start_channel=data["startChannel"],
             end_channel=data["endChannel"],
             image=data.get("image", ""),
@@ -990,6 +992,6 @@ class AlertRuleTestView(APIView):
         from apps.alerting.dispatch import _dispatch_webhook
 
         _dispatch_webhook(
-            rule, "test-incident-id", "test-fiber:0", 0, "Test alert from SequoIA", test=True
+            rule, "test-incident-id", "test-fiber", 0, "Test alert from SequoIA", test=True
         )
         return Response({"detail": "Test payload sent."})

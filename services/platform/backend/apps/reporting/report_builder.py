@@ -115,6 +115,7 @@ def _query_speed_stats(report) -> list[dict]:
                 """
                 SELECT
                     fiber_id,
+                    direction,
                     round(avg(abs(speed)), 1) AS avg_speed,
                     round(min(abs(speed)), 1) AS min_speed,
                     round(max(abs(speed)), 1) AS max_speed,
@@ -122,8 +123,8 @@ def _query_speed_stats(report) -> list[dict]:
                 FROM sequoia.detection_hires
                 WHERE fiber_id IN {fids:Array(String)}
                   AND ts BETWEEN {start:DateTime64(3)} AND {end:DateTime64(3)}
-                GROUP BY fiber_id
-                ORDER BY fiber_id
+                GROUP BY fiber_id, direction
+                ORDER BY fiber_id, direction
                 """,
                 parameters={
                     "fids": report.fiber_ids,
@@ -137,6 +138,7 @@ def _query_speed_stats(report) -> list[dict]:
                 f"""
                 SELECT
                     fiber_id,
+                    direction,
                     round(avgMerge(speed_avg_state), 1) AS avg_speed,
                     round(minMerge(speed_min_state), 1) AS min_speed,
                     round(maxMerge(speed_max_state), 1) AS max_speed,
@@ -144,8 +146,8 @@ def _query_speed_stats(report) -> list[dict]:
                 FROM sequoia.{table}
                 WHERE fiber_id IN {{fids:Array(String)}}
                   AND ts BETWEEN {{start:DateTime64(3)}} AND {{end:DateTime64(3)}}
-                GROUP BY fiber_id
-                ORDER BY fiber_id
+                GROUP BY fiber_id, direction
+                ORDER BY fiber_id, direction
                 """,
                 parameters={
                     "fids": report.fiber_ids,
@@ -159,6 +161,7 @@ def _query_speed_stats(report) -> list[dict]:
     return [
         {
             "fiberId": row["fiber_id"],
+            "direction": row["direction"],
             "avgSpeed": row["avg_speed"],
             "minSpeed": row["min_speed"],
             "maxSpeed": row["max_speed"],
@@ -178,13 +181,14 @@ def _query_volume(report) -> list[dict]:
                 """
                 SELECT
                     fiber_id,
+                    direction,
                     toStartOfHour(ts) AS hour,
                     sum(vehicle_count) AS total_vehicles
                 FROM sequoia.detection_hires
                 WHERE fiber_id IN {fids:Array(String)}
                   AND ts BETWEEN {start:DateTime64(3)} AND {end:DateTime64(3)}
-                GROUP BY fiber_id, hour
-                ORDER BY fiber_id, hour
+                GROUP BY fiber_id, direction, hour
+                ORDER BY fiber_id, direction, hour
                 """,
                 parameters={
                     "fids": report.fiber_ids,
@@ -198,13 +202,14 @@ def _query_volume(report) -> list[dict]:
                 f"""
                 SELECT
                     fiber_id,
+                    direction,
                     toStartOfHour(ts) AS hour,
                     sumMerge(count_sum_state) AS total_vehicles
                 FROM sequoia.{table}
                 WHERE fiber_id IN {{fids:Array(String)}}
                   AND ts BETWEEN {{start:DateTime64(3)}} AND {{end:DateTime64(3)}}
-                GROUP BY fiber_id, hour
-                ORDER BY fiber_id, hour
+                GROUP BY fiber_id, direction, hour
+                ORDER BY fiber_id, direction, hour
                 """,
                 parameters={
                     "fids": report.fiber_ids,
@@ -218,6 +223,7 @@ def _query_volume(report) -> list[dict]:
     return [
         {
             "fiberId": row["fiber_id"],
+            "direction": row["direction"],
             "hour": row["hour"].isoformat()
             if hasattr(row["hour"], "isoformat")
             else str(row["hour"]),

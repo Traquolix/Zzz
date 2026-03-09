@@ -18,18 +18,12 @@ def query_sections(fiber_ids: Optional[list[str]] = None) -> list[dict]:
     Return active monitored sections from ClickHouse.
 
     Args:
-        fiber_ids: Restrict to these fibers. ``None`` = all (superuser).
+        fiber_ids: Restrict to these fibers (plain IDs). ``None`` = all (superuser).
     """
     if fiber_ids is not None:
-        # Expand plain fiber IDs to also match directional variants (e.g. "carros" → "carros", "carros:0", "carros:1")
-        expanded = set(fiber_ids)
-        for fid in fiber_ids:
-            if ":" not in fid:
-                expanded.add(f"{fid}:0")
-                expanded.add(f"{fid}:1")
         rows = query(
             """
-            SELECT section_id, fiber_id, section_name,
+            SELECT section_id, fiber_id, direction, section_name,
                    channel_start, channel_end,
                    expected_travel_time_seconds,
                    alert_threshold_percent,
@@ -40,12 +34,12 @@ def query_sections(fiber_ids: Optional[list[str]] = None) -> list[dict]:
               AND fiber_id IN {fids:Array(String)}
             ORDER BY fiber_id, channel_start
             """,
-            parameters={"fids": list(expanded)},
+            parameters={"fids": fiber_ids},
         )
     else:
         rows = query(
             """
-            SELECT section_id, fiber_id, section_name,
+            SELECT section_id, fiber_id, direction, section_name,
                    channel_start, channel_end,
                    expected_travel_time_seconds,
                    alert_threshold_percent,
@@ -65,6 +59,7 @@ def insert_section(
     name: str,
     channel_start: int,
     channel_end: int,
+    direction: int = 0,
     user: str = "",
 ) -> dict:
     """
@@ -78,12 +73,12 @@ def insert_section(
     query(
         """
         INSERT INTO sequoia.fiber_monitored_sections (
-            section_id, fiber_id, section_name,
+            section_id, fiber_id, direction, section_name,
             channel_start, channel_end,
             expected_travel_time_seconds, alert_threshold_percent,
             is_active, created_at, created_by, updated_at
         ) VALUES (
-            {sid:String}, {fid:String}, {name:String},
+            {sid:String}, {fid:String}, {dir:UInt8}, {name:String},
             {cs:UInt32}, {ce:UInt32},
             NULL, 30.0,
             1, {now:DateTime}, {user:String}, {now2:DateTime}
@@ -92,6 +87,7 @@ def insert_section(
         parameters={
             "sid": section_id,
             "fid": fiber_id,
+            "dir": direction,
             "name": name,
             "cs": channel_start,
             "ce": channel_end,
@@ -104,6 +100,7 @@ def insert_section(
     return {
         "id": section_id,
         "fiberId": fiber_id,
+        "direction": direction,
         "name": name,
         "channelStart": channel_start,
         "channelEnd": channel_end,
@@ -126,13 +123,13 @@ def delete_section(section_id: str, fiber_id: str) -> None:
     query(
         """
         INSERT INTO sequoia.fiber_monitored_sections (
-            section_id, fiber_id, section_name,
+            section_id, fiber_id, direction, section_name,
             channel_start, channel_end,
             expected_travel_time_seconds, alert_threshold_percent,
             is_active, created_at, created_by, updated_at
         )
         SELECT
-            section_id, fiber_id, section_name,
+            section_id, fiber_id, direction, section_name,
             channel_start, channel_end,
             expected_travel_time_seconds, alert_threshold_percent,
             0, created_at, created_by, {now:DateTime}
@@ -147,6 +144,7 @@ def delete_section(section_id: str, fiber_id: str) -> None:
 
 def query_section_history(
     fiber_id: str,
+    direction: int,
     channel_start: int,
     channel_end: int,
     minutes: int = 60,
@@ -157,15 +155,20 @@ def query_section_history(
     - ≤5 min → ``detection_hires`` grouped by second (1s resolution)
     - >5 min → ``detection_1m`` with ``-Merge`` combinators (1min resolution)
 
+    Filters by ``direction`` in the detection tables.
+
     Returns ``[{time, speed, speedMax, samples}, ...]``.
     """
     if minutes <= 5:
-        return _query_section_history_hires(fiber_id, channel_start, channel_end, minutes)
-    return _query_section_history_1m(fiber_id, channel_start, channel_end, minutes)
+        return _query_section_history_hires(
+            fiber_id, direction, channel_start, channel_end, minutes
+        )
+    return _query_section_history_1m(fiber_id, direction, channel_start, channel_end, minutes)
 
 
 def _query_section_history_hires(
     fiber_id: str,
+    direction: int,
     channel_start: int,
     channel_end: int,
     minutes: int,
@@ -180,6 +183,7 @@ def _query_section_history_hires(
             count() AS samples
         FROM sequoia.detection_hires
         WHERE fiber_id = {fid:String}
+          AND direction = {dir:UInt8}
           AND ch BETWEEN {cs:UInt16} AND {ce:UInt16}
           AND ts >= now() - INTERVAL {mins:UInt32} MINUTE
         GROUP BY toStartOfSecond(ts)
@@ -187,6 +191,7 @@ def _query_section_history_hires(
         """,
         parameters={
             "fid": fiber_id,
+            "dir": direction,
             "cs": channel_start,
             "ce": channel_end,
             "mins": minutes,
@@ -198,6 +203,7 @@ def _query_section_history_hires(
 
 def _query_section_history_1m(
     fiber_id: str,
+    direction: int,
     channel_start: int,
     channel_end: int,
     minutes: int,
@@ -212,6 +218,7 @@ def _query_section_history_1m(
             sumMerge(samples_state) AS samples
         FROM sequoia.detection_1m
         WHERE fiber_id = {fid:String}
+          AND direction = {dir:UInt8}
           AND ch BETWEEN {cs:UInt16} AND {ce:UInt16}
           AND ts >= now() - INTERVAL {mins:UInt32} MINUTE
         GROUP BY ts
@@ -219,6 +226,7 @@ def _query_section_history_1m(
         """,
         parameters={
             "fid": fiber_id,
+            "dir": direction,
             "cs": channel_start,
             "ce": channel_end,
             "mins": minutes,
@@ -248,6 +256,7 @@ def _transform_section(row: dict) -> dict:
     return {
         "id": row["section_id"],
         "fiberId": row["fiber_id"],
+        "direction": row.get("direction", 0),
         "name": row["section_name"],
         "channelStart": row["channel_start"],
         "channelEnd": row["channel_end"],

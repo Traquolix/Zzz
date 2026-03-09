@@ -4,7 +4,8 @@ export type Incident = {
   id: string
   type: 'slowdown' | 'congestion' | 'accident' | 'anomaly'
   severity: 'low' | 'medium' | 'high' | 'critical'
-  fiberLine: string // which fiber
+  fiberId: string
+  direction: number
   channel: number // which channel (array index)
   channelEnd?: number
   detectedAt: string
@@ -38,7 +39,8 @@ export type SnapshotPoint = {
 
 export type IncidentSnapshot = {
   incidentId: string
-  fiberLine: string
+  fiberId: string
+  direction: number
   centerChannel: number
   capturedAt: number
   points: SnapshotPoint[]

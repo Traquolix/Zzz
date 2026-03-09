@@ -34,7 +34,7 @@ async def check_alerts_for_detections(detection_dicts: list[dict], org_id: str) 
             success = await sync_to_async(dispatch_alert)(
                 rule,
                 detection.get("incident_id", ""),
-                detection.get("fiberLine", ""),
+                detection.get("fiberId", ""),
                 detection.get("channel", 0),
                 detail,
             )
@@ -49,10 +49,8 @@ async def check_alerts_for_incident(incident_data: dict, fiber_org_map: dict) ->
     Looks up owning orgs from fiber_org_map and checks each org's rules.
     Returns the number of alerts dispatched.
     """
-    fiber_line = incident_data.get("fiberLine", "")
-    # Strip directional suffix for org lookup
-    parent_fid = fiber_line.rsplit(":", 1)[0] if ":" in fiber_line else fiber_line
-    org_ids = fiber_org_map.get(parent_fid, [])
+    fiber_id = incident_data.get("fiberId", "")
+    org_ids = fiber_org_map.get(fiber_id, [])
     if not org_ids:
         return 0
 
@@ -68,7 +66,7 @@ async def check_alerts_for_incident(incident_data: dict, fiber_org_map: dict) ->
             success = await sync_to_async(dispatch_alert)(
                 rule,
                 incident_data.get("id", ""),
-                fiber_line,
+                fiber_id,
                 incident_data.get("channel", 0),
                 detail,
             )

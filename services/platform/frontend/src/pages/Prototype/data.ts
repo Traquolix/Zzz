@@ -131,6 +131,11 @@ for (const fiber of fibers) {
   }
 }
 
+/** Construct the internal directional fiber ID from a plain fiberId + direction. */
+export function fiberLineId(fiberId: string, direction: number): string {
+  return `${fiberId}:${direction}`
+}
+
 export function channelToCoord(fiberLine: string, channel: number): [number, number] | null {
   const fiber = fibers.find(f => f.id === fiberLine)
   if (!fiber) return null
@@ -201,11 +206,4 @@ export const chartColors = {
   speed: { label: 'Speed', unit: 'km/h', color: '#6366f1' },
   flow: { label: 'Flow', unit: 'veh/min', color: '#8b5cf6' },
   occupancy: { label: 'Occupancy', unit: '%', color: '#0ea5e9' },
-}
-
-/** Resolve a cable-level fiberId (e.g. "carros") to a directional fiber ID (e.g. "carros:0"). */
-export function resolveDirectionalFiber(cableFiberId: string): string {
-  // If already directional, return as-is
-  if (cableFiberId.includes(':')) return cableFiberId
-  return `${cableFiberId}:0`
 }

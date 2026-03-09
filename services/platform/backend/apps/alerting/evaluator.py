@@ -8,17 +8,15 @@ Callers are responsible for dispatching.
 import logging
 
 from apps.alerting.models import AlertRule
-from apps.monitoring.incident_service import strip_directional_suffix
 
 logger = logging.getLogger("sequoia.alerting")
 
 
-def _passes_scope_filters(rule: AlertRule, fiber_line: str, channel: int) -> bool:
+def _passes_scope_filters(rule: AlertRule, fiber_id: str, channel: int) -> bool:
     """Check if the data point falls within the rule's fiber/channel scope."""
     # Fiber filter
     if rule.fiber_id_filter:
-        plain_fiber = strip_directional_suffix(fiber_line)
-        if plain_fiber not in rule.fiber_id_filter:
+        if fiber_id not in rule.fiber_id_filter:
             return False
 
     # Channel range filter
@@ -37,12 +35,12 @@ def evaluate_detection(
     """
     Evaluate a single detection against a list of rules.
 
-    detection shape: {fiberLine, channel, speed, ...}
+    detection shape: {fiberId, direction, channel, speed, ...}
     Returns: [(rule, reason_string), ...]
     """
     triggered: list[tuple[AlertRule, str]] = []
 
-    fiber_line = detection.get("fiberLine", "")
+    fiber_id = detection.get("fiberId", "")
     channel = detection.get("channel", 0)
     speed = detection.get("speed", 0.0)
 
@@ -53,7 +51,7 @@ def evaluate_detection(
         if rule.rule_type != "speed_below":
             continue
 
-        if not _passes_scope_filters(rule, fiber_line, channel):
+        if not _passes_scope_filters(rule, fiber_id, channel):
             continue
 
         if rule.threshold is not None and speed < rule.threshold:
@@ -70,12 +68,12 @@ def evaluate_incident(
     """
     Evaluate a new incident against a list of rules.
 
-    incident shape: {id, type, severity, fiberLine, channel, ...}
+    incident shape: {id, type, severity, fiberId, direction, channel, ...}
     Returns: [(rule, reason_string), ...]
     """
     triggered: list[tuple[AlertRule, str]] = []
 
-    fiber_line = incident.get("fiberLine", "")
+    fiber_id = incident.get("fiberId", "")
     channel = incident.get("channel", 0)
     inc_type = incident.get("type", "")
     severity = incident.get("severity", "")
@@ -87,7 +85,7 @@ def evaluate_incident(
         if rule.rule_type != "incident_type":
             continue
 
-        if not _passes_scope_filters(rule, fiber_line, channel):
+        if not _passes_scope_filters(rule, fiber_id, channel):
             continue
 
         # Type filter

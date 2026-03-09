@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS sequoia.fiber_incidents
     -- Identification
     incident_id String CODEC(ZSTD(1)),
     fiber_id String CODEC(ZSTD(1)),
+    direction UInt8 DEFAULT 0 CODEC(LZ4),
 
     -- Time
     timestamp_ns UInt64 CODEC(DoubleDelta, LZ4),
@@ -122,6 +123,7 @@ CREATE TABLE IF NOT EXISTS sequoia.fiber_danger_zones
 (
     zone_id String,
     fiber_id String,
+    direction UInt8 DEFAULT 0,
     zone_type Enum8('tunnel' = 1, 'bridge' = 2, 'intersection' = 3, 'urban_dense' = 4, 'mountain_pass' = 5) DEFAULT 'tunnel',
     zone_name String,
     description String DEFAULT '',
@@ -169,6 +171,7 @@ CREATE TABLE IF NOT EXISTS sequoia.fiber_monitored_sections
 (
     section_id String,
     fiber_id String,
+    direction UInt8 DEFAULT 0,
     section_name String,
     channel_start UInt32,
     channel_end UInt32,

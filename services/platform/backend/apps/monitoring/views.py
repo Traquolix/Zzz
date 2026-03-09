@@ -16,9 +16,6 @@ from rest_framework.views import APIView
 
 from apps.fibers.utils import fiber_belongs_to_org, get_org_fiber_ids
 from apps.monitoring.incident_service import (
-    _ensure_directional_fiber_id,
-)
-from apps.monitoring.incident_service import (
     query_by_id as incident_query_by_id,
 )
 from apps.monitoring.incident_service import (
@@ -194,7 +191,7 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
 
         # Org-scoping: verify fiber belongs to user's org
         fiber_ids = _get_fiber_ids_or_none(request.user)
-        if fiber_ids is not None and not fiber_belongs_to_org(sim_incident["fiberLine"], fiber_ids):
+        if fiber_ids is not None and not fiber_belongs_to_org(sim_incident["fiberId"], fiber_ids):
             raise NotFound({"detail": "Incident not found", "code": "incident_not_found"})
 
         snapshot = get_simulation_snapshot(incident_id)
@@ -204,7 +201,8 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
         return Response(
             {
                 "incidentId": incident_id,
-                "fiberLine": sim_incident["fiberLine"],
+                "fiberId": sim_incident["fiberId"],
+                "direction": sim_incident["direction"],
                 "centerChannel": sim_incident["channel"],
                 "capturedAt": int(time.time() * 1000),
                 "points": points,
@@ -217,7 +215,7 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
         try:
             incident_rows = query(
                 """
-                SELECT fiber_id, channel_start, channel_end, timestamp_ns
+                SELECT fiber_id, direction, channel_start, channel_end, timestamp_ns
                 FROM sequoia.fiber_incidents
                 FINAL
                 WHERE incident_id = {id:String}
@@ -235,6 +233,7 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
 
         incident = incident_rows[0]
         fiber_id = incident["fiber_id"]
+        direction = incident["direction"]
 
         # Org-scoping: verify the incident's fiber belongs to user's org
         fiber_ids = _get_fiber_ids_or_none(request.user)
@@ -258,6 +257,7 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
                     sum(vehicle_count) AS total_count
                 FROM sequoia.detection_hires
                 WHERE fiber_id = {fid:String}
+                  AND direction = {dir:UInt8}
                   AND ch BETWEEN {ch_min:UInt16} AND {ch_max:UInt16}
                   AND ts BETWEEN fromUnixTimestamp64Nano({ts_start:UInt64})
                               AND fromUnixTimestamp64Nano({ts_end:UInt64})
@@ -266,6 +266,7 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
                 """,
                 parameters={
                     "fid": fiber_id,
+                    "dir": direction,
                     "ch_min": max(0, center_ch - 50),
                     "ch_max": center_ch + 50,
                     "ts_start": window_start_ns,
@@ -308,7 +309,8 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
         return Response(
             {
                 "incidentId": incident_id,
-                "fiberLine": _ensure_directional_fiber_id(fiber_id),
+                "fiberId": fiber_id,
+                "direction": incident.get("direction", 0),
                 "centerChannel": center_ch,
                 "capturedAt": int(time.time() * 1000),
                 "points": points,
@@ -482,6 +484,7 @@ class InfrastructureListView(APIView):
                     "type": item.type,
                     "name": item.name,
                     "fiberId": item.fiber_id,
+                    "direction": item.direction,
                     "startChannel": item.start_channel,
                     "endChannel": item.end_channel,
                     "imageUrl": image_url,
@@ -681,6 +684,7 @@ class SectionListView(APIView):
         serializer.is_valid(raise_exception=True)
 
         fiber_id = serializer.validated_data["fiberId"]
+        direction = serializer.validated_data["direction"]
         name = serializer.validated_data["name"]
         channel_start = serializer.validated_data["channelStart"]
         channel_end = serializer.validated_data["channelEnd"]
@@ -698,6 +702,7 @@ class SectionListView(APIView):
             name=name,
             channel_start=channel_start,
             channel_end=channel_end,
+            direction=direction,
             user=str(request.user.id) if hasattr(request.user, "id") else "",
         )
         return Response(section, status=201)
@@ -790,6 +795,7 @@ class SectionHistoryView(FlowAwareMixin, APIView):
         else:
             history = query_section_history(
                 fiber_id=section["fiberId"],
+                direction=section["direction"],
                 channel_start=section["channelStart"],
                 channel_end=section["channelEnd"],
                 minutes=minutes,
@@ -809,6 +815,7 @@ class SectionHistoryView(FlowAwareMixin, APIView):
 
         return get_simulation_section_history(
             fiber_id=section["fiberId"],
+            direction=section["direction"],
             channel_start=section["channelStart"],
             channel_end=section["channelEnd"],
             minutes=minutes,
