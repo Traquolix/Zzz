@@ -17,13 +17,13 @@
 10. [x] **Optimistic flow switch rollback** [#15] — PR #71
 11. [x] **Move CRUD config tables to PostgreSQL** [#33] — sections, danger zones, actors out of ClickHouse
 12. [ ] **Batch section history endpoint** [#70] — reduce N parallel requests to single batch call
-13. [ ] **Real-time SHM data** [#11] — end-to-end SHM data flow (pipeline → simulation → frontend)
-14. [ ] **Fix section creation overlay** [#38] — click position offset on map
-15. [ ] **Expand side panel** [#72] — wider default, more readable charts and data tables
-16. [ ] **Make 3D vehicle popups to track their values**
+13. [ ] **Fix section creation overlay** [#38] — click position offset on map
+14. [ ] **Expand side panel** [#72] — wider default, more readable charts and data tables
+15. [ ] **Make 3D vehicle popups to track their values**
+16. [ ] **Realistic simulation engine** [#10] — physically coherent traffic, location-aware speeds, emergent incidents
 17. [ ] **Differenciate VL / PL**
 18. [ ] **Install self-hosted GitHub Actions runners** [#5] — prerequisite for automated deploys
-19. [ ] **Realistic simulation engine** [#10] — physically coherent traffic, location-aware speeds, emergent incidents
+19. [ ] **Real-time SHM data** [#11] — end-to-end SHM data flow (pipeline → simulation → frontend)
 
 ## High Priority
 

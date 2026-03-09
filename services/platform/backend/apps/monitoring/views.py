@@ -23,11 +23,12 @@ from apps.monitoring.incident_service import (
     query_recent as incident_query_recent,
 )
 from apps.monitoring.mixins import FlowAwareMixin
-from apps.monitoring.models import IncidentAction, Infrastructure
+from apps.monitoring.models import IncidentAction, Infrastructure, Section
 from apps.monitoring.section_service import (
     delete_section,
     get_section,
     insert_section,
+    query_batch_section_history,
     query_section_history,
     query_sections,
 )
@@ -60,6 +61,8 @@ _PROCESS_START_TIME = time.time()
 
 INCIDENTS_CACHE_TTL = 10  # 10 seconds
 STATS_CACHE_TTL = 5  # 5 seconds
+# Keep in sync with frontend: services/platform/frontend/src/api/sections.ts
+MAX_SECTIONS_PER_ORG = 50
 
 
 def _get_fiber_ids_or_none(user):
@@ -698,6 +701,19 @@ class SectionListView(APIView):
                 status=400,
             )
 
+        # Enforce per-org section limit
+        org_count = Section.objects.filter(
+            organization_id=request.user.organization_id, is_active=True
+        ).count()
+        if org_count >= MAX_SECTIONS_PER_ORG:
+            return Response(
+                {
+                    "detail": f"Section limit reached ({MAX_SECTIONS_PER_ORG} per organization)",
+                    "code": "limit_reached",
+                },
+                status=400,
+            )
+
         # Org-scoping: verify the fiber belongs to user's org
         fiber_ids = _get_fiber_ids_or_none(request.user)
         if fiber_ids is not None and not fiber_belongs_to_org(fiber_id, fiber_ids):
@@ -836,6 +852,118 @@ class SectionHistoryView(FlowAwareMixin, APIView):
             minutes=minutes,
             since_ms=since_ms,
         )
+
+
+class BatchSectionHistoryView(FlowAwareMixin, APIView):
+    """
+    POST /api/sections/batch-history — speed time-series for multiple sections.
+
+    Replaces N parallel GET /api/sections/<id>/history calls with a single
+    batch request. Used by the live stats poller (useLiveStats) which needs
+    history for all sections every 2 seconds.
+
+    Request body: ``{"sectionIds": [...], "minutes": 1, "since": {"id1": ms, "id2": ms}}``
+
+    Strict flow isolation:
+    - ``flow=sim`` → in-memory simulation buffers
+    - ``flow=live`` → ClickHouse
+
+    Org-scoped: only returns data for sections belonging to the user's org.
+    """
+
+    permission_classes = [IsActiveUser]
+
+    @clickhouse_fallback()
+    def post(self, request):
+        section_ids = request.data.get("sectionIds")
+        if not isinstance(section_ids, list) or not section_ids:
+            return Response(
+                {"detail": "sectionIds must be a non-empty list", "code": "validation_error"},
+                status=400,
+            )
+
+        # Validate each element is a string
+        section_ids = [sid for sid in section_ids if isinstance(sid, str) and sid]
+        if not section_ids:
+            return Response(
+                {
+                    "detail": "sectionIds must contain at least one valid string",
+                    "code": "validation_error",
+                },
+                status=400,
+            )
+
+        if len(section_ids) > MAX_SECTIONS_PER_ORG:
+            return Response(
+                {
+                    "detail": f"Too many sections: {len(section_ids)} requested, "
+                    f"max {MAX_SECTIONS_PER_ORG} per request",
+                    "code": "validation_error",
+                },
+                status=400,
+            )
+
+        try:
+            minutes = min(int(request.data.get("minutes", 60)), 1440)
+        except (ValueError, TypeError):
+            minutes = 60
+
+        # Per-section since cursors: {"section-abc": 1741234567000, ...}
+        since_raw = request.data.get("since")
+        since_map: dict[str, int] | None = None
+        if isinstance(since_raw, dict):
+            since_map = {}
+            for k, v in since_raw.items():
+                try:
+                    val = int(v)
+                    if val >= 0:
+                        since_map[str(k)] = val
+                except (ValueError, TypeError):
+                    pass
+
+        if self._is_sim(request):
+            minutes = min(minutes, 60)
+
+        # Fetch sections from DB, org-scoped (cached — sections rarely change)
+        org_id = None if request.user.is_superuser else request.user.organization_id
+        cache_key = build_org_cache_key("batch_sections", request.user)
+        sections = django_cache.get(cache_key)
+        if sections is None:
+            sections = query_sections(organization_id=org_id)
+            django_cache.set(cache_key, sections, 30)
+
+        # Filter to requested IDs only
+        sections_by_id = {s["id"]: s for s in sections}
+        requested = [sections_by_id[sid] for sid in section_ids if sid in sections_by_id]
+
+        if not requested:
+            return Response({"results": {}})
+
+        if self._is_sim(request):
+            results = self._get_sim_batch(requested, minutes, since_map)
+        else:
+            results = query_batch_section_history(requested, minutes, since_map)
+
+        return Response({"results": results})
+
+    def _get_sim_batch(
+        self, sections: list[dict], minutes: int, since_map: dict[str, int] | None
+    ) -> dict[str, list[dict]]:
+        """Sim flow: query in-memory simulation detection buffers for each section."""
+        from apps.realtime.simulation import get_simulation_section_history
+
+        result: dict[str, list[dict]] = {}
+        for sec in sections:
+            since_ms = (since_map or {}).get(sec["id"])
+            result[sec["id"]] = get_simulation_section_history(
+                fiber_id=sec["fiberId"],
+                direction=sec["direction"],
+                channel_start=sec["channelStart"],
+                channel_end=sec["channelEnd"],
+                minutes=minutes,
+                since_ms=since_ms,
+            )
+        return result
 
 
 class SpectralDataView(APIView):
