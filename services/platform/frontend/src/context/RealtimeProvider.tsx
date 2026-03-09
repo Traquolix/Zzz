@@ -64,6 +64,7 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
   const setFlow = useCallback((newFlow: DataFlow) => {
     const ws = socketRef.current
     if (!ws || ws.readyState !== WebSocket.OPEN || !authenticatedRef.current) return
+    if (newFlow === flowRef.current) return // Already on this flow
     if (switchingFlowRef.current) return // Ignore if already switching
 
     switchingFlowRef.current = true

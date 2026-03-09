@@ -31,8 +31,8 @@ export function FlowToggle({ flow, switchingFlow, availableFlows, onToggle }: Fl
               'px-2.5 py-0.5 text-[11px] font-medium rounded transition-colors cursor-pointer',
               active && 'bg-[var(--proto-surface-raised)] text-[var(--proto-text)]',
               !active && !disabled && 'text-[var(--proto-text-secondary)] hover:text-[var(--proto-text)]',
-              disabled && 'text-[var(--proto-text-muted)] opacity-40 cursor-not-allowed',
-              switchingFlow && 'opacity-60',
+              disabled && !switchingFlow && 'text-[var(--proto-text-muted)] opacity-40 cursor-not-allowed',
+              switchingFlow && !active && 'opacity-60 cursor-not-allowed',
             )}
           >
             {opt === 'live' && (
