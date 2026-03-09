@@ -23,8 +23,8 @@ export function useLiveStats(sections: Section[]) {
   const sectionsRef = useRef(sections)
   sectionsRef.current = sections
 
-  // Track the latest timestamp per section for incremental fetches
-  const sinceRef = useRef<Map<string, number>>(new Map())
+  // Single global since — all sections share the same poll cadence
+  const sinceRef = useRef<number | undefined>(undefined)
   // Store accumulated points per section
   const accumulatedRef = useRef<Map<string, SectionDataPoint[]>>(new Map())
 
@@ -33,22 +33,16 @@ export function useLiveStats(sections: Section[]) {
     if (secs.length === 0) return
 
     try {
-      // Build per-section since map
-      const sinceMap: Record<string, number> = {}
-      for (const sec of secs) {
-        const since = sinceRef.current.get(sec.id)
-        if (since != null) sinceMap[sec.id] = since
-      }
-
       const batchResult = await fetchBatchSectionHistory(
         secs.map(s => s.id),
         HISTORY_MINUTES,
         flow,
-        Object.keys(sinceMap).length > 0 ? sinceMap : undefined,
+        sinceRef.current,
       )
 
       const nextStats = new Map<string, LiveSectionStats>()
       const nextSeries = new Map<string, SectionDataPoint[]>()
+      let maxTime = sinceRef.current ?? 0
 
       for (const sec of secs) {
         const rawPoints = batchResult[sec.id]
@@ -63,15 +57,12 @@ export function useLiveStats(sections: Section[]) {
         }
 
         const newPoints = mapHistoryPoints(rawPoints)
-        const since = sinceRef.current.get(sec.id)
 
         // Merge with existing accumulated data
         let accumulated = accumulatedRef.current.get(sec.id) ?? []
-        if (since == null) {
+        if (sinceRef.current == null) {
           accumulated = newPoints
         } else if (newPoints.length > 0) {
-          // Batch uses min(since) across all sections, so we may get
-          // points we already have for some sections. Deduplicate by time.
           const lastKnown = accumulated.length > 0 ? accumulated[accumulated.length - 1].timestamp : 0
           const fresh = newPoints.filter(p => p.timestamp > lastKnown)
           accumulated.push(...fresh)
@@ -91,8 +82,12 @@ export function useLiveStats(sections: Section[]) {
         nextStats.set(sec.id, deriveStats(accumulated, sec))
 
         if (rawPoints.length > 0) {
-          sinceRef.current.set(sec.id, rawPoints[rawPoints.length - 1].time)
+          maxTime = Math.max(maxTime, rawPoints[rawPoints.length - 1].time)
         }
+      }
+
+      if (maxTime > (sinceRef.current ?? 0)) {
+        sinceRef.current = maxTime
       }
 
       if (nextSeries.size > 0) {
@@ -105,7 +100,7 @@ export function useLiveStats(sections: Section[]) {
   }, [flow])
 
   useEffect(() => {
-    sinceRef.current.clear()
+    sinceRef.current = undefined
     accumulatedRef.current.clear()
     setStats(new Map())
     setSeriesData(new Map())
