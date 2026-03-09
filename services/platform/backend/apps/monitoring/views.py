@@ -882,6 +882,17 @@ class BatchSectionHistoryView(FlowAwareMixin, APIView):
                 status=400,
             )
 
+        # Validate each element is a string
+        section_ids = [sid for sid in section_ids if isinstance(sid, str) and sid]
+        if not section_ids:
+            return Response(
+                {
+                    "detail": "sectionIds must contain at least one valid string",
+                    "code": "validation_error",
+                },
+                status=400,
+            )
+
         if len(section_ids) > MAX_SECTIONS_PER_ORG:
             return Response(
                 {

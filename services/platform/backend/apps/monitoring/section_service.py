@@ -319,13 +319,13 @@ def _query_batch_hires(
     params: dict = {"mins": minutes}
 
     for i, sec in enumerate(sections):
-        n_ch = max(1, sec["channelEnd"] - sec["channelStart"] + 1)
         s = f"_{i}"
         params[f"fid{s}"] = sec["fiberId"]
         params[f"dir{s}"] = sec["direction"]
         params[f"cs{s}"] = sec["channelStart"]
         params[f"ce{s}"] = sec["channelEnd"]
         params[f"since{s}"] = since.get(sec["id"], 0)
+        params[f"nch{s}"] = max(1, sec["channelEnd"] - sec["channelStart"] + 1)
 
         parts.append(f"""
             SELECT
@@ -333,7 +333,7 @@ def _query_batch_hires(
                 toUnixTimestamp(toStartOfSecond(ts)) * 1000 AS time_ms,
                 avg(speed) AS speed,
                 max(speed) AS speed_max,
-                count() / {n_ch} AS samples
+                count() / {{nch{s}:UInt32}} AS samples
             FROM sequoia.detection_hires
             WHERE fiber_id = {{fid{s}:String}}
               AND direction = {{dir{s}:UInt8}}
@@ -357,13 +357,13 @@ def _query_batch_1m(
     params: dict = {"mins": minutes}
 
     for i, sec in enumerate(sections):
-        n_ch = max(1, sec["channelEnd"] - sec["channelStart"] + 1)
         s = f"_{i}"
         params[f"fid{s}"] = sec["fiberId"]
         params[f"dir{s}"] = sec["direction"]
         params[f"cs{s}"] = sec["channelStart"]
         params[f"ce{s}"] = sec["channelEnd"]
         params[f"since{s}"] = since.get(sec["id"], 0)
+        params[f"nch{s}"] = max(1, sec["channelEnd"] - sec["channelStart"] + 1)
 
         parts.append(f"""
             SELECT
@@ -371,7 +371,7 @@ def _query_batch_1m(
                 toUnixTimestamp(ts) * 1000 AS time_ms,
                 avgMerge(speed_avg_state) AS speed,
                 maxMerge(speed_max_state) AS speed_max,
-                sumMerge(samples_state) / {n_ch} AS samples
+                sumMerge(samples_state) / {{nch{s}:UInt32}} AS samples
             FROM sequoia.detection_1m
             WHERE fiber_id = {{fid{s}:String}}
               AND direction = {{dir{s}:UInt8}}
