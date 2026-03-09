@@ -18,10 +18,11 @@
 11. [x] **Move CRUD config tables to PostgreSQL** [#33] — sections, danger zones, actors out of ClickHouse
 12. [x] **Batch section history endpoint** [#70] — PR #75
 13. [x] **Fix section creation overlay** [#38] — click position offset on map — PR #76
-14. [ ] **Expand side panel** [#72] — wider default, more readable charts and data tables
-15. [ ] **Make 3D vehicle popups to track their values**
-16. [ ] **Realistic simulation engine** [#10] — physically coherent traffic, location-aware speeds, emergent incidents
+14. [x] **Expand side panel** [#72] — wider default, more readable charts and data tables — PR #78
+15. [ ] **Make 3D vehicle popups to track their values on click**
+16. [ ] **Realistic simulation engine** [#10] — physically coherent traffic, location-aware speeds, emergent incidents (Special rules, do not allow traffic (and incidents) on promenade dir B > 4178, promenade dir A > 4177, mathis dir A & B > 687)
 17. [ ] **Differenciate VL / PL**
+18. [ ] **Clicking an incident toast should lead you to said incident details in the tab and consider it as read / viewed**
 18. [ ] **Install self-hosted GitHub Actions runners** [#5] — prerequisite for automated deploys
 19. [ ] **Real-time SHM data** [#11] — end-to-end SHM data flow (pipeline → simulation → frontend)
 

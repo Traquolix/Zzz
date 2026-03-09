@@ -100,6 +100,20 @@
   color: var(--proto-text-muted) !important;
 }
 
+/* Vehicle popup */
+.proto-vehicle-popup .mapboxgl-popup-content {
+  background: rgba(30, 32, 36, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 8px 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+}
+
+.proto-vehicle-popup .mapboxgl-popup-tip {
+  border-top-color: rgba(30, 32, 36, 0.92);
+}
+
 /* Incident marker pulse on hover */
 @keyframes proto-marker-pulse {
   0%,
