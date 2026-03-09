@@ -53,7 +53,7 @@ const initialState: ProtoState = {
   pendingPoint: null,
   showNamingDialog: false,
   pendingSection: null,
-  sidebarOpen: true,
+  sidebarOpen: false,
   sidebarExpanded: false,
   displayMode: 'dots',
   fiberThresholds: Object.fromEntries(fibers.map(f => [f.id, { ...defaultSpeedThresholds }])),

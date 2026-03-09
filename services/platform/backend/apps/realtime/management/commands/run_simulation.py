@@ -17,6 +17,41 @@ from django.core.management.base import BaseCommand
 
 from apps.realtime.simulation import FiberConfig, run_simulation_loop
 
+# Per-fiber calibration: speed limits, typical free-flow ranges, channel limits,
+# and traffic density. These match the real road characteristics in Nice.
+#
+# Channel limits: beyond these channels the fiber runs off-road or has dead coupling.
+#   - promenade dir A (0): valid up to channel 4177
+#   - promenade dir B (1): valid up to channel 4178
+#   - mathis dir A (0) & B (1): valid up to channel 687
+#   - carros: full fiber is on-road (no limit)
+FIBER_CONFIGS: dict[str, dict] = {
+    "carros": {
+        "lanes": 6,
+        "speed_limit": 110,
+        "traffic_density": "high",
+        "typical_speed_range": (80, 110),
+        "max_channel_dir0": None,
+        "max_channel_dir1": None,
+    },
+    "promenade": {
+        "lanes": 4,
+        "speed_limit": 50,
+        "traffic_density": "medium",
+        "typical_speed_range": (30, 50),
+        "max_channel_dir0": 4177,
+        "max_channel_dir1": 4178,
+    },
+    "mathis": {
+        "lanes": 4,
+        "speed_limit": 50,
+        "traffic_density": "low",
+        "typical_speed_range": (35, 50),
+        "max_channel_dir0": 687,
+        "max_channel_dir1": 687,
+    },
+}
+
 
 class Command(BaseCommand):
     help = "Run the traffic simulation engine (detections, incidents, SHM)."
@@ -45,18 +80,12 @@ class Command(BaseCommand):
         )
 
     def _load_fibers(self) -> list[FiberConfig]:
-        """Load fiber configs from JSON data files."""
+        """Load fiber configs from JSON data files with per-road calibration."""
         data_dir = self._get_data_dir()
 
-        fiber_files: list[tuple[str, int, float, str]] = [
-            ("carros.json", 6, 110, "high"),
-            ("promenade.json", 4, 50, "medium"),
-            ("mathis.json", 4, 90, "low"),
-        ]
-
         fibers = []
-        for filename, lanes, speed_limit, traffic_density in fiber_files:
-            path = data_dir / filename
+        for fiber_id, cfg in FIBER_CONFIGS.items():
+            path = data_dir / f"{fiber_id}.json"
             if not path.exists():
                 self.stderr.write(f"Warning: {path} not found, skipping")
                 continue
@@ -73,12 +102,21 @@ class Command(BaseCommand):
                     color=data.get("color", "#000000"),
                     coordinates=coords,
                     channel_count=len(coords),
-                    lanes=lanes,
-                    speed_limit=speed_limit,
-                    traffic_density=traffic_density,
+                    lanes=cfg["lanes"],
+                    speed_limit=cfg["speed_limit"],
+                    traffic_density=cfg["traffic_density"],
+                    typical_speed_range=cfg["typical_speed_range"],
+                    max_channel_dir0=cfg["max_channel_dir0"],
+                    max_channel_dir1=cfg["max_channel_dir1"],
                 )
             )
-            self.stdout.write(f"  Loaded {data['name']} ({len(coords)} channels)")
+            max_ch_0 = cfg["max_channel_dir0"] or len(coords)
+            max_ch_1 = cfg["max_channel_dir1"] or len(coords)
+            self.stdout.write(
+                f"  Loaded {data['name']} ({len(coords)} channels, "
+                f"dir0≤{max_ch_0}, dir1≤{max_ch_1}, "
+                f"{cfg['speed_limit']}km/h, {cfg['traffic_density']} density)"
+            )
 
         return fibers
 
