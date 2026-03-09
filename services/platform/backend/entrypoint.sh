@@ -23,6 +23,39 @@ fi
 echo "Running database migrations..."
 python manage.py migrate --noinput
 
+# Apply ClickHouse migrations (idempotent — safe to re-run on every deploy)
+echo "Applying ClickHouse migrations..."
+python -c "
+import os, glob, sys
+try:
+    import clickhouse_connect
+    client = clickhouse_connect.get_client(
+        host=os.environ.get('CLICKHOUSE_HOST', 'clickhouse'),
+        port=int(os.environ.get('CLICKHOUSE_HTTP_PORT', 8123)),
+        username=os.environ.get('CLICKHOUSE_USER', 'sequoia'),
+        password=os.environ.get('CLICKHOUSE_PASSWORD', ''),
+    )
+    migration_dir = '/infrastructure/clickhouse/migrations'
+    if not os.path.isdir(migration_dir):
+        print(f'  No migrations directory at {migration_dir}, skipping')
+        sys.exit(0)
+    for sql_file in sorted(glob.glob(os.path.join(migration_dir, '*.sql'))):
+        name = os.path.basename(sql_file)
+        with open(sql_file) as f:
+            sql = f.read()
+        for stmt in sql.split(';'):
+            stmt = stmt.strip()
+            if stmt and not stmt.startswith('--'):
+                try:
+                    client.command(stmt)
+                except Exception as e:
+                    print(f'  Warning: {name}: {e}')
+        print(f'  Applied {name}')
+    client.close()
+except Exception as e:
+    print(f'  ClickHouse migrations skipped: {e}')
+" || true
+
 # Seed users only in DEBUG mode (seed_users command enforces this internally too)
 if [ "${DJANGO_SETTINGS_MODULE}" = "sequoia.settings.dev" ]; then
     echo "Seeding development users..."
