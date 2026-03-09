@@ -5,7 +5,7 @@ import { parseDetections } from '@/lib/parseMessage'
 import { getFiberOffsetCoords } from '@/lib/geoUtils'
 import { useRealtime } from '@/hooks/useRealtime'
 import { useFlowReset } from '@/hooks/useFlowReset'
-import { fibers, fiberLineId } from '../data'
+import { fibers } from '../data'
 
 export interface VehiclePosition {
   id: string
@@ -13,15 +13,16 @@ export interface VehiclePosition {
   angle: number
   speed: number
   opacity: number
-  fiberId: string
+  fiberId: string // raw cable ID (e.g. "carros"), not the internal composite ID
+  direction: 0 | 1
   channel: number
 }
 
 interface FiberEngine {
-  fiberId: string
+  cableId: string
+  direction: 0 | 1
   engine: VehicleSimEngine
   coords: [number, number][]
-  direction: 0 | 1
   step: number
 }
 
@@ -70,10 +71,10 @@ export function useVehicleSim(): {
       })
       const coords = getFiberOffsetCoords({ ...fiber, coordinates: fiber.coordinates as [number, number][] })
       return {
-        fiberId: fiber.id,
+        cableId: fiber.parentCableId,
+        direction: fiber.direction,
         engine,
         coords,
-        direction: fiber.direction,
         step: 1,
       }
     })
@@ -86,7 +87,7 @@ export function useVehicleSim(): {
       const now = performance.now()
 
       for (const d of detections) {
-        const fe = enginesRef.current.find(e => e.fiberId === fiberLineId(d.fiberId, d.direction))
+        const fe = enginesRef.current.find(e => e.cableId === d.fiberId && e.direction === d.direction)
         if (!fe) continue
 
         const event: SensorEvent = {
@@ -126,7 +127,8 @@ export function useVehicleSim(): {
             angle: bearing,
             speed,
             opacity: track.opacity * car.opacity,
-            fiberId: fe.fiberId,
+            fiberId: fe.cableId,
+            direction: fe.direction,
             channel: Math.round(track.renderPosition),
           })
         }

@@ -9,7 +9,7 @@ export type InfrastructureType = 'bridge' | 'tunnel'
 export type Infrastructure = FiberRange & {
   type: InfrastructureType
   name: string
-  direction?: number | null // null = both directions
+  direction?: 0 | 1 | null // null = both directions
   imageUrl?: string | null
 }
 

@@ -1,10 +1,21 @@
-export type Severity = 'critical' | 'high' | 'medium' | 'low'
-export type IncidentType = 'accident' | 'congestion' | 'slowdown' | 'anomaly'
+import type { Severity, IncidentType, ProtoIncident } from '@/types/incident'
+
+export type { Severity, IncidentType, ProtoIncident }
 export type SidebarTab = 'incidents' | 'sections' | 'settings' | 'shm' | 'channel' | 'waterfall'
 
+/**
+ * A directional fiber — one direction on a physical cable.
+ *
+ * **Cable** = a physical fiber optic cable installation (e.g. "carros").
+ * Each cable produces two **Fibers**, one per direction (0 and 1).
+ *
+ * The API and domain types use the cable ID (`fiberId`) + `direction` as
+ * separate fields. Internally, each Fiber has a composite `id` ("carros:0")
+ * used only for keying caches and maps inside `data.ts`.
+ */
 export interface Fiber {
-  id: string
-  parentCableId: string
+  id: string // internal composite key ("carros:0"), not used in domain types
+  parentCableId: string // the physical cable ID ("carros"), matches API fiberId
   direction: 0 | 1
   name: string
   color: string
@@ -22,7 +33,8 @@ export interface SpeedThresholds {
 
 export interface Section {
   id: string
-  fiberId: string
+  fiberId: string // raw cable ID (e.g. "carros"), not the internal composite ID
+  direction: 0 | 1
   name: string
   startChannel: number
   endChannel: number
@@ -35,25 +47,6 @@ export interface Section {
   speedThresholds: SpeedThresholds
 }
 
-export interface Incident {
-  id: string
-  fiberId: string
-  type: IncidentType
-  severity: Severity
-  title: string
-  description: string
-  location: [number, number]
-  timestamp: string
-  resolved: boolean
-  channel: number
-  channelEnd?: number
-  status: string
-  duration?: number | null
-  speedBefore?: number | null
-  speedDuring?: number | null
-  speedDropPercent?: number | null
-}
-
 export interface TimeSeriesPoint {
   time: string
   speed?: number
@@ -62,24 +55,24 @@ export interface TimeSeriesPoint {
 }
 
 export interface PendingPoint {
-  fiberId: string
-  parentCableId: string
-  direction: number
+  fiberId: string // raw cable ID (e.g. "carros"), not the internal composite ID
+  direction: 0 | 1
   channel: number
   lng: number
   lat: number
 }
 
 export interface SelectedChannel {
-  fiberId: string
+  fiberId: string // raw cable ID (e.g. "carros"), not the internal composite ID
+  direction: 0 | 1
   channel: number
   lng: number
   lat: number
 }
 
 export interface PendingSection {
-  fiberId: string
-  direction: number
+  fiberId: string // raw cable ID (e.g. "carros"), not the internal composite ID
+  direction: 0 | 1
   startChannel: number
   endChannel: number
 }
@@ -109,7 +102,7 @@ export interface ProtoState {
   hideResolved: boolean
   sectionMetric: MetricKey
   sections: Section[]
-  incidents: Incident[]
+  incidents: ProtoIncident[]
   sectionCreationMode: boolean
   pendingPoint: PendingPoint | null
   showNamingDialog: boolean
@@ -137,7 +130,7 @@ export type ProtoAction =
   | { type: 'ENTER_SECTION_CREATION' }
   | { type: 'EXIT_SECTION_CREATION' }
   | { type: 'SET_PENDING_POINT'; point: PendingPoint }
-  | { type: 'OPEN_NAMING_DIALOG'; fiberId: string; direction: number; startChannel: number; endChannel: number }
+  | { type: 'OPEN_NAMING_DIALOG'; fiberId: string; direction: 0 | 1; startChannel: number; endChannel: number }
   | { type: 'CLOSE_NAMING_DIALOG' }
   | { type: 'CREATE_SECTION'; section: Section }
   | { type: 'DELETE_SECTION'; id: string }
@@ -153,7 +146,7 @@ export type ProtoAction =
   | { type: 'TOGGLE_STRUCTURES_ON_MAP' }
   | { type: 'TOGGLE_STRUCTURE_LABELS' }
   | { type: 'SELECT_CHANNEL'; channel: SelectedChannel }
-  | { type: 'SET_INCIDENTS'; incidents: Incident[] }
+  | { type: 'SET_INCIDENTS'; incidents: ProtoIncident[] }
   | { type: 'SET_SECTIONS'; sections: Section[] }
   | { type: 'TOGGLE_HIDE_RESOLVED' }
   | { type: 'TOGGLE_INCIDENTS_ON_MAP' }

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle, memo } from 'react'
+import { useEffect, useRef, useCallback, useMemo, forwardRef, useImperativeHandle, memo } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { MapboxOverlay } from '@deck.gl/mapbox'
@@ -14,10 +14,11 @@ import {
   getSpeedColor,
   getSectionCoords,
   getSpeedColorRGBA,
-  fiberLineId,
+  findFiber,
+  getFiberColor,
   channelToCoord,
 } from '../data'
-import type { Section, PendingPoint, LiveSectionStats, SpeedThresholds, Incident } from '../types'
+import type { Fiber, Section, PendingPoint, LiveSectionStats, SpeedThresholds, ProtoIncident } from '../types'
 import type { Infrastructure } from '@/types/infrastructure'
 import type { VehiclePosition } from '../hooks/useVehicleSim'
 
@@ -32,7 +33,7 @@ export interface PrototypeMapHandle {
 }
 
 interface PrototypeMapProps {
-  incidents?: Incident[]
+  incidents?: ProtoIncident[]
   onIncidentClick?: (id: string) => void
   onMapClick?: () => void
   sectionCreationMode?: boolean
@@ -40,13 +41,13 @@ interface PrototypeMapProps {
   sections?: Section[]
   selectedSectionId?: string | null
   onFiberClick?: (point: PendingPoint) => void
-  onSectionComplete?: (fiberId: string, direction: number, startChannel: number, endChannel: number) => void
+  onSectionComplete?: (fiberId: string, direction: 0 | 1, startChannel: number, endChannel: number) => void
   buildVehicleGeoJSON?: () => GeoJSON.FeatureCollection
   tickAndCollect?: (now: number, deltaMs: number) => VehiclePosition[]
   displayMode?: 'dots' | 'vehicles'
   liveStats?: Map<string, LiveSectionStats>
   onOverviewChange?: (isOverview: boolean) => void
-  thresholdLookup?: (fiberId: string, channel: number) => SpeedThresholds
+  thresholdLookup?: (cableId: string, direction: 0 | 1, channel: number) => SpeedThresholds
   fiberColors?: Record<string, string>
   structures?: Infrastructure[]
   structureStatuses?: Map<string, import('@/types/infrastructure').SHMStatus>
@@ -64,8 +65,7 @@ interface PrototypeMapProps {
 function findNearestFiberPoint(lngLat: [number, number], maxDistDeg = 0.003) {
   let best: {
     fiberId: string
-    parentCableId: string
-    direction: number
+    direction: 0 | 1
     channel: number
     dist: number
     coord: [number, number]
@@ -84,8 +84,7 @@ function findNearestFiberPoint(lngLat: [number, number], maxDistDeg = 0.003) {
       const dist = Math.sqrt(dx * dx + dy * dy)
       if (dist < maxDistDeg && (!best || dist < best.dist)) {
         best = {
-          fiberId: fiber.id,
-          parentCableId: fiber.parentCableId,
+          fiberId: fiber.parentCableId,
           direction: fiber.direction,
           channel: ch,
           dist,
@@ -98,7 +97,6 @@ function findNearestFiberPoint(lngLat: [number, number], maxDistDeg = 0.003) {
   if (!best) return null
   return {
     fiberId: best.fiberId,
-    parentCableId: best.parentCableId,
     direction: best.direction,
     channel: best.channel,
     lng: best.coord[0],
@@ -188,6 +186,18 @@ export const PrototypeMap = memo(
 
     const sectionsRef = useRef(sections)
     sectionsRef.current = sections
+
+    // Pre-resolve fibers for sections once (avoids per-section findFiber in hot loops)
+    const sectionFibersRef = useRef(new Map<string, Fiber>())
+    const sectionFibers = useMemo(() => {
+      const m = new Map<string, Fiber>()
+      for (const sec of sections ?? []) {
+        const f = findFiber(sec.fiberId, sec.direction)
+        if (f) m.set(sec.id, f)
+      }
+      return m
+    }, [sections])
+    sectionFibersRef.current = sectionFibers
 
     const thresholdLookupRef = useRef(thresholdLookup)
     thresholdLookupRef.current = thresholdLookup
@@ -282,9 +292,11 @@ export const PrototypeMap = memo(
         clearHighlightImpl()
         const sec = sectionsRef.current?.find(s => s.id === sectionId)
         if (!sec) return
-        const coords = getSectionCoords(sec.fiberId, sec.startChannel, sec.endChannel)
+        const secFiber = findFiber(sec.fiberId, sec.direction)
+        if (!secFiber) return
+        const coords = getSectionCoords(secFiber, sec.startChannel, sec.endChannel)
         if (coords.length < 2) return
-        const color = fiberColorsRef.current?.[sec.fiberId] ?? fibers.find(f => f.id === sec.fiberId)?.color ?? '#888'
+        const color = fiberColorsRef.current ? getFiberColor(secFiber, fiberColorsRef.current) : '#888'
         const src = map.getSource('hover-highlight') as mapboxgl.GeoJSONSource | undefined
         src?.setData({
           type: 'FeatureCollection',
@@ -320,8 +332,8 @@ export const PrototypeMap = memo(
         clearHighlightImpl()
         const structure = structures.find(s => s.id === structureId)
         if (!structure) return
-        const dirFiber = fiberLineId(structure.fiberId, structure.direction ?? 0)
-        const coords = getSectionCoords(dirFiber, structure.startChannel, structure.endChannel)
+        const sFiber = findFiber(structure.fiberId, structure.direction ?? 0)
+        const coords = sFiber ? getSectionCoords(sFiber, structure.startChannel, structure.endChannel) : []
         if (coords.length < 2) return
         const typeColor = structure.type === 'bridge' ? '#f59e0b' : '#6366f1'
         const src = map.getSource('hover-highlight') as mapboxgl.GeoJSONSource | undefined
@@ -668,13 +680,13 @@ export const PrototypeMap = memo(
           if (!pending) {
             handlersRef.current.onFiberClick?.(hit)
           } else {
-            if (hit.parentCableId !== pending.parentCableId) return
+            if (hit.fiberId !== pending.fiberId) return
 
             const start = Math.min(pending.channel, hit.channel)
             const end = Math.max(pending.channel, hit.channel)
             if (end - start < 10) return
 
-            handlersRef.current.onSectionComplete?.(pending.parentCableId, pending.direction, start, end)
+            handlersRef.current.onSectionComplete?.(pending.fiberId, pending.direction, start, end)
           }
         })
 
@@ -688,17 +700,16 @@ export const PrototypeMap = memo(
           const sectionSource = map.getSource('pending-section') as mapboxgl.GeoJSONSource | undefined
           if (!sectionSource) return
 
-          if (!hit || hit.parentCableId !== pending.parentCableId) {
+          if (!hit || hit.fiberId !== pending.fiberId) {
             sectionSource.setData({ type: 'FeatureCollection', features: [] })
             return
           }
 
-          const fiber = fibers.find(f => f.id === pending.fiberId)
-          if (!fiber) return
+          const pendingFiber = findFiber(pending.fiberId, pending.direction)
+          if (!pendingFiber) return
           const start = Math.min(pending.channel, hit.channel)
           const end = Math.max(pending.channel, hit.channel)
-          const slice = fiber.coordinates.slice(start, end + 1)
-          const coords = slice.filter(c => c[0] != null && c[1] != null)
+          const coords = getSectionCoords(pendingFiber, start, end)
           if (coords.length < 2) {
             sectionSource.setData({ type: 'FeatureCollection', features: [] })
             return
@@ -769,9 +780,12 @@ export const PrototypeMap = memo(
           if (key === lastSpeedSectionsKey) return // no change, skip allocation
           lastSpeedSectionsKey = key
 
+          const fiberMap = sectionFibersRef.current
           const features = secs
             .map(sec => {
-              const coords = getSectionCoords(sec.fiberId, sec.startChannel, sec.endChannel)
+              const secFiber = fiberMap.get(sec.id)
+              if (!secFiber) return null
+              const coords = getSectionCoords(secFiber, sec.startChannel, sec.endChannel)
               if (coords.length < 2) return null
               const live = stats?.get(sec.id)
               const speed = live?.avgSpeed != null ? live.avgSpeed : sec.avgSpeed
@@ -822,7 +836,7 @@ export const PrototypeMap = memo(
                 if (lookup) {
                   for (const f of geojson.features) {
                     const p = f.properties!
-                    const t = lookup(fiberLineId(p.fiberId, p.direction), p.channel)
+                    const t = lookup(p.fiberId, p.direction, p.channel)
                     p.color = getSpeedColor(p.speed, t)
                   }
                 } else {
@@ -859,7 +873,7 @@ export const PrototypeMap = memo(
                 getPosition,
                 getColor: (d: VehiclePosition) => {
                   const lookup = thresholdLookupRef.current
-                  const t = lookup?.(d.fiberId, d.channel)
+                  const t = lookup?.(d.fiberId, d.direction, d.channel)
                   return getSpeedColorRGBA(d.speed, d.opacity, t)
                 },
                 getOrientation,
@@ -957,16 +971,19 @@ export const PrototypeMap = memo(
     }, [])
 
     // ── Update section highlights when sections change ────────────
-    const updateSectionHighlights = useCallback((map: mapboxgl.Map, secs: Section[]) => {
+    function updateSectionHighlights(map: mapboxgl.Map, secs: Section[]) {
       const source = map.getSource('section-highlights') as mapboxgl.GeoJSONSource | undefined
       if (!source) return
       const colors = fiberColorsRef.current
+      const fiberMap = sectionFibersRef.current
 
       const features = secs
         .map(sec => {
-          const coords = getSectionCoords(sec.fiberId, sec.startChannel, sec.endChannel)
+          const sf = fiberMap.get(sec.id)
+          if (!sf) return null
+          const coords = getSectionCoords(sf, sec.startChannel, sec.endChannel)
           if (coords.length < 2) return null
-          const color = colors?.[sec.fiberId] ?? fibers.find(f => f.id === sec.fiberId)?.color ?? '#888'
+          const color = colors ? getFiberColor(sf, colors) : (sf.color ?? '#888')
 
           return {
             type: 'Feature' as const,
@@ -977,7 +994,7 @@ export const PrototypeMap = memo(
         .filter(Boolean)
 
       source.setData({ type: 'FeatureCollection', features: features as GeoJSON.Feature[] })
-    }, [])
+    }
 
     useEffect(() => {
       const map = mapRef.current
@@ -995,7 +1012,7 @@ export const PrototypeMap = memo(
       return () => {
         map.off('idle', onIdle)
       }
-    }, [sections, updateSectionHighlights, fiberColors])
+    }, [sections, fiberColors])
 
     // ── Update pending point marker ──────────────────────────────
     useEffect(() => {
@@ -1045,7 +1062,7 @@ export const PrototypeMap = memo(
       if (!src) return
       const features = fibers.map(fiber => ({
         type: 'Feature' as const,
-        properties: { id: fiber.id, name: fiber.name, color: fiberColors[fiber.id] ?? fiber.color },
+        properties: { id: fiber.id, name: fiber.name, color: getFiberColor(fiber, fiberColors) },
         geometry: { type: 'LineString' as const, coordinates: fiberOffsetCache.get(fiber.id)! },
       }))
       src.setData({ type: 'FeatureCollection', features })
@@ -1067,8 +1084,8 @@ export const PrototypeMap = memo(
 
         const features = structures
           .map(s => {
-            const dirFiber = fiberLineId(s.fiberId, s.direction ?? 0)
-            const coords = getSectionCoords(dirFiber, s.startChannel, s.endChannel)
+            const sFiber = findFiber(s.fiberId, s.direction ?? 0)
+            const coords = sFiber ? getSectionCoords(sFiber, s.startChannel, s.endChannel) : []
             if (coords.length < 2) return null
             const color = s.type === 'bridge' ? '#f59e0b' : '#6366f1'
             return {
@@ -1103,9 +1120,9 @@ export const PrototypeMap = memo(
       const shmStatusColors: Record<string, string> = { nominal: '#22c55e', warning: '#f59e0b', critical: '#ef4444' }
 
       for (const s of structures) {
-        const dirFiber = fiberLineId(s.fiberId, s.direction ?? 0)
+        const sFiber = findFiber(s.fiberId, s.direction ?? 0)
         const midChannel = Math.floor((s.startChannel + s.endChannel) / 2)
-        const coord = channelToCoord(dirFiber, midChannel)
+        const coord = sFiber ? channelToCoord(sFiber, midChannel) : null
         if (!coord) continue
 
         const status = structureStatuses?.get(s.id)

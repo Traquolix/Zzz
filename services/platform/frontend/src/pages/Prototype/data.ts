@@ -81,30 +81,38 @@ export function getSpeedColorRGBA(
   return [239, 68, 68, a] // red
 }
 
-/** Build a lookup to find which section a (fiberId, channel) belongs to, returning its thresholds. */
+/** Build a lookup to find which section a (cableId, direction, channel) belongs to, returning its thresholds. */
 export function buildThresholdLookup(
   sections: Section[],
   fiberThresholds: Record<string, SpeedThresholds>,
-): (fiberId: string, channel: number) => SpeedThresholds {
-  // Sort sections by fiberId for grouped lookup
-  const byFiber = new Map<string, { start: number; end: number; thresholds: SpeedThresholds }[]>()
+): (cableId: string, direction: 0 | 1, channel: number) => SpeedThresholds {
+  type SectionRange = { start: number; end: number; thresholds: SpeedThresholds }
+  const byCable = new Map<string, Map<number, { ranges: SectionRange[]; fallback: SpeedThresholds }>>()
+
   for (const sec of sections) {
-    let list = byFiber.get(sec.fiberId)
-    if (!list) {
-      list = []
-      byFiber.set(sec.fiberId, list)
+    let byDir = byCable.get(sec.fiberId)
+    if (!byDir) {
+      byDir = new Map()
+      byCable.set(sec.fiberId, byDir)
     }
-    list.push({ start: sec.startChannel, end: sec.endChannel, thresholds: sec.speedThresholds })
+    let entry = byDir.get(sec.direction)
+    if (!entry) {
+      const fid = findFiber(sec.fiberId, sec.direction)?.id ?? ''
+      entry = { ranges: [], fallback: fiberThresholds[fid] ?? defaultSpeedThresholds }
+      byDir.set(sec.direction, entry)
+    }
+    entry.ranges.push({ start: sec.startChannel, end: sec.endChannel, thresholds: sec.speedThresholds })
   }
 
-  return (fiberId: string, channel: number): SpeedThresholds => {
-    const list = byFiber.get(fiberId)
-    if (list) {
-      for (const s of list) {
+  return (cableId: string, direction: 0 | 1, channel: number): SpeedThresholds => {
+    const entry = byCable.get(cableId)?.get(direction)
+    if (entry) {
+      for (const s of entry.ranges) {
         if (channel >= s.start && channel <= s.end) return s.thresholds
       }
+      return entry.fallback
     }
-    return fiberThresholds[fiberId] ?? defaultSpeedThresholds
+    return defaultSpeedThresholds
   }
 }
 
@@ -131,14 +139,27 @@ for (const fiber of fibers) {
   }
 }
 
-/** Construct the internal directional fiber ID from a plain fiberId + direction. */
-export function fiberLineId(fiberId: string, direction: number): string {
-  return `${fiberId}:${direction}`
+const fiberIndex = new Map<string, Map<number, Fiber>>()
+for (const f of fibers) {
+  let byDir = fiberIndex.get(f.parentCableId)
+  if (!byDir) {
+    byDir = new Map()
+    fiberIndex.set(f.parentCableId, byDir)
+  }
+  byDir.set(f.direction, f)
 }
 
-export function channelToCoord(fiberLine: string, channel: number): [number, number] | null {
-  const fiber = fibers.find(f => f.id === fiberLine)
-  if (!fiber) return null
+/** Find the directional fiber entry for a cable ID + direction. */
+export function findFiber(cableId: string, direction: number): Fiber | undefined {
+  return fiberIndex.get(cableId)?.get(direction)
+}
+
+/** Get the display color for a fiber, checking user overrides first. */
+export function getFiberColor(fiber: Fiber, fiberColors: Record<string, string>): string {
+  return fiberColors[fiber.id] ?? fiber.color
+}
+
+export function channelToCoord(fiber: Fiber, channel: number): [number, number] | null {
   if (channel < 0 || channel >= fiber.coordinates.length) return null
 
   if (fiber.coordsPrecomputed) {
@@ -162,18 +183,15 @@ export function channelToCoord(fiberLine: string, channel: number): [number, num
  *  For non-precomputed fibers (Mathis/Promenade), maps through the offset cache
  *  so the coords land on the directional line, not the center-line.
  */
-export function getSectionCoords(fiberId: string, startChannel: number, endChannel: number): [number, number][] {
-  const fiber = fibers.find(f => f.id === fiberId)
-  if (!fiber) return []
-
+export function getSectionCoords(fiber: Fiber, startChannel: number, endChannel: number): [number, number][] {
   if (fiber.coordsPrecomputed) {
     const slice = fiber.coordinates.slice(startChannel, endChannel + 1)
     return slice.filter(c => c[0] != null && c[1] != null) as [number, number][]
   }
 
   // Non-precomputed: map each channel to offset index, then look up offset coords
-  const idxMap = channelToOffsetIndex.get(fiberId)
-  const offsetCoords = fiberOffsetCache.get(fiberId)
+  const idxMap = channelToOffsetIndex.get(fiber.id)
+  const offsetCoords = fiberOffsetCache.get(fiber.id)
   if (!idxMap || !offsetCoords) return []
 
   const result: [number, number][] = []

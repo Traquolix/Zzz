@@ -3,11 +3,20 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import { severityColor, fibers, getSpeedColor, chartColors, defaultSpeedThresholds, fiberLineId } from '../data'
+import {
+  severityColor,
+  fibers,
+  getSpeedColor,
+  chartColors,
+  defaultSpeedThresholds,
+  findFiber,
+  getFiberColor,
+} from '../data'
 import { useIncidentSnapshot } from '@/hooks/useIncidentSnapshot'
 import { fetchSectionHistory } from '@/api/sections'
-import type { Incident } from '../types'
 import type {
+  Fiber,
+  ProtoIncident,
   ProtoState,
   ProtoAction,
   Severity,
@@ -733,34 +742,34 @@ const ChannelIcon = () => (
 
 // ── Waterfall panel ─────────────────────────────────────────────────────
 
-const FIBER_OPTIONS = fibers
-  .filter(
-    (_, i, arr) => i === arr.findIndex(f2 => f2.parentCableId === _.parentCableId && f2.direction === _.direction),
-  )
-  .map(f => ({ id: f.id, label: `${f.name}:${f.direction}` }))
-
 function WaterfallPanel() {
-  const [fiberId, setFiberId] = useState(FIBER_OPTIONS[0]?.id ?? '')
+  // NOTE: index-based selection assumes `fibers` is a static array.
+  // If fibers become dynamic (TTL/hot-reload), switch to keying by fiber ID.
+  const [selectedIndex, setSelectedIndex] = useState(0)
   const [windowMs, setWindowMs] = useState(120_000)
 
-  const fiber = fibers.find(f => f.id === fiberId)
+  const fiber = fibers[selectedIndex] ?? fibers[0]
   const minChannel = 0
   const maxChannel = (fiber?.totalChannels ?? 500) - 1
 
-  const { dotsRef, dirtyRef, prune, lastTsRef } = useWaterfallBuffer(fiberId, windowMs)
+  const { dotsRef, dirtyRef, prune, lastTsRef } = useWaterfallBuffer(
+    fiber?.parentCableId ?? '',
+    fiber?.direction ?? 0,
+    windowMs,
+  )
 
   return (
     <div className="flex flex-col h-full">
       {/* Controls */}
       <div className="flex items-center gap-2 px-4 py-2 border-b border-[var(--proto-border)]">
         <select
-          value={fiberId}
-          onChange={e => setFiberId(e.target.value)}
+          value={selectedIndex}
+          onChange={e => setSelectedIndex(Number(e.target.value))}
           className="text-xs px-2 py-1 rounded bg-[var(--proto-base)] border border-[var(--proto-border)] text-[var(--proto-text)] outline-none"
         >
-          {FIBER_OPTIONS.map(f => (
-            <option key={f.id} value={f.id}>
-              {f.label}
+          {fibers.map((f, i) => (
+            <option key={f.id} value={i}>
+              {f.name}:{f.direction}
             </option>
           ))}
         </select>
@@ -828,13 +837,17 @@ function ChannelDetail({
   dispatch: React.Dispatch<ProtoAction>
   fiberColors: Record<string, string>
 }) {
-  const fiber = fibers.find(f => f.id === channel.fiberId)
-  const fiberColor = fiberColors[channel.fiberId] ?? fiber?.color ?? '#6366f1'
+  const fiber = findFiber(channel.fiberId, channel.direction)
+  const fiberColor = fiber ? getFiberColor(fiber, fiberColors) : '#6366f1'
   const directionLabel = fiber?.direction === 0 ? 'Dir A' : 'Dir B'
 
   // Find sections containing this channel
   const containingSections = sections.filter(
-    s => s.fiberId === channel.fiberId && channel.channel >= s.startChannel && channel.channel <= s.endChannel,
+    s =>
+      s.fiberId === channel.fiberId &&
+      s.direction === channel.direction &&
+      channel.channel >= s.startChannel &&
+      channel.channel <= s.endChannel,
   )
 
   // Live speed data from WebSocket
@@ -862,13 +875,13 @@ function ChannelDetail({
       const now = Date.now()
 
       for (const d of detections) {
-        if (fiberLineId(d.fiberId, d.direction) !== channel.fiberId) continue
+        if (d.fiberId !== channel.fiberId || d.direction !== channel.direction) continue
         if (Math.abs(d.channel - channel.channel) > NEIGHBOR_RANGE) continue
         dotsRef.current.push({ time: now, speed: d.speed })
       }
     })
     return unsub
-  }, [subscribe, channel.fiberId, channel.channel])
+  }, [subscribe, channel.fiberId, channel.direction, channel.channel])
 
   // Canvas render loop + stats update
   useEffect(() => {
@@ -1028,7 +1041,8 @@ function ChannelDetail({
           {containingSections.length > 0 ? (
             <div className="flex flex-col gap-1.5">
               {containingSections.map(sec => {
-                const secColor = fiberColors[sec.fiberId] ?? fiber?.color ?? '#888'
+                const secFiber = findFiber(sec.fiberId, sec.direction)
+                const secColor = secFiber ? getFiberColor(secFiber, fiberColors) : '#888'
                 return (
                   <button
                     key={sec.id}
@@ -1066,7 +1080,7 @@ function IncidentList({
   unseenIds,
   onMarkSeen,
 }: {
-  incidents: Incident[]
+  incidents: ProtoIncident[]
   filterSeverity: Severity | null
   hideResolved: boolean
   sortBy: 'newest' | 'oldest'
@@ -1080,8 +1094,8 @@ function IncidentList({
   if (hideResolved) filtered = filtered.filter(i => !i.resolved)
 
   const sorted = [...filtered].sort((a, b) => {
-    const ta = new Date(a.timestamp).getTime()
-    const tb = new Date(b.timestamp).getTime()
+    const ta = new Date(a.detectedAt).getTime()
+    const tb = new Date(b.detectedAt).getTime()
     return sortBy === 'newest' ? tb - ta : ta - tb
   })
 
@@ -1116,7 +1130,7 @@ function IncidentList({
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm text-[var(--proto-text)] font-medium truncate">{inc.title}</span>
                     <span className="shrink-0 text-xs tabular-nums text-[var(--proto-text-secondary)]">
-                      {new Date(inc.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(inc.detectedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 text-[11px] text-[var(--proto-text-muted)] mt-0.5">
@@ -1125,7 +1139,7 @@ function IncidentList({
                       {inc.channelEnd && inc.channelEnd !== inc.channel ? `–${inc.channelEnd}` : ''}
                     </span>
                     <span className="opacity-40">·</span>
-                    <span>{new Date(inc.timestamp).toLocaleDateString([], { day: 'numeric', month: 'short' })}</span>
+                    <span>{new Date(inc.detectedAt).toLocaleDateString([], { day: 'numeric', month: 'short' })}</span>
                     {inc.resolved && (
                       <>
                         <span className="opacity-40">·</span>
@@ -1175,7 +1189,7 @@ function SectionList({
       ) : (
         <div className="flex flex-col px-3 py-1">
           {sections.map(section => {
-            const fiber = fibers.find(f => f.id === section.fiberId)
+            const fiber = findFiber(section.fiberId, section.direction)
             const live = liveStats.get(section.id)
             const liveSeries = liveSeriesData.get(section.id)
 
@@ -1208,7 +1222,7 @@ function SectionList({
                   <div className="flex items-center gap-2 mb-1">
                     <span
                       className="shrink-0 w-2 h-2 rounded-full"
-                      style={{ backgroundColor: fiberColors[section.fiberId] ?? fiber?.color }}
+                      style={{ backgroundColor: fiber ? getFiberColor(fiber, fiberColors) : undefined }}
                     />
                     <span className="text-sm text-[var(--proto-text)] font-medium truncate">{section.name}</span>
                   </div>
@@ -1260,7 +1274,7 @@ function IncidentDetail({
   dispatch,
   onBack,
 }: {
-  incident: Incident
+  incident: ProtoIncident
   sections: Section[]
   dispatch: React.Dispatch<ProtoAction>
   onBack: () => void
@@ -1269,7 +1283,11 @@ function IncidentDetail({
 
   // Find containing section by channel range
   const relatedSection = sections.find(
-    s => s.fiberId === incident.fiberId && incident.channel >= s.startChannel && incident.channel <= s.endChannel,
+    s =>
+      s.fiberId === incident.fiberId &&
+      s.direction === incident.direction &&
+      incident.channel >= s.startChannel &&
+      incident.channel <= s.endChannel,
   )
 
   // Fetch snapshot data from API — polls every 1s until snapshot is complete
@@ -1382,7 +1400,7 @@ function IncidentDetail({
               Type: <span className="capitalize">{incident.type}</span>
             </span>
             <span>
-              Time: {new Date(incident.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              Time: {new Date(incident.detectedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
             <span>
               Location: {incident.location[1].toFixed(4)}N, {incident.location[0].toFixed(4)}E
@@ -1431,7 +1449,7 @@ function IncidentDetail({
           ) : snapshotData ? (
             <TimeSeriesChart
               data={snapshotData}
-              incidentTime={new Date(incident.timestamp).toLocaleTimeString([], {
+              incidentTime={new Date(incident.detectedAt).toLocaleTimeString([], {
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit',
@@ -1696,14 +1714,14 @@ function SettingsPanel({
 
   // Group fibers by cable
   const cableGroups = useMemo(() => {
-    const map = new Map<string, { name: string; fibers: { id: string; direction: 0 | 1 }[] }>()
+    const map = new Map<string, { name: string; fibers: Fiber[] }>()
     for (const f of fibers) {
       let group = map.get(f.parentCableId)
       if (!group) {
         group = { name: f.name, fibers: [] }
         map.set(f.parentCableId, group)
       }
-      group.fibers.push({ id: f.id, direction: f.direction })
+      group.fibers.push(f)
     }
     return [...map.entries()]
   }, [])
@@ -1751,8 +1769,7 @@ function SettingsPanel({
         Default speed thresholds per fiber. Sections inherit these unless overridden.
       </div>
       {cableGroups.map(([cableId, group]) => {
-        const fiberId0 = `${cableId}:0`
-        const current = fiberThresholds[fiberId0] ?? defaultSpeedThresholds
+        const current = fiberThresholds[group.fibers[0].id] ?? defaultSpeedThresholds
 
         return (
           <div key={cableId} className="flex flex-col gap-2">
@@ -1765,7 +1782,7 @@ function SettingsPanel({
                 <FiberColorDot
                   key={f.id}
                   direction={f.direction}
-                  color={fiberColors[f.id] ?? '#888'}
+                  color={getFiberColor(f, fiberColors)}
                   isPickerOpen={colorPickerOpen === f.id}
                   onTogglePicker={() => setColorPickerOpen(colorPickerOpen === f.id ? null : f.id)}
                   onSelect={c => dispatch({ type: 'SET_FIBER_COLOR', fiberId: f.id, color: c })}
@@ -1835,8 +1852,8 @@ function SectionDetail({
   dispatch: React.Dispatch<ProtoAction>
   fiberColors: Record<string, string>
 }) {
-  const fiber = fibers.find(f => f.id === section.fiberId)
-  const fiberColor = fiberColors[section.fiberId] ?? fiber?.color ?? '#6366f1'
+  const fiber = findFiber(section.fiberId, section.direction)
+  const fiberColor = fiber ? getFiberColor(fiber, fiberColors) : '#6366f1'
 
   const live = liveStats.get(section.id)
   const liveSeries = liveSeriesData.get(section.id)
@@ -2076,8 +2093,7 @@ function StructureList({
   const q = search.toLowerCase()
   const filtered = q
     ? structures.filter(s => {
-        const dirFiber = fiberLineId(s.fiberId, s.direction ?? 0)
-        const fiberName = fibers.find(f => f.id === dirFiber)?.name ?? s.fiberId
+        const fiberName = findFiber(s.fiberId, s.direction ?? 0)?.name ?? s.fiberId
         return (
           s.name.toLowerCase().includes(q) || s.type.toLowerCase().includes(q) || fiberName.toLowerCase().includes(q)
         )
@@ -2093,8 +2109,7 @@ function StructureList({
       ) : (
         filtered.map(structure => {
           const typeStyle = structureTypeColors[structure.type] ?? structureTypeColors.bridge
-          const dirFiber = fiberLineId(structure.fiberId, structure.direction ?? 0)
-          const fiber = fibers.find(f => f.id === dirFiber)
+          const fiber = findFiber(structure.fiberId, structure.direction ?? 0)
           const status = allStatuses.get(structure.id)
           const dotColor = status ? (statusColors[status.status] ?? '#64748b') : '#64748b'
 
@@ -2204,8 +2219,7 @@ function StructureDetail({
   }
 
   const typeStyle = structureTypeColors[structure.type] ?? structureTypeColors.bridge
-  const dirFiber = fiberLineId(structure.fiberId, structure.direction ?? 0)
-  const fiber = fibers.find(f => f.id === dirFiber)
+  const fiber = findFiber(structure.fiberId, structure.direction ?? 0)
   const statusColor = shmStatus ? (statusColors[shmStatus.status] ?? statusColors.nominal) : '#64748b'
 
   const kpis = [

@@ -2,7 +2,7 @@ import { useRef, useEffect, useCallback } from 'react'
 import { useRealtime } from '@/hooks/useRealtime'
 import { useFlowReset } from '@/hooks/useFlowReset'
 import { parseDetections } from '@/lib/parseMessage'
-import { channelToCoord, fiberLineId } from '../data'
+import { channelToCoord, findFiber } from '../data'
 
 interface LiveDot {
   lng: number
@@ -10,7 +10,7 @@ interface LiveDot {
   speed: number
   ts: number
   fiberId: string
-  direction: number
+  direction: 0 | 1
   channel: number
 }
 
@@ -49,11 +49,12 @@ export function useDetections() {
         if (d.timestamp > lastDetectionTsRef.current) {
           lastDetectionTsRef.current = d.timestamp
         }
-        const flId = fiberLineId(d.fiberId, d.direction)
-        const coord = channelToCoord(flId, d.channel)
+        const fiber = findFiber(d.fiberId, d.direction)
+        if (!fiber) continue
+        const coord = channelToCoord(fiber, d.channel)
         if (!coord) continue
 
-        keyParts[0] = flId
+        keyParts[0] = fiber.id
         keyParts[2] = String(d.channel)
         const key = keyParts.join('')
 
