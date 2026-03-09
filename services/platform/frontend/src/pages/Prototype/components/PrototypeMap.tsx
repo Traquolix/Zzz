@@ -8,6 +8,7 @@ import { MAPBOX_TOKEN } from '@/config/mapbox'
 import {
   fibers,
   fiberOffsetCache,
+  offsetIndexToChannel,
   severityColor,
   MAP_CENTER,
   MAP_ZOOM,
@@ -76,8 +77,12 @@ function findNearestFiberPoint(lngLat: [number, number], maxDistDeg = 0.003) {
     // lands on the visible line rather than the shared cable centerline.
     const offsetCoords = fiberOffsetCache.get(fiber.id)
     const coords = offsetCoords ?? fiber.coordinates
-    for (let ch = 0; ch < coords.length; ch++) {
-      const c = coords[ch]
+    // The offset cache is null-filtered and shorter than fiber.coordinates,
+    // so the loop index is NOT the real channel number. Use the reverse map
+    // to translate offset index → real channel.
+    const reverseMap = offsetIndexToChannel.get(fiber.id)
+    for (let i = 0; i < coords.length; i++) {
+      const c = coords[i]
       if (c[0] == null || c[1] == null) continue
       const dx = c[0] - lngLat[0]
       const dy = c[1] - lngLat[1]
@@ -86,7 +91,7 @@ function findNearestFiberPoint(lngLat: [number, number], maxDistDeg = 0.003) {
         best = {
           fiberId: fiber.parentCableId,
           direction: fiber.direction,
-          channel: ch,
+          channel: reverseMap ? reverseMap[i] : i,
           dist,
           coord: c as [number, number],
         }
