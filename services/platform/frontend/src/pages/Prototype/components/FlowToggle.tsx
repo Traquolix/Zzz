@@ -4,13 +4,14 @@ import type { DataFlow } from '@/context/RealtimeContext'
 
 interface FlowToggleProps {
   flow: DataFlow
+  switchingFlow?: boolean
   availableFlows: DataFlow[]
   onToggle: (flow: DataFlow) => void
 }
 
 const flowKeys: Record<DataFlow, string> = { live: 'flow.live', sim: 'flow.sim' }
 
-export function FlowToggle({ flow, availableFlows, onToggle }: FlowToggleProps) {
+export function FlowToggle({ flow, switchingFlow, availableFlows, onToggle }: FlowToggleProps) {
   const { t } = useTranslation()
   const options: DataFlow[] = ['live', 'sim']
 
@@ -18,7 +19,7 @@ export function FlowToggle({ flow, availableFlows, onToggle }: FlowToggleProps) 
     <div className="inline-flex rounded-md bg-[var(--proto-surface)] border border-[var(--proto-border)] p-0.5 gap-0.5">
       {options.map(opt => {
         const active = flow === opt
-        const disabled = !availableFlows.includes(opt)
+        const disabled = !availableFlows.includes(opt) || switchingFlow
         const label = t(flowKeys[opt])
         return (
           <button
@@ -31,6 +32,7 @@ export function FlowToggle({ flow, availableFlows, onToggle }: FlowToggleProps) 
               active && 'bg-[var(--proto-surface-raised)] text-[var(--proto-text)]',
               !active && !disabled && 'text-[var(--proto-text-secondary)] hover:text-[var(--proto-text)]',
               disabled && 'text-[var(--proto-text-muted)] opacity-40 cursor-not-allowed',
+              switchingFlow && 'opacity-60',
             )}
           >
             {opt === 'live' && (
