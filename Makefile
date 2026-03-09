@@ -178,7 +178,7 @@ shell: ## Open a shell in a service container (usage: make shell SERVICE=platfor
 # Local Development
 # ---------------------------------------------------------------------------
 dev: dev-deps ## Start backend + frontend for local development (auto-setup on first run)
-	@trap 'echo ""; echo "==> Shutting down..."; kill 0; docker compose stop postgres clickhouse redis 2>/dev/null' EXIT; \
+	@trap 'echo ""; echo "==> Shutting down..."; docker compose stop postgres clickhouse redis 2>/dev/null; kill 0' EXIT; \
 	$(MAKE) dev-backend & \
 	$(MAKE) dev-frontend & \
 	wait
