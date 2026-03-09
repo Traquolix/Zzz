@@ -816,7 +816,7 @@ export const PrototypeMap = memo(
                 if (lookup) {
                   for (const f of geojson.features) {
                     const p = f.properties!
-                    const t = lookup(`${p.fiberId}:${p.direction}`, p.channel)
+                    const t = lookup(fiberLineId(p.fiberId, p.direction), p.channel)
                     p.color = getSpeedColor(p.speed, t)
                   }
                 } else {

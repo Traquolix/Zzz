@@ -272,7 +272,7 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
     # State for incident polling and SHM
     shm_state: dict[str, dict] = {}
     last_incident_check = time.time()
-    known_incident_ids: dict[str, str] = {}  # {incident_id: fiberId}
+    known_incident_ids: dict[str, tuple[str, int]] = {}  # {incident_id: (fiberId, direction)}
     last_shm_broadcast: float = 0
     last_batch_cleanup: float = 0
     last_kafka_flag_refresh: float = time.time()
@@ -397,9 +397,9 @@ async def _poll_incidents(
     new incidents and resolutions.
 
     Args:
-        known_incidents: Dict of {incident_id: fiberId} for currently tracked
-            incidents. Stores fiberId so resolved notifications can be routed
-            to the correct org groups.
+        known_incidents: Dict of {incident_id: (fiberId, direction)} for currently
+            tracked incidents. Stores both so resolved notifications include the
+            correct direction for frontend placement.
     """
     from apps.monitoring.incident_service import query_active_raw
     from apps.shared.exceptions import ClickHouseUnavailableError
@@ -410,11 +410,11 @@ async def _poll_incidents(
         logger.debug("ClickHouse unavailable for incident polling")
         return
 
-    current_incidents: dict[str, str] = {}
+    current_incidents: dict[str, tuple[str, int]] = {}
     for row in rows:
         iid = row["incident_id"]
         inc_data = transform_incident_row(row)
-        current_incidents[iid] = inc_data["fiberId"]
+        current_incidents[iid] = (inc_data["fiberId"], inc_data.get("direction", 0))
 
         if iid not in known_incidents:
             # New incident -- broadcast to owning orgs
@@ -432,13 +432,14 @@ async def _poll_incidents(
     # Detect resolved incidents (were known, no longer active)
     resolved_ids = set(known_incidents) - set(current_incidents)
     for rid in resolved_ids:
+        fiber_id, direction = known_incidents[rid]
         resolved_data = {
             "id": rid,
             "status": "resolved",
             "type": "",
             "severity": "",
-            "fiberId": known_incidents[rid],  # Preserved from when incident was active
-            "direction": 0,
+            "fiberId": fiber_id,
+            "direction": direction,
             "channel": 0,
             "detectedAt": "",
             "duration": None,
@@ -448,7 +449,7 @@ async def _poll_incidents(
             "incidents",
             resolved_data,
             fiber_org_map,
-            fiber_ids={resolved_data["fiberId"]},
+            fiber_ids={fiber_id},
             flow="live",
         )
 
