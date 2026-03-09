@@ -8,13 +8,3 @@ export type Detection = {
   nTrucks: number
   timestamp: number
 }
-
-/** @deprecated Vehicle counts are now included in Detection (count, nCars, nTrucks). */
-export type VehicleCount = {
-  fiberId: string
-  direction: 0 | 1
-  channelStart: number
-  channelEnd: number
-  vehicleCount: number
-  timestamp: number // ms since epoch
-}

@@ -36,7 +36,6 @@ logger = logging.getLogger("sequoia.realtime")
 ALLOWED_CHANNELS = frozenset(
     {
         "detections",
-        "counts",
         "incidents",
         "shm_readings",
         "fibers",
