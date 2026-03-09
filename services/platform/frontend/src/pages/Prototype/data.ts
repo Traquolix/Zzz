@@ -222,6 +222,6 @@ export const incidentTypeIcon: Record<IncidentType, string> = {
 
 export const chartColors = {
   speed: { label: 'Speed', unit: 'km/h', color: '#6366f1' },
-  flow: { label: 'Flow', unit: 'veh/min', color: '#8b5cf6' },
+  flow: { label: 'Flow', unit: 'veh/h', color: '#8b5cf6' },
   occupancy: { label: 'Occupancy', unit: '%', color: '#0ea5e9' },
 }

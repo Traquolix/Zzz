@@ -32,11 +32,11 @@ from django.core.cache import cache
 
 from apps.alerting.integration import check_alerts_for_detections, check_alerts_for_incident
 from apps.realtime.broadcast import (
-    broadcast_per_org,
-    broadcast_shm,
     broadcast_to_orgs,
     group_by_org,
     load_fiber_org_map,
+    pubsub_broadcast_detections,
+    pubsub_broadcast_shm,
 )
 from apps.shared.constants import MAP_REFRESH_INTERVAL
 
@@ -232,11 +232,11 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
     last_map_refresh = time.time()
 
     # Org-aware broadcast helper for the replay buffer drain
-    async def broadcast(channel: str, data):
+    async def broadcast(_channel: str, data):
         nonlocal fiber_org_map
-        await broadcast_per_org(channel_layer, channel, data, fiber_org_map, flow="live")
+        await pubsub_broadcast_detections(data, fiber_org_map, flow="live")
         # Check alerts for detections (per-org)
-        if channel == "detections" and isinstance(data, list):
+        if isinstance(data, list):
             for org_id, org_dets in group_by_org(data, fiber_org_map).items():
                 await check_alerts_for_detections(org_dets, org_id)
 
@@ -336,7 +336,7 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
                 last_shm_broadcast = now
                 readings = generate_shm_readings(infrastructure, shm_state)
                 if readings:
-                    await broadcast_shm(channel_layer, readings, fiber_org_map, flow="live")
+                    await pubsub_broadcast_shm(readings, fiber_org_map, flow="live")
 
             # --- Cleanup stale batch trackers every 30s ---
             if (now - last_batch_cleanup) >= 30:

@@ -17,6 +17,8 @@ export interface SectionHistoryPoint {
   speed: number
   speedMax: number
   samples: number
+  flow: number
+  occupancy: number
 }
 
 export async function fetchSections(): Promise<ApiSection[]> {
@@ -44,6 +46,11 @@ export async function deleteSection(id: string): Promise<void> {
 export async function fetchSectionHistory(
   id: string,
   minutes = 60,
+  flow?: 'sim' | 'live',
+  since?: number,
 ): Promise<{ sectionId: string; minutes: number; points: SectionHistoryPoint[] }> {
-  return apiRequest(`/api/sections/${id}/history?minutes=${minutes}`)
+  const params = new URLSearchParams({ minutes: String(minutes) })
+  if (flow) params.set('flow', flow)
+  if (since != null) params.set('since', String(since))
+  return apiRequest(`/api/sections/${id}/history?${params}`)
 }

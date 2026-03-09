@@ -9,17 +9,21 @@ Implements the subscribe/unsubscribe JSON protocol that the frontend expects:
   Server sends:  { "action": "pong" }
 
 Supported channels:
-  - detections: Speed/position detections at 10 Hz
-  - counts: AI-derived vehicle flow counts per fiber section
-  - incidents: Incident creation/resolution events
-  - shm_readings: Structural Health Monitoring frequency data at 1 Hz
-  - fibers: Initial fiber configuration (sent once on subscribe)
+  - detections: Speed/position detections at 10 Hz (Redis pub/sub)
+  - incidents: Incident creation/resolution events (Channels layer)
+  - shm_readings: Structural Health Monitoring frequency data at 1 Hz (Redis pub/sub)
+  - fibers: Initial fiber configuration, sent once on subscribe (Channels layer)
 
-Org-scoped: each client joins org-specific groups (realtime_{channel}_org_{org_id}).
-Superusers join the __all__ group to receive all data.
+Transport split:
+  - High-frequency ephemeral data (detections, SHM) → Redis pub/sub
+  - Low-frequency reliable data (incidents, fibers) → Django Channels layer
+
+Org-scoped: each client subscribes to org-specific channels/groups.
+Superusers join the __all__ channel to receive all data.
 """
 
 import asyncio
+import json
 import logging
 import time
 
@@ -41,6 +45,12 @@ ALLOWED_CHANNELS = frozenset(
         "fibers",
     }
 )
+
+# High-frequency channels use Redis pub/sub (fire-and-forget)
+PUBSUB_CHANNELS = frozenset({"detections", "shm_readings"})
+
+# Low-frequency channels use Django Channels layer (reliable delivery)
+LAYER_CHANNELS = frozenset({"incidents", "fibers"})
 
 # Rate limiting: max messages per window
 RATE_LIMIT_MESSAGES = 100
@@ -118,6 +128,11 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         self._flow = "sim"  # Default flow; updated after auth based on availability
         # Rate limiting state
         self._message_times = []
+        # Pub/sub state (lazily initialized on first high-frequency subscribe)
+        self._redis_client = None
+        self._pubsub = None
+        self._pubsub_task = None
+        self._pubsub_subscriptions: dict[str, str] = {}  # channel -> redis pubsub channel name
         # Superusers see all data; regular users scoped to their org
         if user.is_superuser:
             self._org_id = "__all__"
@@ -131,12 +146,16 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         if getattr(self, "_auth_timeout_task", None) and not self._auth_timeout_task.done():
             self._auth_timeout_task.cancel()
 
-        # Leave all flow-prefixed channel groups
+        # Clean up pub/sub resources
+        await self._cleanup_pubsub()
+
+        # Leave channel layer groups (incidents, fibers)
         flow = getattr(self, "_flow", "sim")
         for channel in list(self.subscriptions):
-            await self.channel_layer.group_discard(
-                _org_group_name(channel, self._org_id, flow=flow), self.channel_name
-            )
+            if channel in LAYER_CHANNELS:
+                await self.channel_layer.group_discard(
+                    _org_group_name(channel, self._org_id, flow=flow), self.channel_name
+                )
         self.subscriptions.clear()
         if getattr(self, "_authenticated", False):
             from apps.shared.metrics import WEBSOCKET_CONNECTIONS
@@ -205,9 +224,13 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         if action == "subscribe":
             if channel not in self.subscriptions:
                 self.subscriptions.add(channel)
-                await self.channel_layer.group_add(
-                    _org_group_name(channel, self._org_id, flow=self._flow), self.channel_name
-                )
+                if channel in PUBSUB_CHANNELS:
+                    await self._subscribe_pubsub(channel)
+                else:
+                    await self.channel_layer.group_add(
+                        _org_group_name(channel, self._org_id, flow=self._flow),
+                        self.channel_name,
+                    )
                 logger.debug(
                     "Client subscribed to: %s (org=%s, flow=%s)", channel, self._org_id, self._flow
                 )
@@ -221,9 +244,13 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         elif action == "unsubscribe":
             if channel in self.subscriptions:
                 self.subscriptions.discard(channel)
-                await self.channel_layer.group_discard(
-                    _org_group_name(channel, self._org_id, flow=self._flow), self.channel_name
-                )
+                if channel in PUBSUB_CHANNELS:
+                    await self._unsubscribe_pubsub(channel)
+                else:
+                    await self.channel_layer.group_discard(
+                        _org_group_name(channel, self._org_id, flow=self._flow),
+                        self.channel_name,
+                    )
                 logger.debug("Client unsubscribed from: %s", channel)
 
     async def _handle_authenticate(self, token: str | None):
@@ -287,19 +314,25 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             await self.send_json({"action": "flow_changed", "flow": new_flow})
             return
 
-        # Leave all old flow groups
+        # Leave all old flow groups/channels
         for channel in self.subscriptions:
-            await self.channel_layer.group_discard(
-                _org_group_name(channel, self._org_id, flow=old_flow), self.channel_name
-            )
+            if channel in PUBSUB_CHANNELS:
+                await self._unsubscribe_pubsub(channel)
+            else:
+                await self.channel_layer.group_discard(
+                    _org_group_name(channel, self._org_id, flow=old_flow), self.channel_name
+                )
 
         self._flow = new_flow
 
-        # Join all new flow groups
+        # Join all new flow groups/channels
         for channel in self.subscriptions:
-            await self.channel_layer.group_add(
-                _org_group_name(channel, self._org_id, flow=new_flow), self.channel_name
-            )
+            if channel in PUBSUB_CHANNELS:
+                await self._subscribe_pubsub(channel)
+            else:
+                await self.channel_layer.group_add(
+                    _org_group_name(channel, self._org_id, flow=new_flow), self.channel_name
+                )
 
         await self.send_json({"action": "flow_changed", "flow": new_flow})
         logger.debug("Client switched flow: %s -> %s (org=%s)", old_flow, new_flow, self._org_id)
@@ -310,7 +343,79 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         if "fibers" in self.subscriptions:
             await self._send_initial_fibers()
 
-    # ----- Group message handlers -----
+    # ----- Redis pub/sub helpers (detections, SHM) -----
+
+    async def _ensure_pubsub(self):
+        """Lazily create Redis pub/sub connection on first high-frequency subscribe."""
+        if self._redis_client is None:
+            from apps.realtime.redis_pubsub import create_subscriber
+
+            self._redis_client = create_subscriber()
+            self._pubsub = self._redis_client.pubsub()
+
+    def _ensure_pubsub_listener(self):
+        """Start the pub/sub listener task if not already running."""
+        if self._pubsub_task is None or self._pubsub_task.done():
+            self._pubsub_task = asyncio.create_task(self._pubsub_listener())
+
+    async def _pubsub_listener(self):
+        """Read pub/sub messages and forward to WebSocket."""
+        from apps.shared.metrics import WEBSOCKET_MESSAGES_SENT, WEBSOCKET_SEND_TIMEOUTS
+
+        try:
+            async for message in self._pubsub.listen():
+                if message["type"] != "message":
+                    continue
+                try:
+                    payload = json.loads(message["data"])
+                    await asyncio.wait_for(self.send_json(payload), timeout=15.0)
+                    WEBSOCKET_MESSAGES_SENT.labels(channel=payload.get("channel", "")).inc()
+                except asyncio.TimeoutError:
+                    WEBSOCKET_SEND_TIMEOUTS.inc()
+                    logger.warning("WebSocket send timeout (pub/sub) for user=%s", self._user)
+                    await self.close(code=4008)
+                    return
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.warning("Pub/sub listener error for user=%s", self._user, exc_info=True)
+            # Restart listener after a brief delay if we still have subscriptions
+            if self._pubsub_subscriptions:
+                await asyncio.sleep(1)
+                self._pubsub_task = None
+                self._ensure_pubsub_listener()
+
+    async def _subscribe_pubsub(self, channel: str):
+        """Subscribe to a Redis pub/sub channel."""
+        from apps.realtime.redis_pubsub import pubsub_channel_name
+
+        await self._ensure_pubsub()
+        redis_channel = pubsub_channel_name(self._flow, channel, self._org_id)
+        await self._pubsub.subscribe(redis_channel)
+        self._pubsub_subscriptions[channel] = redis_channel
+        # Start listener after first subscription (listen() exits if no subs)
+        self._ensure_pubsub_listener()
+
+    async def _unsubscribe_pubsub(self, channel: str):
+        """Unsubscribe from a Redis pub/sub channel."""
+        redis_channel = self._pubsub_subscriptions.pop(channel, None)
+        if redis_channel and self._pubsub:
+            await self._pubsub.unsubscribe(redis_channel)
+
+    async def _cleanup_pubsub(self):
+        """Clean up all pub/sub resources."""
+        if getattr(self, "_pubsub_task", None) and not self._pubsub_task.done():
+            self._pubsub_task.cancel()
+            try:
+                await self._pubsub_task
+            except asyncio.CancelledError:
+                pass
+        if getattr(self, "_pubsub", None):
+            await self._pubsub.close()
+        if getattr(self, "_redis_client", None):
+            await self._redis_client.aclose()
+
+    # ----- Group message handlers (Channels layer: incidents, fibers) -----
     # These are called when the Channels layer routes a group_send to this consumer
 
     async def broadcast_message(self, event):

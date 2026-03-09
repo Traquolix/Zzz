@@ -759,6 +759,13 @@ class SectionHistoryView(FlowAwareMixin, APIView):
             OpenApiParameter(
                 name="minutes", type=int, description="History window in minutes (max 1440)"
             ),
+            OpenApiParameter(
+                name="since",
+                type=int,
+                description="Only return points after this timestamp (ms epoch). "
+                "Used for incremental polling.",
+                required=False,
+            ),
         ],
         tags=["sections"],
     )
@@ -768,6 +775,17 @@ class SectionHistoryView(FlowAwareMixin, APIView):
             minutes = min(int(request.query_params.get("minutes", 60)), 1440)
         except (ValueError, TypeError):
             minutes = 60
+
+        # Parse optional since parameter for incremental polling
+        since_raw = request.query_params.get("since")
+        since_ms: int | None = None
+        if since_raw is not None:
+            try:
+                since_ms = int(since_raw)
+            except (ValueError, TypeError):
+                pass
+        if since_ms is not None and since_ms < 0:
+            since_ms = None
 
         # Sim flow: cap at 60 min (buffer limit)
         if self._is_sim(request):
@@ -791,7 +809,7 @@ class SectionHistoryView(FlowAwareMixin, APIView):
             )
 
         if self._is_sim(request):
-            history = self._get_sim_history(section, minutes)
+            history = self._get_sim_history(section, minutes, since_ms)
         else:
             history = query_section_history(
                 fiber_id=section["fiberId"],
@@ -799,6 +817,7 @@ class SectionHistoryView(FlowAwareMixin, APIView):
                 channel_start=section["channelStart"],
                 channel_end=section["channelEnd"],
                 minutes=minutes,
+                since_ms=since_ms,
             )
 
         return Response(
@@ -809,7 +828,9 @@ class SectionHistoryView(FlowAwareMixin, APIView):
             }
         )
 
-    def _get_sim_history(self, section: dict, minutes: int) -> list[dict]:
+    def _get_sim_history(
+        self, section: dict, minutes: int, since_ms: int | None = None
+    ) -> list[dict]:
         """Sim flow: query in-memory simulation detection buffers."""
         from apps.realtime.simulation import get_simulation_section_history
 
@@ -819,6 +840,7 @@ class SectionHistoryView(FlowAwareMixin, APIView):
             channel_start=section["channelStart"],
             channel_end=section["channelEnd"],
             minutes=minutes,
+            since_ms=since_ms,
         )
 
 

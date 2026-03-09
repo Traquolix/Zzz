@@ -2,15 +2,11 @@
 Shared org-scoped broadcast helpers for the realtime app.
 
 Used by both the Kafka bridge (live flow) and the simulation engine (sim flow).
-All broadcasts are routed to org-specific Channels groups based on fiber ownership.
-Superuser clients join the ``__all__`` group which always receives full data.
 
-Three broadcast patterns:
-- ``broadcast_to_orgs``: send the same payload to all orgs that own specific fibers
-  (used for single incidents, vehicle counts).
-- ``broadcast_per_org``: split a list of items so each org only gets their own fibers'
-  items (used for detections, counts).
-- ``broadcast_shm``: route SHM readings by fiber ownership (via ``fiberId`` on each reading).
+- ``broadcast_to_orgs``: send the same payload to all orgs via Channels layer
+  (used for incidents — low-frequency, reliable delivery).
+- ``pubsub_broadcast_detections`` / ``pubsub_broadcast_shm``: high-frequency
+  broadcasts via Redis pub/sub (fire-and-forget, no stale backlog).
 """
 
 import logging
@@ -119,76 +115,30 @@ async def broadcast_to_orgs(
                     )
 
 
-async def broadcast_per_org(
-    channel_layer,
-    channel: str,
+# ============================================================================
+# PUB/SUB BROADCAST HELPERS (high-frequency channels)
+# ============================================================================
+
+
+async def pubsub_broadcast_detections(
     items: list[dict],
     fiber_org_map: dict[str, list[str]],
-    fiber_key: str = "fiberId",
     *,
     flow: str,
 ):
-    """
-    Split items by fiber ownership and send each org only their items.
+    """Broadcast detections via Redis pub/sub (fire-and-forget)."""
+    from apps.realtime.redis_pubsub import pubsub_publish_per_org
 
-    Used for detections and counts where different items belong to different fibers.
-    Always sends the full set to the ``__all__`` group.
-
-    Args:
-        channel_layer: Django Channels layer.
-        channel: Channel name (e.g. ``"detections"``).
-        items: List of dicts, each containing a ``fiberId`` field.
-        fiber_org_map: ``{fiber_id: [org_id, ...]}`` mapping.
-        fiber_key: Key in each item dict that holds the plain fiber ID.
-        flow: ``"sim"`` or ``"live"`` — determines group name prefix.
-    """
-    if not items:
-        return
-
-    # Always send full data to superuser group
-    await channel_layer.group_send(
-        f"realtime_{flow}_{channel}_org___all__",
-        {
-            "type": "broadcast_message",
-            "channel": channel,
-            "data": items,
-        },
-    )
-
-    for org_id, org_data in group_by_org(items, fiber_org_map, fiber_key).items():
-        await channel_layer.group_send(
-            f"realtime_{flow}_{channel}_org_{org_id}",
-            {
-                "type": "broadcast_message",
-                "channel": channel,
-                "data": org_data,
-            },
-        )
+    await pubsub_publish_per_org("detections", items, fiber_org_map, flow=flow)
 
 
-async def broadcast_shm(
-    channel_layer,
+async def pubsub_broadcast_shm(
     readings: list[dict],
     fiber_org_map: dict[str, list[str]],
     *,
     flow: str,
 ):
-    """
-    Broadcast SHM readings to org-scoped groups via fiber ownership.
+    """Broadcast SHM readings via Redis pub/sub (fire-and-forget)."""
+    from apps.realtime.redis_pubsub import pubsub_publish_shm
 
-    Each reading must include a ``fiberId`` field (the fiber the infrastructure
-    sits on). Org routing uses ``fiber_org_map``, same as all other broadcasts.
-    """
-    if not readings:
-        return
-
-    await channel_layer.group_send(
-        f"realtime_{flow}_shm_readings_org___all__",
-        {"type": "broadcast_message", "channel": "shm_readings", "data": readings},
-    )
-
-    for org_id, org_data in group_by_org(readings, fiber_org_map, fiber_key="fiberId").items():
-        await channel_layer.group_send(
-            f"realtime_{flow}_shm_readings_org_{org_id}",
-            {"type": "broadcast_message", "channel": "shm_readings", "data": org_data},
-        )
+    await pubsub_publish_shm(readings, fiber_org_map, flow=flow)

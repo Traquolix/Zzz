@@ -13,7 +13,6 @@ import {
   getFiberColor,
 } from '../data'
 import { useIncidentSnapshot } from '@/hooks/useIncidentSnapshot'
-import { fetchSectionHistory } from '@/api/sections'
 import type {
   Fiber,
   ProtoIncident,
@@ -43,6 +42,7 @@ import { Sparkline } from './Sparkline'
 import { useWaterfallBuffer } from '../hooks/useWaterfallBuffer'
 import { WaterfallCanvas } from './WaterfallCanvas'
 import { FlowToggle } from './FlowToggle'
+import { useSectionHistory } from '../hooks/useSectionHistory'
 import type { DataFlow } from '@/context/RealtimeContext'
 
 interface StructureDataProp {
@@ -77,12 +77,6 @@ interface SidePanelProps {
 const severityOrder: Severity[] = ['critical', 'high', 'medium', 'low']
 
 type TimeRange = '1m' | '5m' | '15m' | '1h'
-const timeRangePoints: Record<TimeRange, number> = {
-  '1m': 120, // 60s * 2Hz
-  '5m': 600, // 5 * 60 * 2
-  '15m': 1800, // 15 * 60 * 2
-  '1h': 7200, // 60 * 60 * 2
-}
 
 export function SidePanel({
   state,
@@ -1426,7 +1420,7 @@ function IncidentDetail({
             <div className="text-sm text-[var(--proto-text)] mb-1">{relatedSection.name}</div>
             <div className="flex gap-4 text-xs text-[var(--proto-text-secondary)]">
               <span>{relatedSection.avgSpeed} km/h</span>
-              <span>{relatedSection.flow} veh/min</span>
+              <span>{relatedSection.flow} veh/h</span>
               <span>{relatedSection.occupancy}% occ.</span>
               <span>
                 Ch {relatedSection.startChannel}-{relatedSection.endChannel}
@@ -1470,6 +1464,7 @@ function IncidentDetail({
 // ── Section detail ──────────────────────────────────────────────────────
 
 function computeTrend(history: number[]): { pct: number } {
+  if (history.length < 10) return { pct: 0 }
   const recent = history.slice(-5)
   const earlier = history.slice(0, 5)
   const avgRecent = recent.reduce((a, b) => a + b, 0) / recent.length
@@ -1855,6 +1850,12 @@ function SectionDetail({
   const fiber = findFiber(section.fiberId, section.direction)
   const fiberColor = fiber ? getFiberColor(fiber, fiberColors) : '#6366f1'
 
+  const [timeRange, setTimeRange] = useState<TimeRange>('1m')
+
+  // Chart data fetched at the resolution matching the selected time range
+  const historySeries = useSectionHistory(section.id, timeRange)
+
+  // KPIs use the always-on page-level stats (stable regardless of chart time range)
   const live = liveStats.get(section.id)
   const liveSeries = liveSeriesData.get(section.id)
   const displaySpeed = live?.avgSpeed != null ? Math.round(live.avgSpeed) : section.avgSpeed
@@ -1862,13 +1863,13 @@ function SectionDetail({
   const displayTravelTime = live?.travelTime ?? section.travelTime
   const displayOccupancy = live?.occupancy ?? section.occupancy
 
-  // Derive sparklines from live data when available, else fall back to static
+  // Sparklines from the page-level 1-minute data (not affected by chart time range)
   const SPARK_LENGTH = 30
   const speedSpark = liveSeries?.length ? liveSeries.slice(-SPARK_LENGTH).map(p => p.speed) : section.speedHistory
   const flowSpark = liveSeries?.length ? liveSeries.slice(-SPARK_LENGTH).map(p => p.flow) : section.countHistory
   const occupancySpark = liveSeries?.length ? liveSeries.slice(-SPARK_LENGTH).map(p => p.occupancy) : null
 
-  // Compute trends from live sparklines
+  // Compute trends from sparklines
   const speedTrend = computeTrend(speedSpark)
   const flowTrend = computeTrend(flowSpark)
 
@@ -1885,7 +1886,7 @@ function SectionDetail({
     {
       label: 'Flow',
       value: `${displayFlow}`,
-      unit: 'veh/min',
+      unit: 'veh/h',
       trend: flowSpark,
       color: '#8b5cf6',
       trendPct: flowTrend.pct,
@@ -1895,43 +1896,18 @@ function SectionDetail({
     { label: 'Travel Time', value: `${displayTravelTime}`, unit: 'min', color: fiberColor },
   ]
 
-  const [timeRange, setTimeRange] = useState<TimeRange>('1m')
-
-  // Fetch historical data from API when no live series
-  const [historyData, setHistoryData] = useState<
-    { time: string; speed: number; flow: number; occupancy: number }[] | null
-  >(null)
-
-  useEffect(() => {
-    if (liveSeries?.length) return // live data available, skip API fetch
-    let mounted = true
-    fetchSectionHistory(section.id, 60)
-      .then(res => {
-        if (!mounted) return
-        const points = res.points.map(p => ({
-          time: new Date(p.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
-          speed: p.speed,
-          flow: p.samples,
-          occupancy: 0,
-        }))
-        setHistoryData(points.length > 0 ? points : null)
-      })
-      .catch(() => {
-        if (mounted) setHistoryData(null)
-      })
-    return () => {
-      mounted = false
-    }
-  }, [section.id, liveSeries?.length])
-
-  // Prefer live series data, fall back to API history
-  const maxPoints = timeRangePoints[timeRange]
-  const chartData = liveSeries?.length
-    ? liveSeries.slice(-maxPoints).map(p => ({ time: p.time, speed: p.speed, flow: p.flow, occupancy: p.occupancy }))
-    : (historyData ?? [])
-  const tableData = liveSeries?.length
-    ? liveSeries.slice(-10).map(p => ({ time: p.time, speed: p.speed, flow: p.flow, occupancy: p.occupancy }))
-    : (historyData ?? []).slice(-10)
+  const chartData = historySeries.map(p => ({
+    time: p.time,
+    speed: p.speed,
+    flow: p.flow,
+    occupancy: p.occupancy,
+  }))
+  const tableData = historySeries.slice(-10).map(p => ({
+    time: p.time,
+    speed: p.speed,
+    flow: p.flow,
+    occupancy: p.occupancy,
+  }))
 
   return (
     <div className="proto-analysis-enter flex flex-col">
@@ -2025,7 +2001,7 @@ function SectionDetail({
                     <td className="text-right py-1.5 px-3">
                       <span style={{ color: getSpeedColor(row.speed, section.speedThresholds) }}>{row.speed}</span> km/h
                     </td>
-                    <td className="text-right py-1.5 px-3">{row.flow} veh/min</td>
+                    <td className="text-right py-1.5 px-3">{row.flow} veh/h</td>
                     <td className="text-right py-1.5 pl-3">{row.occupancy}%</td>
                   </tr>
                 ))}
