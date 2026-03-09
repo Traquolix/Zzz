@@ -162,7 +162,7 @@ function reducer(state: ProtoState, action: ProtoAction): ProtoState {
         selectedSectionId: state.selectedSectionId === action.id ? null : state.selectedSectionId,
       }
     case 'TOGGLE_SIDEBAR':
-      return { ...state, sidebarOpen: !state.sidebarOpen }
+      return { ...state, sidebarOpen: !state.sidebarOpen, sidebarExpanded: false }
     case 'OPEN_SIDEBAR':
       return {
         ...state,
