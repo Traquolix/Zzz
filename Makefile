@@ -213,13 +213,12 @@ dev-backend: ## Start backend dev server (auto-setup on first run)
 	fi
 	@echo "==> Running migrations..."
 	@cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python manage.py migrate --run-syncdb
-	@if [ ! -f "$(BACKEND_DIR)/.dev-seeded" ]; then \
-		echo "==> Seeding dev users..."; \
-		(cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python manage.py seed_users); \
-		echo "==> Seeding infrastructure..."; \
-		(cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python manage.py seed_infrastructure); \
-		touch $(BACKEND_DIR)/.dev-seeded; \
-	fi
+	@echo "==> Seeding dev users..."
+	@cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python manage.py seed_users
+	@echo "==> Seeding infrastructure..."
+	@cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python manage.py seed_infrastructure
+	@echo "==> Clearing throttle cache..."
+	@cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python -c "from django.core.cache import cache; cache.clear()" 2>/dev/null || true
 	@echo "==> Starting backend on http://localhost:8001"
 	cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/daphne -b 127.0.0.1 -p 8001 sequoia.asgi:application
 
