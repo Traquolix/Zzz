@@ -281,6 +281,35 @@ def _transform_history_point(r: dict, bucket_seconds: int) -> dict:
     }
 
 
+def query_batch_section_history(
+    sections: list[dict],
+    minutes: int = 60,
+    since_ms: int | None = None,
+) -> dict[str, list[dict]]:
+    """Query history for multiple sections in one call.
+
+    Each section dict must have: id, fiberId, direction, channelStart, channelEnd.
+
+    The main win is collapsing N frontend HTTP requests into one. On the
+    ClickHouse side, each section still needs its own query (different
+    fiber/direction/channel ranges), but they share the same connection
+    and avoid N round-trips through Django + DRF deserialization.
+
+    Returns ``{section_id: [{time, speed, speedMax, samples, flow, occupancy}, ...], ...}``.
+    """
+    result: dict[str, list[dict]] = {}
+    for sec in sections:
+        result[sec["id"]] = query_section_history(
+            fiber_id=sec["fiberId"],
+            direction=sec["direction"],
+            channel_start=sec["channelStart"],
+            channel_end=sec["channelEnd"],
+            minutes=minutes,
+            since_ms=since_ms,
+        )
+    return result
+
+
 def _section_to_dict(section: Section) -> dict:
     """Convert a Section model instance to the API response dict."""
     return {

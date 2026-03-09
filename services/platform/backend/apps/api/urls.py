@@ -43,6 +43,11 @@ urlpatterns = [
     ),
     path("sections", monitoring_views.SectionListView.as_view(), name="sections"),
     path(
+        "sections/batch-history",
+        monitoring_views.BatchSectionHistoryView.as_view(),
+        name="section-batch-history",
+    ),
+    path(
         "sections/<path:section_id>/history",
         monitoring_views.SectionHistoryView.as_view(),
         name="section-history",

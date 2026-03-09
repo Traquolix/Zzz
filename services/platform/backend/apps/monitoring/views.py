@@ -28,6 +28,7 @@ from apps.monitoring.section_service import (
     delete_section,
     get_section,
     insert_section,
+    query_batch_section_history,
     query_section_history,
     query_sections,
 )
@@ -836,6 +837,95 @@ class SectionHistoryView(FlowAwareMixin, APIView):
             minutes=minutes,
             since_ms=since_ms,
         )
+
+
+class BatchSectionHistoryView(FlowAwareMixin, APIView):
+    """
+    POST /api/sections/batch-history — speed time-series for multiple sections.
+
+    Replaces N parallel GET /api/sections/<id>/history calls with a single
+    batch request. Used by the live stats poller (useLiveStats) which needs
+    history for all sections every 2 seconds.
+
+    Request body: ``{"sectionIds": [...], "minutes": 1, "since": <epoch_ms>}``
+
+    Strict flow isolation:
+    - ``flow=sim`` → in-memory simulation buffers
+    - ``flow=live`` → ClickHouse
+
+    Org-scoped: only returns data for sections belonging to the user's org.
+    """
+
+    permission_classes = [IsActiveUser]
+
+    @clickhouse_fallback()
+    def post(self, request):
+        section_ids = request.data.get("sectionIds")
+        if not isinstance(section_ids, list) or not section_ids:
+            return Response(
+                {"detail": "sectionIds must be a non-empty list", "code": "validation_error"},
+                status=400,
+            )
+
+        if len(section_ids) > 100:
+            return Response(
+                {"detail": "Too many sections (max 100)", "code": "validation_error"},
+                status=400,
+            )
+
+        try:
+            minutes = min(int(request.data.get("minutes", 60)), 1440)
+        except (ValueError, TypeError):
+            minutes = 60
+
+        since_raw = request.data.get("since")
+        since_ms: int | None = None
+        if since_raw is not None:
+            try:
+                since_ms = int(since_raw)
+            except (ValueError, TypeError):
+                pass
+        if since_ms is not None and since_ms < 0:
+            since_ms = None
+
+        if self._is_sim(request):
+            minutes = min(minutes, 60)
+
+        # Fetch sections from DB, org-scoped
+        org_id = None if request.user.is_superuser else request.user.organization_id
+        sections = query_sections(organization_id=org_id)
+
+        # Filter to requested IDs only
+        sections_by_id = {s["id"]: s for s in sections}
+        requested = [sections_by_id[sid] for sid in section_ids if sid in sections_by_id]
+
+        if not requested:
+            return Response({"results": {}})
+
+        if self._is_sim(request):
+            results = self._get_sim_batch(requested, minutes, since_ms)
+        else:
+            results = query_batch_section_history(requested, minutes, since_ms)
+
+        return Response({"results": results})
+
+    def _get_sim_batch(
+        self, sections: list[dict], minutes: int, since_ms: int | None
+    ) -> dict[str, list[dict]]:
+        """Sim flow: query in-memory simulation detection buffers for each section."""
+        from apps.realtime.simulation import get_simulation_section_history
+
+        result: dict[str, list[dict]] = {}
+        for sec in sections:
+            result[sec["id"]] = get_simulation_section_history(
+                fiber_id=sec["fiberId"],
+                direction=sec["direction"],
+                channel_start=sec["channelStart"],
+                channel_end=sec["channelEnd"],
+                minutes=minutes,
+                since_ms=since_ms,
+            )
+        return result
 
 
 class SpectralDataView(APIView):

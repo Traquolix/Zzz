@@ -54,3 +54,28 @@ export async function fetchSectionHistory(
   if (since != null) params.set('since', String(since))
   return apiRequest(`/api/sections/${id}/history?${params}`)
 }
+
+export async function fetchBatchSectionHistory(
+  sectionIds: string[],
+  minutes = 60,
+  flow?: 'sim' | 'live',
+  since?: Record<string, number>,
+): Promise<Record<string, SectionHistoryPoint[]>> {
+  // Use the earliest `since` across all sections for the batch request.
+  // Individual per-section `since` values would require N requests, defeating
+  // the purpose. The frontend trims any already-seen points client-side.
+  let sinceMs: number | undefined
+  if (since) {
+    const values = Object.values(since)
+    if (values.length > 0) sinceMs = Math.min(...values)
+  }
+  const params = flow ? `?flow=${flow}` : ''
+  const res = await apiRequest<{ results: Record<string, SectionHistoryPoint[]> }>(
+    `/api/sections/batch-history${params}`,
+    {
+      method: 'POST',
+      body: { sectionIds, minutes, ...(sinceMs != null && { since: sinceMs }) },
+    },
+  )
+  return res.results
+}

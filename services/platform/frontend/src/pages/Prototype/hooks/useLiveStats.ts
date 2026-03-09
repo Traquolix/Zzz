@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { fetchSectionHistory } from '@/api/sections'
+import { fetchBatchSectionHistory } from '@/api/sections'
 import { useRealtime } from '@/hooks/useRealtime'
 import type { Section, SectionDataPoint, LiveSectionStats } from '../types'
 import { mapHistoryPoints } from './mapHistoryPoints'
@@ -12,9 +12,9 @@ const MAX_POINTS = 60 // 1 minute at 1s resolution
  * Lightweight stats poller for all sections.
  *
  * Fetches the last minute of per-second data to derive current speed, flow,
- * occupancy, and short sparklines. Used by the map (section coloring) and
- * section list cards. The section detail view uses useSectionHistory instead
- * for time-range-aware chart data.
+ * occupancy, and short sparklines. Uses a single batch endpoint instead of
+ * N parallel requests. The section detail view uses useSectionHistory for
+ * time-range-aware chart data.
  */
 export function useLiveStats(sections: Section[]) {
   const { flow } = useRealtime()
@@ -32,58 +32,75 @@ export function useLiveStats(sections: Section[]) {
     const secs = sectionsRef.current
     if (secs.length === 0) return
 
-    const nextStats = new Map<string, LiveSectionStats>()
-    const nextSeries = new Map<string, SectionDataPoint[]>()
+    try {
+      // Build per-section since map
+      const sinceMap: Record<string, number> = {}
+      for (const sec of secs) {
+        const since = sinceRef.current.get(sec.id)
+        if (since != null) sinceMap[sec.id] = since
+      }
 
-    await Promise.all(
-      secs.map(async sec => {
-        try {
-          const since = sinceRef.current.get(sec.id)
-          const res = await fetchSectionHistory(sec.id, HISTORY_MINUTES, flow, since)
-          const newPoints = mapHistoryPoints(res.points)
+      const batchResult = await fetchBatchSectionHistory(
+        secs.map(s => s.id),
+        HISTORY_MINUTES,
+        flow,
+        Object.keys(sinceMap).length > 0 ? sinceMap : undefined,
+      )
 
-          // Merge with existing accumulated data
-          let accumulated = accumulatedRef.current.get(sec.id) ?? []
-          if (since == null) {
-            accumulated = newPoints
-          } else if (newPoints.length > 0) {
-            accumulated.push(...newPoints)
-          }
+      const nextStats = new Map<string, LiveSectionStats>()
+      const nextSeries = new Map<string, SectionDataPoint[]>()
 
-          // Trim to window
-          const cutoff = Date.now() - HISTORY_MINUTES * 60 * 1000
-          const firstValid = accumulated.findIndex(p => p.timestamp >= cutoff)
-          if (firstValid > 0) accumulated.splice(0, firstValid)
-
-          if (accumulated.length > MAX_POINTS) {
-            accumulated.splice(0, accumulated.length - MAX_POINTS)
-          }
-
-          accumulatedRef.current.set(sec.id, accumulated)
-          nextSeries.set(sec.id, accumulated)
-          nextStats.set(sec.id, deriveStats(accumulated, sec))
-
-          if (res.points.length > 0) {
-            sinceRef.current.set(sec.id, res.points[res.points.length - 1].time)
-          }
-        } catch {
-          // Keep previous data on error
-        }
-
-        // Preserve existing data if fetch failed
-        if (!nextSeries.has(sec.id)) {
+      for (const sec of secs) {
+        const rawPoints = batchResult[sec.id]
+        if (!rawPoints) {
+          // Section not in response (e.g. filtered out by org scoping) — keep existing
           const existing = accumulatedRef.current.get(sec.id)
           if (existing && existing.length > 0) {
             nextSeries.set(sec.id, existing)
             nextStats.set(sec.id, deriveStats(existing, sec))
           }
+          continue
         }
-      }),
-    )
 
-    if (nextSeries.size > 0) {
-      setSeriesData(nextSeries)
-      setStats(nextStats)
+        const newPoints = mapHistoryPoints(rawPoints)
+        const since = sinceRef.current.get(sec.id)
+
+        // Merge with existing accumulated data
+        let accumulated = accumulatedRef.current.get(sec.id) ?? []
+        if (since == null) {
+          accumulated = newPoints
+        } else if (newPoints.length > 0) {
+          // Batch uses min(since) across all sections, so we may get
+          // points we already have for some sections. Deduplicate by time.
+          const lastKnown = accumulated.length > 0 ? accumulated[accumulated.length - 1].timestamp : 0
+          const fresh = newPoints.filter(p => p.timestamp > lastKnown)
+          accumulated.push(...fresh)
+        }
+
+        // Trim to window
+        const cutoff = Date.now() - HISTORY_MINUTES * 60 * 1000
+        const firstValid = accumulated.findIndex(p => p.timestamp >= cutoff)
+        if (firstValid > 0) accumulated.splice(0, firstValid)
+
+        if (accumulated.length > MAX_POINTS) {
+          accumulated.splice(0, accumulated.length - MAX_POINTS)
+        }
+
+        accumulatedRef.current.set(sec.id, accumulated)
+        nextSeries.set(sec.id, accumulated)
+        nextStats.set(sec.id, deriveStats(accumulated, sec))
+
+        if (rawPoints.length > 0) {
+          sinceRef.current.set(sec.id, rawPoints[rawPoints.length - 1].time)
+        }
+      }
+
+      if (nextSeries.size > 0) {
+        setSeriesData(nextSeries)
+        setStats(nextStats)
+      }
+    } catch {
+      // Keep previous data on error
     }
   }, [flow])
 
