@@ -1769,7 +1769,7 @@ function SettingsPanel({
         Default speed thresholds per fiber. Sections inherit these unless overridden.
       </div>
       {cableGroups.map(([cableId, group]) => {
-        const current = fiberThresholds[group.fibers[0]?.id ?? ''] ?? defaultSpeedThresholds
+        const current = fiberThresholds[group.fibers[0].id] ?? defaultSpeedThresholds
 
         return (
           <div key={cableId} className="flex flex-col gap-2">
