@@ -540,7 +540,7 @@ function NamingDialog({
   onSave,
   onCancel,
 }: {
-  pendingSection: { fiberId: string; direction: number; startChannel: number; endChannel: number }
+  pendingSection: { fiberId: string; direction: 0 | 1; startChannel: number; endChannel: number }
   onSave: (name: string) => void
   onCancel: () => void
 }) {
