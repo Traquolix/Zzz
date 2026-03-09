@@ -971,7 +971,7 @@ export const PrototypeMap = memo(
     }, [])
 
     // ── Update section highlights when sections change ────────────
-    const updateSectionHighlights = useCallback((map: mapboxgl.Map, secs: Section[]) => {
+    function updateSectionHighlights(map: mapboxgl.Map, secs: Section[]) {
       const source = map.getSource('section-highlights') as mapboxgl.GeoJSONSource | undefined
       if (!source) return
       const colors = fiberColorsRef.current
@@ -994,7 +994,7 @@ export const PrototypeMap = memo(
         .filter(Boolean)
 
       source.setData({ type: 'FeatureCollection', features: features as GeoJSON.Feature[] })
-    }, [])
+    }
 
     useEffect(() => {
       const map = mapRef.current
@@ -1012,7 +1012,7 @@ export const PrototypeMap = memo(
       return () => {
         map.off('idle', onIdle)
       }
-    }, [sections, updateSectionHighlights, fiberColors])
+    }, [sections, fiberColors])
 
     // ── Update pending point marker ──────────────────────────────
     useEffect(() => {
