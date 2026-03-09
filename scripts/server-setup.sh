@@ -30,7 +30,7 @@ set -euo pipefail
 # ---------------------------------------------------------------------------
 ROLE=""
 GH_TOKEN=""
-GH_REPO="https://github.com/Traquolix/Sequoia"
+GH_REPO="https://github.com/Traquolix/Zzz"
 # NOTE: GitHub deprecates old runner versions — update periodically.
 # Check latest at: https://github.com/actions/runner/releases
 RUNNER_VERSION="2.322.0"

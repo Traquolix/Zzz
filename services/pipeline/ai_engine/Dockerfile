@@ -50,7 +50,6 @@ COPY config/ config/
 COPY ai_engine/main.py ai_engine/main.py
 COPY ai_engine/message_utils.py ai_engine/message_utils.py
 COPY ai_engine/schema/ ai_engine/schema/
-COPY schema/ schema/
 
 # AI Model dependencies
 COPY ai_engine/model_vehicle/ ai_engine/model_vehicle/

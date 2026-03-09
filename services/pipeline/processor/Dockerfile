@@ -24,7 +24,6 @@ COPY config/ config/
 COPY processor/main.py processor/main.py
 COPY processor/processing_tools/ processor/processing_tools/
 COPY processor/schema/ processor/schema/
-COPY schema/ schema/
 
 RUN touch shared/__init__.py processor/__init__.py config/__init__.py
 
