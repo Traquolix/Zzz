@@ -2686,7 +2686,7 @@ const VIRIDIS: [number, number, number][] = [
 function SpectralHeatmapCanvas({ data }: { data: SpectralTimeSeries }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const { width: debouncedWidth } = useDebouncedResize(containerRef)
+  const { width: debouncedWidth, transitioning } = useDebouncedResize(containerRef)
 
   const draw = useCallback(
     (width: number) => {
@@ -2803,8 +2803,12 @@ function SpectralHeatmapCanvas({ data }: { data: SpectralTimeSeries }) {
   }, [draw, debouncedWidth])
 
   return (
-    <div ref={containerRef} className="w-full">
-      <canvas ref={canvasRef} className="rounded" />
+    <div ref={containerRef} className="w-full" style={{ height: 200 }}>
+      {transitioning ? (
+        <div className="w-full h-full rounded-lg bg-[var(--proto-surface-raised)] animate-pulse" />
+      ) : (
+        <canvas ref={canvasRef} className="rounded" />
+      )}
     </div>
   )
 }
@@ -2822,7 +2826,7 @@ function formatScatterHour(date: Date): string {
 function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
-  const { width } = useDebouncedResize(containerRef)
+  const { width, transitioning } = useDebouncedResize(containerRef)
   const [tooltip, setTooltip] = useState<ScatterTooltip>(null)
   const [brush, setBrush] = useState<ScatterBrush>(null)
   const [zoom, setZoom] = useState<ScatterZoom>(null)
@@ -2948,6 +2952,14 @@ function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
     : null
 
   if (!data.dt.length) return <div className="h-[170px]" ref={containerRef} />
+
+  if (transitioning) {
+    return (
+      <div ref={containerRef} className="relative h-[170px]">
+        <div className="w-full h-full rounded-lg bg-[var(--proto-surface-raised)] animate-pulse" />
+      </div>
+    )
+  }
 
   return (
     <div ref={containerRef} className="w-full relative">
@@ -3293,7 +3305,7 @@ function ComparisonSection({
   onStats?: (stats: ComparisonStats | null) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const { width: rawChartWidth } = useDebouncedResize(containerRef)
+  const { width: rawChartWidth, transitioning: chartTransitioning } = useDebouncedResize(containerRef)
   const chartWidth = Math.max(160, rawChartWidth)
   const [mode, setMode] = useState<ComparisonMode>('day')
   const [focus, setFocus] = useState<FocusMode>('equal')
@@ -3472,9 +3484,13 @@ function ComparisonSection({
         ref={containerRef}
         className="rounded-lg bg-[var(--proto-surface-raised)] border border-[var(--proto-border)] p-2"
       >
-        {isLoading ? (
+        {isLoading || chartTransitioning ? (
           <div className="flex items-center justify-center h-[140px]">
-            <div className="w-4 h-4 border-2 border-[var(--proto-text-muted)] border-t-transparent rounded-full animate-spin" />
+            {isLoading ? (
+              <div className="w-4 h-4 border-2 border-[var(--proto-text-muted)] border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <div className="w-full h-full rounded-lg bg-[var(--proto-surface-raised)] animate-pulse" />
+            )}
           </div>
         ) : (
           <ComparisonOverlay dataA={windowA.data} dataB={windowB.data} focus={focus} width={chartWidth} />

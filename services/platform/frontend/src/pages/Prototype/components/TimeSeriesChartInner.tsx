@@ -18,7 +18,7 @@ export default function TimeSeriesChartInner({ data, metric, config, timeRange, 
     : undefined
 
   const containerRef = useRef<HTMLDivElement>(null)
-  const { width } = useDebouncedResize(containerRef)
+  const { width, transitioning } = useDebouncedResize(containerRef)
 
   // Defer rendering until the container has positive dimensions to prevent
   // Recharts "width(-1) height(-1)" warnings on hidden/collapsed panels
@@ -31,50 +31,58 @@ export default function TimeSeriesChartInner({ data, metric, config, timeRange, 
 
   return (
     <div ref={containerRef} className="h-[200px]">
-      {visible && width > 0 && (
-        <LineChart data={data} width={width} height={chartHeight} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
-          <CartesianGrid stroke="var(--proto-chart-grid, rgba(255,255,255,0.03))" strokeDasharray="3 3" />
-          <XAxis
-            dataKey="time"
-            tick={{ fill: '#64748b', fontSize: 10 }}
-            tickLine={false}
-            axisLine={false}
-            interval={Math.max(0, Math.floor(data.length / 6) - 1)}
-            tickFormatter={tickFormatter}
-          />
-          <YAxis tick={{ fill: '#64748b', fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: '#2b2d31',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: 8,
-              fontSize: 12,
-              color: '#e2e8f0',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-            }}
-            formatter={(value: number | undefined) => [`${value ?? 0} ${config.unit}`, config.label]}
-          />
-          {incidentTime && (
-            <ReferenceLine
-              x={incidentTime}
-              stroke="var(--proto-red, #ef4444)"
-              strokeDasharray="4 3"
-              strokeWidth={1.5}
-              label={{ value: 'Incident', position: 'top', fill: 'var(--proto-red, #ef4444)', fontSize: 9 }}
+      {!visible || transitioning ? (
+        <ChartSkeleton />
+      ) : (
+        width > 0 && (
+          <LineChart data={data} width={width} height={chartHeight} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
+            <CartesianGrid stroke="var(--proto-chart-grid, rgba(255,255,255,0.03))" strokeDasharray="3 3" />
+            <XAxis
+              dataKey="time"
+              tick={{ fill: '#64748b', fontSize: 10 }}
+              tickLine={false}
+              axisLine={false}
+              interval={Math.max(0, Math.floor(data.length / 6) - 1)}
+              tickFormatter={tickFormatter}
             />
-          )}
-          <Line
-            type="monotone"
-            dataKey={metric}
-            stroke={config.color}
-            strokeWidth={1.5}
-            dot={false}
-            activeDot={{ r: 2.5, fill: config.color }}
-            connectNulls
-            isAnimationActive={false}
-          />
-        </LineChart>
+            <YAxis tick={{ fill: '#64748b', fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: '#2b2d31',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: 8,
+                fontSize: 12,
+                color: '#e2e8f0',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+              }}
+              formatter={(value: number | undefined) => [`${value ?? 0} ${config.unit}`, config.label]}
+            />
+            {incidentTime && (
+              <ReferenceLine
+                x={incidentTime}
+                stroke="var(--proto-red, #ef4444)"
+                strokeDasharray="4 3"
+                strokeWidth={1.5}
+                label={{ value: 'Incident', position: 'top', fill: 'var(--proto-red, #ef4444)', fontSize: 9 }}
+              />
+            )}
+            <Line
+              type="monotone"
+              dataKey={metric}
+              stroke={config.color}
+              strokeWidth={1.5}
+              dot={false}
+              activeDot={{ r: 2.5, fill: config.color }}
+              connectNulls
+              isAnimationActive={false}
+            />
+          </LineChart>
+        )
       )}
     </div>
   )
+}
+
+function ChartSkeleton() {
+  return <div className="w-full h-full rounded-lg bg-[var(--proto-surface-raised)] animate-pulse" />
 }
