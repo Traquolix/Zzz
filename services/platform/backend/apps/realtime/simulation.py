@@ -932,15 +932,15 @@ class RoadEventManager:
                 v.forced_speed = None
 
         # Maybe spawn new events (probability per sim-hour, scaled by density)
-        density = _get_density_multiplier(sim_hour, None)
         for event_type, base_rate in self.EVENT_RATES.items():
+            # Pick a fiber first so we use its per-fiber traffic curve
+            fiber = random.choice(fibers)
+            density = _get_density_multiplier(sim_hour, fiber)
             # Real-time probability per tick
             rate = base_rate * density * hour_advance_rate
             prob_per_tick = rate * delta_s / 3600
             if random.random() > prob_per_tick:
                 continue
-            # Pick a fiber and find a vehicle to affect
-            fiber = random.choice(fibers)
             fiber_vehicles = [
                 v for v in vehicles if v.fiber_line == fiber.id and v.forced_speed is None
             ]

@@ -224,7 +224,7 @@ class Command(BaseCommand):
 
     def _load_fibers(self) -> list[FiberConfig]:
         """Load fiber configs from JSON data files with per-road calibration."""
-        from apps.realtime.management.commands.run_simulation import FIBER_CONFIGS
+        from apps.realtime.fiber_calibration import FIBER_CONFIGS
 
         data_dir = self._get_data_dir()
 
