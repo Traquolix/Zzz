@@ -162,7 +162,11 @@ function reducer(state: ProtoState, action: ProtoAction): ProtoState {
         selectedSectionId: state.selectedSectionId === action.id ? null : state.selectedSectionId,
       }
     case 'TOGGLE_SIDEBAR':
-      return { ...state, sidebarOpen: !state.sidebarOpen, sidebarExpanded: false }
+      // Keep sidebarExpanded during close so the 400ms CSS transition applies;
+      // SidePanel resets it via RESET_SIDEBAR_EXPANDED after the slide finishes.
+      return { ...state, sidebarOpen: !state.sidebarOpen }
+    case 'RESET_SIDEBAR_EXPANDED':
+      return { ...state, sidebarExpanded: false }
     case 'OPEN_SIDEBAR':
       return {
         ...state,
@@ -495,6 +499,7 @@ export function Prototype() {
           }
           isOverview={isOverview}
           sidebarOpen={state.sidebarOpen}
+          sidebarExpanded={state.sidebarExpanded}
           hideFibersInOverview={state.hideFibersInOverview}
           onToggleHideFibers={() => dispatch({ type: 'TOGGLE_HIDE_FIBERS_OVERVIEW' })}
         />
