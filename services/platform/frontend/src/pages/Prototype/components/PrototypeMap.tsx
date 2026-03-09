@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle, memo } from 'react'
+import { useEffect, useRef, useCallback, useMemo, forwardRef, useImperativeHandle, memo } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { MapboxOverlay } from '@deck.gl/mapbox'
@@ -189,11 +189,14 @@ export const PrototypeMap = memo(
 
     // Pre-resolve fibers for sections once (avoids per-section findFiber in hot loops)
     const sectionFibersRef = useRef(new Map<string, Fiber>())
-    const sectionFibers = new Map<string, Fiber>()
-    for (const sec of sections ?? []) {
-      const f = findFiber(sec.fiberId, sec.direction)
-      if (f) sectionFibers.set(sec.id, f)
-    }
+    const sectionFibers = useMemo(() => {
+      const m = new Map<string, Fiber>()
+      for (const sec of sections ?? []) {
+        const f = findFiber(sec.fiberId, sec.direction)
+        if (f) m.set(sec.id, f)
+      }
+      return m
+    }, [sections])
     sectionFibersRef.current = sectionFibers
 
     const thresholdLookupRef = useRef(thresholdLookup)
