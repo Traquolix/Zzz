@@ -65,8 +65,15 @@
 
 /* Collapsible sidebar */
 .proto-sidebar {
-  transition: transform 200ms ease-in-out;
-  width: clamp(340px, 40vw, 680px);
+  --sidebar-width: clamp(340px, 28vw, 480px);
+  width: var(--sidebar-width);
+  transition:
+    transform 200ms ease-in-out,
+    width 200ms ease-in-out;
+}
+
+.proto-sidebar.expanded {
+  --sidebar-width: 50vw;
 }
 
 /* Mapbox overrides for dark theme */

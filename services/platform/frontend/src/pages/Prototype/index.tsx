@@ -53,6 +53,7 @@ const initialState: ProtoState = {
   showNamingDialog: false,
   pendingSection: null,
   sidebarOpen: true,
+  sidebarExpanded: false,
   displayMode: 'dots',
   fiberThresholds: Object.fromEntries(fibers.map(f => [f.id, { ...defaultSpeedThresholds }])),
   fiberColors: Object.fromEntries(fibers.map(f => [f.id, f.color])),
@@ -240,6 +241,8 @@ function reducer(state: ProtoState, action: ProtoAction): ProtoState {
       return { ...state, show3DBuildings: !state.show3DBuildings }
     case 'TOGGLE_CHANNEL_HELPER':
       return { ...state, showChannelHelper: !state.showChannelHelper }
+    case 'TOGGLE_SIDEBAR_EXPANDED':
+      return { ...state, sidebarExpanded: !state.sidebarExpanded }
     default:
       return state
   }
@@ -450,6 +453,7 @@ export function Prototype() {
           onStructureClick={handleStructureClick}
           onChannelClick={handleChannelClick}
           sidebarOpen={state.sidebarOpen}
+          sidebarExpanded={state.sidebarExpanded}
           hideFibersInOverview={state.hideFibersInOverview}
           show3DBuildings={state.show3DBuildings}
           showChannelHelper={state.showChannelHelper}
@@ -489,6 +493,7 @@ export function Prototype() {
         }
         isOverview={isOverview}
         sidebarOpen={state.sidebarOpen}
+        sidebarExpanded={state.sidebarExpanded}
         hideFibersInOverview={state.hideFibersInOverview}
         onToggleHideFibers={() => dispatch({ type: 'TOGGLE_HIDE_FIBERS_OVERVIEW' })}
       />

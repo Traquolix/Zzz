@@ -108,6 +108,7 @@ export interface ProtoState {
   showNamingDialog: boolean
   pendingSection: PendingSection | null
   sidebarOpen: boolean
+  sidebarExpanded: boolean
   displayMode: 'dots' | 'vehicles'
   fiberThresholds: Record<string, SpeedThresholds>
   fiberColors: Record<string, string>
@@ -153,3 +154,4 @@ export type ProtoAction =
   | { type: 'TOGGLE_HIDE_FIBERS_OVERVIEW' }
   | { type: 'TOGGLE_3D_BUILDINGS' }
   | { type: 'TOGGLE_CHANNEL_HELPER' }
+  | { type: 'TOGGLE_SIDEBAR_EXPANDED' }

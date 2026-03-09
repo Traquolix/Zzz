@@ -3,6 +3,7 @@ interface LegendProps {
   onToggleDisplayMode: () => void
   isOverview?: boolean
   sidebarOpen?: boolean
+  sidebarExpanded?: boolean
   hideFibersInOverview?: boolean
   onToggleHideFibers?: () => void
 }
@@ -12,10 +13,12 @@ export function Legend({
   onToggleDisplayMode,
   isOverview,
   sidebarOpen,
+  sidebarExpanded,
   hideFibersInOverview,
   onToggleHideFibers,
 }: LegendProps) {
-  const right = sidebarOpen ? 'calc(clamp(340px, 40vw, 680px) + 0.75rem)' : 'calc(0.75rem + 36px + 0.5rem)'
+  const sidebarWidth = sidebarExpanded ? '50vw' : 'clamp(340px, 28vw, 480px)'
+  const right = sidebarOpen ? `calc(${sidebarWidth} + 0.75rem)` : 'calc(0.75rem + 36px + 0.5rem)'
 
   return (
     <div

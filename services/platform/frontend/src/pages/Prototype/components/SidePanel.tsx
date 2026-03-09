@@ -105,6 +105,7 @@ export function SidePanel({
     sections,
     incidents,
     sidebarOpen,
+    sidebarExpanded,
     fiberColors,
     showStructuresOnMap,
     showStructureLabels,
@@ -156,7 +157,10 @@ export function SidePanel({
       {/* Main panel — slides in/out via transform, tabs ride along */}
       <div
         ref={panelRef}
-        className="proto-sidebar h-full flex flex-col bg-[var(--proto-surface)] border-l border-[var(--proto-border)] shadow-[-4px_0_16px_rgba(0,0,0,0.3)] pointer-events-auto"
+        className={cn(
+          'proto-sidebar h-full flex flex-col bg-[var(--proto-surface)] border-l border-[var(--proto-border)] shadow-[-4px_0_16px_rgba(0,0,0,0.3)] pointer-events-auto',
+          sidebarExpanded && 'expanded',
+        )}
         style={{
           transform: sidebarOpen ? 'translateX(0)' : 'translateX(100%)',
           visibility: fullyClosed && !sidebarOpen ? 'hidden' : 'visible',
@@ -208,6 +212,12 @@ export function SidePanel({
                 onClick={() => dispatch({ type: 'SELECT_CHANNEL', channel: selectedChannel })}
               />
             )}
+            <TabButton
+              label={sidebarExpanded ? 'Collapse' : 'Expand'}
+              icon={<ExpandIcon expanded={!!sidebarExpanded} />}
+              active={false}
+              onClick={() => dispatch({ type: 'TOGGLE_SIDEBAR_EXPANDED' })}
+            />
             <TabButton
               label="Settings"
               icon={<SettingsIcon />}
@@ -675,6 +685,31 @@ const SectionsIcon = () => (
     <circle cx="4" cy="4" r="1.5" fill="currentColor" stroke="none" />
     <circle cx="12" cy="8" r="1.5" fill="currentColor" stroke="none" />
     <circle cx="7" cy="12" r="1.5" fill="currentColor" stroke="none" />
+  </svg>
+)
+
+const ExpandIcon = ({ expanded }: { expanded: boolean }) => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    {expanded ? (
+      <>
+        <polyline points="11 17 6 12 11 7" />
+        <polyline points="18 17 13 12 18 7" />
+      </>
+    ) : (
+      <>
+        <polyline points="13 17 18 12 13 7" />
+        <polyline points="6 17 11 12 6 7" />
+      </>
+    )}
   </svg>
 )
 
