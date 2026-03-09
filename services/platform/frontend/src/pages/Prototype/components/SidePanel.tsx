@@ -33,6 +33,7 @@ import type {
   PeakFrequencyData,
   SpectralSummary,
 } from '@/types/infrastructure'
+import { MAX_SECTIONS_PER_ORG } from '@/api/sections'
 import { fetchPeakFrequencies } from '@/api/infrastructure'
 import { useRealtime } from '@/hooks/useRealtime'
 import { useAuth } from '@/hooks/useAuth'
@@ -444,8 +445,18 @@ export function SidePanel({
                 ))}
                 <button
                   onClick={() => dispatch({ type: 'ENTER_SECTION_CREATION' })}
-                  className="flex items-center justify-center w-6 h-6 rounded text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors cursor-pointer"
-                  title="Add section"
+                  disabled={sections.length >= MAX_SECTIONS_PER_ORG}
+                  className={cn(
+                    'flex items-center justify-center w-6 h-6 rounded transition-colors',
+                    sections.length >= MAX_SECTIONS_PER_ORG
+                      ? 'text-[var(--proto-text-muted)] opacity-40 cursor-not-allowed'
+                      : 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] cursor-pointer',
+                  )}
+                  title={
+                    sections.length >= MAX_SECTIONS_PER_ORG
+                      ? `Section limit reached (${MAX_SECTIONS_PER_ORG} per organization)`
+                      : 'Add section'
+                  }
                 >
                   <svg
                     width="14"

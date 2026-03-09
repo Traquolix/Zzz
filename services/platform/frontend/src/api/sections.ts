@@ -1,5 +1,8 @@
 import { apiRequest } from './client'
 
+// Keep in sync with backend: services/platform/backend/apps/monitoring/views.py
+export const MAX_SECTIONS_PER_ORG = 50
+
 export interface ApiSection {
   id: string
   fiberId: string
@@ -53,4 +56,21 @@ export async function fetchSectionHistory(
   if (flow) params.set('flow', flow)
   if (since != null) params.set('since', String(since))
   return apiRequest(`/api/sections/${id}/history?${params}`)
+}
+
+export async function fetchBatchSectionHistory(
+  sectionIds: string[],
+  minutes = 60,
+  flow?: 'sim' | 'live',
+  since?: Record<string, number>,
+): Promise<Record<string, SectionHistoryPoint[]>> {
+  const params = flow ? `?flow=${flow}` : ''
+  const res = await apiRequest<{ results: Record<string, SectionHistoryPoint[]> }>(
+    `/api/sections/batch-history${params}`,
+    {
+      method: 'POST',
+      body: { sectionIds, minutes, ...(since && Object.keys(since).length > 0 && { since }) },
+    },
+  )
+  return res.results
 }

@@ -281,6 +281,124 @@ def _transform_history_point(r: dict, bucket_seconds: int) -> dict:
     }
 
 
+def query_batch_section_history(
+    sections: list[dict],
+    minutes: int = 60,
+    since_map: dict[str, int] | None = None,
+) -> dict[str, list[dict]]:
+    """Query history for multiple sections in a single ClickHouse round-trip.
+
+    Each section dict must have: id, fiberId, direction, channelStart, channelEnd.
+
+    Args:
+        since_map: Per-section ``{section_id: epoch_ms}`` cursors. Each section
+            only returns points after its own cursor. ``None`` = full window.
+
+    Builds a UNION ALL query where each branch is tagged with a section index.
+    All per-section values (fiber_id, direction, channel range, since) are
+    ClickHouse parameters with indexed suffixes (``fid_0``, ``fid_1``, ...).
+    The ``n_ch`` divisor is a literal integer derived from the section config.
+
+    Returns ``{section_id: [{time, speed, speedMax, samples, flow, occupancy}, ...], ...}``.
+    """
+    if not sections:
+        return {}
+
+    since = since_map or {}
+
+    if minutes <= 5:
+        return _query_batch_hires(sections, minutes, since)
+    return _query_batch_1m(sections, minutes, since)
+
+
+def _query_batch_hires(
+    sections: list[dict], minutes: int, since: dict[str, int]
+) -> dict[str, list[dict]]:
+    """Batch query detection_hires at 1-second resolution using UNION ALL."""
+    parts: list[str] = []
+    params: dict = {"mins": minutes}
+
+    for i, sec in enumerate(sections):
+        s = f"_{i}"
+        params[f"fid{s}"] = sec["fiberId"]
+        params[f"dir{s}"] = sec["direction"]
+        params[f"cs{s}"] = sec["channelStart"]
+        params[f"ce{s}"] = sec["channelEnd"]
+        params[f"since{s}"] = since.get(sec["id"], 0)
+        params[f"nch{s}"] = max(1, sec["channelEnd"] - sec["channelStart"] + 1)
+
+        parts.append(f"""
+            SELECT
+                {i} AS section_idx,
+                toUnixTimestamp(toStartOfSecond(ts)) * 1000 AS time_ms,
+                avg(speed) AS speed,
+                max(speed) AS speed_max,
+                count() / {{nch{s}:UInt32}} AS samples
+            FROM sequoia.detection_hires
+            WHERE fiber_id = {{fid{s}:String}}
+              AND direction = {{dir{s}:UInt8}}
+              AND ch BETWEEN {{cs{s}:UInt16}} AND {{ce{s}:UInt16}}
+              AND ts >= now() - INTERVAL {{mins:UInt32}} MINUTE
+              AND ({{since{s}:UInt64}} = 0
+                   OR ts > fromUnixTimestamp64Milli({{since{s}:UInt64}}))
+            GROUP BY toStartOfSecond(ts)
+        """)
+
+    sql = " UNION ALL ".join(parts) + " ORDER BY section_idx, time_ms"
+    rows = query(sql, parameters=params)
+    return _split_batch_rows(rows, sections, bucket_seconds=1)
+
+
+def _query_batch_1m(
+    sections: list[dict], minutes: int, since: dict[str, int]
+) -> dict[str, list[dict]]:
+    """Batch query detection_1m at 1-minute resolution using UNION ALL."""
+    parts: list[str] = []
+    params: dict = {"mins": minutes}
+
+    for i, sec in enumerate(sections):
+        s = f"_{i}"
+        params[f"fid{s}"] = sec["fiberId"]
+        params[f"dir{s}"] = sec["direction"]
+        params[f"cs{s}"] = sec["channelStart"]
+        params[f"ce{s}"] = sec["channelEnd"]
+        params[f"since{s}"] = since.get(sec["id"], 0)
+        params[f"nch{s}"] = max(1, sec["channelEnd"] - sec["channelStart"] + 1)
+
+        parts.append(f"""
+            SELECT
+                {i} AS section_idx,
+                toUnixTimestamp(ts) * 1000 AS time_ms,
+                avgMerge(speed_avg_state) AS speed,
+                maxMerge(speed_max_state) AS speed_max,
+                sumMerge(samples_state) / {{nch{s}:UInt32}} AS samples
+            FROM sequoia.detection_1m
+            WHERE fiber_id = {{fid{s}:String}}
+              AND direction = {{dir{s}:UInt8}}
+              AND ch BETWEEN {{cs{s}:UInt16}} AND {{ce{s}:UInt16}}
+              AND ts >= now() - INTERVAL {{mins:UInt32}} MINUTE
+              AND ({{since{s}:UInt64}} = 0
+                   OR ts > fromUnixTimestamp64Milli({{since{s}:UInt64}}))
+            GROUP BY ts
+        """)
+
+    sql = " UNION ALL ".join(parts) + " ORDER BY section_idx, time_ms"
+    rows = query(sql, parameters=params)
+    return _split_batch_rows(rows, sections, bucket_seconds=60)
+
+
+def _split_batch_rows(
+    rows: list[dict], sections: list[dict], bucket_seconds: int
+) -> dict[str, list[dict]]:
+    """Split UNION ALL rows back into per-section results by section_idx."""
+    result: dict[str, list[dict]] = {sec["id"]: [] for sec in sections}
+    for row in rows:
+        idx = int(row["section_idx"])
+        if 0 <= idx < len(sections):
+            result[sections[idx]["id"]].append(_transform_history_point(row, bucket_seconds))
+    return result
+
+
 def _section_to_dict(section: Section) -> dict:
     """Convert a Section model instance to the API response dict."""
     return {
