@@ -7,7 +7,7 @@ export type Incident = {
   type: IncidentType
   severity: Severity
   fiberId: string
-  direction: number
+  direction: 0 | 1
   channel: number // which channel (array index)
   channelEnd?: number
   detectedAt: string
@@ -50,7 +50,7 @@ export type SnapshotPoint = {
 export type IncidentSnapshot = {
   incidentId: string
   fiberId: string
-  direction: number
+  direction: 0 | 1
   centerChannel: number
   capturedAt: number
   points: SnapshotPoint[]

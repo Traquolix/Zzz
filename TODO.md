@@ -14,9 +14,10 @@
 7. [x] **Consolidate dual Incident type definitions** [#42] — PR #65
 8. [ ] **Remove dead frontend type files** [#61] — tech-debt, delete unused types in `src/types/` (selection.ts, admin.ts, report.ts, user.ts, section.ts, metrics.ts)
 9. [x] **Replace `fiberLineId()` composite keys with structured keys** [#62] — PR #65
-10. [ ] **Frontend: poll section history API** [#54] — enhancement, replace client-side accumulation with periodic API polling
-11. [ ] **Sim stats: `detectionsPerSecond` always 0** [#41] — enhancement
-12. [ ] **Optimistic flow switch rollback** [#15] — bug, frontend/backend flow state desync
+10. [ ] **Rename Proto-prefixed types** [#66] — refactor, rename ProtoIncident/ProtoState/ProtoAction to meaningful names
+11. [ ] **Frontend: poll section history API** [#54] — enhancement, replace client-side accumulation with periodic API polling
+12. [ ] **Sim stats: `detectionsPerSecond` always 0** [#41] — enhancement
+13. [ ] **Optimistic flow switch rollback** [#15] — bug, frontend/backend flow state desync
 
 ## High Priority
 
