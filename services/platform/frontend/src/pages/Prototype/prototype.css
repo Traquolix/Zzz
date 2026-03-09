@@ -64,8 +64,8 @@
 }
 
 /* Collapsible sidebar
-   Transition duration (200ms) must be less than useDebouncedResize delay (250ms)
-   so the debounce timer fires after the CSS transition settles. */
+   The useDebouncedResize timer (250ms) resets on every ResizeObserver event
+   during the transition, so charts re-render only after the animation settles. */
 .proto-sidebar {
   container-type: inline-size;
   --sidebar-width: clamp(340px, 28vw, 480px);
@@ -87,6 +87,9 @@
 
 .proto-sidebar.expanded {
   --sidebar-width: 50vw;
+  transition:
+    transform 400ms ease-in-out,
+    width 400ms ease-in-out;
 }
 
 /* Mapbox overrides for dark theme */
@@ -112,6 +115,22 @@
 
 .proto-vehicle-popup .mapboxgl-popup-tip {
   border-top-color: rgba(30, 32, 36, 0.92);
+}
+
+.proto-vehicle-popup-body {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--proto-text);
+}
+
+.proto-vehicle-popup-speed {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.proto-vehicle-popup-detail {
+  color: var(--proto-text-secondary);
 }
 
 /* Incident marker pulse on hover */

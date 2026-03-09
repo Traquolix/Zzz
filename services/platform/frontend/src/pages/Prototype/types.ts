@@ -155,3 +155,4 @@ export type ProtoAction =
   | { type: 'TOGGLE_3D_BUILDINGS' }
   | { type: 'TOGGLE_CHANNEL_HELPER' }
   | { type: 'TOGGLE_SIDEBAR_EXPANDED' }
+  | { type: 'RESET_SIDEBAR_EXPANDED' }
