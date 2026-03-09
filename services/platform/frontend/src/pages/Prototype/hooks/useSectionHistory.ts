@@ -30,6 +30,8 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
 
   const minutes = TIME_RANGE_MINUTES[timeRange] ?? 5
 
+  // Abort flag — not passed to fetch (apiRequest has its own timeout controller),
+  // but used to discard stale responses when the time range changes mid-flight.
   const abortRef = useRef<AbortController | null>(null)
 
   const fetchData = useCallback(async () => {

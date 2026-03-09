@@ -379,6 +379,11 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             pass
         except Exception:
             logger.warning("Pub/sub listener error for user=%s", self._user, exc_info=True)
+            # Restart listener after a brief delay if we still have subscriptions
+            if self._pubsub_subscriptions:
+                await asyncio.sleep(1)
+                self._pubsub_task = None
+                self._ensure_pubsub_listener()
 
     async def _subscribe_pubsub(self, channel: str):
         """Subscribe to a Redis pub/sub channel."""
