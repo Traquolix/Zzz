@@ -15,6 +15,7 @@ export function useDebouncedResize(
   const [width, setWidth] = useState(0)
   const [transitioning, setTransitioning] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const latestWidthRef = useRef(0)
   const initialised = useRef(false)
 
   useEffect(() => {
@@ -24,12 +25,15 @@ export function useDebouncedResize(
     // Seed initial width synchronously (no transition flag on first mount)
     if (el.clientWidth > 0 && !initialised.current) {
       setWidth(el.clientWidth)
+      latestWidthRef.current = el.clientWidth
       initialised.current = true
     }
 
     const observer = new ResizeObserver(entries => {
       const w = entries[0]?.contentRect.width ?? 0
       if (w <= 0) return
+
+      latestWidthRef.current = w
 
       // First observation — seed without marking as transitioning
       if (!initialised.current) {
@@ -42,7 +46,8 @@ export function useDebouncedResize(
 
       if (timerRef.current) clearTimeout(timerRef.current)
       timerRef.current = setTimeout(() => {
-        setWidth(w)
+        // Always use the most recent width, not the closure-captured value
+        setWidth(latestWidthRef.current)
         setTransitioning(false)
       }, delay)
     })

@@ -453,7 +453,6 @@ export function Prototype() {
           onStructureClick={handleStructureClick}
           onChannelClick={handleChannelClick}
           sidebarOpen={state.sidebarOpen}
-          sidebarExpanded={state.sidebarExpanded}
           hideFibersInOverview={state.hideFibersInOverview}
           show3DBuildings={state.show3DBuildings}
           showChannelHelper={state.showChannelHelper}
@@ -493,7 +492,6 @@ export function Prototype() {
         }
         isOverview={isOverview}
         sidebarOpen={state.sidebarOpen}
-        sidebarExpanded={state.sidebarExpanded}
         hideFibersInOverview={state.hideFibersInOverview}
         onToggleHideFibers={() => dispatch({ type: 'TOGGLE_HIDE_FIBERS_OVERVIEW' })}
       />

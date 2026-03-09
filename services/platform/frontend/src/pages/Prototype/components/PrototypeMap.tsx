@@ -22,6 +22,7 @@ import {
 import type { Fiber, Section, PendingPoint, LiveSectionStats, SpeedThresholds, ProtoIncident } from '../types'
 import type { Infrastructure } from '@/types/infrastructure'
 import type { VehiclePosition } from '../hooks/useVehicleSim'
+import { getSidebarWidth } from '../hooks/useSidebarWidth'
 
 export interface PrototypeMapHandle {
   flyTo: (center: [number, number], zoom?: number) => void
@@ -58,7 +59,6 @@ interface PrototypeMapProps {
   onStructureClick?: (id: string) => void
   onChannelClick?: (point: PendingPoint) => void
   sidebarOpen?: boolean
-  sidebarExpanded?: boolean
   hideFibersInOverview?: boolean
   show3DBuildings?: boolean
   showChannelHelper?: boolean
@@ -145,7 +145,6 @@ export const PrototypeMap = memo(
       onStructureClick,
       onChannelClick,
       sidebarOpen,
-      sidebarExpanded,
       hideFibersInOverview,
       show3DBuildings,
       showChannelHelper,
@@ -215,9 +214,6 @@ export const PrototypeMap = memo(
     const sidebarOpenRef = useRef(sidebarOpen)
     sidebarOpenRef.current = sidebarOpen
 
-    const sidebarExpandedRef = useRef(sidebarExpanded)
-    sidebarExpandedRef.current = sidebarExpanded
-
     const overviewRef = useRef(false)
     const hideFibersRef = useRef(hideFibersInOverview)
     hideFibersRef.current = hideFibersInOverview
@@ -264,11 +260,7 @@ export const PrototypeMap = memo(
       flyTo: (center: [number, number], zoom = 14) => {
         // When the sidebar is open, pad the right side so the target
         // centers in the visible map area rather than behind the panel.
-        const sidebarW = !sidebarOpenRef.current
-          ? 0
-          : sidebarExpandedRef.current
-            ? window.innerWidth * 0.5
-            : Math.min(Math.max(window.innerWidth * 0.28, 340), 480)
+        const sidebarW = !sidebarOpenRef.current ? 0 : getSidebarWidth()
         mapRef.current?.flyTo({
           center,
           zoom,
