@@ -2285,28 +2285,42 @@ function StructureDetail({
         </div>
 
         {/* Frequency shift banner */}
-        {comparisonStats && (
-          <div className="flex items-center justify-between rounded-lg border border-[var(--proto-border)] bg-[var(--proto-surface-raised)] px-4 py-3">
-            <div>
-              <span
-                className={`text-xl font-bold ${comparisonStats.diff > 0 ? 'text-green-400' : comparisonStats.diff < 0 ? 'text-red-400' : 'text-[var(--proto-text)]'}`}
-              >
-                {comparisonStats.diff > 0 ? '+' : ''}
-                {(comparisonStats.diff * 1000).toFixed(2)} mHz
-              </span>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span
-                  className={`text-xs ${comparisonStats.diff > 0 ? 'text-green-500' : comparisonStats.diff < 0 ? 'text-red-500' : 'text-[var(--proto-text-muted)]'}`}
-                >
-                  ({comparisonStats.diffPercent > 0 ? '+' : ''}
-                  {comparisonStats.diffPercent.toFixed(2)}%)
-                </span>
-                <span className="text-[10px] text-[var(--proto-text-muted)]">vs previous period</span>
+        {comparisonStats &&
+          (() => {
+            const isNominal = shmStatus?.status === 'nominal'
+            const shiftColor = isNominal
+              ? 'text-[var(--proto-text)]'
+              : comparisonStats.diff > 0
+                ? 'text-green-400'
+                : comparisonStats.diff < 0
+                  ? 'text-red-400'
+                  : 'text-[var(--proto-text)]'
+            const pctColor = isNominal
+              ? 'text-[var(--proto-text-muted)]'
+              : comparisonStats.diff > 0
+                ? 'text-green-500'
+                : comparisonStats.diff < 0
+                  ? 'text-red-500'
+                  : 'text-[var(--proto-text-muted)]'
+            return (
+              <div className="flex items-center justify-between rounded-lg border border-[var(--proto-border)] bg-[var(--proto-surface-raised)] px-4 py-3">
+                <div>
+                  <span className={`text-xl font-bold ${shiftColor}`}>
+                    {comparisonStats.diff > 0 ? '+' : ''}
+                    {(comparisonStats.diff * 1000).toFixed(2)} mHz
+                  </span>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className={`text-xs ${pctColor}`}>
+                      ({comparisonStats.diffPercent > 0 ? '+' : ''}
+                      {comparisonStats.diffPercent.toFixed(2)}%)
+                    </span>
+                    <span className="text-[10px] text-[var(--proto-text-muted)]">vs previous period</span>
+                  </div>
+                </div>
+                <div className="text-[10px] text-[var(--proto-text-muted)] uppercase tracking-wider">Freq Shift</div>
               </div>
-            </div>
-            <div className="text-[10px] text-[var(--proto-text-muted)] uppercase tracking-wider">Freq Shift</div>
-          </div>
-        )}
+            )
+          })()}
 
         {/* Spectral Heatmap */}
         <div className="border-t border-[var(--proto-border)] pt-3">
@@ -2614,7 +2628,7 @@ function SpectralHeatmapCanvas({ data }: { data: SpectralTimeSeries }) {
     const { spectra, freqs } = data
     if (!spectra.length || !freqs.length) return
 
-    const margin = { top: 4, right: 8, bottom: 24, left: 36 }
+    const margin = { top: 4, right: 8, bottom: 24, left: 48 }
     const plotW = width - margin.left - margin.right
     const plotH = height - margin.top - margin.bottom
 
@@ -2654,26 +2668,53 @@ function SpectralHeatmapCanvas({ data }: { data: SpectralTimeSeries }) {
     // Axes
     ctx.fillStyle = '#64748b'
     ctx.font = '10px sans-serif'
+
+    // X axis (time) — hour-aligned ticks like PeakScatterPlot
     ctx.textAlign = 'center'
-
-    // X axis (time)
-    const numXLabels = Math.min(5, numTime)
-    for (let i = 0; i < numXLabels; i++) {
-      const ti = Math.round((i / (numXLabels - 1)) * (numTime - 1))
-      const x = margin.left + ti * cellW + cellW / 2
-      const seconds = data.dt[ti]
-      const label = seconds < 60 ? `${Math.round(seconds)}s` : `${(seconds / 60).toFixed(0)}m`
-      ctx.fillText(label, x, height - 4)
+    const t0 = new Date(data.t0)
+    const tMin = t0.getTime()
+    const tMax = tMin + (data.dt[data.dt.length - 1] || 0) * 1000
+    const durH = (tMax - tMin) / (1000 * 3600)
+    let interval = 1
+    if (durH > 72) interval = 12
+    else if (durH > 24) interval = 6
+    else if (durH > 12) interval = 3
+    else if (durH > 6) interval = 2
+    const cur = new Date(tMin)
+    cur.setMinutes(0, 0, 0)
+    if (cur.getTime() < tMin) cur.setHours(cur.getHours() + 1)
+    const aligned = Math.ceil(cur.getHours() / interval) * interval
+    cur.setHours(aligned)
+    while (cur.getTime() <= tMax) {
+      if (cur.getTime() >= tMin) {
+        const frac = (cur.getTime() - tMin) / (tMax - tMin || 1)
+        const x = margin.left + frac * plotW
+        const label = `${cur.getHours().toString().padStart(2, '0')}:00`
+        ctx.fillText(label, x, height - 4)
+      }
+      cur.setHours(cur.getHours() + interval)
     }
 
-    // Y axis (frequency)
+    // Y axis (frequency) — integer Hz ticks
     ctx.textAlign = 'right'
-    const numYLabels = Math.min(5, numFreq)
-    for (let i = 0; i < numYLabels; i++) {
-      const fi = Math.round((i / (numYLabels - 1)) * (numFreq - 1))
-      const y = margin.top + (numFreq - 1 - fi) * cellH + cellH / 2 + 3
-      ctx.fillText(`${freqs[fi].toFixed(0)}`, margin.left - 4, y)
+    const freqLo = Math.ceil(freqs[0])
+    const freqHi = Math.floor(freqs[freqs.length - 1])
+    for (let hz = freqLo; hz <= freqHi; hz++) {
+      const frac = (hz - freqs[0]) / (freqs[freqs.length - 1] - freqs[0])
+      const y = margin.top + (1 - frac) * plotH + 3
+      ctx.fillText(`${hz}`, margin.left - 4, y)
     }
+
+    // Rotated vertical label: "Freq (Hz)"
+    ctx.save()
+    ctx.font = '9px sans-serif'
+    ctx.textAlign = 'center'
+    const labelX = 15
+    const labelY = margin.top + plotH / 2
+    ctx.translate(labelX, labelY)
+    ctx.rotate(-Math.PI / 2)
+    ctx.fillText('Freq (Hz)', 0, 0)
+    ctx.restore()
   }, [data])
 
   useEffect(() => {
@@ -2722,7 +2763,7 @@ function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
   }, [])
 
   const height = 170
-  const padding = { top: 16, right: 12, bottom: 28, left: 40 }
+  const padding = { top: 16, right: 12, bottom: 28, left: 48 }
   const plotW = width - padding.left - padding.right
   const plotH = height - padding.top - padding.bottom
 
@@ -2741,7 +2782,8 @@ function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
 
   const { points, xScale, yScale, freqMin, freqMax, inverseXScale } = useMemo(() => {
     const freqMin = 1.05
-    const freqMax = 1.2
+    const freqMax = 1.16
+
     let pMin = Infinity,
       pMax = -Infinity
     for (const p of data.peakPowers) {
@@ -2904,11 +2946,11 @@ function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
             </g>
           ))}
           <text
-            x={12}
+            x={4}
             y={height / 2}
             textAnchor="middle"
             dominantBaseline="middle"
-            transform={`rotate(-90, 12, ${height / 2})`}
+            transform={`rotate(-90, 4, ${height / 2})`}
             fill="#64748b"
             fontSize="9"
           >
@@ -3040,12 +3082,12 @@ function ComparisonOverlay({
   const rawId = useRef(Math.random().toString(36).slice(2)).current
   const clipId = `proto-overlay-${rawId}`
   const height = 140
-  const padding = { top: 12, right: 12, bottom: 22, left: 40 }
+  const padding = { top: 12, right: 12, bottom: 22, left: 48 }
   const plotW = Math.max(80, width - padding.left - padding.right)
   const plotH = height - padding.top - padding.bottom
 
   const freqMin = 1.05,
-    freqMax = 1.2
+    freqMax = 1.16
   const yScale = (f: number) => padding.top + ((freqMax - f) / (freqMax - freqMin)) * plotH
 
   const processData = (data: PeakFrequencyData | null, color: string) => {
@@ -3062,7 +3104,7 @@ function ComparisonOverlay({
   const pointsB = processData(dataB, '#f59e0b')
   const opacityA = focus === 'A' ? 0.7 : focus === 'equal' ? 0.3 : 0.04
   const opacityB = focus === 'B' ? 0.7 : focus === 'equal' ? 0.3 : 0.04
-  const yTicks = [1.05, 1.1, 1.15, 1.2]
+  const yTicks = [1.05, 1.09, 1.12, 1.16]
 
   return (
     <svg
@@ -3118,15 +3160,15 @@ function ComparisonOverlay({
         </g>
       ))}
       <text
-        x={12}
+        x={4}
         y={height / 2}
         textAnchor="middle"
         dominantBaseline="middle"
-        transform={`rotate(-90, 12, ${height / 2})`}
+        transform={`rotate(-90, 4, ${height / 2})`}
         fill="#64748b"
         fontSize="9"
       >
-        Hz
+        Freq (Hz)
       </text>
 
       {/* X-axis */}
