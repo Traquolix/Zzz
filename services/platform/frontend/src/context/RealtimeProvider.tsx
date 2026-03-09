@@ -3,6 +3,7 @@ import { getAuthToken } from '@/api/client'
 import { logger } from '@/lib/logger'
 import { RealtimeContext, type RealtimeContextType, type DataFlow } from './RealtimeContext'
 import { useAppStore } from '@/stores/appStore'
+import { showToast } from '@/lib/toast'
 
 const PING_INTERVAL_MS = 30_000
 const INITIAL_RECONNECT_DELAY_MS = 1_000
@@ -17,8 +18,8 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
   const [connected, setConnected] = useState(false)
   const [reconnecting, setReconnecting] = useState(false)
   const [authFailed, setAuthFailed] = useState(false)
-  const [flow, setFlowState] = useState<DataFlow>('sim')
-  const flowRef = useRef<DataFlow>('sim')
+  const [flow, setFlowState] = useState<DataFlow>('live')
+  const flowRef = useRef<DataFlow>('live')
   const [switchingFlow, setSwitchingFlow] = useState(false)
   const switchingFlowRef = useRef(false)
   const [availableFlows, setAvailableFlows] = useState<DataFlow[]>(['sim'])
@@ -76,6 +77,7 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
       logger.error('RealtimeProvider: flow switch timeout, reverting')
       switchingFlowRef.current = false
       setSwitchingFlow(false)
+      showToast.warning('flow.switchTimeout')
     }, FLOW_SWITCH_TIMEOUT_MS)
   }, [])
 
@@ -179,8 +181,9 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
               setAuthFailed(false)
               reconnectDelayRef.current = INITIAL_RECONNECT_DELAY_MS
 
-              // Read available flows from auth response
+              // Read available flows and server's chosen default from auth response
               const flows: DataFlow[] = parsed.available_flows ?? ['sim']
+              const serverFlow: DataFlow = parsed.flow ?? (flows.includes('live') ? 'live' : 'sim')
               setAvailableFlows(flows)
 
               // Preserve user's flow choice across reconnects; fall back if unavailable
@@ -193,9 +196,8 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
               flowRef.current = resolvedFlow
               setFlowState(resolvedFlow)
 
-              // Only send set_flow if the resolved flow differs from the server
-              // default ('sim'). This handles reconnects where the user was on 'live'.
-              if (resolvedFlow !== 'sim') {
+              // Only send set_flow if user's preference differs from server's default
+              if (resolvedFlow !== serverFlow) {
                 ws.send(JSON.stringify({ action: 'set_flow', flow: resolvedFlow }))
               }
 

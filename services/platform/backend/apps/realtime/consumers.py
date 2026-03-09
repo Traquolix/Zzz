@@ -125,7 +125,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         self.subscriptions = set()
         self._user = user
         self._authenticated = True
-        self._flow = "sim"  # Default flow; updated after auth based on availability
+        self._flow = "live"  # Default to live; downgraded to sim if live unavailable
         # Rate limiting state
         self._message_times = []
         # Pub/sub state (lazily initialized on first high-frequency subscribe)
@@ -298,12 +298,19 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         if cache.get("kafka_available", False):
             available_flows.append("live")
 
+        # Default to live if available, otherwise fall back to sim
+        if "live" in available_flows:
+            self._flow = "live"
+        else:
+            self._flow = "sim"
+
         logger.debug("WebSocket client authenticated: %s (org=%s)", user.username, self._org_id)
         await self.send_json(
             {
                 "action": "authenticated",
                 "success": True,
                 "available_flows": available_flows,
+                "flow": self._flow,
             }
         )
 
