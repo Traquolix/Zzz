@@ -44,6 +44,7 @@ import { useWaterfallBuffer } from '../hooks/useWaterfallBuffer'
 import { WaterfallCanvas } from './WaterfallCanvas'
 import { FlowToggle } from './FlowToggle'
 import { useSectionHistory } from '../hooks/useSectionHistory'
+import { useDebouncedResize } from '../hooks/useDebouncedResize'
 import type { DataFlow } from '@/context/RealtimeContext'
 
 interface StructureDataProp {
@@ -63,6 +64,7 @@ interface StructureDataProp {
 interface SidePanelProps {
   state: ProtoState
   dispatch: React.Dispatch<ProtoAction>
+  panelRef: React.RefObject<HTMLDivElement | null>
   liveStats: Map<string, LiveSectionStats>
   liveSeriesData: Map<string, SectionDataPoint[]>
   onHighlightFiber?: (fiberId: string) => void
@@ -82,6 +84,7 @@ type TimeRange = '1m' | '5m' | '15m' | '1h'
 export function SidePanel({
   state,
   dispatch,
+  panelRef,
   liveStats,
   liveSeriesData,
   onHighlightFiber,
@@ -105,35 +108,32 @@ export function SidePanel({
     sections,
     incidents,
     sidebarOpen,
+    sidebarExpanded,
     fiberColors,
     showStructuresOnMap,
     showStructureLabels,
     showIncidentsOnMap,
   } = state
   const realtimeCtx = useRealtime()
+  const { t } = useTranslation()
   const [incidentSortBy, setIncidentSortBy] = useState<'newest' | 'oldest'>('newest')
   const [shmSearch, setShmSearch] = useState('')
+  const [sectionSearch, setSectionSearch] = useState('')
 
   const incident = selectedIncidentId ? incidents.find(i => i.id === selectedIncidentId) : null
   const section = selectedSectionId ? sections.find(s => s.id === selectedSectionId) : null
 
   // Track when the slide transition finishes so we can delay showing/hiding elements
-  const [, setFullyOpen] = useState(sidebarOpen)
   const [fullyClosed, setFullyClosed] = useState(!sidebarOpen)
-  const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (sidebarOpen) {
       setFullyClosed(false)
-    } else {
-      setFullyOpen(false)
     }
   }, [sidebarOpen])
 
   const handleTransitionEnd = () => {
-    if (sidebarOpen) {
-      setFullyOpen(true)
-    } else {
+    if (!sidebarOpen) {
       setFullyClosed(true)
     }
   }
@@ -156,7 +156,10 @@ export function SidePanel({
       {/* Main panel — slides in/out via transform, tabs ride along */}
       <div
         ref={panelRef}
-        className="proto-sidebar h-full flex flex-col bg-[var(--proto-surface)] border-l border-[var(--proto-border)] shadow-[-4px_0_16px_rgba(0,0,0,0.3)] pointer-events-auto"
+        className={cn(
+          'proto-sidebar h-full flex flex-col bg-[var(--proto-surface)] border-l border-[var(--proto-border)] shadow-[-4px_0_16px_rgba(0,0,0,0.3)] pointer-events-auto',
+          sidebarExpanded && 'expanded',
+        )}
         style={{
           transform: sidebarOpen ? 'translateX(0)' : 'translateX(100%)',
           visibility: fullyClosed && !sidebarOpen ? 'hidden' : 'visible',
@@ -208,6 +211,13 @@ export function SidePanel({
                 onClick={() => dispatch({ type: 'SELECT_CHANNEL', channel: selectedChannel })}
               />
             )}
+            <button
+              title={sidebarExpanded ? t('sidebar.collapsePanel') : t('sidebar.expandPanel')}
+              onClick={() => dispatch({ type: 'TOGGLE_SIDEBAR_EXPANDED' })}
+              className="group/exp flex items-center justify-center self-end w-[32px] hover:w-full h-7 rounded-l-lg border border-r-0 border-transparent bg-[var(--proto-surface)]/40 text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)] hover:bg-[var(--proto-surface)]/80 transition-all cursor-pointer"
+            >
+              <ExpandIcon expanded={!!sidebarExpanded} />
+            </button>
             <TabButton
               label="Settings"
               icon={<SettingsIcon />}
@@ -218,25 +228,25 @@ export function SidePanel({
         </div>
 
         {/* Panel header */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--proto-border)]">
+        <div className="flex items-center justify-between px-4 h-[52px] shrink-0 border-b border-[var(--proto-border)]">
           <div className="flex items-center gap-2.5">
-            <span className="text-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
+            <span className="text-[length:var(--text-sm)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
               {activeTab}
             </span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             {activeTab === 'incidents' && (
               <>
                 {filterSeverity && (
                   <button
                     onClick={() => dispatch({ type: 'SET_FILTER_SEVERITY', severity: null })}
-                    className="w-2.5 h-2.5 rounded-full transition-all cursor-pointer opacity-50 hover:opacity-80"
+                    className="w-3 h-3 rounded-full transition-all cursor-pointer opacity-50 hover:opacity-80"
                     style={{ backgroundColor: 'var(--proto-text-muted)' }}
                     title="Clear filter"
                   >
                     <svg
-                      width="10"
-                      height="10"
+                      width="12"
+                      height="12"
                       viewBox="0 0 10 10"
                       fill="none"
                       stroke="currentColor"
@@ -254,7 +264,7 @@ export function SidePanel({
                     key={s}
                     onClick={() => dispatch({ type: 'SET_FILTER_SEVERITY', severity: filterSeverity === s ? null : s })}
                     className={cn(
-                      'w-2.5 h-2.5 rounded-full transition-all cursor-pointer ring-offset-1 ring-offset-[var(--proto-surface)]',
+                      'w-3 h-3 rounded-full transition-all cursor-pointer ring-offset-1 ring-offset-[var(--proto-surface)]',
                       filterSeverity === s
                         ? 'ring-1 ring-[var(--proto-text-secondary)] scale-125'
                         : 'opacity-50 hover:opacity-80',
@@ -266,7 +276,7 @@ export function SidePanel({
                 <button
                   onClick={() => dispatch({ type: 'TOGGLE_HIDE_RESOLVED' })}
                   className={cn(
-                    'ml-1 flex items-center justify-center w-5 h-5 rounded transition-colors cursor-pointer',
+                    'ml-1 flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer',
                     hideResolved
                       ? 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)]'
                       : 'text-[var(--proto-accent)]',
@@ -307,7 +317,7 @@ export function SidePanel({
                 <button
                   onClick={() => dispatch({ type: 'TOGGLE_INCIDENTS_ON_MAP' })}
                   className={cn(
-                    'flex items-center justify-center w-5 h-5 rounded transition-colors cursor-pointer',
+                    'flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer',
                     showIncidentsOnMap
                       ? 'text-[var(--proto-accent)]'
                       : 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)]',
@@ -330,7 +340,7 @@ export function SidePanel({
                 </button>
                 <button
                   onClick={() => setIncidentSortBy(s => (s === 'newest' ? 'oldest' : 'newest'))}
-                  className="flex items-center justify-center w-5 h-5 rounded text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors cursor-pointer"
+                  className="flex items-center justify-center w-6 h-6 rounded text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors cursor-pointer"
                   title={incidentSortBy === 'newest' ? 'Newest first' : 'Oldest first'}
                 >
                   <svg
@@ -356,8 +366,8 @@ export function SidePanel({
                 <div className="relative">
                   <svg
                     className="absolute left-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--proto-text-muted)]"
-                    width="10"
-                    height="10"
+                    width="12"
+                    height="12"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -373,7 +383,7 @@ export function SidePanel({
                     value={shmSearch}
                     onChange={e => setShmSearch(e.target.value)}
                     placeholder="Search..."
-                    className="w-28 focus:w-36 pl-5 pr-1.5 py-0.5 rounded bg-transparent border border-[var(--proto-border)] text-[10px] text-[var(--proto-text)] placeholder:text-[var(--proto-text-muted)] outline-none focus:border-[var(--proto-text-secondary)] transition-all"
+                    className="w-28 focus:w-36 pl-5 pr-1.5 py-1 rounded bg-transparent border border-[var(--proto-border)] text-[length:var(--text-xs)] text-[var(--proto-text)] placeholder:text-[var(--proto-text-muted)] outline-none focus:border-[var(--proto-text-secondary)] transition-all"
                   />
                 </div>
                 <button
@@ -389,15 +399,19 @@ export function SidePanel({
                   <svg
                     width="14"
                     height="14"
-                    viewBox="0 0 14 14"
+                    viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
-                    strokeWidth="1.5"
+                    strokeWidth="1.8"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   >
-                    <path d="M7 1C5 1 3.5 3 3.5 5.5C3.5 8.5 7 13 7 13C7 13 10.5 8.5 10.5 5.5C10.5 3 9 1 7 1Z" />
-                    <circle cx="7" cy="5.5" r="1.5" />
+                    <rect x="1" y="5" width="22" height="14" rx="2" />
+                    <path d="M5 5v5" />
+                    <path d="M9 5v3" />
+                    <path d="M13 5v5" />
+                    <path d="M17 5v3" />
+                    <path d="M21 5v5" />
                   </svg>
                 </button>
                 <button
@@ -429,20 +443,29 @@ export function SidePanel({
             )}
             {activeTab === 'sections' && !selectedSectionId && (
               <>
-                {(Object.keys(chartColors) as MetricKey[]).map(key => (
-                  <button
-                    key={key}
-                    onClick={() => dispatch({ type: 'SET_SECTION_METRIC', metric: key })}
-                    className={cn(
-                      'text-[10px] font-medium px-1.5 py-0.5 rounded transition-colors cursor-pointer',
-                      sectionMetric === key
-                        ? 'text-[var(--proto-text)] bg-[var(--proto-border)]'
-                        : 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)]',
-                    )}
+                <div className="relative">
+                  <svg
+                    className="absolute left-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--proto-text-muted)]"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                   >
-                    {chartColors[key].label}
-                  </button>
-                ))}
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                  <input
+                    type="text"
+                    value={sectionSearch}
+                    onChange={e => setSectionSearch(e.target.value)}
+                    placeholder="Search..."
+                    className="w-28 focus:w-36 pl-5 pr-1.5 py-1 rounded bg-transparent border border-[var(--proto-border)] text-[length:var(--text-xs)] text-[var(--proto-text)] placeholder:text-[var(--proto-text-muted)] outline-none focus:border-[var(--proto-text-secondary)] transition-all"
+                  />
+                </div>
                 <button
                   onClick={() => dispatch({ type: 'ENTER_SECTION_CREATION' })}
                   disabled={sections.length >= MAX_SECTIONS_PER_ORG}
@@ -471,6 +494,17 @@ export function SidePanel({
                     <line x1="3" y1="7" x2="11" y2="7" />
                   </svg>
                 </button>
+                <button
+                  onClick={() => {
+                    const keys = Object.keys(chartColors) as MetricKey[]
+                    const idx = keys.indexOf(sectionMetric)
+                    dispatch({ type: 'SET_SECTION_METRIC', metric: keys[(idx + 1) % keys.length] })
+                  }}
+                  className="flex items-center justify-center w-6 h-6 rounded hover:bg-[var(--proto-border)] transition-colors cursor-pointer"
+                  title={chartColors[sectionMetric].label}
+                >
+                  <MetricIcon metric={sectionMetric} />
+                </button>
               </>
             )}
             <button
@@ -484,7 +518,7 @@ export function SidePanel({
 
         {/* Connection status — only show after a connection was established and lost */}
         {realtimeCtx.reconnecting && (
-          <div className="px-4 py-1.5 text-xs text-amber-300 bg-amber-500/10 border-b border-amber-500/20 flex items-center gap-2">
+          <div className="px-4 py-1.5 text-[length:var(--text-xs)] text-amber-300 bg-amber-500/10 border-b border-amber-500/20 flex items-center gap-2">
             <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 16 16" fill="none">
               <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" opacity="0.3" />
               <path d="M14 8a6 6 0 0 0-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -536,6 +570,7 @@ export function SidePanel({
                 fiberColors={fiberColors}
                 onHighlightSection={onHighlightSection}
                 onClearHighlight={onClearHighlight}
+                search={sectionSearch}
               />
             ))}
           {activeTab === 'settings' && (
@@ -678,6 +713,88 @@ const SectionsIcon = () => (
   </svg>
 )
 
+const MetricIcon = ({ metric }: { metric: MetricKey }) => {
+  const color = chartColors[metric].color
+  if (metric === 'speed')
+    return (
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M2 16a10 10 0 0 1 20 0" />
+        <path d="M12 16l-3.5-6" />
+        <circle cx="12" cy="16" r="1.5" fill={color} />
+      </svg>
+    )
+  if (metric === 'flow')
+    return (
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke={color}
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <line x1="4" y1="5" x2="13" y2="5" />
+        <polyline points="11,3 13,5 11,7" />
+        <line x1="7" y1="12" x2="17" y2="12" />
+        <polyline points="15,10 17,12 15,14" />
+        <line x1="3" y1="19" x2="14" y2="19" />
+        <polyline points="12,17 14,19 12,21" />
+      </svg>
+    )
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="4" y="3" width="16" height="18" rx="2" />
+      <rect x="4" y="11" width="16" height="10" rx="0" fill={color} fillOpacity="0.35" stroke="none" />
+    </svg>
+  )
+}
+
+const ExpandIcon = ({ expanded }: { expanded: boolean }) => (
+  <svg
+    width="12"
+    height="12"
+    className="group-hover/exp:scale-110 transition-transform"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    {expanded ? (
+      <>
+        <polyline points="13 17 18 12 13 7" />
+        <polyline points="6 17 11 12 6 7" />
+      </>
+    ) : (
+      <>
+        <polyline points="11 17 6 12 11 7" />
+        <polyline points="18 17 13 12 18 7" />
+      </>
+    )}
+  </svg>
+)
+
 const SettingsIcon = () => (
   <svg
     width="20"
@@ -771,7 +888,7 @@ function WaterfallPanel() {
         <select
           value={selectedIndex}
           onChange={e => setSelectedIndex(Number(e.target.value))}
-          className="text-xs px-2 py-1 rounded bg-[var(--proto-base)] border border-[var(--proto-border)] text-[var(--proto-text)] outline-none"
+          className="text-[length:var(--text-xs)] px-2 py-1 rounded bg-[var(--proto-base)] border border-[var(--proto-border)] text-[var(--proto-text)] outline-none"
         >
           {fibers.map((f, i) => (
             <option key={f.id} value={i}>
@@ -785,7 +902,7 @@ function WaterfallPanel() {
               key={ms}
               onClick={() => setWindowMs(ms)}
               className={cn(
-                'text-xs px-2 py-1 transition-colors cursor-pointer',
+                'text-[length:var(--text-xs)] px-2 py-1 transition-colors cursor-pointer',
                 windowMs === ms
                   ? 'bg-[var(--proto-accent)] text-white'
                   : 'bg-[var(--proto-base)] text-[var(--proto-text-muted)] hover:text-[var(--proto-text)]',
@@ -812,7 +929,7 @@ function WaterfallPanel() {
 
       {/* Speed color legend */}
       <div className="flex items-center gap-3 px-4 py-2 border-t border-[var(--proto-border)]">
-        <span className="text-[10px] text-[var(--proto-text-muted)]">Speed:</span>
+        <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)]">Speed:</span>
         {[
           { color: '#22c55e', label: '≥80' },
           { color: '#eab308', label: '≥60' },
@@ -821,10 +938,10 @@ function WaterfallPanel() {
         ].map(({ color, label }) => (
           <div key={label} className="flex items-center gap-1">
             <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: color }} />
-            <span className="text-[10px] text-[var(--proto-text-muted)]">{label}</span>
+            <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)]">{label}</span>
           </div>
         ))}
-        <span className="text-[10px] text-[var(--proto-text-muted)] ml-auto">km/h</span>
+        <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] ml-auto">km/h</span>
       </div>
     </div>
   )
@@ -997,10 +1114,10 @@ function ChannelDetail({
       {/* Header — matching SectionDetail pattern */}
       <div className="sticky top-0 z-10 bg-[var(--proto-surface)] border-b border-[var(--proto-border)] px-4 py-3">
         <div className="min-w-0">
-          <span className="text-sm font-semibold text-[var(--proto-text)] truncate block">
+          <span className="text-[length:var(--text-sm)] font-semibold text-[var(--proto-text)] truncate block">
             Channel {channel.channel}
           </span>
-          <span className="text-[10px] text-[var(--proto-text-muted)] flex items-center gap-1.5">
+          <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] flex items-center gap-1.5">
             <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: fiberColor }} />
             {fiber?.name ?? channel.fiberId} · {directionLabel} · {channel.lat.toFixed(5)}N, {channel.lng.toFixed(5)}E
           </span>
@@ -1011,19 +1128,26 @@ function ChannelDetail({
         {/* KPI cards — 2-column grid */}
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-lg border border-[var(--proto-border)] p-3">
-            <div className="text-[10px] text-[var(--proto-text-muted)] uppercase tracking-wider mb-1">Detections</div>
+            <div className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] uppercase tracking-wider mb-1">
+              Detections
+            </div>
             <div>
-              <span className="text-xl font-semibold text-[var(--proto-text)]">{liveCount}</span>
-              <span className="text-xs text-[var(--proto-text-muted)] ml-1">in 10s</span>
+              <span className="text-[length:var(--text-xl)] font-semibold text-[var(--proto-text)]">{liveCount}</span>
+              <span className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)] ml-1">in 10s</span>
             </div>
           </div>
           <div className="rounded-lg border border-[var(--proto-border)] p-3">
-            <div className="text-[10px] text-[var(--proto-text-muted)] uppercase tracking-wider mb-1">Avg Speed</div>
+            <div className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] uppercase tracking-wider mb-1">
+              Avg Speed
+            </div>
             <div>
-              <span className="text-xl font-semibold" style={{ color: speedColor ?? 'var(--proto-text)' }}>
+              <span
+                className="text-[length:var(--text-xl)] font-semibold"
+                style={{ color: speedColor ?? 'var(--proto-text)' }}
+              >
                 {liveAvgSpeed != null ? liveAvgSpeed : '\u2014'}
               </span>
-              <span className="text-xs text-[var(--proto-text-muted)] ml-1">km/h</span>
+              <span className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)] ml-1">km/h</span>
             </div>
           </div>
         </div>
@@ -1031,17 +1155,17 @@ function ChannelDetail({
         {/* Live speed chart */}
         <div className="rounded-lg border border-[var(--proto-border)] overflow-hidden">
           <div className="px-3 py-2 flex items-center justify-between">
-            <h3 className="text-[10px] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
+            <h3 className="text-[length:var(--text-2xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
               Live Speed
             </h3>
-            <span className="text-[10px] text-[var(--proto-text-muted)]">(60s)</span>
+            <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)]">(60s)</span>
           </div>
           <canvas ref={canvasRef} className="w-full" style={{ height: 160, borderRadius: '0 0 8px 8px' }} />
         </div>
 
         {/* Containing sections */}
         <div>
-          <h3 className="text-[10px] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-2">
+          <h3 className="text-[length:var(--text-2xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-2">
             Sections
           </h3>
           {containingSections.length > 0 ? (
@@ -1056,8 +1180,10 @@ function ChannelDetail({
                     className="flex items-center gap-2.5 w-full text-left rounded-lg border border-[var(--proto-border)] px-3 py-2 hover:bg-[var(--proto-surface-raised)] transition-colors cursor-pointer"
                   >
                     <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: secColor }} />
-                    <span className="text-sm text-[var(--proto-text)] truncate flex-1">{sec.name}</span>
-                    <span className="text-[10px] text-[var(--proto-text-muted)] flex-shrink-0 px-1.5 py-0.5 rounded bg-[var(--proto-base)]">
+                    <span className="text-[length:var(--text-sm)] text-[var(--proto-text)] truncate flex-1">
+                      {sec.name}
+                    </span>
+                    <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] flex-shrink-0 px-1.5 py-0.5 rounded bg-[var(--proto-base)]">
                       Ch {sec.startChannel}–{sec.endChannel}
                     </span>
                   </button>
@@ -1065,7 +1191,9 @@ function ChannelDetail({
               })}
             </div>
           ) : (
-            <p className="text-xs text-[var(--proto-text-muted)] italic">No sections contain this channel</p>
+            <p className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)] italic">
+              No sections contain this channel
+            </p>
           )}
         </div>
       </div>
@@ -1108,7 +1236,7 @@ function IncidentList({
   return (
     <>
       {sorted.length === 0 ? (
-        <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-sm">
+        <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-[length:var(--text-sm)]">
           No incidents match this filter
         </div>
       ) : (
@@ -1134,12 +1262,14 @@ function IncidentList({
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm text-[var(--proto-text)] font-medium truncate">{inc.title}</span>
-                    <span className="shrink-0 text-xs tabular-nums text-[var(--proto-text-secondary)]">
+                    <span className="text-[length:var(--text-sm)] text-[var(--proto-text)] font-medium truncate">
+                      {inc.title}
+                    </span>
+                    <span className="shrink-0 text-[length:var(--text-xs)] tabular-nums text-[var(--proto-text-secondary)]">
                       {new Date(inc.detectedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-[11px] text-[var(--proto-text-muted)] mt-0.5">
+                  <div className="flex items-center gap-1.5 text-[length:var(--text-xxs)] text-[var(--proto-text-muted)] mt-0.5">
                     <span>
                       Ch {inc.channel}
                       {inc.channelEnd && inc.channelEnd !== inc.channel ? `–${inc.channelEnd}` : ''}
@@ -1174,6 +1304,7 @@ function SectionList({
   fiberColors,
   onHighlightSection,
   onClearHighlight,
+  search,
 }: {
   sections: Section[]
   dispatch: React.Dispatch<ProtoAction>
@@ -1183,18 +1314,27 @@ function SectionList({
   fiberColors: Record<string, string>
   onHighlightSection?: (id: string) => void
   onClearHighlight?: () => void
+  search?: string
 }) {
   const metricConfig = chartColors[metric]
+  const query = search?.trim().toLowerCase() ?? ''
+  const filtered = query
+    ? sections.filter(s => s.name.toLowerCase().includes(query) || s.fiberId.toLowerCase().includes(query))
+    : sections
 
   return (
     <>
       {sections.length === 0 ? (
-        <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-sm">
+        <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-[length:var(--text-sm)]">
           No sections yet
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-[length:var(--text-sm)]">
+          No matching sections
         </div>
       ) : (
         <div className="flex flex-col px-3 py-1">
-          {sections.map(section => {
+          {filtered.map(section => {
             const fiber = findFiber(section.fiberId, section.direction)
             const live = liveStats.get(section.id)
             const liveSeries = liveSeriesData.get(section.id)
@@ -1230,9 +1370,11 @@ function SectionList({
                       className="shrink-0 w-2 h-2 rounded-full"
                       style={{ backgroundColor: fiber ? getFiberColor(fiber, fiberColors) : undefined }}
                     />
-                    <span className="text-sm text-[var(--proto-text)] font-medium truncate">{section.name}</span>
+                    <span className="text-[length:var(--text-sm)] text-[var(--proto-text)] font-medium truncate">
+                      {section.name}
+                    </span>
                   </div>
-                  <div className="flex items-center justify-between text-xs text-[var(--proto-text-secondary)] pl-4">
+                  <div className="flex items-center justify-between text-[length:var(--text-xs)] text-[var(--proto-text-secondary)] pl-4">
                     <span>
                       <span
                         style={{
@@ -1259,7 +1401,7 @@ function SectionList({
                     e.stopPropagation()
                     dispatch({ type: 'DELETE_SECTION', id: section.id })
                   }}
-                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-[var(--proto-text-muted)] hover:text-[var(--proto-red)] transition-all text-xs cursor-pointer px-1"
+                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-[var(--proto-text-muted)] hover:text-[var(--proto-red)] transition-all text-[length:var(--text-xs)] cursor-pointer px-1"
                 >
                   &times;
                 </button>
@@ -1311,13 +1453,15 @@ function IncidentDetail({
       <div className="sticky top-0 z-10 bg-[var(--proto-surface)] border-b border-[var(--proto-border)] px-4 py-3 flex items-center gap-3">
         <button
           onClick={onBack}
-          className="text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors text-sm cursor-pointer"
+          className="text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors text-[length:var(--text-sm)] cursor-pointer"
         >
           &larr; Back
         </button>
-        <span className="text-sm font-semibold text-[var(--proto-text)] truncate">{incident.title}</span>
+        <span className="text-[length:var(--text-sm)] font-semibold text-[var(--proto-text)] truncate">
+          {incident.title}
+        </span>
         <span
-          className="text-[10px] font-medium px-1.5 py-0.5 rounded capitalize shrink-0"
+          className="text-[length:var(--text-2xs)] font-medium px-1.5 py-0.5 rounded capitalize shrink-0"
           style={{ backgroundColor: `${severityColor[incident.severity]}20`, color: severityColor[incident.severity] }}
         >
           {incident.severity}
@@ -1330,29 +1474,35 @@ function IncidentDetail({
           <div className="grid grid-cols-3 gap-2 pb-3 border-b border-[var(--proto-border)]">
             {incident.speedBefore != null && (
               <div className="rounded-lg border border-[var(--proto-border)] p-2.5">
-                <div className="text-[10px] text-[var(--proto-text-muted)] uppercase tracking-wider mb-0.5">Before</div>
-                <span className="text-lg font-semibold text-[var(--proto-text)]">
+                <div className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] uppercase tracking-wider mb-0.5">
+                  Before
+                </div>
+                <span className="text-[length:var(--text-lg)] font-semibold text-[var(--proto-text)]">
                   {Math.round(incident.speedBefore)}
                 </span>
-                <span className="text-[10px] text-[var(--proto-text-muted)] ml-0.5">km/h</span>
+                <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] ml-0.5">km/h</span>
               </div>
             )}
             {incident.speedDuring != null && (
               <div className="rounded-lg border border-[var(--proto-border)] p-2.5">
-                <div className="text-[10px] text-[var(--proto-text-muted)] uppercase tracking-wider mb-0.5">During</div>
-                <span className="text-lg font-semibold text-[var(--proto-red)]">
+                <div className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] uppercase tracking-wider mb-0.5">
+                  During
+                </div>
+                <span className="text-[length:var(--text-lg)] font-semibold text-[var(--proto-red)]">
                   {Math.round(incident.speedDuring)}
                 </span>
-                <span className="text-[10px] text-[var(--proto-text-muted)] ml-0.5">km/h</span>
+                <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] ml-0.5">km/h</span>
               </div>
             )}
             {incident.speedDropPercent != null && (
               <div className="rounded-lg border border-[var(--proto-border)] p-2.5">
-                <div className="text-[10px] text-[var(--proto-text-muted)] uppercase tracking-wider mb-0.5">Drop</div>
-                <span className="text-lg font-semibold text-[var(--proto-red)]">
+                <div className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] uppercase tracking-wider mb-0.5">
+                  Drop
+                </div>
+                <span className="text-[length:var(--text-lg)] font-semibold text-[var(--proto-red)]">
                   {Math.round(incident.speedDropPercent)}
                 </span>
-                <span className="text-[10px] text-[var(--proto-text-muted)] ml-0.5">%</span>
+                <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] ml-0.5">%</span>
               </div>
             )}
           </div>
@@ -1366,7 +1516,7 @@ function IncidentDetail({
                 value={draft}
                 onChange={e => setDraft(e.target.value)}
                 rows={3}
-                className="w-full px-2 py-1.5 rounded bg-[var(--proto-surface)] border border-[var(--proto-border)] text-sm text-[var(--proto-text)] outline-none focus:border-[var(--proto-accent)] resize-none"
+                className="w-full px-2 py-1.5 rounded bg-[var(--proto-surface)] border border-[var(--proto-border)] text-[length:var(--text-sm)] text-[var(--proto-text)] outline-none focus:border-[var(--proto-accent)] resize-none"
               />
               <div className="flex gap-2 justify-end">
                 <button
@@ -1374,7 +1524,7 @@ function IncidentDetail({
                     setDraft(incident.description)
                     setEditing(false)
                   }}
-                  className="px-2 py-1 rounded text-xs text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors cursor-pointer"
+                  className="px-2 py-1 rounded text-[length:var(--text-xs)] text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -1383,7 +1533,7 @@ function IncidentDetail({
                     dispatch({ type: 'UPDATE_INCIDENT_DESCRIPTION', id: incident.id, description: draft })
                     setEditing(false)
                   }}
-                  className="px-2 py-1 rounded text-xs bg-[var(--proto-accent)] text-white cursor-pointer hover:opacity-80 transition-opacity"
+                  className="px-2 py-1 rounded text-[length:var(--text-xs)] bg-[var(--proto-accent)] text-white cursor-pointer hover:opacity-80 transition-opacity"
                 >
                   Save
                 </button>
@@ -1391,7 +1541,7 @@ function IncidentDetail({
             </div>
           ) : (
             <div
-              className="text-sm text-[var(--proto-text)] mb-2 cursor-pointer hover:bg-[var(--proto-surface-raised)] rounded px-1 -mx-1 py-0.5 transition-colors"
+              className="text-[length:var(--text-sm)] text-[var(--proto-text)] mb-2 cursor-pointer hover:bg-[var(--proto-surface-raised)] rounded px-1 -mx-1 py-0.5 transition-colors"
               onClick={() => {
                 setDraft(incident.description)
                 setEditing(true)
@@ -1401,7 +1551,7 @@ function IncidentDetail({
               {incident.description}
             </div>
           )}
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[var(--proto-text-secondary)]">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[length:var(--text-xs)] text-[var(--proto-text-secondary)]">
             <span>
               Type: <span className="capitalize">{incident.type}</span>
             </span>
@@ -1426,11 +1576,11 @@ function IncidentDetail({
 
         {relatedSection && (
           <div className="pb-3 border-b border-[var(--proto-border)]">
-            <h3 className="text-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-2">
+            <h3 className="text-[length:var(--text-xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-2">
               Affected Section
             </h3>
-            <div className="text-sm text-[var(--proto-text)] mb-1">{relatedSection.name}</div>
-            <div className="flex gap-4 text-xs text-[var(--proto-text-secondary)]">
+            <div className="text-[length:var(--text-sm)] text-[var(--proto-text)] mb-1">{relatedSection.name}</div>
+            <div className="flex gap-4 text-[length:var(--text-xs)] text-[var(--proto-text-secondary)]">
               <span>{relatedSection.avgSpeed} km/h</span>
               <span>{relatedSection.flow} veh/h</span>
               <span>{relatedSection.occupancy}% occ.</span>
@@ -1442,7 +1592,7 @@ function IncidentDetail({
         )}
 
         <div>
-          <h3 className="text-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
+          <h3 className="text-[length:var(--text-xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
             Snapshot
             {!snapshotComplete && !snapshotLoading && (
               <span className="ml-2 text-[var(--proto-accent)] animate-pulse">collecting...</span>
@@ -1450,7 +1600,7 @@ function IncidentDetail({
           </h3>
           {snapshotLoading ? (
             <div className="h-[200px] rounded bg-[var(--proto-surface)] animate-pulse flex items-center justify-center">
-              <span className="text-xs text-[var(--proto-text-muted)]">Loading snapshot...</span>
+              <span className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)]">Loading snapshot...</span>
             </div>
           ) : snapshotData ? (
             <TimeSeriesChart
@@ -1463,7 +1613,7 @@ function IncidentDetail({
               })}
             />
           ) : (
-            <div className="text-xs text-[var(--proto-text-muted)] italic py-4 text-center">
+            <div className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)] italic py-4 text-center">
               No snapshot data available
             </div>
           )}
@@ -1491,7 +1641,7 @@ function TrendBadge({ pct, positiveIsGood }: { pct: number; positiveIsGood: bool
   const isUp = pct > 0
   const isGood = positiveIsGood ? isUp : !isUp
   return (
-    <span className={cn('text-[10px] ml-1', isGood ? 'text-green-400' : 'text-red-400')}>
+    <span className={cn('text-[length:var(--text-2xs)] ml-1', isGood ? 'text-green-400' : 'text-red-400')}>
       {isUp ? '\u2191' : '\u2193'}
       {Math.abs(pct)}%
     </span>
@@ -1524,13 +1674,13 @@ function ThresholdEditor({
   return (
     <div className="border-t border-[var(--proto-border)] pt-3">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
+        <h3 className="text-[length:var(--text-xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
           Speed Thresholds
         </h3>
         {isDirty && (
           <button
             onClick={() => onChange(draft)}
-            className="px-2.5 py-1 rounded text-[10px] font-medium bg-[var(--proto-accent)] text-white cursor-pointer hover:opacity-80 transition-opacity"
+            className="px-2.5 py-1 rounded text-[length:var(--text-2xs)] font-medium bg-[var(--proto-accent)] text-white cursor-pointer hover:opacity-80 transition-opacity"
           >
             Apply
           </button>
@@ -1549,9 +1699,9 @@ function ThresholdEditor({
                   setDraft(prev => ({ ...prev, [f.key]: val }))
                 }
               }}
-              className="w-12 px-1 py-0.5 rounded bg-transparent border border-[var(--proto-border)] text-xs text-[var(--proto-text)] text-center outline-none focus:border-[var(--proto-text-secondary)] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              className="w-12 px-1 py-0.5 rounded bg-transparent border border-[var(--proto-border)] text-[length:var(--text-xs)] text-[var(--proto-text)] text-center outline-none focus:border-[var(--proto-text-secondary)] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
-            <span className="text-[10px] text-[var(--proto-text-muted)]">km/h</span>
+            <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)]">km/h</span>
           </label>
         ))}
       </div>
@@ -1687,7 +1837,7 @@ function FiberColorDot({
         style={{ backgroundColor: color }}
         title={`Change ${dirLabel} color`}
       />
-      <span className="text-[10px] text-[var(--proto-text-muted)]">{dirLabel}</span>
+      <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)]">{dirLabel}</span>
       {isPickerOpen && <ColorPicker current={color} onSelect={onSelect} onClose={onClosePicker} anchorRef={btnRef} />}
     </div>
   )
@@ -1739,7 +1889,7 @@ function SettingsPanel({
     <div className="px-4 py-4 flex flex-col gap-5">
       {/* Data source */}
       <div className="flex flex-col gap-2">
-        <span className="text-xs text-[var(--proto-text-secondary)]">{t('flow.label')}</span>
+        <span className="text-[length:var(--text-xs)] text-[var(--proto-text-secondary)]">{t('flow.label')}</span>
         <FlowToggle flow={flow} switchingFlow={switchingFlow} availableFlows={availableFlows} onToggle={onFlowToggle} />
       </div>
 
@@ -1747,9 +1897,9 @@ function SettingsPanel({
 
       {/* Map display toggles */}
       <div className="flex flex-col gap-2">
-        <span className="text-xs text-[var(--proto-text-secondary)]">Map</span>
+        <span className="text-[length:var(--text-xs)] text-[var(--proto-text-secondary)]">Map</span>
         <label className="flex items-center justify-between cursor-pointer group">
-          <span className="text-sm text-[var(--proto-text)]">3D Buildings</span>
+          <span className="text-[length:var(--text-sm)] text-[var(--proto-text)]">3D Buildings</span>
           <button
             onClick={() => dispatch({ type: 'TOGGLE_3D_BUILDINGS' })}
             className={`relative w-8 h-[18px] rounded-full transition-colors ${show3DBuildings ? 'bg-[var(--proto-accent)]' : 'bg-[var(--proto-border)]'}`}
@@ -1760,7 +1910,7 @@ function SettingsPanel({
           </button>
         </label>
         <label className="flex items-center justify-between cursor-pointer group">
-          <span className="text-sm text-[var(--proto-text)]">Channel Helper</span>
+          <span className="text-[length:var(--text-sm)] text-[var(--proto-text)]">Channel Helper</span>
           <button
             onClick={() => dispatch({ type: 'TOGGLE_CHANNEL_HELPER' })}
             className={`relative w-8 h-[18px] rounded-full transition-colors ${showChannelHelper ? 'bg-[var(--proto-accent)]' : 'bg-[var(--proto-border)]'}`}
@@ -1774,7 +1924,7 @@ function SettingsPanel({
 
       <div className="h-px bg-[var(--proto-border)]" />
 
-      <div className="text-xs text-[var(--proto-text-secondary)]">
+      <div className="text-[length:var(--text-xs)] text-[var(--proto-text-secondary)]">
         Default speed thresholds per fiber. Sections inherit these unless overridden.
       </div>
       {cableGroups.map(([cableId, group]) => {
@@ -1783,7 +1933,7 @@ function SettingsPanel({
         return (
           <div key={cableId} className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-medium text-[var(--proto-text)]">{group.name}</span>
+              <span className="text-[length:var(--text-sm)] font-medium text-[var(--proto-text)]">{group.name}</span>
             </div>
             {/* Per-direction color dots */}
             <div className="flex gap-4 pl-0.5">
@@ -1832,13 +1982,13 @@ function LogoutButton() {
   return (
     <div className="flex flex-col gap-2">
       {username && (
-        <span className="text-xs text-[var(--proto-text-muted)]">
+        <span className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)]">
           Signed in as <span className="text-[var(--proto-text-secondary)]">{username}</span>
         </span>
       )}
       <button
         onClick={handleLogout}
-        className="w-full px-3 py-2 text-sm text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-md transition-colors cursor-pointer text-left"
+        className="w-full px-3 py-2 text-[length:var(--text-sm)] text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-md transition-colors cursor-pointer text-left"
       >
         Sign out
       </button>
@@ -1867,7 +2017,7 @@ function SectionDetail({
   const [timeRange, setTimeRange] = useState<TimeRange>('1m')
 
   // Chart data fetched at the resolution matching the selected time range
-  const historySeries = useSectionHistory(section.id, timeRange)
+  const { series: historySeries, stale: historyStale } = useSectionHistory(section.id, timeRange)
 
   // KPIs use the always-on page-level stats (stable regardless of chart time range)
   const live = liveStats.get(section.id)
@@ -1928,14 +2078,16 @@ function SectionDetail({
       <div className="sticky top-0 z-10 bg-[var(--proto-surface)] border-b border-[var(--proto-border)] px-4 py-3 flex items-center gap-3">
         <button
           onClick={onBack}
-          className="text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors text-sm cursor-pointer"
+          className="text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors text-[length:var(--text-sm)] cursor-pointer"
         >
           &larr; Back
         </button>
         <div className="min-w-0">
-          <span className="text-sm font-semibold text-[var(--proto-text)] truncate block">{section.name}</span>
+          <span className="text-[length:var(--text-sm)] font-semibold text-[var(--proto-text)] truncate block">
+            {section.name}
+          </span>
           {fiber && (
-            <span className="text-[10px] text-[var(--proto-text-muted)] flex items-center gap-1.5">
+            <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] flex items-center gap-1.5">
               <span
                 className="inline-block w-2 h-2 rounded-full flex-shrink-0"
                 style={{ backgroundColor: fiberColor }}
@@ -1952,7 +2104,7 @@ function SectionDetail({
         <div className="grid grid-cols-2 gap-3">
           {kpis.map(kpi => (
             <div key={kpi.label} className="rounded-lg border border-[var(--proto-border)] p-3">
-              <div className="text-[10px] text-[var(--proto-text-muted)] uppercase tracking-wider mb-1">
+              <div className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] uppercase tracking-wider mb-1">
                 {kpi.label}
                 {kpi.trendPct !== undefined && (
                   <TrendBadge pct={kpi.trendPct} positiveIsGood={kpi.positiveIsGood ?? true} />
@@ -1960,8 +2112,10 @@ function SectionDetail({
               </div>
               <div className="flex items-end justify-between">
                 <div>
-                  <span className="text-xl font-semibold text-[var(--proto-text)]">{kpi.value}</span>
-                  <span className="text-xs text-[var(--proto-text-muted)] ml-1">{kpi.unit}</span>
+                  <span className="text-[length:var(--text-xl)] font-semibold text-[var(--proto-text)]">
+                    {kpi.value}
+                  </span>
+                  <span className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)] ml-1">{kpi.unit}</span>
                 </div>
                 {kpi.trend && <Sparkline data={kpi.trend} color={kpi.color} width={48} height={20} />}
               </div>
@@ -1972,14 +2126,16 @@ function SectionDetail({
         {/* Time series chart */}
         <div className="border-t border-[var(--proto-border)] pt-3">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">Time Series</h3>
+            <h3 className="text-[length:var(--text-xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
+              Time Series
+            </h3>
             <div className="flex gap-1">
               {(['1m', '5m', '15m', '1h'] as TimeRange[]).map(r => (
                 <button
                   key={r}
                   onClick={() => setTimeRange(r)}
                   className={cn(
-                    'px-2 py-0.5 rounded text-[10px] transition-colors cursor-pointer',
+                    'px-2 py-0.5 rounded text-[length:var(--text-2xs)] transition-colors cursor-pointer',
                     timeRange === r
                       ? 'bg-[var(--proto-accent)] text-white'
                       : 'bg-[var(--proto-surface)] text-[var(--proto-text-muted)] hover:text-[var(--proto-text)]',
@@ -1990,16 +2146,22 @@ function SectionDetail({
               ))}
             </div>
           </div>
-          <TimeSeriesChart data={chartData} timeRange={timeRange} />
+          <div
+            className={historyStale ? 'opacity-50 transition-opacity duration-200' : 'transition-opacity duration-200'}
+          >
+            <TimeSeriesChart data={chartData} timeRange={timeRange} />
+          </div>
         </div>
 
         {/* Data table */}
-        <div className="border-t border-[var(--proto-border)] pt-3">
-          <h3 className="text-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
+        <div
+          className={`border-t border-[var(--proto-border)] pt-3 ${historyStale ? 'opacity-50 transition-opacity duration-200' : 'transition-opacity duration-200'}`}
+        >
+          <h3 className="text-[length:var(--text-xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
             Recent Data
           </h3>
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table className="w-full text-[length:var(--text-xs)]">
               <thead>
                 <tr className="text-[var(--proto-text-muted)] border-b border-[var(--proto-border)]">
                   <th className="text-left py-1.5 pr-3 font-medium">Time</th>
@@ -2066,7 +2228,7 @@ function StructureList({
 }) {
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-sm">
+      <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-[length:var(--text-sm)]">
         <span className="animate-pulse">Loading structures...</span>
       </div>
     )
@@ -2074,7 +2236,7 @@ function StructureList({
 
   if (structures.length === 0) {
     return (
-      <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-sm">
+      <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-[length:var(--text-sm)]">
         No structures found
       </div>
     )
@@ -2093,7 +2255,7 @@ function StructureList({
   return (
     <div className="flex flex-col px-3 py-1">
       {filtered.length === 0 ? (
-        <div className="flex items-center justify-center h-24 text-[var(--proto-text-muted)] text-sm">
+        <div className="flex items-center justify-center h-24 text-[var(--proto-text-muted)] text-[length:var(--text-sm)]">
           No structures match "{search}"
         </div>
       ) : (
@@ -2160,10 +2322,12 @@ function StructureList({
               )}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-sm text-[var(--proto-text)] font-medium truncate">{structure.name}</span>
+                  <span className="text-[length:var(--text-sm)] text-[var(--proto-text)] font-medium truncate">
+                    {structure.name}
+                  </span>
                   <span className="shrink-0 w-2 h-2 rounded-full" style={{ backgroundColor: dotColor }} />
                 </div>
-                <span className="text-xs text-[var(--proto-text-muted)] shrink-0">
+                <span className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)] shrink-0">
                   {structure.type.charAt(0).toUpperCase() + structure.type.slice(1)} ·{' '}
                   {fiber?.name ?? structure.fiberId}
                 </span>
@@ -2202,7 +2366,7 @@ function StructureDetail({
 
   if (!structure) {
     return (
-      <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-sm">
+      <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-[length:var(--text-sm)]">
         Structure not found
       </div>
     )
@@ -2225,14 +2389,16 @@ function StructureDetail({
       <div className="sticky top-0 z-10 bg-[var(--proto-surface)] border-b border-[var(--proto-border)] px-4 py-3 flex items-center gap-3">
         <button
           onClick={onBack}
-          className="text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors text-sm cursor-pointer"
+          className="text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors text-[length:var(--text-sm)] cursor-pointer"
         >
           &larr; Back
         </button>
         <div className="min-w-0">
-          <span className="text-sm font-semibold text-[var(--proto-text)] truncate block">{structure.name}</span>
+          <span className="text-[length:var(--text-sm)] font-semibold text-[var(--proto-text)] truncate block">
+            {structure.name}
+          </span>
           {fiber && (
-            <span className="text-[10px] text-[var(--proto-text-muted)] flex items-center gap-1.5">
+            <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] flex items-center gap-1.5">
               <span
                 className="inline-block w-2 h-2 rounded-full flex-shrink-0"
                 style={{ backgroundColor: typeStyle.dot }}
@@ -2243,7 +2409,7 @@ function StructureDetail({
         </div>
         {shmStatus && (
           <span
-            className="text-[10px] font-medium px-1.5 py-0.5 rounded capitalize shrink-0"
+            className="text-[length:var(--text-2xs)] font-medium px-1.5 py-0.5 rounded capitalize shrink-0"
             style={{ backgroundColor: `${statusColor}20`, color: statusColor }}
           >
             {shmStatus.status}
@@ -2265,18 +2431,23 @@ function StructureDetail({
         <div className="grid grid-cols-2 gap-3">
           {kpis.map(kpi => (
             <div key={kpi.label} className="rounded-lg border border-[var(--proto-border)] p-3">
-              <div className="text-[10px] text-[var(--proto-text-muted)] uppercase tracking-wider mb-1">
+              <div className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] uppercase tracking-wider mb-1">
                 {kpi.label}
               </div>
               <div className="flex items-end gap-1">
                 {kpi.isStatus ? (
-                  <span className="text-sm font-semibold capitalize" style={{ color: statusColor }}>
+                  <span
+                    className="text-[length:var(--text-sm)] font-semibold capitalize"
+                    style={{ color: statusColor }}
+                  >
                     {kpi.value}
                   </span>
                 ) : (
                   <>
-                    <span className="text-xl font-semibold text-[var(--proto-text)]">{kpi.value}</span>
-                    <span className="text-xs text-[var(--proto-text-muted)]">{kpi.unit}</span>
+                    <span className="text-[length:var(--text-xl)] font-semibold text-[var(--proto-text)]">
+                      {kpi.value}
+                    </span>
+                    <span className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)]">{kpi.unit}</span>
                   </>
                 )}
               </div>
@@ -2305,53 +2476,61 @@ function StructureDetail({
             return (
               <div className="flex items-center justify-between rounded-lg border border-[var(--proto-border)] bg-[var(--proto-surface-raised)] px-4 py-3">
                 <div>
-                  <span className={`text-xl font-bold ${shiftColor}`}>
+                  <span className={`text-[length:var(--text-xl)] font-bold ${shiftColor}`}>
                     {comparisonStats.diff > 0 ? '+' : ''}
                     {(comparisonStats.diff * 1000).toFixed(2)} mHz
                   </span>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className={`text-xs ${pctColor}`}>
+                    <span className={`text-[length:var(--text-xs)] ${pctColor}`}>
                       ({comparisonStats.diffPercent > 0 ? '+' : ''}
                       {comparisonStats.diffPercent.toFixed(2)}%)
                     </span>
-                    <span className="text-[10px] text-[var(--proto-text-muted)]">vs previous period</span>
+                    <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)]">
+                      vs previous period
+                    </span>
                   </div>
                 </div>
-                <div className="text-[10px] text-[var(--proto-text-muted)] uppercase tracking-wider">Freq Shift</div>
+                <div className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] uppercase tracking-wider">
+                  Freq Shift
+                </div>
               </div>
             )
           })()}
 
         {/* Spectral Heatmap */}
         <div className="border-t border-[var(--proto-border)] pt-3">
-          <h3 className="text-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
+          <h3 className="text-[length:var(--text-xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
             Spectral Heatmap
           </h3>
-          {spectralLoading ? (
-            <div className="h-[200px] rounded-lg bg-[var(--proto-surface-raised)] animate-pulse" />
-          ) : spectralData ? (
-            <SpectralHeatmapCanvas data={spectralData} />
-          ) : (
-            <div className="h-[200px] rounded-lg bg-[var(--proto-surface-raised)] flex items-center justify-center text-xs text-[var(--proto-text-muted)]">
-              No spectral data
-            </div>
-          )}
+          <div className="rounded-lg bg-[var(--proto-surface-raised)] border border-[var(--proto-border)] p-2">
+            {spectralLoading ? (
+              <div className="h-[200px] rounded-lg bg-[var(--proto-surface-raised)] animate-pulse" />
+            ) : spectralData ? (
+              <SpectralHeatmapCanvas data={spectralData} />
+            ) : (
+              <div className="h-[200px] flex items-center justify-center text-[length:var(--text-xs)] text-[var(--proto-text-muted)]">
+                No spectral data
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Peak Scatter */}
         <div className="border-t border-[var(--proto-border)] pt-3">
-          <h3 className="text-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
+          <h3 className="text-[length:var(--text-xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
             Peak Frequencies
           </h3>
-          {peakLoading ? (
-            <div className="h-[170px] rounded-lg bg-[var(--proto-surface-raised)] animate-pulse" />
-          ) : peakData ? (
-            <PeakScatterPlot data={peakData} />
-          ) : (
-            <div className="h-[170px] rounded-lg bg-[var(--proto-surface-raised)] flex items-center justify-center text-xs text-[var(--proto-text-muted)]">
-              No peak data
-            </div>
-          )}
+          <div className="rounded-lg bg-[var(--proto-surface-raised)] border border-[var(--proto-border)] p-2">
+            {peakLoading ? (
+              <div className="h-[170px] rounded-lg bg-[var(--proto-surface-raised)] animate-pulse" />
+            ) : peakData ? (
+              <PeakScatterPlot data={peakData} />
+            ) : (
+              <div className="h-[170px] flex items-center justify-center text-[length:var(--text-xs)] text-[var(--proto-text-muted)]">
+                No peak data
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Comparison overlay */}
@@ -2361,6 +2540,38 @@ function StructureDetail({
       </div>
     </div>
   )
+}
+
+// ── Shared SHM helpers ───────────────────────────────────────────────
+
+/** Compute hour-aligned tick positions for a time range. Returns {frac, label} tuples. */
+function computeHourTicks(tMin: number, tMax: number): { frac: number; label: string }[] {
+  const ticks: { frac: number; label: string }[] = []
+  const durH = (tMax - tMin) / (1000 * 3600)
+  let interval = 1
+  if (durH > 72) interval = 12
+  else if (durH > 24) interval = 6
+  else if (durH > 12) interval = 3
+  else if (durH > 6) interval = 2
+  // Align to the first interval-boundary hour at or after tMin.
+  // Use local time only for alignment, then advance by fixed ms to avoid DST skips.
+  const d = new Date(tMin)
+  d.setMinutes(0, 0, 0)
+  if (d.getTime() < tMin) d.setHours(d.getHours() + 1)
+  const aligned = Math.ceil(d.getHours() / interval) * interval
+  d.setHours(aligned)
+  const intervalMs = interval * 3600_000
+  let ts = d.getTime()
+  while (ts <= tMax) {
+    if (ts >= tMin) {
+      ticks.push({
+        frac: (ts - tMin) / (tMax - tMin || 1),
+        label: `${new Date(ts).getHours().toString().padStart(2, '0')}:00`,
+      })
+    }
+    ts += intervalMs
+  }
+  return ticks
 }
 
 // ── Spectral heatmap (canvas) ────────────────────────────────────────
@@ -2607,126 +2818,113 @@ const VIRIDIS: [number, number, number][] = [
 function SpectralHeatmapCanvas({ data }: { data: SpectralTimeSeries }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const { width: debouncedWidth, transitioning } = useDebouncedResize(containerRef)
 
-  const draw = useCallback(() => {
-    const canvas = canvasRef.current
-    const container = containerRef.current
-    if (!canvas || !container) return
+  const draw = useCallback(
+    (width: number) => {
+      const canvas = canvasRef.current
+      if (!canvas || width <= 0) return
 
-    const width = container.clientWidth
-    const height = 200
-    const dpr = window.devicePixelRatio || 1
-    canvas.width = width * dpr
-    canvas.height = height * dpr
-    canvas.style.width = `${width}px`
-    canvas.style.height = `${height}px`
+      const height = 200
+      const dpr = window.devicePixelRatio || 1
+      canvas.width = width * dpr
+      canvas.height = height * dpr
+      canvas.style.width = `${width}px`
+      canvas.style.height = `${height}px`
 
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    ctx.scale(dpr, dpr)
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+      ctx.scale(dpr, dpr)
 
-    const { spectra, freqs } = data
-    if (!spectra.length || !freqs.length) return
+      const { spectra, freqs } = data
+      if (!spectra.length || !freqs.length) return
 
-    const margin = { top: 4, right: 8, bottom: 24, left: 48 }
-    const plotW = width - margin.left - margin.right
-    const plotH = height - margin.top - margin.bottom
+      const margin = { top: 4, right: 8, bottom: 24, left: 36 }
+      const plotW = width - margin.left - margin.right
+      const plotH = height - margin.top - margin.bottom
 
-    const numTime = spectra.length
-    const numFreq = freqs.length
+      const numTime = spectra.length
+      const numFreq = freqs.length
 
-    // Find min/max power for color scaling
-    let minP = Infinity,
-      maxP = -Infinity
-    for (const row of spectra) {
-      for (const v of row) {
-        if (v < minP) minP = v
-        if (v > maxP) maxP = v
+      // Find min/max power for color scaling
+      let minP = Infinity,
+        maxP = -Infinity
+      for (const row of spectra) {
+        for (const v of row) {
+          if (v < minP) minP = v
+          if (v > maxP) maxP = v
+        }
       }
-    }
-    const range = maxP - minP || 1
+      const range = maxP - minP || 1
 
-    // Draw heatmap
-    const cellW = plotW / numTime
-    const cellH = plotH / numFreq
+      // Draw heatmap
+      const cellW = plotW / numTime
+      const cellH = plotH / numFreq
 
-    for (let ti = 0; ti < numTime; ti++) {
-      for (let fi = 0; fi < numFreq; fi++) {
-        const norm = (spectra[ti][fi] - minP) / range
-        const idx = Math.floor(norm * (VIRIDIS.length - 1))
-        const [r, g, b] = VIRIDIS[Math.max(0, Math.min(idx, VIRIDIS.length - 1))]
-        ctx.fillStyle = `rgb(${r},${g},${b})`
-        ctx.fillRect(
-          margin.left + ti * cellW,
-          margin.top + (numFreq - 1 - fi) * cellH,
-          Math.ceil(cellW) + 1,
-          Math.ceil(cellH) + 1,
-        )
+      for (let ti = 0; ti < numTime; ti++) {
+        for (let fi = 0; fi < numFreq; fi++) {
+          const norm = (spectra[ti][fi] - minP) / range
+          const idx = Math.floor(norm * (VIRIDIS.length - 1))
+          const [r, g, b] = VIRIDIS[Math.max(0, Math.min(idx, VIRIDIS.length - 1))]
+          ctx.fillStyle = `rgb(${r},${g},${b})`
+          ctx.fillRect(
+            margin.left + ti * cellW,
+            margin.top + (numFreq - 1 - fi) * cellH,
+            Math.ceil(cellW) + 1,
+            Math.ceil(cellH) + 1,
+          )
+        }
       }
-    }
 
-    // Axes
-    ctx.fillStyle = '#64748b'
-    ctx.font = '10px sans-serif'
+      // Axes
+      ctx.fillStyle = '#64748b'
+      ctx.font = '10px sans-serif'
 
-    // X axis (time) — hour-aligned ticks like PeakScatterPlot
-    ctx.textAlign = 'center'
-    const t0 = new Date(data.t0)
-    const tMin = t0.getTime()
-    const tMax = tMin + (data.dt[data.dt.length - 1] || 0) * 1000
-    const durH = (tMax - tMin) / (1000 * 3600)
-    let interval = 1
-    if (durH > 72) interval = 12
-    else if (durH > 24) interval = 6
-    else if (durH > 12) interval = 3
-    else if (durH > 6) interval = 2
-    const cur = new Date(tMin)
-    cur.setMinutes(0, 0, 0)
-    if (cur.getTime() < tMin) cur.setHours(cur.getHours() + 1)
-    const aligned = Math.ceil(cur.getHours() / interval) * interval
-    cur.setHours(aligned)
-    while (cur.getTime() <= tMax) {
-      if (cur.getTime() >= tMin) {
-        const frac = (cur.getTime() - tMin) / (tMax - tMin || 1)
-        const x = margin.left + frac * plotW
-        const label = `${cur.getHours().toString().padStart(2, '0')}:00`
-        ctx.fillText(label, x, height - 4)
+      // X axis (time) — hour-aligned ticks
+      ctx.textAlign = 'center'
+      const t0 = new Date(data.t0)
+      const tMin = t0.getTime()
+      const tMax = tMin + (data.dt[data.dt.length - 1] || 0) * 1000
+      for (const tick of computeHourTicks(tMin, tMax)) {
+        const x = margin.left + tick.frac * plotW
+        ctx.fillText(tick.label, x, height - 4)
       }
-      cur.setHours(cur.getHours() + interval)
-    }
 
-    // Y axis (frequency) — integer Hz ticks
-    ctx.textAlign = 'right'
-    const freqLo = Math.ceil(freqs[0])
-    const freqHi = Math.floor(freqs[freqs.length - 1])
-    for (let hz = freqLo; hz <= freqHi; hz++) {
-      const frac = (hz - freqs[0]) / (freqs[freqs.length - 1] - freqs[0])
-      const y = margin.top + (1 - frac) * plotH + 3
-      ctx.fillText(`${hz}`, margin.left - 4, y)
-    }
+      // Y axis (frequency) — integer Hz ticks
+      ctx.textAlign = 'right'
+      const freqLo = Math.ceil(freqs[0])
+      const freqHi = Math.floor(freqs[freqs.length - 1])
+      for (let hz = freqLo; hz <= freqHi; hz++) {
+        const frac = (hz - freqs[0]) / (freqs[freqs.length - 1] - freqs[0])
+        const y = margin.top + (1 - frac) * plotH + 3
+        ctx.fillText(`${hz}`, margin.left - 4, y)
+      }
 
-    // Rotated vertical label: "Freq (Hz)"
-    ctx.save()
-    ctx.font = '9px sans-serif'
-    ctx.textAlign = 'center'
-    const labelX = 15
-    const labelY = margin.top + plotH / 2
-    ctx.translate(labelX, labelY)
-    ctx.rotate(-Math.PI / 2)
-    ctx.fillText('Freq (Hz)', 0, 0)
-    ctx.restore()
-  }, [data])
+      // Rotated vertical label: "Freq (Hz)"
+      ctx.save()
+      ctx.font = '9px sans-serif'
+      ctx.textAlign = 'center'
+      const labelX = 12
+      const labelY = margin.top + plotH / 2
+      ctx.translate(labelX, labelY)
+      ctx.rotate(-Math.PI / 2)
+      ctx.fillText('Freq (Hz)', 0, 0)
+      ctx.restore()
+    },
+    [data],
+  )
 
   useEffect(() => {
-    draw()
-    const observer = new ResizeObserver(draw)
-    if (containerRef.current) observer.observe(containerRef.current)
-    return () => observer.disconnect()
-  }, [draw])
+    draw(debouncedWidth)
+  }, [draw, debouncedWidth])
 
   return (
-    <div ref={containerRef} className="w-full">
-      <canvas ref={canvasRef} className="rounded" />
+    <div ref={containerRef} className="w-full" style={{ height: 200 }}>
+      {transitioning ? (
+        <div className="w-full h-full rounded-lg bg-[var(--proto-surface-raised)] animate-pulse" />
+      ) : (
+        <canvas ref={canvasRef} className="rounded" />
+      )}
     </div>
   )
 }
@@ -2737,30 +2935,15 @@ type ScatterTooltip = { x: number; y: number; freq: number; power: number; times
 type ScatterBrush = { startX: number; currentX: number } | null
 type ScatterZoom = { startMs: number; endMs: number } | null
 
-function formatScatterHour(date: Date): string {
-  return `${date.getHours().toString().padStart(2, '0')}:00`
-}
-
 function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
-  const [width, setWidth] = useState(280)
+  const { width, transitioning } = useDebouncedResize(containerRef)
   const [tooltip, setTooltip] = useState<ScatterTooltip>(null)
   const [brush, setBrush] = useState<ScatterBrush>(null)
   const [zoom, setZoom] = useState<ScatterZoom>(null)
   const rawId = useRef(Math.random().toString(36).slice(2)).current
   const clipId = `proto-scatter-${rawId}`
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const obs = new ResizeObserver(entries => {
-      for (const entry of entries) setWidth(entry.contentRect.width)
-    })
-    obs.observe(el)
-    setWidth(el.clientWidth)
-    return () => obs.disconnect()
-  }, [])
 
   const height = 170
   const padding = { top: 16, right: 12, bottom: 28, left: 48 }
@@ -2820,24 +3003,8 @@ function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
   }, [freqMin, freqMax])
 
   const xTicks = useMemo(() => {
-    const ticks: { x: number; label: string }[] = []
     const { min: tMin, max: tMax } = timeRange
-    const durH = (tMax - tMin) / (1000 * 3600)
-    let interval = 1
-    if (durH > 72) interval = 12
-    else if (durH > 24) interval = 6
-    else if (durH > 12) interval = 3
-    else if (durH > 6) interval = 2
-    const cur = new Date(tMin)
-    cur.setMinutes(0, 0, 0)
-    if (cur.getTime() < tMin) cur.setHours(cur.getHours() + 1)
-    const aligned = Math.ceil(cur.getHours() / interval) * interval
-    cur.setHours(aligned)
-    while (cur.getTime() <= tMax) {
-      if (cur.getTime() >= tMin) ticks.push({ x: xScale(cur.getTime()), label: formatScatterHour(cur) })
-      cur.setHours(cur.getHours() + interval)
-    }
-    return ticks
+    return computeHourTicks(tMin, tMax).map(t => ({ x: xScale(tMin + t.frac * (tMax - tMin)), label: t.label }))
   }, [timeRange, xScale])
 
   // Brush handlers
@@ -2882,12 +3049,20 @@ function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
 
   if (!data.dt.length) return <div className="h-[170px]" ref={containerRef} />
 
+  if (transitioning) {
+    return (
+      <div ref={containerRef} className="relative h-[170px]">
+        <div className="w-full h-full rounded-lg bg-[var(--proto-surface-raised)] animate-pulse" />
+      </div>
+    )
+  }
+
   return (
     <div ref={containerRef} className="w-full relative">
       {zoom && (
         <button
           onClick={() => setZoom(null)}
-          className="absolute top-0 right-0 z-10 flex items-center gap-1 px-2 py-1 text-[10px] text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] rounded transition-colors cursor-pointer"
+          className="absolute top-0 right-0 z-10 flex items-center gap-1 px-2 py-1 text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] rounded transition-colors cursor-pointer"
         >
           ↺ Reset
         </button>
@@ -3039,7 +3214,7 @@ function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
       {/* Tooltip */}
       {tooltip && !brush && (
         <div
-          className="absolute bg-[var(--proto-surface-raised)] text-[var(--proto-text)] text-[10px] px-2 py-1.5 rounded shadow-lg pointer-events-none z-10 whitespace-nowrap border border-[var(--proto-border)]"
+          className="absolute bg-[var(--proto-surface-raised)] text-[var(--proto-text)] text-[length:var(--text-2xs)] px-2 py-1.5 rounded shadow-lg pointer-events-none z-10 whitespace-nowrap border border-[var(--proto-border)]"
           style={{
             left: tooltip.x > width * 0.6 ? undefined : tooltip.x + 10,
             right: tooltip.x > width * 0.6 ? width - tooltip.x + 10 : undefined,
@@ -3226,7 +3401,8 @@ function ComparisonSection({
   onStats?: (stats: ComparisonStats | null) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [chartWidth, setChartWidth] = useState(280)
+  const { width: rawChartWidth, transitioning: chartTransitioning } = useDebouncedResize(containerRef)
+  const chartWidth = Math.max(160, rawChartWidth)
   const [mode, setMode] = useState<ComparisonMode>('day')
   const [focus, setFocus] = useState<FocusMode>('equal')
   const [windowA, setWindowA] = useState<{ data: PeakFrequencyData | null; loading: boolean }>({
@@ -3237,18 +3413,6 @@ function ComparisonSection({
     data: null,
     loading: false,
   })
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const measure = () => {
-      if (el) setChartWidth(Math.max(160, el.clientWidth))
-    }
-    measure()
-    const obs = new ResizeObserver(measure)
-    obs.observe(el)
-    return () => obs.disconnect()
-  }, [])
 
   // Compute comparison date ranges
   const referenceDate = useMemo(() => {
@@ -3361,13 +3525,15 @@ function ComparisonSection({
     <div>
       {/* Header row */}
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">Comparison</h3>
+        <h3 className="text-[length:var(--text-xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
+          Comparison
+        </h3>
         <div className="flex items-center gap-2">
           {/* Mode selector */}
           <select
             value={mode}
             onChange={e => setMode(e.target.value as ComparisonMode)}
-            className="text-[10px] bg-[var(--proto-surface-raised)] text-[var(--proto-text-secondary)] border border-[var(--proto-border)] rounded px-1.5 py-0.5 cursor-pointer"
+            className="text-[length:var(--text-2xs)] bg-[var(--proto-surface-raised)] text-[var(--proto-text-secondary)] border border-[var(--proto-border)] rounded px-1.5 py-0.5 cursor-pointer"
           >
             <option value="day">Day / Day</option>
             <option value="week">Week / Week</option>
@@ -3379,7 +3545,7 @@ function ComparisonSection({
                 key={f}
                 onClick={() => setFocus(f)}
                 className={cn(
-                  'px-2 py-0.5 text-[10px] font-medium rounded transition-colors cursor-pointer',
+                  'px-2 py-0.5 text-[length:var(--text-2xs)] font-medium rounded transition-colors cursor-pointer',
                   focus === f
                     ? f === 'A'
                       ? 'bg-blue-500 text-white'
@@ -3397,7 +3563,7 @@ function ComparisonSection({
       </div>
 
       {/* Period labels */}
-      <div className="flex items-center gap-3 mb-2 text-[10px]">
+      <div className="flex items-center gap-3 mb-2 text-[length:var(--text-2xs)]">
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
           <span className="text-[var(--proto-text-secondary)]">A: {labelA}</span>
@@ -3414,9 +3580,13 @@ function ComparisonSection({
         ref={containerRef}
         className="rounded-lg bg-[var(--proto-surface-raised)] border border-[var(--proto-border)] p-2"
       >
-        {isLoading ? (
+        {isLoading || chartTransitioning ? (
           <div className="flex items-center justify-center h-[140px]">
-            <div className="w-4 h-4 border-2 border-[var(--proto-text-muted)] border-t-transparent rounded-full animate-spin" />
+            {isLoading ? (
+              <div className="w-4 h-4 border-2 border-[var(--proto-text-muted)] border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <div className="w-full h-full rounded-lg bg-[var(--proto-surface-raised)] animate-pulse" />
+            )}
           </div>
         ) : (
           <ComparisonOverlay dataA={windowA.data} dataB={windowB.data} focus={focus} width={chartWidth} />
@@ -3426,7 +3596,7 @@ function ComparisonSection({
       {/* Stats (A/B mean and σ only — shift banner is in StructureDetail) */}
       {stats && (
         <div className="mt-2">
-          <div className="grid grid-cols-2 gap-2 text-[10px]">
+          <div className="grid grid-cols-2 gap-2 text-[length:var(--text-2xs)]">
             <div className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
               <span className="text-[var(--proto-text-muted)]">μ</span>

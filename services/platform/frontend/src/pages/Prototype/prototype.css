@@ -63,10 +63,30 @@
   background: rgba(255, 255, 255, 0.2);
 }
 
-/* Collapsible sidebar */
+/* Collapsible sidebar
+   Transition duration (200ms) must be less than useDebouncedResize delay (250ms)
+   so the debounce timer fires after the CSS transition settles. */
 .proto-sidebar {
-  transition: transform 200ms ease-in-out;
-  width: clamp(340px, 40vw, 680px);
+  container-type: inline-size;
+  --sidebar-width: clamp(340px, 28vw, 480px);
+  width: var(--sidebar-width);
+  transition:
+    transform 200ms ease-in-out,
+    width 200ms ease-in-out;
+
+  /* Container-query-based text tiers.
+     Each uses clamp(current-px, cqi-blend, max-px) so text stays
+     the same at the default width and grows gently when expanded. */
+  --text-2xs: clamp(10px, 0.5cqi + 8px, 15px);
+  --text-xxs: clamp(11px, 0.5cqi + 9px, 16px);
+  --text-xs: clamp(12px, 0.5cqi + 10px, 17px);
+  --text-sm: clamp(14px, 0.6cqi + 11.5px, 20px);
+  --text-lg: clamp(18px, 0.8cqi + 14.5px, 26px);
+  --text-xl: clamp(20px, 1cqi + 16px, 30px);
+}
+
+.proto-sidebar.expanded {
+  --sidebar-width: 50vw;
 }
 
 /* Mapbox overrides for dark theme */
