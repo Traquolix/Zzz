@@ -124,19 +124,26 @@ export function buildThresholdLookup(
 // The offset cache is null-filtered (shorter), so we build a channel→index map.
 
 const channelToOffsetIndex = new Map<string, Map<number, number>>()
+// Reverse map: offset array index → real channel number.
+// The offset cache is null-filtered (shorter than fiber.coordinates), so index ≠ channel.
+// Used by findNearestFiberPoint to return the correct channel after snapping to offset coords.
+export const offsetIndexToChannel = new Map<string, number[]>()
 for (const fiber of fibers) {
-  if (!fiber.coordsPrecomputed) {
-    const map = new Map<number, number>()
-    let idx = 0
-    for (let ch = 0; ch < fiber.coordinates.length; ch++) {
-      const c = fiber.coordinates[ch]
-      if (c[0] != null && c[1] != null) {
-        map.set(ch, idx)
-        idx++
-      }
+  const forward = new Map<number, number>()
+  const reverse: number[] = []
+  let idx = 0
+  for (let ch = 0; ch < fiber.coordinates.length; ch++) {
+    const c = fiber.coordinates[ch]
+    if (c[0] != null && c[1] != null) {
+      forward.set(ch, idx)
+      reverse.push(ch)
+      idx++
     }
-    channelToOffsetIndex.set(fiber.id, map)
   }
+  if (!fiber.coordsPrecomputed) {
+    channelToOffsetIndex.set(fiber.id, forward)
+  }
+  offsetIndexToChannel.set(fiber.id, reverse)
 }
 
 const fiberIndex = new Map<string, Map<number, Fiber>>()
