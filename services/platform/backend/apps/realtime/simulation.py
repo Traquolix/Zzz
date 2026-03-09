@@ -247,10 +247,10 @@ class Incident:
     type: str
     severity: str
     fiber_line: str
+    direction: int
     channel: int
     detected_at: str
     detected_at_ms: float  # Wall-clock ms at creation (avoids UTC/local parsing bugs)
-    direction: int = 0
     status: str = "active"
     duration: Optional[float] = None
 

@@ -792,7 +792,7 @@ class SectionHistoryView(FlowAwareMixin, APIView):
         else:
             history = query_section_history(
                 fiber_id=section["fiberId"],
-                direction=section.get("direction", 0),
+                direction=section["direction"],
                 channel_start=section["channelStart"],
                 channel_end=section["channelEnd"],
                 minutes=minutes,
@@ -812,7 +812,7 @@ class SectionHistoryView(FlowAwareMixin, APIView):
 
         return get_simulation_section_history(
             fiber_id=section["fiberId"],
-            direction=section.get("direction", 0),
+            direction=section["direction"],
             channel_start=section["channelStart"],
             channel_end=section["channelEnd"],
             minutes=minutes,
