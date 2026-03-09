@@ -22,12 +22,13 @@ from typing import Optional, TypedDict
 from channels.layers import get_channel_layer
 
 from apps.alerting.integration import check_alerts_for_detections, check_alerts_for_incident
+from apps.monitoring.section_service import compute_occupancy
 from apps.realtime.broadcast import (
-    broadcast_per_org,
-    broadcast_shm,
     broadcast_to_orgs,
     group_by_org,
     load_fiber_org_map,
+    pubsub_broadcast_detections,
+    pubsub_broadcast_shm,
 )
 from apps.shared.constants import MAP_REFRESH_INTERVAL
 
@@ -82,24 +83,32 @@ def get_simulation_section_history(
     channel_start: int,
     channel_end: int,
     minutes: int,
+    since_ms: int | None = None,
 ) -> list[dict]:
     """Query in-memory simulation buffers for section history.
 
     - ≤5 min → per-second buffer (1s resolution)
     - >5 min → per-minute buffer (1min resolution)
 
-    Returns ``[{time, speed, speedMax, samples}, ...]`` matching the live query shape.
+    Args:
+        since_ms: If provided, only return points after this timestamp (ms epoch).
+
+    Returns ``[{time, speed, speedMax, samples, flow, occupancy}, ...]``.
     """
     if minutes <= 5:
         buf = _simulation_per_second_buffer
+        bucket_seconds = 1
     else:
         buf = _simulation_per_minute_buffer
+        bucket_seconds = 60
 
     if not buf:
         return []
 
     now_ms = int(time.time() * 1000)
     cutoff_ms = now_ms - minutes * 60 * 1000
+    if since_ms is not None:
+        cutoff_ms = max(cutoff_ms, since_ms)
     points: list[dict] = []
 
     for (fid, d, ch), entries in buf.items():
@@ -108,32 +117,48 @@ def get_simulation_section_history(
         if ch < channel_start or ch > channel_end:
             continue
         for entry in entries:
-            if entry["time"] < cutoff_ms:
+            if entry["time"] <= cutoff_ms:
                 continue
             points.append(entry)
 
     # Aggregate by time bucket (multiple channels contribute to the same second/minute)
+    # Divide total vehicle detections by total section channels to get the average
+    # flow at a single point — this avoids inflating flow by the section length.
+    total_channels = max(1, channel_end - channel_start + 1)
+
     buckets: dict[int, dict] = {}
     for p in points:
         t = p["time"]
         if t not in buckets:
-            buckets[t] = {"speed_sum": 0.0, "speed_max": 0.0, "count": 0, "samples": 0}
+            buckets[t] = {
+                "speed_sum": 0.0,
+                "speed_max": 0.0,
+                "n_channels": 0,
+                "vehicle_count": 0,
+            }
         b = buckets[t]
-        b["speed_sum"] += p["speed"] * p["samples"]
+        b["speed_sum"] += p["speed"]
         b["speed_max"] = max(b["speed_max"], p["speedMax"])
-        b["count"] += p["samples"]
-        b["samples"] += p["samples"]
+        b["n_channels"] += 1
+        b["vehicle_count"] += p["vehicle_count"]
 
     result = []
     for t in sorted(buckets):
         b = buckets[t]
-        avg_speed = b["speed_sum"] / b["count"] if b["count"] > 0 else 0
+        avg_speed = b["speed_sum"] / b["n_channels"] if b["n_channels"] > 0 else 0
+        # Flow (veh/h) = total detections / total channels * (3600 / bucket_seconds)
+        avg_per_channel = b["vehicle_count"] / total_channels
+        flow = round(avg_per_channel * (3600 / bucket_seconds))
+        occupancy = compute_occupancy(avg_speed, flow)
+
         result.append(
             {
                 "time": t,
                 "speed": round(avg_speed, 1),
                 "speedMax": round(b["speed_max"], 1),
-                "samples": b["samples"],
+                "samples": b["vehicle_count"],
+                "flow": flow,
+                "occupancy": occupancy,
             }
         )
     return result
@@ -831,11 +856,13 @@ class SimulationEngine:
                     "speed_sum": 0.0,
                     "speed_max": 0.0,
                     "count": 0,
+                    "vehicle_count": 0,
                 }
             acc = self._sec_accum[key]
             acc["speed_sum"] += d.speed
             acc["speed_max"] = max(acc["speed_max"], d.speed)
             acc["count"] += 1
+            acc["vehicle_count"] += d.count
 
     def _flush_second_buffer(self):
         """Flush accumulated per-second data to the global buffer and evict old entries."""
@@ -850,7 +877,7 @@ class SimulationEngine:
                 "time": bucket_ms,
                 "speed": round(acc["speed_sum"] / acc["count"], 1),
                 "speedMax": round(acc["speed_max"], 1),
-                "samples": acc["count"],
+                "vehicle_count": acc["vehicle_count"],
             }
             if key not in _simulation_per_second_buffer:
                 _simulation_per_second_buffer[key] = []
@@ -875,25 +902,27 @@ class SimulationEngine:
         cutoff_ms = now_ms - 60 * 60 * 1000  # 60 min retention
 
         for key, entries in _simulation_per_second_buffer.items():
-            # Aggregate all entries in the previous minute
+            # Aggregate all per-second entries in the previous minute
             speed_sum = 0.0
             speed_max = 0.0
-            total_samples = 0
+            speed_count = 0
+            total_vehicle_count = 0
             for e in entries:
                 e_minute = int(e["time"] // 60_000) * 60_000
                 if e_minute == minute_ms:
-                    speed_sum += e["speed"] * e["samples"]
+                    speed_sum += e["speed"]
                     speed_max = max(speed_max, e["speedMax"])
-                    total_samples += e["samples"]
+                    speed_count += 1
+                    total_vehicle_count += e["vehicle_count"]
 
-            if total_samples == 0:
+            if speed_count == 0:
                 continue
 
             entry = {
                 "time": minute_ms,
-                "speed": round(speed_sum / total_samples, 1),
+                "speed": round(speed_sum / speed_count, 1),
                 "speedMax": round(speed_max, 1),
-                "samples": total_samples,
+                "vehicle_count": total_vehicle_count,
             }
 
             if key not in _simulation_per_minute_buffer:
@@ -1023,9 +1052,7 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
                 for d in pending_detections
             ]
             pending_detections.clear()
-            await broadcast_per_org(
-                channel_layer,
-                "detections",
+            await pubsub_broadcast_detections(
                 detection_dicts,
                 fiber_org_map,
                 flow="sim",
@@ -1049,7 +1076,7 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
                     }
                     for r in readings
                 ]
-                await broadcast_shm(channel_layer, shm_dicts, fiber_org_map, flow="sim")
+                await pubsub_broadcast_shm(shm_dicts, fiber_org_map, flow="sim")
 
         # Sync snapshot cache every 20 ticks (1s) so frontend polling gets fresh data
         if snapshot_counter >= 20:

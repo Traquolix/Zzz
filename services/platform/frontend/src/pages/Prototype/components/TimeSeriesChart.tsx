@@ -35,21 +35,27 @@ export function TimeSeriesChart({ data, timeRange, incidentTime }: TimeSeriesCha
         ))}
       </div>
 
-      <Suspense
-        fallback={
-          <div className="h-[200px] flex items-center justify-center text-[var(--proto-text-muted)] text-xs">
-            Loading chart...
-          </div>
-        }
-      >
-        <LazyChart
-          data={data}
-          metric={metric}
-          config={chartColors[metric]}
-          timeRange={timeRange}
-          incidentTime={incidentTime}
-        />
-      </Suspense>
+      {data.length === 0 ? (
+        <div className="h-[200px] flex items-center justify-center text-[var(--proto-text-muted)] text-xs">
+          No data available
+        </div>
+      ) : (
+        <Suspense
+          fallback={
+            <div className="h-[200px] flex items-center justify-center text-[var(--proto-text-muted)] text-xs">
+              Loading chart...
+            </div>
+          }
+        >
+          <LazyChart
+            data={data}
+            metric={metric}
+            config={chartColors[metric]}
+            timeRange={timeRange}
+            incidentTime={incidentTime}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }

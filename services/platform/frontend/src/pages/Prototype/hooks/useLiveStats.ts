@@ -1,178 +1,123 @@
-import { useRef, useEffect, useState, useCallback } from 'react'
-import { CircularBuffer } from '@/lib/CircularBuffer'
-import { parseDetections } from '@/lib/parseMessage'
+import { useEffect, useState, useRef, useCallback } from 'react'
+import { fetchSectionHistory } from '@/api/sections'
 import { useRealtime } from '@/hooks/useRealtime'
-import { useFlowReset } from '@/hooks/useFlowReset'
-import type { Detection } from '@/types/realtime'
-import type { Section } from '../types'
-import type { SectionDataPoint, LiveSectionStats } from '../types'
+import type { Section, SectionDataPoint, LiveSectionStats } from '../types'
+import { mapHistoryPoints } from './mapHistoryPoints'
 
-const FLUSH_INTERVAL = 500 // 2Hz
-const MAX_PENDING = 5000
-const HISTORY_SIZE = 7200 // 1 hour at 2Hz
+const POLL_INTERVAL = 2000 // 2 seconds
+const HISTORY_MINUTES = 1 // minimal window — just enough for current stats + sparklines
+const MAX_POINTS = 60 // 1 minute at 1s resolution
 
-interface SectionBuffer {
-  buffer: CircularBuffer<SectionDataPoint>
-  rawCounts: CircularBuffer<number>
-}
-
+/**
+ * Lightweight stats poller for all sections.
+ *
+ * Fetches the last minute of per-second data to derive current speed, flow,
+ * occupancy, and short sparklines. Used by the map (section coloring) and
+ * section list cards. The section detail view uses useSectionHistory instead
+ * for time-range-aware chart data.
+ */
 export function useLiveStats(sections: Section[]) {
-  const { subscribe } = useRealtime()
-  const pendingRef = useRef<Detection[]>([])
+  const { flow } = useRealtime()
+  const [stats, setStats] = useState<Map<string, LiveSectionStats>>(() => new Map())
+  const [seriesData, setSeriesData] = useState<Map<string, SectionDataPoint[]>>(() => new Map())
   const sectionsRef = useRef(sections)
   sectionsRef.current = sections
 
-  const buffersRef = useRef(new Map<string, SectionBuffer>())
+  // Track the latest timestamp per section for incremental fetches
+  const sinceRef = useRef<Map<string, number>>(new Map())
+  // Store accumulated points per section
+  const accumulatedRef = useRef<Map<string, SectionDataPoint[]>>(new Map())
 
-  const [stats, setStats] = useState<Map<string, LiveSectionStats>>(() => new Map())
-  const statsRef = useRef<Map<string, LiveSectionStats>>(new Map())
-  const [seriesData, setSeriesData] = useState<Map<string, SectionDataPoint[]>>(() => new Map())
+  const fetchAll = useCallback(async () => {
+    const secs = sectionsRef.current
+    if (secs.length === 0) return
 
-  // Clear accumulated state on flow switch
-  useFlowReset(() => {
-    pendingRef.current = []
-    buffersRef.current.clear()
-    statsRef.current = new Map()
-    setStats(new Map())
-    setSeriesData(new Map())
-  })
+    const nextStats = new Map<string, LiveSectionStats>()
+    const nextSeries = new Map<string, SectionDataPoint[]>()
 
-  // Ensure buffers exist for all sections
-  const ensureBuffers = useCallback((secs: Section[]) => {
-    for (const sec of secs) {
-      if (!buffersRef.current.has(sec.id)) {
-        buffersRef.current.set(sec.id, {
-          buffer: new CircularBuffer<SectionDataPoint>(HISTORY_SIZE),
-          rawCounts: new CircularBuffer<number>(HISTORY_SIZE),
-        })
-      }
-    }
-  }, [])
+    await Promise.all(
+      secs.map(async sec => {
+        try {
+          const since = sinceRef.current.get(sec.id)
+          const res = await fetchSectionHistory(sec.id, HISTORY_MINUTES, flow, since)
+          const newPoints = mapHistoryPoints(res.points)
 
-  // Subscribe to detections
-  useEffect(() => {
-    const unsub = subscribe('detections', (data: unknown) => {
-      const detections = parseDetections(data)
-      if (detections.length === 0) return
-
-      const pending = pendingRef.current
-      if (pending.length < MAX_PENDING) {
-        pending.push(...detections)
-      } else {
-        // Drop oldest to make room
-        const overflow = pending.length + detections.length - MAX_PENDING
-        if (overflow > 0) pending.splice(0, overflow)
-        pending.push(...detections)
-      }
-    })
-    return unsub
-  }, [subscribe])
-
-  // 2Hz flush
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const batch = pendingRef.current
-      if (batch.length === 0) return
-      pendingRef.current = []
-
-      const secs = sectionsRef.current
-      ensureBuffers(secs)
-
-      const now = Date.now()
-      const timeStr = new Date(now).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      })
-
-      const nextStats = new Map<string, LiveSectionStats>()
-      const nextSeries = new Map<string, SectionDataPoint[]>()
-
-      for (const sec of secs) {
-        // Filter detections belonging to this section
-        const matching = batch.filter(
-          d =>
-            d.fiberId === sec.fiberId &&
-            d.direction === sec.direction &&
-            d.channel >= sec.startChannel &&
-            d.channel <= sec.endChannel,
-        )
-
-        const sb = buffersRef.current.get(sec.id)
-        if (!sb) continue
-
-        if (matching.length > 0) {
-          // Weighted avg speed: sum(speed * count) / sum(count)
-          let speedSum = 0
-          let countSum = 0
-          for (const d of matching) {
-            speedSum += d.speed * d.count
-            countSum += d.count
+          // Merge with existing accumulated data
+          let accumulated = accumulatedRef.current.get(sec.id) ?? []
+          if (since == null) {
+            accumulated = newPoints
+          } else if (newPoints.length > 0) {
+            accumulated.push(...newPoints)
           }
-          const avgSpeed = countSum > 0 ? speedSum / countSum : 0
 
-          // Travel time: (channelRange * 5m) / (avgSpeed km/h → m/s) / 60 → minutes
-          const channelRange = sec.endChannel - sec.startChannel
-          const travelTime = avgSpeed > 0 ? (channelRange * 5) / ((avgSpeed * 1000) / 3600) / 60 : null
+          // Trim to window
+          const cutoff = Date.now() - HISTORY_MINUTES * 60 * 1000
+          const firstValid = accumulated.findIndex(p => p.timestamp >= cutoff)
+          if (firstValid > 0) accumulated.splice(0, firstValid)
 
-          const AVG_VEHICLE_LENGTH = 6 // meters
+          if (accumulated.length > MAX_POINTS) {
+            accumulated.splice(0, accumulated.length - MAX_POINTS)
+          }
 
-          // Estimate cross-section flow: countSum spans many channels,
-          // but we want the count at a single point. Divide by the
-          // number of channels that actually reported to get the
-          // average per-channel count (≈ cross-section vehicle count).
-          const reportingChannels = new Set(matching.map(d => d.channel)).size
-          sb.rawCounts.push(countSum / reportingChannels)
+          accumulatedRef.current.set(sec.id, accumulated)
+          nextSeries.set(sec.id, accumulated)
+          nextStats.set(sec.id, deriveStats(accumulated, sec))
 
-          // Compute rolling flow (last 20 entries = 10 seconds at 2Hz)
-          const ROLLING_WINDOW = 20
-          const recent = sb.rawCounts.lastN(ROLLING_WINDOW)
-          const totalCount = recent.reduce((a, b) => a + b, 0)
-          const windowSeconds = recent.length * (FLUSH_INTERVAL / 1000)
-          const rollingFlowPerHour = Math.round((totalCount / windowSeconds) * 3600)
-          const rollingFlowPerMin = Math.round(rollingFlowPerHour / 60)
-
-          // Compute occupancy using veh/h internally: (flow_veh_h * vehicle_length_m) / (speed_m_s * 1000)
-          const speedMs = avgSpeed * (1000 / 3600)
-          const occupancy =
-            speedMs > 0
-              ? Math.min(100, Math.round((rollingFlowPerHour * AVG_VEHICLE_LENGTH) / (speedMs * 1000)))
-              : countSum > 0
-                ? 100
-                : 0
-
-          sb.buffer.push({
-            time: timeStr,
-            timestamp: now,
-            speed: Math.round(avgSpeed),
-            flow: rollingFlowPerMin,
-            occupancy,
-          })
-
-          nextStats.set(sec.id, {
-            avgSpeed: Math.round(avgSpeed),
-            flow: rollingFlowPerMin,
-            travelTime: travelTime ? Math.round(travelTime * 10) / 10 : null,
-            occupancy,
-          })
-        } else {
-          // Push zero so rolling window reflects no-traffic periods
-          sb.rawCounts.push(0)
-          // Keep previous stats if available
-          const prev = statsRef.current.get(sec.id)
-          if (prev) nextStats.set(sec.id, prev)
+          if (res.points.length > 0) {
+            sinceRef.current.set(sec.id, res.points[res.points.length - 1].time)
+          }
+        } catch {
+          // Keep previous data on error
         }
 
-        nextSeries.set(sec.id, sb.buffer.toArray())
-      }
+        // Preserve existing data if fetch failed
+        if (!nextSeries.has(sec.id)) {
+          const existing = accumulatedRef.current.get(sec.id)
+          if (existing && existing.length > 0) {
+            nextSeries.set(sec.id, existing)
+            nextStats.set(sec.id, deriveStats(existing, sec))
+          }
+        }
+      }),
+    )
 
-      statsRef.current = nextStats
-      setStats(nextStats)
+    if (nextSeries.size > 0) {
       setSeriesData(nextSeries)
-    }, FLUSH_INTERVAL)
+      setStats(nextStats)
+    }
+  }, [flow])
 
+  useEffect(() => {
+    sinceRef.current.clear()
+    accumulatedRef.current.clear()
+    setStats(new Map())
+    setSeriesData(new Map())
+    fetchAll()
+    const timer = setInterval(fetchAll, POLL_INTERVAL)
     return () => clearInterval(timer)
-  }, [ensureBuffers])
+  }, [fetchAll])
 
   return { stats, seriesData }
+}
+
+/** Derive current stats from the most recent data points. */
+export function deriveStats(series: SectionDataPoint[], section: Section): LiveSectionStats {
+  if (series.length === 0) {
+    return { avgSpeed: null, flow: null, travelTime: null, occupancy: null }
+  }
+
+  const recent = series.slice(-10)
+  const avgSpeed = Math.round(recent.reduce((a, p) => a + p.speed, 0) / recent.length)
+  const avgFlow = Math.round(recent.reduce((a, p) => a + p.flow, 0) / recent.length)
+  const avgOccupancy = Math.round(recent.reduce((a, p) => a + p.occupancy, 0) / recent.length)
+
+  const channelRange = section.endChannel - section.startChannel
+  const travelTime = avgSpeed > 0 ? (channelRange * 5) / ((avgSpeed * 1000) / 3600) / 60 : null
+
+  return {
+    avgSpeed,
+    flow: avgFlow,
+    travelTime: travelTime ? Math.round(travelTime * 10) / 10 : null,
+    occupancy: avgOccupancy,
+  }
 }

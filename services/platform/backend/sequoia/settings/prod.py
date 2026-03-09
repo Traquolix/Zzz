@@ -149,6 +149,9 @@ CACHES = {
     }
 }
 
+# Redis pub/sub for high-frequency realtime broadcasts (detections, SHM)
+REDIS_PUBSUB_URL = f"redis://{_REDIS_AUTH_PROD}{_REDIS_HOST_PROD}:6379/0"
+
 # ---------------------------------------------------------------------------
 # Sentry
 # ---------------------------------------------------------------------------
