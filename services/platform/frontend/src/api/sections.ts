@@ -1,5 +1,6 @@
 import { apiRequest } from './client'
 
+// Keep in sync with backend: services/platform/backend/apps/monitoring/views.py
 export const MAX_SECTIONS_PER_ORG = 50
 
 export interface ApiSection {

@@ -23,7 +23,7 @@ from apps.monitoring.incident_service import (
     query_recent as incident_query_recent,
 )
 from apps.monitoring.mixins import FlowAwareMixin
-from apps.monitoring.models import IncidentAction, Infrastructure
+from apps.monitoring.models import IncidentAction, Infrastructure, Section
 from apps.monitoring.section_service import (
     delete_section,
     get_section,
@@ -61,6 +61,7 @@ _PROCESS_START_TIME = time.time()
 
 INCIDENTS_CACHE_TTL = 10  # 10 seconds
 STATS_CACHE_TTL = 5  # 5 seconds
+# Keep in sync with frontend: services/platform/frontend/src/api/sections.ts
 MAX_SECTIONS_PER_ORG = 50
 
 
@@ -701,8 +702,6 @@ class SectionListView(APIView):
             )
 
         # Enforce per-org section limit
-        from apps.monitoring.models import Section
-
         org_count = Section.objects.filter(
             organization_id=request.user.organization_id, is_active=True
         ).count()
@@ -916,7 +915,7 @@ class BatchSectionHistoryView(FlowAwareMixin, APIView):
 
         # Fetch sections from DB, org-scoped (cached — sections rarely change)
         org_id = None if request.user.is_superuser else request.user.organization_id
-        cache_key = f"sections:{org_id or '__all__'}"
+        cache_key = build_org_cache_key("batch_sections", request.user)
         sections = django_cache.get(cache_key)
         if sections is None:
             sections = query_sections(organization_id=org_id)

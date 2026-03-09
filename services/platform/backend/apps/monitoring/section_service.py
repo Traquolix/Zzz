@@ -304,14 +304,18 @@ def query_batch_section_history(
     result: dict[str, list[dict]] = {}
     for sec in sections:
         since_ms = (since_map or {}).get(sec["id"])
-        result[sec["id"]] = query_section_history(
-            fiber_id=sec["fiberId"],
-            direction=sec["direction"],
-            channel_start=sec["channelStart"],
-            channel_end=sec["channelEnd"],
-            minutes=minutes,
-            since_ms=since_ms,
-        )
+        try:
+            result[sec["id"]] = query_section_history(
+                fiber_id=sec["fiberId"],
+                direction=sec["direction"],
+                channel_start=sec["channelStart"],
+                channel_end=sec["channelEnd"],
+                minutes=minutes,
+                since_ms=since_ms,
+            )
+        except Exception:
+            logger.warning("Failed to query history for section %s", sec["id"], exc_info=True)
+            result[sec["id"]] = []
     return result
 
 
