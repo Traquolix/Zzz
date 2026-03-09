@@ -47,15 +47,18 @@ export function useLiveStats(sections: Section[]) {
             // First fetch: replace entirely
             accumulated = newPoints
           } else if (newPoints.length > 0) {
-            // Incremental: append new points
-            accumulated = [...accumulated, ...newPoints]
+            // Incremental: append in-place to avoid copying the full array
+            accumulated.push(...newPoints)
           }
 
-          // Trim to window: drop points older than HISTORY_MINUTES, cap by count
+          // Trim to window: drop points older than HISTORY_MINUTES
           const cutoff = Date.now() - HISTORY_MINUTES * 60 * 1000
-          accumulated = accumulated.filter(p => p.timestamp >= cutoff)
+          const firstValid = accumulated.findIndex(p => p.timestamp >= cutoff)
+          if (firstValid > 0) accumulated.splice(0, firstValid)
+
+          // Cap by count
           if (accumulated.length > MAX_POINTS) {
-            accumulated = accumulated.slice(-MAX_POINTS)
+            accumulated.splice(0, accumulated.length - MAX_POINTS)
           }
 
           accumulatedRef.current.set(sec.id, accumulated)
