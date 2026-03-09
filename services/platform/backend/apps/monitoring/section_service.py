@@ -5,11 +5,17 @@ Sections are config data stored in PostgreSQL. Time-series history
 (detection_hires, detection_1m) stays in ClickHouse.
 """
 
+from __future__ import annotations
+
 import logging
 import math
 import uuid
+from typing import TYPE_CHECKING
 
 from apps.shared.clickhouse import query
+
+if TYPE_CHECKING:
+    from apps.monitoring.models import Section
 
 logger = logging.getLogger("sequoia.sections")
 
@@ -70,24 +76,38 @@ def insert_section(
     return _section_to_dict(section)
 
 
-def delete_section(section_id: str) -> bool:
+def delete_section(section_id: str, organization_id: int | None = None) -> bool:
     """
     Delete a section. Returns True if found and deleted.
+
+    Args:
+        organization_id: Restrict to this org. ``None`` = any (superuser).
     """
     from apps.monitoring.models import Section
 
+    qs = Section.objects.filter(id=section_id)
+    if organization_id is not None:
+        qs = qs.filter(organization_id=organization_id)
+
     deleted_count: int
-    deleted_count, _ = Section.objects.filter(id=section_id).delete()
+    deleted_count, _ = qs.delete()
     return deleted_count > 0
 
 
-def get_section(section_id: str) -> dict | None:
-    """Fetch a single section by ID, or None if not found / inactive."""
+def get_section(section_id: str, organization_id: int | None = None) -> dict | None:
+    """Fetch a single section by ID, or None if not found / inactive.
+
+    Args:
+        organization_id: Restrict to this org. ``None`` = any (superuser).
+    """
     from apps.monitoring.models import Section
 
-    try:
-        section = Section.objects.get(id=section_id, is_active=True)
-    except Section.DoesNotExist:
+    qs = Section.objects.filter(id=section_id, is_active=True)
+    if organization_id is not None:
+        qs = qs.filter(organization_id=organization_id)
+
+    section = qs.first()
+    if section is None:
         return None
     return _section_to_dict(section)
 
@@ -261,19 +281,19 @@ def _transform_history_point(r: dict, bucket_seconds: int) -> dict:
     }
 
 
-def _section_to_dict(section: object) -> dict:
+def _section_to_dict(section: Section) -> dict:
     """Convert a Section model instance to the API response dict."""
-    ca = section.created_at  # type: ignore[attr-defined]
+    ca = section.created_at
     created = ca.isoformat() if hasattr(ca, "isoformat") else str(ca)
 
     return {
-        "id": section.id,  # type: ignore[attr-defined]
-        "fiberId": section.fiber_id,  # type: ignore[attr-defined]
-        "direction": section.direction,  # type: ignore[attr-defined]
-        "name": section.name,  # type: ignore[attr-defined]
-        "channelStart": section.channel_start,  # type: ignore[attr-defined]
-        "channelEnd": section.channel_end,  # type: ignore[attr-defined]
-        "expectedTravelTime": section.expected_travel_time_seconds,  # type: ignore[attr-defined]
-        "isActive": section.is_active,  # type: ignore[attr-defined]
+        "id": section.id,
+        "fiberId": section.fiber_id,
+        "direction": section.direction,
+        "name": section.name,
+        "channelStart": section.channel_start,
+        "channelEnd": section.channel_end,
+        "expectedTravelTime": section.expected_travel_time_seconds,
+        "isActive": section.is_active,
         "createdAt": created,
     }

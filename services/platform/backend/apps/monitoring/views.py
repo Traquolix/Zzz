@@ -715,22 +715,15 @@ class SectionDeleteView(APIView):
     permission_classes = [IsActiveUser]
 
     def delete(self, request, section_id):
-        section = get_section(section_id)
+        org_id = None if request.user.is_superuser else request.user.organization_id
+        section = get_section(section_id, organization_id=org_id)
         if not section:
             return Response(
                 {"detail": "Section not found", "code": "not_found"},
                 status=404,
             )
 
-        # Org-scoping
-        fiber_ids = _get_fiber_ids_or_none(request.user)
-        if fiber_ids is not None and not fiber_belongs_to_org(section["fiberId"], fiber_ids):
-            return Response(
-                {"detail": "Section not found", "code": "not_found"},
-                status=404,
-            )
-
-        delete_section(section_id)
+        delete_section(section_id, organization_id=org_id)
         return Response(status=204)
 
 
@@ -785,16 +778,9 @@ class SectionHistoryView(FlowAwareMixin, APIView):
         if self._is_sim(request):
             minutes = min(minutes, 60)
 
-        section = get_section(section_id)
+        org_id = None if request.user.is_superuser else request.user.organization_id
+        section = get_section(section_id, organization_id=org_id)
         if not section:
-            return Response(
-                {"detail": "Section not found", "code": "not_found"},
-                status=404,
-            )
-
-        # Org-scoping
-        fiber_ids = _get_fiber_ids_or_none(request.user)
-        if fiber_ids is not None and not fiber_belongs_to_org(section["fiberId"], fiber_ids):
             return Response(
                 {"detail": "Section not found", "code": "not_found"},
                 status=404,
