@@ -15,9 +15,10 @@
 8. [ ] **Remove dead frontend type files** [#61] — tech-debt, delete unused types in `src/types/` (selection.ts, admin.ts, report.ts, user.ts, section.ts, metrics.ts)
 9. [x] **Replace `fiberLineId()` composite keys with structured keys** [#62] — PR #65
 10. [ ] **Rename Proto-prefixed types** [#66] — refactor, rename ProtoIncident/ProtoState/ProtoAction to meaningful names
-11. [ ] **Frontend: poll section history API** [#54] — enhancement, replace client-side accumulation with periodic API polling
-12. [ ] **Sim stats: `detectionsPerSecond` always 0** [#41] — enhancement
-13. [ ] **Optimistic flow switch rollback** [#15] — bug, frontend/backend flow state desync
+11. [ ] **Remove SQLite, use PostgreSQL + Redis everywhere** [#67] — infrastructure, switch dev/test from SQLite/in-memory to PostgreSQL + Redis, spin up all deps in `make dev`
+12. [ ] **Frontend: poll section history API** [#54] — enhancement, replace client-side accumulation with periodic API polling
+13. [ ] **Sim stats: `detectionsPerSecond` always 0** [#41] — enhancement
+14. [ ] **Optimistic flow switch rollback** [#15] — bug, frontend/backend flow state desync
 
 ## High Priority
 
