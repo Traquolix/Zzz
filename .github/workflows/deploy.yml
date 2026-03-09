@@ -51,10 +51,8 @@ jobs:
         run: |
           cd ${{ env.DEPLOY_DIR }}
           docker compose build --parallel
-          docker compose up -d --remove-orphans || true
-          # kafka-setup is a one-shot init container that may exit non-zero
-          # on restarts due to DNS race. Wait for it to complete via retries.
-          docker compose up -d --wait kafka-setup || true
+          docker compose down --remove-orphans
+          docker compose up -d
 
       - name: Health check
         id: health
