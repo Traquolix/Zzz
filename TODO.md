@@ -12,13 +12,16 @@
 5. [x] **SectionHistoryView not flow-aware** [#40] — PR #55, merged
 6. [x] **Make direction a first-class field everywhere** [#58] — PR #59, merged
 7. [x] **Consolidate dual Incident type definitions** [#42] — PR #65
-8. [ ] **Remove dead frontend type files** [#61] — tech-debt, delete unused types in `src/types/` (selection.ts, admin.ts, report.ts, user.ts, section.ts, metrics.ts)
-9. [x] **Replace `fiberLineId()` composite keys with structured keys** [#62] — PR #65
-10. [ ] **Rename Proto-prefixed types** [#66] — refactor, rename ProtoIncident/ProtoState/ProtoAction to meaningful names
-11. [ ] **Remove SQLite, use PostgreSQL + Redis everywhere** [#67] — infrastructure, switch dev/test from SQLite/in-memory to PostgreSQL + Redis, spin up all deps in `make dev`
-12. [ ] **Frontend: poll section history API** [#54] — enhancement, replace client-side accumulation with periodic API polling
-13. [ ] **Sim stats: `detectionsPerSecond` always 0** [#41] — enhancement
-14. [ ] **Optimistic flow switch rollback** [#15] — bug, frontend/backend flow state desync
+8. [x] **Replace `fiberLineId()` composite keys with structured keys** [#62] — PR #65
+9. [x] **Frontend: poll section history + Redis pub/sub + flow fixes** [#54] — PR #69, merged
+10. [ ] **Optimistic flow switch rollback** [#15] — PR #71, in review
+11. [ ] **Move CRUD config tables to PostgreSQL** [#33] — sections, danger zones, actors out of ClickHouse
+12. [ ] **Batch section history endpoint** [#70] — reduce N parallel requests to single batch call
+13. [ ] **Real-time SHM data** [#11] — end-to-end SHM data flow (pipeline → simulation → frontend)
+14. [ ] **Fix section creation overlay** [#38] — click position offset on map
+15. [ ] **Expand side panel** [#72] — wider default, more readable charts and data tables
+16. [ ] **Install self-hosted GitHub Actions runners** [#5] — prerequisite for automated deploys
+17. [ ] **Realistic simulation engine** [#10] — physically coherent traffic, location-aware speeds, emergent incidents
 
 ## High Priority
 

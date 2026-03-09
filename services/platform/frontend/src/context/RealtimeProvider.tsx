@@ -3,6 +3,7 @@ import { getAuthToken } from '@/api/client'
 import { logger } from '@/lib/logger'
 import { RealtimeContext, type RealtimeContextType, type DataFlow } from './RealtimeContext'
 import { useAppStore } from '@/stores/appStore'
+import { showToast } from '@/lib/toast'
 
 const PING_INTERVAL_MS = 30_000
 const INITIAL_RECONNECT_DELAY_MS = 1_000
@@ -10,16 +11,20 @@ const MAX_RECONNECT_DELAY_MS = 30_000
 const TOKEN_POLL_INTERVAL_MS = 500
 const TOKEN_POLL_MAX_ATTEMPTS = 20
 const AUTH_TIMEOUT_MS = 30_000
+const FLOW_SWITCH_TIMEOUT_MS = 5_000
 
 export function RealtimeProvider({ children, url }: { children: ReactNode; url: string }) {
   const socketRef = useRef<WebSocket | null>(null)
   const [connected, setConnected] = useState(false)
   const [reconnecting, setReconnecting] = useState(false)
   const [authFailed, setAuthFailed] = useState(false)
-  const [flow, setFlowState] = useState<DataFlow>('sim')
-  const flowRef = useRef<DataFlow>('sim')
+  const [flow, setFlowState] = useState<DataFlow>('live')
+  const flowRef = useRef<DataFlow>('live')
+  const [switchingFlow, setSwitchingFlow] = useState(false)
+  const switchingFlowRef = useRef(false)
   const [availableFlows, setAvailableFlows] = useState<DataFlow[]>(['sim'])
   const flowChangeCallbacksRef = useRef<Set<(flow: DataFlow) => void>>(new Set())
+  const flowSwitchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const subscriptionsRef = useRef<Map<string, Set<(data: unknown) => void>>>(new Map())
   const reconnectDelayRef = useRef(INITIAL_RECONNECT_DELAY_MS)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -42,6 +47,10 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
       clearTimeout(authTimeoutRef.current)
       authTimeoutRef.current = null
     }
+    if (flowSwitchTimeoutRef.current) {
+      clearTimeout(flowSwitchTimeoutRef.current)
+      flowSwitchTimeoutRef.current = null
+    }
   }, [])
 
   const startPingPong = useCallback((ws: WebSocket) => {
@@ -56,11 +65,20 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
   const setFlow = useCallback((newFlow: DataFlow) => {
     const ws = socketRef.current
     if (!ws || ws.readyState !== WebSocket.OPEN || !authenticatedRef.current) return
+    if (newFlow === flowRef.current) return // Already on this flow
+    if (switchingFlowRef.current) return // Ignore if already switching
+
+    switchingFlowRef.current = true
+    setSwitchingFlow(true)
     ws.send(JSON.stringify({ action: 'set_flow', flow: newFlow }))
-    flowRef.current = newFlow
-    setFlowState(newFlow)
-    // Notify all registered callbacks so hooks can clear state
-    flowChangeCallbacksRef.current.forEach(cb => cb(newFlow))
+
+    // Timeout: if server doesn't confirm within 5s, revert
+    flowSwitchTimeoutRef.current = setTimeout(() => {
+      logger.error('RealtimeProvider: flow switch timeout, reverting')
+      switchingFlowRef.current = false
+      setSwitchingFlow(false)
+      showToast.warning('flow.switchTimeout')
+    }, FLOW_SWITCH_TIMEOUT_MS)
   }, [])
 
   const onFlowChange = useCallback((cb: (flow: DataFlow) => void) => {
@@ -132,6 +150,8 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
         authenticatedRef.current = false
         pendingSubscriptionsRef.current = []
         setConnected(false)
+        switchingFlowRef.current = false
+        setSwitchingFlow(false)
         clearTimers()
         scheduleReconnect()
       }
@@ -161,8 +181,9 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
               setAuthFailed(false)
               reconnectDelayRef.current = INITIAL_RECONNECT_DELAY_MS
 
-              // Read available flows from auth response
+              // Read available flows and server's chosen default from auth response
               const flows: DataFlow[] = parsed.available_flows ?? ['sim']
+              const serverFlow: DataFlow = parsed.flow ?? (flows.includes('live') ? 'live' : 'sim')
               setAvailableFlows(flows)
 
               // Preserve user's flow choice across reconnects; fall back if unavailable
@@ -175,8 +196,10 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
               flowRef.current = resolvedFlow
               setFlowState(resolvedFlow)
 
-              // Send initial set_flow to backend
-              ws.send(JSON.stringify({ action: 'set_flow', flow: resolvedFlow }))
+              // Only send set_flow if user's preference differs from server's default
+              if (resolvedFlow !== serverFlow) {
+                ws.send(JSON.stringify({ action: 'set_flow', flow: resolvedFlow }))
+              }
 
               // Now send queued subscriptions
               for (const channel of pendingSubscriptionsRef.current) {
@@ -193,12 +216,30 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
             return
           }
 
-          // Handle flow_changed confirmation (no-op, already handled optimistically)
-          if (parsed.action === 'flow_changed') return
+          // Handle flow_changed confirmation — apply the switch now
+          if (parsed.action === 'flow_changed') {
+            if (flowSwitchTimeoutRef.current) {
+              clearTimeout(flowSwitchTimeoutRef.current)
+              flowSwitchTimeoutRef.current = null
+            }
+            const confirmedFlow = parsed.flow as DataFlow
+            flowRef.current = confirmedFlow
+            setFlowState(confirmedFlow)
+            switchingFlowRef.current = false
+            setSwitchingFlow(false)
+            flowChangeCallbacksRef.current.forEach(cb => cb(confirmedFlow))
+            return
+          }
 
-          // Handle error responses
+          // Handle error responses — revert flow switch if one was pending
           if (parsed.action === 'error') {
             logger.error('RealtimeProvider: server error:', parsed.message)
+            if (flowSwitchTimeoutRef.current) {
+              clearTimeout(flowSwitchTimeoutRef.current)
+              flowSwitchTimeoutRef.current = null
+              switchingFlowRef.current = false
+              setSwitchingFlow(false)
+            }
             return
           }
 
@@ -282,6 +323,7 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
     reconnecting,
     authFailed,
     flow,
+    switchingFlow,
     availableFlows,
     setFlow,
     onFlowChange,
