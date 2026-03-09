@@ -40,7 +40,7 @@ function toProtoIncident(api: ApiIncident): ProtoIncident {
 }
 
 const initialState: ProtoState = {
-  activeTab: 'incidents',
+  activeTab: 'sections',
   selectedIncidentId: null,
   selectedSectionId: null,
   filterSeverity: null,
