@@ -96,3 +96,11 @@ REPLAY_BUFFER_DELAY = Histogram(
     "Replay buffer scheduling delay (wall time - target time)",
     buckets=(0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0),
 )
+
+# ---------- Redis Pub/Sub ----------
+
+PUBSUB_MESSAGES_PUBLISHED = Counter(
+    "sequoia_pubsub_messages_published_total",
+    "Messages published to Redis pub/sub",
+    ["channel"],
+)

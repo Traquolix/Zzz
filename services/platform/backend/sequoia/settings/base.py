@@ -131,7 +131,7 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_THROTTLE_RATES": {
         "anon": "5/minute",
-        "user": "1000/hour",
+        "user": "3000/hour",
         "login": "5/minute",
         "api_key": "100/hour",
         "export": "10/hour",
@@ -206,9 +206,14 @@ CHANNEL_LAYERS = {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
             "hosts": [f"redis://{_REDIS_AUTH}{_REDIS_HOST}:6379/0"],
+            "capacity": 500,
         },
     },
 }
+
+# Redis pub/sub for high-frequency realtime broadcasts (detections, SHM)
+# Uses the same Redis instance as the channel layer (DB 0)
+REDIS_PUBSUB_URL = f"redis://{_REDIS_AUTH}{_REDIS_HOST}:6379/0"
 
 CACHES = {
     "default": {

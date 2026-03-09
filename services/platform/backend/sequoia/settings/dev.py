@@ -65,12 +65,16 @@ CHANNEL_LAYERS = {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
             "hosts": [f"redis://{_DEV_REDIS_AUTH}{_DEV_REDIS_HOST}:6379/0"],
+            "capacity": 500,
         },
     },
 }
 
 # Auto-start simulation when first WebSocket connects (dev only)
 REALTIME_AUTO_START_SIMULATION = True
+
+# Redis pub/sub for high-frequency realtime broadcasts (detections, SHM)
+REDIS_PUBSUB_URL = f"redis://{_DEV_REDIS_AUTH}{_DEV_REDIS_HOST}:6379/0"
 
 # Cache — Redis
 CACHES = {

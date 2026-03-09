@@ -192,3 +192,32 @@ async def broadcast_shm(
             f"realtime_{flow}_shm_readings_org_{org_id}",
             {"type": "broadcast_message", "channel": "shm_readings", "data": org_data},
         )
+
+
+# ============================================================================
+# PUB/SUB BROADCAST HELPERS (high-frequency channels)
+# ============================================================================
+
+
+async def pubsub_broadcast_detections(
+    items: list[dict],
+    fiber_org_map: dict[str, list[str]],
+    *,
+    flow: str,
+):
+    """Broadcast detections via Redis pub/sub (fire-and-forget)."""
+    from apps.realtime.redis_pubsub import pubsub_publish_per_org
+
+    await pubsub_publish_per_org("detections", items, fiber_org_map, flow=flow)
+
+
+async def pubsub_broadcast_shm(
+    readings: list[dict],
+    fiber_org_map: dict[str, list[str]],
+    *,
+    flow: str,
+):
+    """Broadcast SHM readings via Redis pub/sub (fire-and-forget)."""
+    from apps.realtime.redis_pubsub import pubsub_publish_shm
+
+    await pubsub_publish_shm(readings, fiber_org_map, flow=flow)
