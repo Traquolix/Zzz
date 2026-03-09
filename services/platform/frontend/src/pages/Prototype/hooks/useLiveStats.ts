@@ -7,6 +7,7 @@ import type { SectionDataPoint, LiveSectionStats } from '../types'
 
 const POLL_INTERVAL = 2000 // 2 seconds
 const HISTORY_MINUTES = 60
+const MAX_POINTS = 3600 // cap accumulated points (1h at 1s resolution)
 
 /**
  * Polls the section history API for each section and derives stats + series data.
@@ -59,9 +60,12 @@ export function useLiveStats(sections: Section[]) {
             accumulated = [...accumulated, ...newPoints]
           }
 
-          // Trim to window: drop points older than HISTORY_MINUTES
+          // Trim to window: drop points older than HISTORY_MINUTES, cap by count
           const cutoff = Date.now() - HISTORY_MINUTES * 60 * 1000
           accumulated = accumulated.filter(p => p.timestamp >= cutoff)
+          if (accumulated.length > MAX_POINTS) {
+            accumulated = accumulated.slice(-MAX_POINTS)
+          }
 
           accumulatedRef.current.set(sec.id, accumulated)
           nextSeries.set(sec.id, accumulated)
@@ -72,9 +76,13 @@ export function useLiveStats(sections: Section[]) {
             sinceRef.current.set(sec.id, res.points[res.points.length - 1].time)
           }
         } catch {
-          // Keep previous data on error
+          // Keep previous data on error or empty response
+        }
+
+        // Always preserve existing data if not updated above
+        if (!nextSeries.has(sec.id)) {
           const existing = accumulatedRef.current.get(sec.id)
-          if (existing) {
+          if (existing && existing.length > 0) {
             nextSeries.set(sec.id, existing)
             nextStats.set(sec.id, deriveStats(existing, sec))
           }

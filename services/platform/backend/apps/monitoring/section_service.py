@@ -181,38 +181,33 @@ def _query_section_history_hires(
     since_ms: int | None = None,
 ) -> list[dict]:
     """Query detection_hires at 1-second resolution for short windows (≤5 min)."""
-    since_clause = ""
-    params: dict = {
-        "fid": fiber_id,
-        "dir": direction,
-        "cs": channel_start,
-        "ce": channel_end,
-        "mins": minutes,
-    }
-    if since_ms is not None:
-        since_clause = "AND ts > fromUnixTimestamp64Milli({since:UInt64})"
-        params["since"] = since_ms
-
     rows = query(
-        f"""
+        """
         SELECT
             toUnixTimestamp(toStartOfSecond(ts)) * 1000 AS time_ms,
             avg(speed) AS speed,
             max(speed) AS speed_max,
             count() AS samples
         FROM sequoia.detection_hires
-        WHERE fiber_id = {{fid:String}}
-          AND direction = {{dir:UInt8}}
-          AND ch BETWEEN {{cs:UInt16}} AND {{ce:UInt16}}
-          AND ts >= now() - INTERVAL {{mins:UInt32}} MINUTE
-          {since_clause}
+        WHERE fiber_id = {fid:String}
+          AND direction = {dir:UInt8}
+          AND ch BETWEEN {cs:UInt16} AND {ce:UInt16}
+          AND ts >= now() - INTERVAL {mins:UInt32} MINUTE
+          AND ({since:UInt64} = 0 OR ts > fromUnixTimestamp64Milli({since:UInt64}))
         GROUP BY toStartOfSecond(ts)
         ORDER BY toStartOfSecond(ts)
         """,
-        parameters=params,
+        parameters={
+            "fid": fiber_id,
+            "dir": direction,
+            "cs": channel_start,
+            "ce": channel_end,
+            "mins": minutes,
+            "since": since_ms or 0,
+        },
     )
 
-    return _transform_history_rows(rows)
+    return _transform_history_rows(rows, bucket_seconds=1)
 
 
 def _query_section_history_1m(
@@ -224,55 +219,54 @@ def _query_section_history_1m(
     since_ms: int | None = None,
 ) -> list[dict]:
     """Query detection_1m at 1-minute resolution using -Merge combinators."""
-    since_clause = ""
-    params: dict = {
-        "fid": fiber_id,
-        "dir": direction,
-        "cs": channel_start,
-        "ce": channel_end,
-        "mins": minutes,
-    }
-    if since_ms is not None:
-        since_clause = "AND ts > fromUnixTimestamp64Milli({since:UInt64})"
-        params["since"] = since_ms
-
     rows = query(
-        f"""
+        """
         SELECT
             toUnixTimestamp(ts) * 1000 AS time_ms,
             avgMerge(speed_avg_state) AS speed,
             maxMerge(speed_max_state) AS speed_max,
             sumMerge(samples_state) AS samples
         FROM sequoia.detection_1m
-        WHERE fiber_id = {{fid:String}}
-          AND direction = {{dir:UInt8}}
-          AND ch BETWEEN {{cs:UInt16}} AND {{ce:UInt16}}
-          AND ts >= now() - INTERVAL {{mins:UInt32}} MINUTE
-          {since_clause}
+        WHERE fiber_id = {fid:String}
+          AND direction = {dir:UInt8}
+          AND ch BETWEEN {cs:UInt16} AND {ce:UInt16}
+          AND ts >= now() - INTERVAL {mins:UInt32} MINUTE
+          AND ({since:UInt64} = 0 OR ts > fromUnixTimestamp64Milli({since:UInt64}))
         GROUP BY ts
         ORDER BY ts
         """,
-        parameters=params,
+        parameters={
+            "fid": fiber_id,
+            "dir": direction,
+            "cs": channel_start,
+            "ce": channel_end,
+            "mins": minutes,
+            "since": since_ms or 0,
+        },
     )
 
-    return _transform_history_rows(rows)
+    return _transform_history_rows(rows, bucket_seconds=60)
 
 
 AVG_VEHICLE_LENGTH_M = 6  # meters, for occupancy estimation
 
 
-def _transform_history_rows(rows: list[dict]) -> list[dict]:
+def _transform_history_rows(rows: list[dict], bucket_seconds: int = 60) -> list[dict]:
     """Transform raw query rows into the section history response shape.
 
+    Args:
+        bucket_seconds: Duration of each time bucket (1 for hires, 60 for 1m).
+            Used to correctly scale flow to per-hour for occupancy calculation.
+
     Computes derived metrics:
-    - ``flow``: vehicle count (= samples) per time bucket
+    - ``flow``: detection count (= samples) per time bucket
     - ``occupancy``: estimated road occupancy percentage using
       ``(flow_per_hour * vehicle_length) / (speed_m_s * 1000)``
     """
-    return [_transform_history_point(r) for r in rows]
+    return [_transform_history_point(r, bucket_seconds) for r in rows]
 
 
-def _transform_history_point(r: dict) -> dict:
+def _transform_history_point(r: dict, bucket_seconds: int) -> dict:
     speed = round(float(r["speed"]), 1) if r["speed"] is not None else 0.0
     samples = int(r["samples"]) if r["samples"] is not None else 0
 
@@ -282,7 +276,8 @@ def _transform_history_point(r: dict) -> dict:
     # Occupancy: (flow_per_hour * vehicle_length) / (speed_m_s * 1000)
     speed_ms = speed * (1000 / 3600)
     if speed_ms > 0 and flow > 0:
-        flow_per_hour = flow * 60  # rough estimate assuming 1-min buckets
+        # Scale flow to per-hour based on actual bucket duration
+        flow_per_hour = flow * (3600 / bucket_seconds)
         occupancy = min(100, round((flow_per_hour * AVG_VEHICLE_LENGTH_M) / (speed_ms * 1000)))
     else:
         occupancy = 100 if flow > 0 else 0

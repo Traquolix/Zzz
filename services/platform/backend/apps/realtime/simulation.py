@@ -99,8 +99,10 @@ def get_simulation_section_history(
     """
     if minutes <= 5:
         buf = _simulation_per_second_buffer
+        bucket_seconds = 1
     else:
         buf = _simulation_per_minute_buffer
+        bucket_seconds = 60
 
     if not buf:
         return []
@@ -141,7 +143,7 @@ def get_simulation_section_history(
         flow = samples
         speed_ms = avg_speed * (1000 / 3600)
         if speed_ms > 0 and flow > 0:
-            flow_per_hour = flow * 60
+            flow_per_hour = flow * (3600 / bucket_seconds)
             occupancy = min(100, round((flow_per_hour * _AVG_VEHICLE_LENGTH_M) / (speed_ms * 1000)))
         else:
             occupancy = 100 if flow > 0 else 0
