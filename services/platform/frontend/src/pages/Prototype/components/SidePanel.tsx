@@ -2781,7 +2781,7 @@ function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
   }, [zoom, fullTimeRange])
 
   const { points, xScale, yScale, freqMin, freqMax, inverseXScale } = useMemo(() => {
-    const freqMin = 1.05
+    const freqMin = 1.06
     const freqMax = 1.16
 
     let pMin = Infinity,
@@ -3086,7 +3086,7 @@ function ComparisonOverlay({
   const plotW = Math.max(80, width - padding.left - padding.right)
   const plotH = height - padding.top - padding.bottom
 
-  const freqMin = 1.05,
+  const freqMin = 1.06,
     freqMax = 1.16
   const yScale = (f: number) => padding.top + ((freqMax - f) / (freqMax - freqMin)) * plotH
 
@@ -3104,7 +3104,7 @@ function ComparisonOverlay({
   const pointsB = processData(dataB, '#f59e0b')
   const opacityA = focus === 'A' ? 0.7 : focus === 'equal' ? 0.3 : 0.04
   const opacityB = focus === 'B' ? 0.7 : focus === 'equal' ? 0.3 : 0.04
-  const yTicks = [1.05, 1.09, 1.12, 1.16]
+  const yTicks = [1.06, 1.09, 1.12, 1.16]
 
   return (
     <svg
