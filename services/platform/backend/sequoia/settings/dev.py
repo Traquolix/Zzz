@@ -8,7 +8,7 @@ from pathlib import Path as _Path
 from dotenv import load_dotenv
 
 from .base import *  # noqa: F401, F403
-from .base import BASE_DIR, SIMPLE_JWT
+from .base import SIMPLE_JWT
 
 # Load .env.dev from backend root if it exists
 _env_dev = _Path(__file__).resolve().parent.parent.parent / ".env.dev"
@@ -30,11 +30,15 @@ DEBUG = True
 
 ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 
-# Database — SQLite for development
+# Database — PostgreSQL (Docker container started by `make dev-deps`)
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("POSTGRES_DB", "sequoia"),
+        "USER": os.environ.get("POSTGRES_USER", "sequoia"),
+        "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "CHANGE_ME"),
+        "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
+        "PORT": os.environ.get("POSTGRES_PORT", "5432"),
     }
 }
 
@@ -51,21 +55,28 @@ EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 # Disable password validators in development
 AUTH_PASSWORD_VALIDATORS = []
 
-# Channels — use in-memory layer for dev without Redis
+# Channels — Redis (Docker container started by `make dev-deps`)
+_DEV_REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
+_DEV_REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD", "CHANGE_ME")
+_DEV_REDIS_AUTH = f":{_DEV_REDIS_PASSWORD}@" if _DEV_REDIS_PASSWORD else ""
+
 CHANNEL_LAYERS = {
     "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer",
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [f"redis://{_DEV_REDIS_AUTH}{_DEV_REDIS_HOST}:6379/0"],
+        },
     },
 }
 
 # Auto-start simulation when first WebSocket connects (dev only)
-# This ensures simulation runs in Daphne's event loop for InMemoryChannelLayer compatibility
 REALTIME_AUTO_START_SIMULATION = True
 
-# Cache — use in-memory for dev (no Redis dependency)
+# Cache — Redis
 CACHES = {
     "default": {
-        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": f"redis://{_DEV_REDIS_AUTH}{_DEV_REDIS_HOST}:6379/1",
     }
 }
 

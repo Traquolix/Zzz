@@ -22,8 +22,15 @@ SIMPLE_JWT = {
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": ":memory:",
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": os.environ.get("POSTGRES_DB", "sequoia"),
+        "USER": os.environ.get("POSTGRES_USER", "sequoia"),
+        "PASSWORD": os.environ.get("POSTGRES_PASSWORD", "CHANGE_ME"),
+        "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
+        "PORT": os.environ.get("POSTGRES_PORT", "5432"),
+        "TEST": {
+            "NAME": "test_sequoia",
+        },
     }
 }
 

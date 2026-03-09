@@ -108,9 +108,12 @@ Thumbs.db
 # Exception: AI engine config CSVs required for inference
 !services/pipeline/ai_engine/model_vehicle/models_parameters/*.csv
 
-# SQLite databases
+# SQLite databases (legacy, no longer used in dev)
 db.sqlite3
 *.sqlite3
+
+# Dev seed marker
+.dev-seeded
 
 # Config files with secrets
 config.yml
