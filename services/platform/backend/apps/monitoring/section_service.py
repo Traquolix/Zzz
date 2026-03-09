@@ -284,11 +284,15 @@ def _transform_history_point(r: dict, bucket_seconds: int) -> dict:
 def query_batch_section_history(
     sections: list[dict],
     minutes: int = 60,
-    since_ms: int | None = None,
+    since_map: dict[str, int] | None = None,
 ) -> dict[str, list[dict]]:
     """Query history for multiple sections in one call.
 
     Each section dict must have: id, fiberId, direction, channelStart, channelEnd.
+
+    Args:
+        since_map: Per-section ``{section_id: epoch_ms}`` cursors. Each section
+            only returns points after its own cursor. ``None`` = full window.
 
     The main win is collapsing N frontend HTTP requests into one. On the
     ClickHouse side, each section still needs its own query (different
@@ -299,6 +303,7 @@ def query_batch_section_history(
     """
     result: dict[str, list[dict]] = {}
     for sec in sections:
+        since_ms = (since_map or {}).get(sec["id"])
         result[sec["id"]] = query_section_history(
             fiber_id=sec["fiberId"],
             direction=sec["direction"],

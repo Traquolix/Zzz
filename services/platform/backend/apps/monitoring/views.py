@@ -847,7 +847,7 @@ class BatchSectionHistoryView(FlowAwareMixin, APIView):
     batch request. Used by the live stats poller (useLiveStats) which needs
     history for all sections every 2 seconds.
 
-    Request body: ``{"sectionIds": [...], "minutes": 1, "since": <epoch_ms>}``
+    Request body: ``{"sectionIds": [...], "minutes": 1, "since": {"id1": ms, "id2": ms}}``
 
     Strict flow isolation:
     - ``flow=sim`` → in-memory simulation buffers
@@ -878,15 +878,18 @@ class BatchSectionHistoryView(FlowAwareMixin, APIView):
         except (ValueError, TypeError):
             minutes = 60
 
+        # Per-section since cursors: {"section-abc": 1741234567000, ...}
         since_raw = request.data.get("since")
-        since_ms: int | None = None
-        if since_raw is not None:
-            try:
-                since_ms = int(since_raw)
-            except (ValueError, TypeError):
-                pass
-        if since_ms is not None and since_ms < 0:
-            since_ms = None
+        since_map: dict[str, int] | None = None
+        if isinstance(since_raw, dict):
+            since_map = {}
+            for k, v in since_raw.items():
+                try:
+                    val = int(v)
+                    if val >= 0:
+                        since_map[str(k)] = val
+                except (ValueError, TypeError):
+                    pass
 
         if self._is_sim(request):
             minutes = min(minutes, 60)
@@ -903,20 +906,21 @@ class BatchSectionHistoryView(FlowAwareMixin, APIView):
             return Response({"results": {}})
 
         if self._is_sim(request):
-            results = self._get_sim_batch(requested, minutes, since_ms)
+            results = self._get_sim_batch(requested, minutes, since_map)
         else:
-            results = query_batch_section_history(requested, minutes, since_ms)
+            results = query_batch_section_history(requested, minutes, since_map)
 
         return Response({"results": results})
 
     def _get_sim_batch(
-        self, sections: list[dict], minutes: int, since_ms: int | None
+        self, sections: list[dict], minutes: int, since_map: dict[str, int] | None
     ) -> dict[str, list[dict]]:
         """Sim flow: query in-memory simulation detection buffers for each section."""
         from apps.realtime.simulation import get_simulation_section_history
 
         result: dict[str, list[dict]] = {}
         for sec in sections:
+            since_ms = (since_map or {}).get(sec["id"])
             result[sec["id"]] = get_simulation_section_history(
                 fiber_id=sec["fiberId"],
                 direction=sec["direction"],

@@ -23,7 +23,8 @@ export function useLiveStats(sections: Section[]) {
   const sectionsRef = useRef(sections)
   sectionsRef.current = sections
 
-  // Per-section since cursors — each section may have a different latest timestamp
+  // Per-section since cursors sent to the backend so each section
+  // only returns points after its own last-known timestamp.
   const sinceRef = useRef<Map<string, number>>(new Map())
   // Store accumulated points per section
   const accumulatedRef = useRef<Map<string, SectionDataPoint[]>>(new Map())
@@ -33,16 +34,18 @@ export function useLiveStats(sections: Section[]) {
     if (secs.length === 0) return
 
     try {
-      // Batch since = min of all per-section cursors (so no section misses data).
-      // Sections whose cursor is ahead will get some overlap — deduplicated below.
-      const sinceValues = [...sinceRef.current.values()]
-      const batchSince = sinceValues.length > 0 ? Math.min(...sinceValues) : undefined
+      // Build per-section since map — backend applies each cursor individually
+      const sinceMap: Record<string, number> = {}
+      for (const sec of secs) {
+        const since = sinceRef.current.get(sec.id)
+        if (since != null) sinceMap[sec.id] = since
+      }
 
       const batchResult = await fetchBatchSectionHistory(
         secs.map(s => s.id),
         HISTORY_MINUTES,
         flow,
-        batchSince,
+        Object.keys(sinceMap).length > 0 ? sinceMap : undefined,
       )
 
       const nextStats = new Map<string, LiveSectionStats>()
@@ -61,18 +64,13 @@ export function useLiveStats(sections: Section[]) {
         }
 
         const newPoints = mapHistoryPoints(rawPoints)
-        const sectionSince = sinceRef.current.get(sec.id)
 
         // Merge with existing accumulated data
         let accumulated = accumulatedRef.current.get(sec.id) ?? []
-        if (sectionSince == null) {
+        if (!sinceRef.current.has(sec.id)) {
           accumulated = newPoints
         } else if (newPoints.length > 0) {
-          // Batch uses min(since) globally, so sections whose cursor was ahead
-          // of the batch since will receive points they already have. Deduplicate.
-          const lastKnown = accumulated.length > 0 ? accumulated[accumulated.length - 1].timestamp : 0
-          const fresh = newPoints.filter(p => p.timestamp > lastKnown)
-          accumulated.push(...fresh)
+          accumulated.push(...newPoints)
         }
 
         // Trim to window

@@ -59,14 +59,14 @@ export async function fetchBatchSectionHistory(
   sectionIds: string[],
   minutes = 60,
   flow?: 'sim' | 'live',
-  since?: number,
+  since?: Record<string, number>,
 ): Promise<Record<string, SectionHistoryPoint[]>> {
   const params = flow ? `?flow=${flow}` : ''
   const res = await apiRequest<{ results: Record<string, SectionHistoryPoint[]> }>(
     `/api/sections/batch-history${params}`,
     {
       method: 'POST',
-      body: { sectionIds, minutes, ...(since != null && { since }) },
+      body: { sectionIds, minutes, ...(since && Object.keys(since).length > 0 && { since }) },
     },
   )
   return res.results
