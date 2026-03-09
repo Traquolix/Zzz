@@ -3,9 +3,19 @@ import type { Severity, IncidentType, ProtoIncident } from '@/types/incident'
 export type { Severity, IncidentType, ProtoIncident }
 export type SidebarTab = 'incidents' | 'sections' | 'settings' | 'shm' | 'channel' | 'waterfall'
 
+/**
+ * A directional fiber — one direction on a physical cable.
+ *
+ * **Cable** = a physical fiber optic cable installation (e.g. "carros").
+ * Each cable produces two **Fibers**, one per direction (0 and 1).
+ *
+ * The API and domain types use the cable ID (`fiberId`) + `direction` as
+ * separate fields. Internally, each Fiber has a composite `id` ("carros:0")
+ * used only for keying caches and maps inside `data.ts`.
+ */
 export interface Fiber {
-  id: string
-  parentCableId: string
+  id: string // internal composite key ("carros:0"), not used in domain types
+  parentCableId: string // the physical cable ID ("carros"), matches API fiberId
   direction: 0 | 1
   name: string
   color: string

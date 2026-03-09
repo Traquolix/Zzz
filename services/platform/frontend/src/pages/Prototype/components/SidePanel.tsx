@@ -3,10 +3,19 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import { severityColor, fibers, getSpeedColor, chartColors, defaultSpeedThresholds, findFiber } from '../data'
+import {
+  severityColor,
+  fibers,
+  getSpeedColor,
+  chartColors,
+  defaultSpeedThresholds,
+  findFiber,
+  getFiberColor,
+} from '../data'
 import { useIncidentSnapshot } from '@/hooks/useIncidentSnapshot'
 import { fetchSectionHistory } from '@/api/sections'
 import type {
+  Fiber,
   ProtoIncident,
   ProtoState,
   ProtoAction,
@@ -829,7 +838,7 @@ function ChannelDetail({
   fiberColors: Record<string, string>
 }) {
   const fiber = findFiber(channel.fiberId, channel.direction)
-  const fiberColor = fiber ? (fiberColors[fiber.id] ?? fiber.color) : '#6366f1'
+  const fiberColor = fiber ? getFiberColor(fiber, fiberColors) : '#6366f1'
   const directionLabel = fiber?.direction === 0 ? 'Dir A' : 'Dir B'
 
   // Find sections containing this channel
@@ -1033,7 +1042,7 @@ function ChannelDetail({
             <div className="flex flex-col gap-1.5">
               {containingSections.map(sec => {
                 const secFiber = findFiber(sec.fiberId, sec.direction)
-                const secColor = (secFiber ? fiberColors[secFiber.id] : undefined) ?? secFiber?.color ?? '#888'
+                const secColor = secFiber ? getFiberColor(secFiber, fiberColors) : '#888'
                 return (
                   <button
                     key={sec.id}
@@ -1213,7 +1222,7 @@ function SectionList({
                   <div className="flex items-center gap-2 mb-1">
                     <span
                       className="shrink-0 w-2 h-2 rounded-full"
-                      style={{ backgroundColor: (fiber ? fiberColors[fiber.id] : undefined) ?? fiber?.color }}
+                      style={{ backgroundColor: fiber ? getFiberColor(fiber, fiberColors) : undefined }}
                     />
                     <span className="text-sm text-[var(--proto-text)] font-medium truncate">{section.name}</span>
                   </div>
@@ -1705,14 +1714,14 @@ function SettingsPanel({
 
   // Group fibers by cable
   const cableGroups = useMemo(() => {
-    const map = new Map<string, { name: string; fibers: { id: string; direction: 0 | 1 }[] }>()
+    const map = new Map<string, { name: string; fibers: Fiber[] }>()
     for (const f of fibers) {
       let group = map.get(f.parentCableId)
       if (!group) {
         group = { name: f.name, fibers: [] }
         map.set(f.parentCableId, group)
       }
-      group.fibers.push({ id: f.id, direction: f.direction })
+      group.fibers.push(f)
     }
     return [...map.entries()]
   }, [])
@@ -1760,8 +1769,7 @@ function SettingsPanel({
         Default speed thresholds per fiber. Sections inherit these unless overridden.
       </div>
       {cableGroups.map(([cableId, group]) => {
-        const fiberId0 = `${cableId}:0`
-        const current = fiberThresholds[fiberId0] ?? defaultSpeedThresholds
+        const current = fiberThresholds[group.fibers[0]?.id ?? ''] ?? defaultSpeedThresholds
 
         return (
           <div key={cableId} className="flex flex-col gap-2">
@@ -1774,7 +1782,7 @@ function SettingsPanel({
                 <FiberColorDot
                   key={f.id}
                   direction={f.direction}
-                  color={fiberColors[f.id] ?? '#888'}
+                  color={getFiberColor(f, fiberColors)}
                   isPickerOpen={colorPickerOpen === f.id}
                   onTogglePicker={() => setColorPickerOpen(colorPickerOpen === f.id ? null : f.id)}
                   onSelect={c => dispatch({ type: 'SET_FIBER_COLOR', fiberId: f.id, color: c })}
@@ -1845,7 +1853,7 @@ function SectionDetail({
   fiberColors: Record<string, string>
 }) {
   const fiber = findFiber(section.fiberId, section.direction)
-  const fiberColor = (fiber ? fiberColors[fiber.id] : undefined) ?? fiber?.color ?? '#6366f1'
+  const fiberColor = fiber ? getFiberColor(fiber, fiberColors) : '#6366f1'
 
   const live = liveStats.get(section.id)
   const liveSeries = liveSeriesData.get(section.id)

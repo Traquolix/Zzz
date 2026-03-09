@@ -20,7 +20,7 @@ import './prototype.css'
 /** Enrich an API incident with display fields computed from fiber geometry. */
 function toProtoIncident(api: ApiIncident): ProtoIncident {
   const fiber = findFiber(api.fiberId, api.direction)
-  const loc = fiber ? channelToCoord(fiber.id, api.channel) : null
+  const loc = fiber ? channelToCoord(fiber, api.channel) : null
   const fiberName = fiber?.name ?? api.fiberId
   const typeLabel = api.type.charAt(0).toUpperCase() + api.type.slice(1)
   const title = `${typeLabel} — ${fiberName}`
@@ -331,12 +331,12 @@ export function Prototype() {
     if (!state.selectedSectionId) return
     const sec = state.sections.find(s => s.id === state.selectedSectionId)
     if (!sec) return
-    const fiber = findFiber(sec.fiberId, sec.direction)
-    if (!fiber) return
+    const secFiber = findFiber(sec.fiberId, sec.direction)
+    if (!secFiber) return
     const midChannel = Math.floor((sec.startChannel + sec.endChannel) / 2)
-    const coord = fiber.coordinates[midChannel]
-    if (coord && coord[0] != null && coord[1] != null) {
-      mapRef.current?.flyTo(coord as [number, number], 13)
+    const coord = channelToCoord(secFiber, midChannel)
+    if (coord) {
+      mapRef.current?.flyTo(coord, 13)
     }
   }, [state.selectedSectionId, state.sections])
 
@@ -345,9 +345,9 @@ export function Prototype() {
     if (!state.selectedStructureId) return
     const structure = structureData.structures.find(s => s.id === state.selectedStructureId)
     if (!structure) return
-    const fiber = findFiber(structure.fiberId, structure.direction ?? 0)
+    const sFiber = findFiber(structure.fiberId, structure.direction ?? 0)
     const midChannel = Math.floor((structure.startChannel + structure.endChannel) / 2)
-    const coord = fiber ? channelToCoord(fiber.id, midChannel) : null
+    const coord = sFiber ? channelToCoord(sFiber, midChannel) : null
     if (coord) {
       mapRef.current?.flyTo(coord, 14)
     }

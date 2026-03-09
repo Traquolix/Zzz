@@ -51,7 +51,7 @@ export function useDetections() {
         }
         const fiber = findFiber(d.fiberId, d.direction)
         if (!fiber) continue
-        const coord = channelToCoord(fiber.id, d.channel)
+        const coord = channelToCoord(fiber, d.channel)
         if (!coord) continue
 
         keyParts[0] = fiber.id

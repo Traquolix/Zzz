@@ -154,9 +154,12 @@ export function findFiber(cableId: string, direction: number): Fiber | undefined
   return fiberIndex.get(cableId)?.get(direction)
 }
 
-export function channelToCoord(fiberLine: string, channel: number): [number, number] | null {
-  const fiber = fibers.find(f => f.id === fiberLine)
-  if (!fiber) return null
+/** Get the display color for a fiber, checking user overrides first. */
+export function getFiberColor(fiber: Fiber, fiberColors: Record<string, string>): string {
+  return fiberColors[fiber.id] ?? fiber.color
+}
+
+export function channelToCoord(fiber: Fiber, channel: number): [number, number] | null {
   if (channel < 0 || channel >= fiber.coordinates.length) return null
 
   if (fiber.coordsPrecomputed) {
@@ -180,18 +183,15 @@ export function channelToCoord(fiberLine: string, channel: number): [number, num
  *  For non-precomputed fibers (Mathis/Promenade), maps through the offset cache
  *  so the coords land on the directional line, not the center-line.
  */
-export function getSectionCoords(fiberId: string, startChannel: number, endChannel: number): [number, number][] {
-  const fiber = fibers.find(f => f.id === fiberId)
-  if (!fiber) return []
-
+export function getSectionCoords(fiber: Fiber, startChannel: number, endChannel: number): [number, number][] {
   if (fiber.coordsPrecomputed) {
     const slice = fiber.coordinates.slice(startChannel, endChannel + 1)
     return slice.filter(c => c[0] != null && c[1] != null) as [number, number][]
   }
 
   // Non-precomputed: map each channel to offset index, then look up offset coords
-  const idxMap = channelToOffsetIndex.get(fiberId)
-  const offsetCoords = fiberOffsetCache.get(fiberId)
+  const idxMap = channelToOffsetIndex.get(fiber.id)
+  const offsetCoords = fiberOffsetCache.get(fiber.id)
   if (!idxMap || !offsetCoords) return []
 
   const result: [number, number][] = []
