@@ -156,6 +156,7 @@ export const PrototypeMap = memo(
     const mapRef = useRef<mapboxgl.Map | null>(null)
     const markersRef = useRef<Map<string, mapboxgl.Marker>>(new Map())
     const incidentClickedRef = useRef(false)
+    const vehicleClickedRef = useRef(false)
     const handlersRef = useRef({
       onIncidentClick,
       onMapClick,
@@ -661,14 +662,60 @@ export const PrototypeMap = memo(
           handlersRef.current.onOverviewChange?.(shouldOverview)
         })
 
+        // ── Vehicle popup ──
+        let selectedVehicleId: string | null = null
+        const vehiclePopup = new mapboxgl.Popup({
+          closeButton: false,
+          closeOnClick: false,
+          className: 'proto-vehicle-popup',
+          maxWidth: '220px',
+          offset: [0, -12],
+        })
+
+        function updateVehiclePopup(positions: VehiclePosition[]) {
+          if (!selectedVehicleId) return
+          const v = positions.find(p => p.id === selectedVehicleId)
+          if (!v || v.opacity < 0.05) {
+            dismissVehiclePopup()
+            return
+          }
+          const fiber = findFiber(v.fiberId, v.direction)
+          const fiberName = fiber?.name ?? v.fiberId
+          const dir = v.direction === 0 ? '→' : '←'
+          const lookup = thresholdLookupRef.current
+          const t = lookup?.(v.fiberId, v.direction, v.channel)
+          const speedColor = getSpeedColor(v.speed, t)
+          vehiclePopup
+            .setLngLat([v.position[0], v.position[1]])
+            .setHTML(
+              `<div style="font-size:11px;line-height:1.5;color:#e2e8f0">` +
+                `<div style="font-size:13px;font-weight:600;margin-bottom:2px;color:${speedColor}">${Math.round(v.speed)} km/h</div>` +
+                `<div style="color:#94a3b8">${fiberName} ${dir} · ch ${v.channel}</div>` +
+                `<div style="color:#94a3b8">${v.carCount > 1 ? v.carCount + ' vehicles' : '1 vehicle'}</div>` +
+                `</div>`,
+            )
+          if (!vehiclePopup.isOpen()) vehiclePopup.addTo(map)
+        }
+
+        function dismissVehiclePopup() {
+          selectedVehicleId = null
+          vehiclePopup.remove()
+        }
+
         // ── Map click handler for section creation + channel selection + deselection ─
         map.on('click', e => {
-          // Incident marker DOM click fires before map click — skip if
-          // the user actually clicked an incident marker.
+          // Incident/vehicle click fires before map click — skip if
+          // the user actually clicked one of those.
           if (incidentClickedRef.current) {
             incidentClickedRef.current = false
             return
           }
+          if (vehicleClickedRef.current) {
+            vehicleClickedRef.current = false
+            return
+          }
+          // Clicked somewhere else — dismiss vehicle popup if open
+          dismissVehiclePopup()
           if (!sectionCreationRef.current) {
             // Not in creation mode — try channel selection, else deselect
             const hit = findNearestFiberPoint([e.lngLat.lng, e.lngLat.lat])
@@ -734,7 +781,19 @@ export const PrototypeMap = memo(
 
         function ensureDeckOverlay() {
           if (!deckOverlay) {
-            deckOverlay = new MapboxOverlay({ interleaved: true, layers: [] })
+            deckOverlay = new MapboxOverlay({
+              interleaved: true,
+              layers: [],
+              onClick: info => {
+                if (info.object) {
+                  const v = info.object as VehiclePosition
+                  selectedVehicleId = v.id
+                  vehicleClickedRef.current = true
+                  return true
+                }
+                return false
+              },
+            })
             deckOverlayRef.current = deckOverlay
           }
           if (!deckAdded) {
@@ -744,6 +803,7 @@ export const PrototypeMap = memo(
         }
 
         function removeDeckOverlay() {
+          dismissVehiclePopup()
           if (deckOverlay && deckAdded) {
             try {
               deckOverlay.setProps({ layers: [] })
@@ -873,12 +933,14 @@ export const PrototypeMap = memo(
             const tick = tickAndCollectRef.current
             if (tick && cubeRef.current) {
               const positions = tick(now, deltaMs)
+              updateVehiclePopup(positions)
               const layer = new SimpleMeshLayer({
                 id: 'proto-vehicle-3d',
                 data: positions,
                 mesh: cubeRef.current,
                 getPosition,
                 getColor: (d: VehiclePosition) => {
+                  if (d.id === selectedVehicleId) return [255, 255, 255, 220] as [number, number, number, number]
                   const lookup = thresholdLookupRef.current
                   const t = lookup?.(d.fiberId, d.direction, d.channel)
                   return getSpeedColorRGBA(d.speed, d.opacity, t)
@@ -886,7 +948,7 @@ export const PrototypeMap = memo(
                 getOrientation,
                 getScale,
                 sizeScale: 1,
-                pickable: false,
+                pickable: true,
                 autoHighlight: false,
               })
               ensureDeckOverlay()
@@ -950,6 +1012,7 @@ export const PrototypeMap = memo(
           if (rafId !== null) cancelAnimationFrame(rafId)
           if (slowInterval !== null) clearInterval(slowInterval)
           clearInterval(loopSyncInterval)
+          vehiclePopup.remove()
         })
       })
 

@@ -203,6 +203,13 @@ export function SidePanel({
                         /> */}
           </div>
           <div className="flex flex-col gap-1.5">
+            <button
+              title={sidebarExpanded ? t('sidebar.collapsePanel') : t('sidebar.expandPanel')}
+              onClick={() => dispatch({ type: 'TOGGLE_SIDEBAR_EXPANDED' })}
+              className="group/exp flex items-center justify-center self-end w-[32px] hover:w-full h-7 rounded-l-lg border border-r-0 border-transparent bg-[var(--proto-surface)]/40 text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)] hover:bg-[var(--proto-surface)]/80 transition-all cursor-pointer"
+            >
+              <ExpandIcon expanded={!!sidebarExpanded} />
+            </button>
             {selectedChannel && (
               <TabButton
                 label="Channel"
@@ -995,12 +1002,11 @@ function ChannelDetail({
 
     const unsub = subscribe('detections', (data: unknown) => {
       const detections = parseDetections(data)
-      const now = Date.now()
 
       for (const d of detections) {
         if (d.fiberId !== channel.fiberId || d.direction !== channel.direction) continue
         if (Math.abs(d.channel - channel.channel) > NEIGHBOR_RANGE) continue
-        dotsRef.current.push({ time: now, speed: d.speed })
+        dotsRef.current.push({ time: d.timestamp, speed: d.speed })
       }
     })
     return unsub
@@ -1010,7 +1016,7 @@ function ChannelDetail({
   useEffect(() => {
     let rafId: number
     const WINDOW_MS = 60_000 // 60s rolling window
-    const STATS_WINDOW_MS = 10_000 // 10s for stats
+    const STATS_WINDOW_MS = 60_000 // 60s for stats
 
     function render() {
       const canvas = canvasRef.current
@@ -1033,7 +1039,7 @@ function ChannelDetail({
         dotsRef.current.shift()
       }
 
-      // Compute stats (last 10s)
+      // Compute stats (last 60s)
       let count = 0
       let speedSum = 0
       for (const dot of dotsRef.current) {
@@ -1133,7 +1139,7 @@ function ChannelDetail({
             </div>
             <div>
               <span className="text-[length:var(--text-xl)] font-semibold text-[var(--proto-text)]">{liveCount}</span>
-              <span className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)] ml-1">in 10s</span>
+              <span className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)] ml-1">in 60s</span>
             </div>
           </div>
           <div className="rounded-lg border border-[var(--proto-border)] p-3">
