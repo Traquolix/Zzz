@@ -9,6 +9,7 @@ import logging
 import time
 
 from django.core.cache import cache as django_cache
+from django.db import IntegrityError
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.exceptions import NotFound, ParseError
 from rest_framework.response import Response
@@ -25,6 +26,7 @@ from apps.monitoring.mixins import FlowAwareMixin
 from apps.monitoring.models import IncidentAction, Infrastructure
 from apps.monitoring.section_service import (
     delete_section,
+    get_section,
     insert_section,
     query_section_history,
     query_sections,
@@ -653,24 +655,26 @@ class StatsView(FlowAwareMixin, APIView):
 class SectionListView(APIView):
     """
     GET  /api/sections — list active monitored sections.
-    POST /api/sections — create a new monitored section.
+    POST /api/sections — create a new monitored section (requires non-viewer role).
 
-    Org-scoped via fiber assignment.
+    Org-scoped via Section.organization FK.
     """
 
     permission_classes = [IsActiveUser]
+
+    def get_permissions(self):
+        perms = [IsActiveUser()]
+        if self.request.method == "POST":
+            perms.append(IsNotViewer())
+        return perms
 
     @extend_schema(
         responses={200: SectionSerializer(many=True)},
         tags=["sections"],
     )
-    @clickhouse_fallback(fallback_fn=lambda self, request, *a, **kw: Response({"results": []}))
     def get(self, request):
-        fiber_ids = _get_fiber_ids_or_none(request.user)
-        if fiber_ids is not None and not fiber_ids:
-            return Response({"results": []})
-
-        sections = query_sections(fiber_ids=fiber_ids)
+        org_id = None if request.user.is_superuser else request.user.organization_id
+        sections = query_sections(organization_id=org_id)
         return Response({"results": sections})
 
     @extend_schema(
@@ -678,7 +682,6 @@ class SectionListView(APIView):
         responses={201: SectionSerializer},
         tags=["sections"],
     )
-    @clickhouse_fallback()
     def post(self, request):
         serializer = SectionInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -689,6 +692,12 @@ class SectionListView(APIView):
         channel_start = serializer.validated_data["channelStart"]
         channel_end = serializer.validated_data["channelEnd"]
 
+        if request.user.organization_id is None:
+            return Response(
+                {"detail": "Cannot create sections without an organization"},
+                status=400,
+            )
+
         # Org-scoping: verify the fiber belongs to user's org
         fiber_ids = _get_fiber_ids_or_none(request.user)
         if fiber_ids is not None and not fiber_belongs_to_org(fiber_id, fiber_ids):
@@ -697,46 +706,40 @@ class SectionListView(APIView):
                 status=404,
             )
 
-        section = insert_section(
-            fiber_id=fiber_id,
-            name=name,
-            channel_start=channel_start,
-            channel_end=channel_end,
-            direction=direction,
-            user=str(request.user.id) if hasattr(request.user, "id") else "",
-        )
+        try:
+            section = insert_section(
+                fiber_id=fiber_id,
+                name=name,
+                channel_start=channel_start,
+                channel_end=channel_end,
+                direction=direction,
+                organization_id=request.user.organization_id,
+                user_id=request.user.id,
+            )
+        except IntegrityError:
+            return Response(
+                {"detail": "A section with this range already exists", "code": "duplicate"},
+                status=409,
+            )
         return Response(section, status=201)
 
 
 class SectionDeleteView(APIView):
     """
-    DELETE /api/sections/<id> — soft-delete a monitored section.
+    DELETE /api/sections/<id> — delete a monitored section.
 
-    Org-scoped: verifies the section's fiber belongs to the user's org.
+    Org-scoped via Section.organization FK. Requires non-viewer role.
     """
 
-    permission_classes = [IsActiveUser]
+    permission_classes = [IsActiveUser, IsNotViewer]
 
-    @clickhouse_fallback()
     def delete(self, request, section_id):
-        sections = query_sections()
-
-        section = next((s for s in sections if s["id"] == section_id), None)
-        if not section:
+        org_id = None if request.user.is_superuser else request.user.organization_id
+        if not delete_section(section_id, organization_id=org_id):
             return Response(
                 {"detail": "Section not found", "code": "not_found"},
                 status=404,
             )
-
-        # Org-scoping
-        fiber_ids = _get_fiber_ids_or_none(request.user)
-        if fiber_ids is not None and not fiber_belongs_to_org(section["fiberId"], fiber_ids):
-            return Response(
-                {"detail": "Section not found", "code": "not_found"},
-                status=404,
-            )
-
-        delete_section(section_id, section["fiberId"])
         return Response(status=204)
 
 
@@ -748,7 +751,7 @@ class SectionHistoryView(FlowAwareMixin, APIView):
     - ``flow=sim`` → in-memory simulation buffers (per-second ≤5min, per-minute >5min)
     - ``flow=live`` → ClickHouse (``detection_hires`` ≤5min, ``detection_1m`` >5min)
 
-    Org-scoped via fiber assignment.
+    Org-scoped via Section.organization FK.
     """
 
     permission_classes = [IsActiveUser]
@@ -791,18 +794,9 @@ class SectionHistoryView(FlowAwareMixin, APIView):
         if self._is_sim(request):
             minutes = min(minutes, 60)
 
-        sections = query_sections()
-
-        section = next((s for s in sections if s["id"] == section_id), None)
+        org_id = None if request.user.is_superuser else request.user.organization_id
+        section = get_section(section_id, organization_id=org_id)
         if not section:
-            return Response(
-                {"detail": "Section not found", "code": "not_found"},
-                status=404,
-            )
-
-        # Org-scoping
-        fiber_ids = _get_fiber_ids_or_none(request.user)
-        if fiber_ids is not None and not fiber_belongs_to_org(section["fiberId"], fiber_ids):
             return Response(
                 {"detail": "Section not found", "code": "not_found"},
                 status=404,
