@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { fetchSectionHistory, type SectionHistoryPoint } from '@/api/sections'
+import { fetchSectionHistory } from '@/api/sections'
 import { useRealtime } from '@/hooks/useRealtime'
 import type { SectionDataPoint } from '../types'
+import { mapHistoryPoints } from './mapHistoryPoints'
 
 const POLL_INTERVAL = 2000
 
@@ -41,7 +42,7 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
       const res = await fetchSectionHistory(sectionId, minutes, flow, since)
       if (controller.signal.aborted) return
 
-      const newPoints = mapPoints(res.points)
+      const newPoints = mapHistoryPoints(res.points)
 
       let accumulated = accumulatedRef.current
       if (since == null) {
@@ -80,18 +81,4 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
   }, [fetchData])
 
   return series
-}
-
-function mapPoints(points: SectionHistoryPoint[]): SectionDataPoint[] {
-  return points.map(p => ({
-    time: new Date(p.time).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    }),
-    timestamp: p.time,
-    speed: Math.round(p.speed),
-    flow: p.flow,
-    occupancy: p.occupancy,
-  }))
 }

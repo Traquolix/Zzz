@@ -1464,7 +1464,7 @@ function IncidentDetail({
 // ── Section detail ──────────────────────────────────────────────────────
 
 function computeTrend(history: number[]): { pct: number } {
-  if (history.length < 2) return { pct: 0 }
+  if (history.length < 10) return { pct: 0 }
   const recent = history.slice(-5)
   const earlier = history.slice(0, 5)
   const avgRecent = recent.reduce((a, b) => a + b, 0) / recent.length

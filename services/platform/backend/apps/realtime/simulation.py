@@ -156,6 +156,7 @@ def get_simulation_section_history(
                 "time": t,
                 "speed": round(avg_speed, 1),
                 "speedMax": round(b["speed_max"], 1),
+                "samples": b["vehicle_count"],
                 "flow": flow,
                 "occupancy": occupancy,
             }

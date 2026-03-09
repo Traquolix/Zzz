@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
-import { fetchSectionHistory, type SectionHistoryPoint } from '@/api/sections'
+import { fetchSectionHistory } from '@/api/sections'
 import { useRealtime } from '@/hooks/useRealtime'
-import type { Section } from '../types'
-import type { SectionDataPoint, LiveSectionStats } from '../types'
+import type { Section, SectionDataPoint, LiveSectionStats } from '../types'
+import { mapHistoryPoints } from './mapHistoryPoints'
 
 const POLL_INTERVAL = 2000 // 2 seconds
 const HISTORY_MINUTES = 1 // minimal window — just enough for current stats + sparklines
@@ -40,7 +40,7 @@ export function useLiveStats(sections: Section[]) {
         try {
           const since = sinceRef.current.get(sec.id)
           const res = await fetchSectionHistory(sec.id, HISTORY_MINUTES, flow, since)
-          const newPoints = mapPointsToSeries(res.points)
+          const newPoints = mapHistoryPoints(res.points)
 
           // Merge with existing accumulated data
           let accumulated = accumulatedRef.current.get(sec.id) ?? []
@@ -98,21 +98,6 @@ export function useLiveStats(sections: Section[]) {
   }, [fetchAll])
 
   return { stats, seriesData }
-}
-
-/** Map API history points to frontend SectionDataPoint shape. */
-function mapPointsToSeries(points: SectionHistoryPoint[]): SectionDataPoint[] {
-  return points.map(p => ({
-    time: new Date(p.time).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    }),
-    timestamp: p.time,
-    speed: Math.round(p.speed),
-    flow: p.flow,
-    occupancy: p.occupancy,
-  }))
 }
 
 /** Derive current stats from the most recent data points. */

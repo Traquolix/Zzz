@@ -232,7 +232,7 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
     last_map_refresh = time.time()
 
     # Org-aware broadcast helper for the replay buffer drain
-    async def broadcast(channel: str, data):
+    async def broadcast(_channel: str, data):
         nonlocal fiber_org_map
         await pubsub_broadcast_detections(data, fiber_org_map, flow="live")
         # Check alerts for detections (per-org)

@@ -40,6 +40,14 @@ async def get_publish_client() -> aioredis.Redis:
     return _publish_client
 
 
+async def close_publish_client() -> None:
+    """Close the singleton publish client. Call on graceful shutdown."""
+    global _publish_client
+    if _publish_client is not None:
+        await _publish_client.aclose()
+        _publish_client = None
+
+
 def create_subscriber() -> aioredis.Redis:
     """Create a new async Redis client for subscribing (one per consumer)."""
     url: str = getattr(settings, "REDIS_PUBSUB_URL", "redis://localhost:6379/0")

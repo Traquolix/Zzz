@@ -206,6 +206,8 @@ CHANNEL_LAYERS = {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
             "hosts": [f"redis://{_REDIS_AUTH}{_REDIS_HOST}:6379/0"],
+            # Only incidents + fibers use the channel layer now (low-frequency).
+            # 500 buffers burst deliveries without excessive memory. Default is 100.
             "capacity": 500,
         },
     },
