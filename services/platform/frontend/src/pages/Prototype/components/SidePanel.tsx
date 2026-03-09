@@ -743,6 +743,8 @@ const ChannelIcon = () => (
 // ── Waterfall panel ─────────────────────────────────────────────────────
 
 function WaterfallPanel() {
+  // NOTE: index-based selection assumes `fibers` is a static array.
+  // If fibers become dynamic (TTL/hot-reload), switch to keying by fiber ID.
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [windowMs, setWindowMs] = useState(120_000)
 
