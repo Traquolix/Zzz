@@ -745,9 +745,11 @@ class SimulationEngine:
         for s in range(SNAPSHOT_WINDOW_S * 2):
             buckets[s] = {"speed_sum": 0.0, "speed_count": 0, "vehicle_count": 0}
 
-        # Seed from rolling buffer: detections near this incident's channel
+        # Seed from rolling buffer: detections near this incident's channel and direction
         ring = self._detection_ring.get(inc.fiber_line, [])
         for det in ring:
+            if det["direction"] != inc.direction:
+                continue
             if abs(det["channel"] - inc.channel) > SNAPSHOT_CHANNEL_RADIUS:
                 continue
             if det["timestamp"] < start_ms:
@@ -764,6 +766,7 @@ class SimulationEngine:
             "start_ms": start_ms,
             "end_ms": end_ms,
             "fiber_line": inc.fiber_line,
+            "direction": inc.direction,
             "channel": inc.channel,
         }
 
@@ -794,6 +797,8 @@ class SimulationEngine:
 
             for d in detections:
                 if d.fiber_line != snap["fiber_line"]:
+                    continue
+                if d.direction != snap["direction"]:
                     continue
                 if abs(d.channel - snap["channel"]) > SNAPSHOT_CHANNEL_RADIUS:
                     continue
