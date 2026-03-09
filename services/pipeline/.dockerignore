@@ -13,4 +13,3 @@ tests/
 docs/
 .DS_Store
 *.md
-pyproject.toml
