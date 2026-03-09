@@ -25,6 +25,7 @@ from apps.monitoring.mixins import FlowAwareMixin
 from apps.monitoring.models import IncidentAction, Infrastructure
 from apps.monitoring.section_service import (
     delete_section,
+    get_section,
     insert_section,
     query_section_history,
     query_sections,
@@ -655,7 +656,7 @@ class SectionListView(APIView):
     GET  /api/sections — list active monitored sections.
     POST /api/sections — create a new monitored section.
 
-    Org-scoped via fiber assignment.
+    Org-scoped via Section.organization FK.
     """
 
     permission_classes = [IsActiveUser]
@@ -664,13 +665,9 @@ class SectionListView(APIView):
         responses={200: SectionSerializer(many=True)},
         tags=["sections"],
     )
-    @clickhouse_fallback(fallback_fn=lambda self, request, *a, **kw: Response({"results": []}))
     def get(self, request):
-        fiber_ids = _get_fiber_ids_or_none(request.user)
-        if fiber_ids is not None and not fiber_ids:
-            return Response({"results": []})
-
-        sections = query_sections(fiber_ids=fiber_ids)
+        org_id = None if request.user.is_superuser else request.user.organization_id
+        sections = query_sections(organization_id=org_id)
         return Response({"results": sections})
 
     @extend_schema(
@@ -678,7 +675,6 @@ class SectionListView(APIView):
         responses={201: SectionSerializer},
         tags=["sections"],
     )
-    @clickhouse_fallback()
     def post(self, request):
         serializer = SectionInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -703,25 +699,23 @@ class SectionListView(APIView):
             channel_start=channel_start,
             channel_end=channel_end,
             direction=direction,
-            user=str(request.user.id) if hasattr(request.user, "id") else "",
+            organization_id=request.user.organization_id,
+            user_id=request.user.id,
         )
         return Response(section, status=201)
 
 
 class SectionDeleteView(APIView):
     """
-    DELETE /api/sections/<id> — soft-delete a monitored section.
+    DELETE /api/sections/<id> — delete a monitored section.
 
-    Org-scoped: verifies the section's fiber belongs to the user's org.
+    Org-scoped via Section.organization FK.
     """
 
     permission_classes = [IsActiveUser]
 
-    @clickhouse_fallback()
     def delete(self, request, section_id):
-        sections = query_sections()
-
-        section = next((s for s in sections if s["id"] == section_id), None)
+        section = get_section(section_id)
         if not section:
             return Response(
                 {"detail": "Section not found", "code": "not_found"},
@@ -736,7 +730,7 @@ class SectionDeleteView(APIView):
                 status=404,
             )
 
-        delete_section(section_id, section["fiberId"])
+        delete_section(section_id)
         return Response(status=204)
 
 
@@ -748,7 +742,7 @@ class SectionHistoryView(FlowAwareMixin, APIView):
     - ``flow=sim`` → in-memory simulation buffers (per-second ≤5min, per-minute >5min)
     - ``flow=live`` → ClickHouse (``detection_hires`` ≤5min, ``detection_1m`` >5min)
 
-    Org-scoped via fiber assignment.
+    Org-scoped via Section.organization FK.
     """
 
     permission_classes = [IsActiveUser]
@@ -791,9 +785,7 @@ class SectionHistoryView(FlowAwareMixin, APIView):
         if self._is_sim(request):
             minutes = min(minutes, 60)
 
-        sections = query_sections()
-
-        section = next((s for s in sections if s["id"] == section_id), None)
+        section = get_section(section_id)
         if not section:
             return Response(
                 {"detail": "Section not found", "code": "not_found"},

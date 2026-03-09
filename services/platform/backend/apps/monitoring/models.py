@@ -1,6 +1,9 @@
 """
-Monitoring models — infrastructure and incident workflow stored in PostgreSQL.
-Raw incident detections come from ClickHouse; workflow state lives here.
+Monitoring models — infrastructure, sections, and incident workflow stored
+in PostgreSQL.
+
+Raw incident detections and time-series data live in ClickHouse; everything
+that is CRUDable config/reference data lives here.
 """
 
 import uuid
@@ -107,3 +110,52 @@ class IncidentAction(models.Model):
 
     def __str__(self):
         return f"{self.incident_id}: {self.from_status} → {self.to_status}"
+
+
+class Section(models.Model):
+    """
+    User-defined monitored road section on a fiber.
+
+    Defines a channel range on a fiber where travel time, speed, flow, and
+    occupancy are computed. Org-scoped via ForeignKey.
+    """
+
+    id = models.CharField(max_length=100, primary_key=True)
+    organization = models.ForeignKey(
+        "organizations.Organization",
+        on_delete=models.CASCADE,
+        related_name="sections",
+    )
+    fiber_id = models.CharField(max_length=100, db_index=True)
+    direction = models.IntegerField(
+        default=0,
+        help_text="Traffic direction (0 or 1).",
+    )
+    name = models.CharField(max_length=200)
+    channel_start = models.IntegerField()
+    channel_end = models.IntegerField()
+    expected_travel_time_seconds = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Expected travel time across this section in seconds.",
+    )
+    alert_threshold_percent = models.FloatField(
+        default=30.0,
+        help_text="Speed drop threshold (%) that triggers an alert.",
+    )
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_sections",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["fiber_id", "channel_start"]
+
+    def __str__(self):
+        return f"{self.name} ({self.fiber_id} ch{self.channel_start}-{self.channel_end})"

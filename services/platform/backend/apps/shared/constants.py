@@ -11,6 +11,7 @@ INFRASTRUCTURE_TYPES = [
     ("tunnel", "Tunnel"),
 ]
 
+
 # User roles
 USER_ROLES = [
     ("admin", "Administrator"),
