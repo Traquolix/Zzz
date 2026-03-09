@@ -1,7 +1,7 @@
 import { useReducer, useEffect, useCallback, useRef, useState, useMemo } from 'react'
 import { toast } from 'sonner'
 import type { ProtoState, ProtoAction, Incident, PendingPoint } from './types'
-import { fibers, defaultSpeedThresholds, buildThresholdLookup, resolveDirectionalFiber, channelToCoord } from './data'
+import { fibers, defaultSpeedThresholds, buildThresholdLookup, fiberLineId, channelToCoord } from './data'
 import { PrototypeMap, type PrototypeMapHandle } from './components/PrototypeMap'
 import { StatusBar } from './components/StatusBar'
 import { Legend } from './components/Legend'
@@ -19,10 +19,10 @@ import './prototype.css'
 
 /** Map an API incident to the prototype Incident shape. */
 function toProtoIncident(api: ApiIncident): Incident {
-  const fiberId = api.fiberLine
-  const dirFiber = resolveDirectionalFiber(fiberId)
+  const dirFiber = fiberLineId(api.fiberId, api.direction)
   const loc = channelToCoord(dirFiber, api.channel)
-  const fiberName = fibers.find(f => f.id === dirFiber)?.name ?? fibers.find(f => f.id === fiberId)?.name ?? fiberId
+  const fiberName =
+    fibers.find(f => f.id === dirFiber)?.name ?? fibers.find(f => f.parentCableId === api.fiberId)?.name ?? api.fiberId
   const typeLabel = api.type.charAt(0).toUpperCase() + api.type.slice(1)
   const title = `${typeLabel} — ${fiberName}`
 
@@ -33,7 +33,7 @@ function toProtoIncident(api: ApiIncident): Incident {
 
   return {
     id: api.id,
-    fiberId,
+    fiberId: dirFiber,
     type: api.type as Incident['type'],
     severity: api.severity as Incident['severity'],
     title,
@@ -141,7 +141,12 @@ function reducer(state: ProtoState, action: ProtoAction): ProtoState {
       return {
         ...state,
         showNamingDialog: true,
-        pendingSection: { fiberId: action.fiberId, startChannel: action.startChannel, endChannel: action.endChannel },
+        pendingSection: {
+          fiberId: action.fiberId,
+          direction: action.direction,
+          startChannel: action.startChannel,
+          endChannel: action.endChannel,
+        },
         sectionCreationMode: false,
         pendingPoint: null,
       }
@@ -306,9 +311,12 @@ export function Prototype() {
     dispatch({ type: 'SET_PENDING_POINT', point })
   }, [])
 
-  const handleSectionComplete = useCallback((fiberId: string, startChannel: number, endChannel: number) => {
-    dispatch({ type: 'OPEN_NAMING_DIALOG', fiberId, startChannel, endChannel })
-  }, [])
+  const handleSectionComplete = useCallback(
+    (fiberId: string, direction: number, startChannel: number, endChannel: number) => {
+      dispatch({ type: 'OPEN_NAMING_DIALOG', fiberId, direction, startChannel, endChannel })
+    },
+    [],
+  )
 
   const handleStructureClick = useCallback((id: string) => {
     dispatch({ type: 'SELECT_STRUCTURE', id })
@@ -349,7 +357,7 @@ export function Prototype() {
     if (!state.selectedStructureId) return
     const structure = structureData.structures.find(s => s.id === state.selectedStructureId)
     if (!structure) return
-    const dirFiber = resolveDirectionalFiber(structure.fiberId)
+    const dirFiber = fiberLineId(structure.fiberId, structure.direction ?? 0)
     const midChannel = Math.floor((structure.startChannel + structure.endChannel) / 2)
     const coord = channelToCoord(dirFiber, midChannel)
     if (coord) {
@@ -526,7 +534,7 @@ export function Prototype() {
             const ps = state.pendingSection!
             dispatch({ type: 'CLOSE_NAMING_DIALOG' })
             try {
-              const section = await addSection(ps.fiberId, name, ps.startChannel, ps.endChannel)
+              const section = await addSection(ps.fiberId, ps.direction, name, ps.startChannel, ps.endChannel)
               dispatch({ type: 'CREATE_SECTION', section })
             } catch {
               toast.error('Failed to create section')
@@ -544,12 +552,13 @@ function NamingDialog({
   onSave,
   onCancel,
 }: {
-  pendingSection: { fiberId: string; startChannel: number; endChannel: number }
+  pendingSection: { fiberId: string; direction: number; startChannel: number; endChannel: number }
   onSave: (name: string) => void
   onCancel: () => void
 }) {
   const [name, setName] = useState('')
-  const fiber = fibers.find(f => f.id === pendingSection.fiberId)
+  const dirId = fiberLineId(pendingSection.fiberId, pendingSection.direction)
+  const fiber = fibers.find(f => f.id === dirId)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">

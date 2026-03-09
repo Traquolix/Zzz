@@ -2,14 +2,15 @@ import { useRef, useEffect, useCallback } from 'react'
 import { useRealtime } from '@/hooks/useRealtime'
 import { useFlowReset } from '@/hooks/useFlowReset'
 import { parseDetections } from '@/lib/parseMessage'
-import { channelToCoord } from '../data'
+import { channelToCoord, fiberLineId } from '../data'
 
 interface LiveDot {
   lng: number
   lat: number
   speed: number
   ts: number
-  fiberLine: string
+  fiberId: string
+  direction: number
   channel: number
 }
 
@@ -48,10 +49,11 @@ export function useDetections() {
         if (d.timestamp > lastDetectionTsRef.current) {
           lastDetectionTsRef.current = d.timestamp
         }
-        const coord = channelToCoord(d.fiberLine, d.channel)
+        const flId = fiberLineId(d.fiberId, d.direction)
+        const coord = channelToCoord(flId, d.channel)
         if (!coord) continue
 
-        keyParts[0] = d.fiberLine
+        keyParts[0] = flId
         keyParts[2] = String(d.channel)
         const key = keyParts.join('')
 
@@ -68,7 +70,8 @@ export function useDetections() {
             lat: coord[1],
             speed: d.speed,
             ts: now,
-            fiberLine: d.fiberLine,
+            fiberId: d.fiberId,
+            direction: d.direction,
             channel: d.channel,
           })
         }
@@ -108,7 +111,7 @@ export function useDetections() {
       const opacity = 1.0 - age / DOT_TTL
       features.push({
         type: 'Feature',
-        properties: { speed: dot.speed, opacity, fiberLine: dot.fiberLine, channel: dot.channel },
+        properties: { speed: dot.speed, opacity, fiberId: dot.fiberId, direction: dot.direction, channel: dot.channel },
         geometry: { type: 'Point', coordinates: [dot.lng, dot.lat] },
       })
     }

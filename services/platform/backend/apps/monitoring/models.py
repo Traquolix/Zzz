@@ -47,6 +47,11 @@ class Infrastructure(models.Model):
     end_channel = models.IntegerField(
         help_text="Last DAS channel covering this infrastructure.",
     )
+    direction = models.IntegerField(
+        null=True,
+        blank=True,
+        help_text="Direction (0 or 1). NULL means both directions.",
+    )
     image = models.CharField(
         max_length=255,
         blank=True,

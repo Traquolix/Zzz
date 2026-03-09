@@ -35,7 +35,8 @@ export type SelectedIncident = {
   id: string
   type: 'slowdown' | 'congestion' | 'accident' | 'anomaly'
   severity: 'low' | 'medium' | 'high' | 'critical'
-  fiberLine: string
+  fiberId: string
+  direction: number
   channel: number
   lng: number
   lat: number
