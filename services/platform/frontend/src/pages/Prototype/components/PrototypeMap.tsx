@@ -18,7 +18,7 @@ import {
   getFiberColor,
   channelToCoord,
 } from '../data'
-import type { Section, PendingPoint, LiveSectionStats, SpeedThresholds, ProtoIncident } from '../types'
+import type { Fiber, Section, PendingPoint, LiveSectionStats, SpeedThresholds, ProtoIncident } from '../types'
 import type { Infrastructure } from '@/types/infrastructure'
 import type { VehiclePosition } from '../hooks/useVehicleSim'
 
@@ -186,6 +186,15 @@ export const PrototypeMap = memo(
 
     const sectionsRef = useRef(sections)
     sectionsRef.current = sections
+
+    // Pre-resolve fibers for sections once (avoids per-section findFiber in hot loops)
+    const sectionFibersRef = useRef(new Map<string, Fiber>())
+    const sectionFibers = new Map<string, Fiber>()
+    for (const sec of sections ?? []) {
+      const f = findFiber(sec.fiberId, sec.direction)
+      if (f) sectionFibers.set(sec.id, f)
+    }
+    sectionFibersRef.current = sectionFibers
 
     const thresholdLookupRef = useRef(thresholdLookup)
     thresholdLookupRef.current = thresholdLookup
@@ -768,9 +777,10 @@ export const PrototypeMap = memo(
           if (key === lastSpeedSectionsKey) return // no change, skip allocation
           lastSpeedSectionsKey = key
 
+          const fiberMap = sectionFibersRef.current
           const features = secs
             .map(sec => {
-              const secFiber = findFiber(sec.fiberId, sec.direction)
+              const secFiber = fiberMap.get(sec.id)
               if (!secFiber) return null
               const coords = getSectionCoords(secFiber, sec.startChannel, sec.endChannel)
               if (coords.length < 2) return null
@@ -962,10 +972,11 @@ export const PrototypeMap = memo(
       const source = map.getSource('section-highlights') as mapboxgl.GeoJSONSource | undefined
       if (!source) return
       const colors = fiberColorsRef.current
+      const fiberMap = sectionFibersRef.current
 
       const features = secs
         .map(sec => {
-          const sf = findFiber(sec.fiberId, sec.direction)
+          const sf = fiberMap.get(sec.id)
           if (!sf) return null
           const coords = getSectionCoords(sf, sec.startChannel, sec.endChannel)
           if (coords.length < 2) return null
