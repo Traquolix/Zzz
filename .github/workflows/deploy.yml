@@ -60,6 +60,12 @@ jobs:
           docker compose build --parallel $APP_SERVICES
           docker compose up -d --no-deps --force-recreate $APP_SERVICES
 
+      - name: Run migrations and seed data
+        run: |
+          cd ${{ env.DEPLOY_DIR }}
+          docker compose exec -T platform-backend python manage.py migrate --noinput
+          docker compose exec -T platform-backend python manage.py seed_infrastructure
+
       - name: Health check
         id: health
         run: |
