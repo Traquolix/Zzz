@@ -16,8 +16,8 @@
 9. [x] **Frontend: poll section history + Redis pub/sub + flow fixes** [#54] — PR #69
 10. [x] **Optimistic flow switch rollback** [#15] — PR #71
 11. [x] **Move CRUD config tables to PostgreSQL** [#33] — sections, danger zones, actors out of ClickHouse
-12. [ ] **Batch section history endpoint** [#70] — reduce N parallel requests to single batch call
-13. [ ] **Fix section creation overlay** [#38] — click position offset on map
+12. [x] **Batch section history endpoint** [#70] — PR #75
+13. [x] **Fix section creation overlay** [#38] — click position offset on map — PR #76
 14. [ ] **Expand side panel** [#72] — wider default, more readable charts and data tables
 15. [ ] **Make 3D vehicle popups to track their values**
 16. [ ] **Realistic simulation engine** [#10] — physically coherent traffic, location-aware speeds, emergent incidents
