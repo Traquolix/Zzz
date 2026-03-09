@@ -55,11 +55,6 @@ class FlowAwareMixin:
             sim_fn: Callable that returns simulation data (e.g. get_simulation_incidents).
             fiber_key: Key in each item dict that holds the directional fiber ID.
         """
-        from apps.realtime.simulation_manager import SimulationManager
-
-        if not SimulationManager.instance().is_running:
-            return []
-
         try:
             data = sim_fn()
         except ImportError:
