@@ -47,7 +47,7 @@ interface PrototypeMapProps {
   displayMode?: 'dots' | 'vehicles'
   liveStats?: Map<string, LiveSectionStats>
   onOverviewChange?: (isOverview: boolean) => void
-  thresholdLookup?: (cableId: string, direction: number, channel: number) => SpeedThresholds
+  thresholdLookup?: (cableId: string, direction: 0 | 1, channel: number) => SpeedThresholds
   fiberColors?: Record<string, string>
   structures?: Infrastructure[]
   structureStatuses?: Map<string, import('@/types/infrastructure').SHMStatus>

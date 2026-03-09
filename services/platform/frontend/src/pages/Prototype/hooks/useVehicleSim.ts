@@ -19,11 +19,10 @@ export interface VehiclePosition {
 }
 
 interface FiberEngine {
-  fiberId: string
   cableId: string
+  direction: 0 | 1
   engine: VehicleSimEngine
   coords: [number, number][]
-  direction: 0 | 1
   step: number
 }
 
@@ -72,11 +71,10 @@ export function useVehicleSim(): {
       })
       const coords = getFiberOffsetCoords({ ...fiber, coordinates: fiber.coordinates as [number, number][] })
       return {
-        fiberId: fiber.id,
         cableId: fiber.parentCableId,
+        direction: fiber.direction,
         engine,
         coords,
-        direction: fiber.direction,
         step: 1,
       }
     })

@@ -85,7 +85,7 @@ export function getSpeedColorRGBA(
 export function buildThresholdLookup(
   sections: Section[],
   fiberThresholds: Record<string, SpeedThresholds>,
-): (cableId: string, direction: number, channel: number) => SpeedThresholds {
+): (cableId: string, direction: 0 | 1, channel: number) => SpeedThresholds {
   type SectionRange = { start: number; end: number; thresholds: SpeedThresholds }
   const byCable = new Map<string, Map<number, { ranges: SectionRange[]; fallback: SpeedThresholds }>>()
 
@@ -104,7 +104,7 @@ export function buildThresholdLookup(
     entry.ranges.push({ start: sec.startChannel, end: sec.endChannel, thresholds: sec.speedThresholds })
   }
 
-  return (cableId: string, direction: number, channel: number): SpeedThresholds => {
+  return (cableId: string, direction: 0 | 1, channel: number): SpeedThresholds => {
     const entry = byCable.get(cableId)?.get(direction)
     if (entry) {
       for (const s of entry.ranges) {
