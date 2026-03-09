@@ -3,7 +3,7 @@ import { apiRequest } from './client'
 export interface ApiSection {
   id: string
   fiberId: string
-  direction: number
+  direction: 0 | 1
   name: string
   channelStart: number
   channelEnd: number
@@ -26,7 +26,7 @@ export async function fetchSections(): Promise<ApiSection[]> {
 
 export async function createSection(data: {
   fiberId: string
-  direction: number
+  direction: 0 | 1
   name: string
   channelStart: number
   channelEnd: number

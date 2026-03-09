@@ -742,34 +742,32 @@ const ChannelIcon = () => (
 
 // ── Waterfall panel ─────────────────────────────────────────────────────
 
-const FIBER_OPTIONS = fibers
-  .filter(
-    (_, i, arr) => i === arr.findIndex(f2 => f2.parentCableId === _.parentCableId && f2.direction === _.direction),
-  )
-  .map(f => ({ id: f.id, label: `${f.name}:${f.direction}` }))
-
 function WaterfallPanel() {
-  const [fiberId, setFiberId] = useState(FIBER_OPTIONS[0]?.id ?? '')
+  const [selectedIndex, setSelectedIndex] = useState(0)
   const [windowMs, setWindowMs] = useState(120_000)
 
-  const fiber = fibers.find(f => f.id === fiberId)
+  const fiber = fibers[selectedIndex] ?? fibers[0]
   const minChannel = 0
   const maxChannel = (fiber?.totalChannels ?? 500) - 1
 
-  const { dotsRef, dirtyRef, prune, lastTsRef } = useWaterfallBuffer(fiberId, windowMs)
+  const { dotsRef, dirtyRef, prune, lastTsRef } = useWaterfallBuffer(
+    fiber?.parentCableId ?? '',
+    fiber?.direction ?? 0,
+    windowMs,
+  )
 
   return (
     <div className="flex flex-col h-full">
       {/* Controls */}
       <div className="flex items-center gap-2 px-4 py-2 border-b border-[var(--proto-border)]">
         <select
-          value={fiberId}
-          onChange={e => setFiberId(e.target.value)}
+          value={selectedIndex}
+          onChange={e => setSelectedIndex(Number(e.target.value))}
           className="text-xs px-2 py-1 rounded bg-[var(--proto-base)] border border-[var(--proto-border)] text-[var(--proto-text)] outline-none"
         >
-          {FIBER_OPTIONS.map(f => (
-            <option key={f.id} value={f.id}>
-              {f.label}
+          {fibers.map((f, i) => (
+            <option key={f.id} value={i}>
+              {f.name}:{f.direction}
             </option>
           ))}
         </select>

@@ -10,7 +10,7 @@ interface LiveDot {
   speed: number
   ts: number
   fiberId: string
-  direction: number
+  direction: 0 | 1
   channel: number
 }
 

@@ -8,7 +8,7 @@ function toProtoSection(api: ApiSection): Section {
   return {
     id: api.id,
     fiberId: api.fiberId,
-    direction: api.direction as 0 | 1,
+    direction: api.direction,
     name: api.name,
     startChannel: api.channelStart,
     endChannel: api.channelEnd,
@@ -44,7 +44,7 @@ export function useSections() {
   }, [])
 
   const addSection = useCallback(
-    async (fiberId: string, direction: number, name: string, startChannel: number, endChannel: number) => {
+    async (fiberId: string, direction: 0 | 1, name: string, startChannel: number, endChannel: number) => {
       const api = await createSection({ fiberId, direction, name, channelStart: startChannel, channelEnd: endChannel })
       const section = toProtoSection(api)
       setSections(prev => [...prev, section])

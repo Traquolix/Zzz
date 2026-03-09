@@ -2,7 +2,6 @@ import { useRef, useEffect } from 'react'
 import { useRealtime } from '@/hooks/useRealtime'
 import { useFlowReset } from '@/hooks/useFlowReset'
 import { parseDetections } from '@/lib/parseMessage'
-import { findFiber } from '../data'
 
 export interface WaterfallDot {
   channel: number
@@ -13,7 +12,7 @@ export interface WaterfallDot {
 
 const DEFAULT_WINDOW_MS = 120_000
 
-export function useWaterfallBuffer(fiberFilter: string, windowMs = DEFAULT_WINDOW_MS) {
+export function useWaterfallBuffer(cableId: string, direction: number, windowMs = DEFAULT_WINDOW_MS) {
   const { subscribe } = useRealtime()
   const dotsRef = useRef<WaterfallDot[]>([])
   const dirtyRef = useRef(false)
@@ -31,7 +30,7 @@ export function useWaterfallBuffer(fiberFilter: string, windowMs = DEFAULT_WINDO
     dotsRef.current = []
     lastTsRef.current = 0
     dirtyRef.current = true
-  }, [fiberFilter])
+  }, [cableId, direction])
 
   useEffect(() => {
     const unsub = subscribe('detections', (data: unknown) => {
@@ -39,7 +38,7 @@ export function useWaterfallBuffer(fiberFilter: string, windowMs = DEFAULT_WINDO
       if (detections.length === 0) return
 
       for (const d of detections) {
-        if (findFiber(d.fiberId, d.direction)?.id !== fiberFilter) continue
+        if (d.fiberId !== cableId || d.direction !== direction) continue
         dotsRef.current.push({
           channel: d.channel,
           speed: d.speed,
@@ -55,7 +54,7 @@ export function useWaterfallBuffer(fiberFilter: string, windowMs = DEFAULT_WINDO
     })
 
     return unsub
-  }, [subscribe, fiberFilter])
+  }, [subscribe, cableId, direction])
 
   /** Prune dots older than the visible window. Call during render. */
   function prune() {
