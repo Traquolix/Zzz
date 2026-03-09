@@ -86,27 +86,30 @@ export function buildThresholdLookup(
   sections: Section[],
   fiberThresholds: Record<string, SpeedThresholds>,
 ): (cableId: string, direction: number, channel: number) => SpeedThresholds {
-  // Group sections by their fiber's internal ID for fast lookup
-  const byFiber = new Map<string, { start: number; end: number; thresholds: SpeedThresholds }[]>()
+  // Group sections by cableId:direction key for fast closure lookup (no findFiber in hot path)
+  const byKey = new Map<string, { start: number; end: number; thresholds: SpeedThresholds }[]>()
+  const fallbackByKey = new Map<string, SpeedThresholds>()
   for (const sec of sections) {
-    const key = findFiber(sec.fiberId, sec.direction)?.id ?? ''
-    let list = byFiber.get(key)
+    const key = `${sec.fiberId}:${sec.direction}`
+    let list = byKey.get(key)
     if (!list) {
       list = []
-      byFiber.set(key, list)
+      byKey.set(key, list)
+      const fid = findFiber(sec.fiberId, sec.direction)?.id ?? ''
+      fallbackByKey.set(key, fiberThresholds[fid] ?? defaultSpeedThresholds)
     }
     list.push({ start: sec.startChannel, end: sec.endChannel, thresholds: sec.speedThresholds })
   }
 
   return (cableId: string, direction: number, channel: number): SpeedThresholds => {
-    const fid = findFiber(cableId, direction)?.id ?? ''
-    const list = byFiber.get(fid)
+    const key = `${cableId}:${direction}`
+    const list = byKey.get(key)
     if (list) {
       for (const s of list) {
         if (channel >= s.start && channel <= s.end) return s.thresholds
       }
     }
-    return fiberThresholds[fid] ?? defaultSpeedThresholds
+    return fallbackByKey.get(key) ?? defaultSpeedThresholds
   }
 }
 
@@ -133,9 +136,11 @@ for (const fiber of fibers) {
   }
 }
 
+const fiberIndex = new Map(fibers.map(f => [`${f.parentCableId}:${f.direction}`, f]))
+
 /** Find the directional fiber entry for a cable ID + direction. */
 export function findFiber(cableId: string, direction: number): Fiber | undefined {
-  return fibers.find(f => f.parentCableId === cableId && f.direction === direction)
+  return fiberIndex.get(`${cableId}:${direction}`)
 }
 
 export function channelToCoord(fiberLine: string, channel: number): [number, number] | null {
