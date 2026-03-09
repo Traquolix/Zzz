@@ -115,6 +115,7 @@ export function SidePanel({
   const realtimeCtx = useRealtime()
   const [incidentSortBy, setIncidentSortBy] = useState<'newest' | 'oldest'>('newest')
   const [shmSearch, setShmSearch] = useState('')
+  const [sectionSearch, setSectionSearch] = useState('')
 
   const incident = selectedIncidentId ? incidents.find(i => i.id === selectedIncidentId) : null
   const section = selectedSectionId ? sections.find(s => s.id === selectedSectionId) : null
@@ -216,7 +217,7 @@ export function SidePanel({
             <button
               title={sidebarExpanded ? 'Collapse panel' : 'Expand panel'}
               onClick={() => dispatch({ type: 'TOGGLE_SIDEBAR_EXPANDED' })}
-              className="flex items-center justify-center w-[56px] h-7 rounded-l-lg border border-r-0 border-transparent bg-[var(--proto-surface)]/60 text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)] hover:bg-[var(--proto-surface)]/80 transition-colors cursor-pointer"
+              className="group/exp flex items-center justify-center w-[56px] h-5 hover:h-7 rounded-l-lg border border-r-0 border-transparent bg-[var(--proto-surface)]/40 text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)] hover:bg-[var(--proto-surface)]/80 transition-all cursor-pointer"
             >
               <ExpandIcon expanded={!!sidebarExpanded} />
             </button>
@@ -230,25 +231,25 @@ export function SidePanel({
         </div>
 
         {/* Panel header */}
-        <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--proto-border)]">
+        <div className="flex items-center justify-between px-4 h-[52px] shrink-0 border-b border-[var(--proto-border)]">
           <div className="flex items-center gap-2.5">
-            <span className="text-[length:var(--text-xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
+            <span className="text-[length:var(--text-sm)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
               {activeTab}
             </span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             {activeTab === 'incidents' && (
               <>
                 {filterSeverity && (
                   <button
                     onClick={() => dispatch({ type: 'SET_FILTER_SEVERITY', severity: null })}
-                    className="w-2.5 h-2.5 rounded-full transition-all cursor-pointer opacity-50 hover:opacity-80"
+                    className="w-3 h-3 rounded-full transition-all cursor-pointer opacity-50 hover:opacity-80"
                     style={{ backgroundColor: 'var(--proto-text-muted)' }}
                     title="Clear filter"
                   >
                     <svg
-                      width="10"
-                      height="10"
+                      width="12"
+                      height="12"
                       viewBox="0 0 10 10"
                       fill="none"
                       stroke="currentColor"
@@ -266,7 +267,7 @@ export function SidePanel({
                     key={s}
                     onClick={() => dispatch({ type: 'SET_FILTER_SEVERITY', severity: filterSeverity === s ? null : s })}
                     className={cn(
-                      'w-2.5 h-2.5 rounded-full transition-all cursor-pointer ring-offset-1 ring-offset-[var(--proto-surface)]',
+                      'w-3 h-3 rounded-full transition-all cursor-pointer ring-offset-1 ring-offset-[var(--proto-surface)]',
                       filterSeverity === s
                         ? 'ring-1 ring-[var(--proto-text-secondary)] scale-125'
                         : 'opacity-50 hover:opacity-80',
@@ -278,7 +279,7 @@ export function SidePanel({
                 <button
                   onClick={() => dispatch({ type: 'TOGGLE_HIDE_RESOLVED' })}
                   className={cn(
-                    'ml-1 flex items-center justify-center w-5 h-5 rounded transition-colors cursor-pointer',
+                    'ml-1 flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer',
                     hideResolved
                       ? 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)]'
                       : 'text-[var(--proto-accent)]',
@@ -319,7 +320,7 @@ export function SidePanel({
                 <button
                   onClick={() => dispatch({ type: 'TOGGLE_INCIDENTS_ON_MAP' })}
                   className={cn(
-                    'flex items-center justify-center w-5 h-5 rounded transition-colors cursor-pointer',
+                    'flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer',
                     showIncidentsOnMap
                       ? 'text-[var(--proto-accent)]'
                       : 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)]',
@@ -342,7 +343,7 @@ export function SidePanel({
                 </button>
                 <button
                   onClick={() => setIncidentSortBy(s => (s === 'newest' ? 'oldest' : 'newest'))}
-                  className="flex items-center justify-center w-5 h-5 rounded text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors cursor-pointer"
+                  className="flex items-center justify-center w-6 h-6 rounded text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors cursor-pointer"
                   title={incidentSortBy === 'newest' ? 'Newest first' : 'Oldest first'}
                 >
                   <svg
@@ -368,8 +369,8 @@ export function SidePanel({
                 <div className="relative">
                   <svg
                     className="absolute left-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--proto-text-muted)]"
-                    width="10"
-                    height="10"
+                    width="12"
+                    height="12"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -385,7 +386,7 @@ export function SidePanel({
                     value={shmSearch}
                     onChange={e => setShmSearch(e.target.value)}
                     placeholder="Search..."
-                    className="w-28 focus:w-36 pl-5 pr-1.5 py-0.5 rounded bg-transparent border border-[var(--proto-border)] text-[length:var(--text-2xs)] text-[var(--proto-text)] placeholder:text-[var(--proto-text-muted)] outline-none focus:border-[var(--proto-text-secondary)] transition-all"
+                    className="w-28 focus:w-36 pl-5 pr-1.5 py-1 rounded bg-transparent border border-[var(--proto-border)] text-[length:var(--text-xs)] text-[var(--proto-text)] placeholder:text-[var(--proto-text-muted)] outline-none focus:border-[var(--proto-text-secondary)] transition-all"
                   />
                 </div>
                 <button
@@ -401,15 +402,19 @@ export function SidePanel({
                   <svg
                     width="14"
                     height="14"
-                    viewBox="0 0 14 14"
+                    viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
-                    strokeWidth="1.5"
+                    strokeWidth="1.8"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   >
-                    <path d="M7 1C5 1 3.5 3 3.5 5.5C3.5 8.5 7 13 7 13C7 13 10.5 8.5 10.5 5.5C10.5 3 9 1 7 1Z" />
-                    <circle cx="7" cy="5.5" r="1.5" />
+                    <rect x="1" y="5" width="22" height="14" rx="2" />
+                    <path d="M5 5v5" />
+                    <path d="M9 5v3" />
+                    <path d="M13 5v5" />
+                    <path d="M17 5v3" />
+                    <path d="M21 5v5" />
                   </svg>
                 </button>
                 <button
@@ -441,20 +446,29 @@ export function SidePanel({
             )}
             {activeTab === 'sections' && !selectedSectionId && (
               <>
-                {(Object.keys(chartColors) as MetricKey[]).map(key => (
-                  <button
-                    key={key}
-                    onClick={() => dispatch({ type: 'SET_SECTION_METRIC', metric: key })}
-                    className={cn(
-                      'text-[length:var(--text-2xs)] font-medium px-1.5 py-0.5 rounded transition-colors cursor-pointer',
-                      sectionMetric === key
-                        ? 'text-[var(--proto-text)] bg-[var(--proto-border)]'
-                        : 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)]',
-                    )}
+                <div className="relative">
+                  <svg
+                    className="absolute left-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-[var(--proto-text-muted)]"
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                   >
-                    {chartColors[key].label}
-                  </button>
-                ))}
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                  <input
+                    type="text"
+                    value={sectionSearch}
+                    onChange={e => setSectionSearch(e.target.value)}
+                    placeholder="Search..."
+                    className="w-28 focus:w-36 pl-5 pr-1.5 py-1 rounded bg-transparent border border-[var(--proto-border)] text-[length:var(--text-xs)] text-[var(--proto-text)] placeholder:text-[var(--proto-text-muted)] outline-none focus:border-[var(--proto-text-secondary)] transition-all"
+                  />
+                </div>
                 <button
                   onClick={() => dispatch({ type: 'ENTER_SECTION_CREATION' })}
                   disabled={sections.length >= MAX_SECTIONS_PER_ORG}
@@ -482,6 +496,17 @@ export function SidePanel({
                     <line x1="7" y1="3" x2="7" y2="11" />
                     <line x1="3" y1="7" x2="11" y2="7" />
                   </svg>
+                </button>
+                <button
+                  onClick={() => {
+                    const keys = Object.keys(chartColors) as MetricKey[]
+                    const idx = keys.indexOf(sectionMetric)
+                    dispatch({ type: 'SET_SECTION_METRIC', metric: keys[(idx + 1) % keys.length] })
+                  }}
+                  className="flex items-center justify-center w-6 h-6 rounded hover:bg-[var(--proto-border)] transition-colors cursor-pointer"
+                  title={chartColors[sectionMetric].label}
+                >
+                  <MetricIcon metric={sectionMetric} />
                 </button>
               </>
             )}
@@ -548,6 +573,7 @@ export function SidePanel({
                 fiberColors={fiberColors}
                 onHighlightSection={onHighlightSection}
                 onClearHighlight={onClearHighlight}
+                search={sectionSearch}
               />
             ))}
           {activeTab === 'settings' && (
@@ -690,10 +716,63 @@ const SectionsIcon = () => (
   </svg>
 )
 
+const MetricIcon = ({ metric }: { metric: MetricKey }) => {
+  const color = chartColors[metric].color
+  if (metric === 'speed')
+    return (
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M12 12l4-4" />
+        <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
+      </svg>
+    )
+  if (metric === 'flow')
+    return (
+      <svg
+        width="14"
+        height="14"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke={color}
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M5 12h14" />
+        <path d="M12 5l7 7-7 7" />
+      </svg>
+    )
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color}
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="3" y="12" width="4" height="9" rx="1" />
+      <rect x="10" y="7" width="4" height="14" rx="1" />
+      <rect x="17" y="3" width="4" height="18" rx="1" />
+    </svg>
+  )
+}
+
 const ExpandIcon = ({ expanded }: { expanded: boolean }) => (
   <svg
-    width="14"
-    height="14"
+    width="12"
+    height="12"
+    className="group-hover/exp:scale-110 transition-transform"
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -1224,6 +1303,7 @@ function SectionList({
   fiberColors,
   onHighlightSection,
   onClearHighlight,
+  search,
 }: {
   sections: Section[]
   dispatch: React.Dispatch<ProtoAction>
@@ -1233,8 +1313,13 @@ function SectionList({
   fiberColors: Record<string, string>
   onHighlightSection?: (id: string) => void
   onClearHighlight?: () => void
+  search?: string
 }) {
   const metricConfig = chartColors[metric]
+  const query = search?.trim().toLowerCase() ?? ''
+  const filtered = query
+    ? sections.filter(s => s.name.toLowerCase().includes(query) || s.fiberId.toLowerCase().includes(query))
+    : sections
 
   return (
     <>
@@ -1242,9 +1327,13 @@ function SectionList({
         <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-[length:var(--text-sm)]">
           No sections yet
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-[length:var(--text-sm)]">
+          No matching sections
+        </div>
       ) : (
         <div className="flex flex-col px-3 py-1">
-          {sections.map(section => {
+          {filtered.map(section => {
             const fiber = findFiber(section.fiberId, section.direction)
             const live = liveStats.get(section.id)
             const liveSeries = liveSeriesData.get(section.id)
@@ -2406,15 +2495,17 @@ function StructureDetail({
           <h3 className="text-[length:var(--text-xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
             Spectral Heatmap
           </h3>
-          {spectralLoading ? (
-            <div className="h-[200px] rounded-lg bg-[var(--proto-surface-raised)] animate-pulse" />
-          ) : spectralData ? (
-            <SpectralHeatmapCanvas data={spectralData} />
-          ) : (
-            <div className="h-[200px] rounded-lg bg-[var(--proto-surface-raised)] flex items-center justify-center text-[length:var(--text-xs)] text-[var(--proto-text-muted)]">
-              No spectral data
-            </div>
-          )}
+          <div className="rounded-lg bg-[var(--proto-surface-raised)] border border-[var(--proto-border)] p-2">
+            {spectralLoading ? (
+              <div className="h-[200px] rounded-lg bg-[var(--proto-surface-raised)] animate-pulse" />
+            ) : spectralData ? (
+              <SpectralHeatmapCanvas data={spectralData} />
+            ) : (
+              <div className="h-[200px] flex items-center justify-center text-[length:var(--text-xs)] text-[var(--proto-text-muted)]">
+                No spectral data
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Peak Scatter */}
@@ -2422,15 +2513,17 @@ function StructureDetail({
           <h3 className="text-[length:var(--text-xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
             Peak Frequencies
           </h3>
-          {peakLoading ? (
-            <div className="h-[170px] rounded-lg bg-[var(--proto-surface-raised)] animate-pulse" />
-          ) : peakData ? (
-            <PeakScatterPlot data={peakData} />
-          ) : (
-            <div className="h-[170px] rounded-lg bg-[var(--proto-surface-raised)] flex items-center justify-center text-[length:var(--text-xs)] text-[var(--proto-text-muted)]">
-              No peak data
-            </div>
-          )}
+          <div className="rounded-lg bg-[var(--proto-surface-raised)] border border-[var(--proto-border)] p-2">
+            {peakLoading ? (
+              <div className="h-[170px] rounded-lg bg-[var(--proto-surface-raised)] animate-pulse" />
+            ) : peakData ? (
+              <PeakScatterPlot data={peakData} />
+            ) : (
+              <div className="h-[170px] flex items-center justify-center text-[length:var(--text-xs)] text-[var(--proto-text-muted)]">
+                No peak data
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Comparison overlay */}
@@ -2707,7 +2800,7 @@ function SpectralHeatmapCanvas({ data }: { data: SpectralTimeSeries }) {
       const { spectra, freqs } = data
       if (!spectra.length || !freqs.length) return
 
-      const margin = { top: 4, right: 8, bottom: 24, left: 48 }
+      const margin = { top: 4, right: 8, bottom: 24, left: 56 }
       const plotW = width - margin.left - margin.right
       const plotH = height - margin.top - margin.bottom
 
@@ -2788,7 +2881,7 @@ function SpectralHeatmapCanvas({ data }: { data: SpectralTimeSeries }) {
       ctx.save()
       ctx.font = '9px sans-serif'
       ctx.textAlign = 'center'
-      const labelX = 15
+      const labelX = 12
       const labelY = margin.top + plotH / 2
       ctx.translate(labelX, labelY)
       ctx.rotate(-Math.PI / 2)

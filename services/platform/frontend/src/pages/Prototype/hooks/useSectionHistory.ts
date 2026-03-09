@@ -69,11 +69,10 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
     }
   }, [sectionId, minutes, flow])
 
-  // Reset on time range or flow change
+  // Reset on time range or flow change — keep previous data visible until new data arrives
   useEffect(() => {
     sinceRef.current = undefined
     accumulatedRef.current = []
-    setSeries([])
     fetchData()
     const timer = setInterval(fetchData, POLL_INTERVAL)
     return () => {

@@ -45,7 +45,13 @@ export default function TimeSeriesChartInner({ data, metric, config, timeRange, 
               interval={Math.max(0, Math.floor(data.length / 6) - 1)}
               tickFormatter={tickFormatter}
             />
-            <YAxis tick={{ fill: '#64748b', fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
+            <YAxis
+              tick={{ fill: '#64748b', fontSize: 10 }}
+              tickLine={false}
+              axisLine={false}
+              width={36}
+              domain={[0, (max: number) => Math.ceil(max * 1.1)]}
+            />
             <Tooltip
               contentStyle={{
                 backgroundColor: '#2b2d31',
