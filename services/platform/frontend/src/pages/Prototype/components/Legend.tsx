@@ -1,3 +1,4 @@
+import { useRef, useState, useEffect } from 'react'
 import { useSidebarWidth } from '../hooks/useSidebarWidth'
 
 interface LegendProps {
@@ -5,29 +6,49 @@ interface LegendProps {
   onToggleDisplayMode: () => void
   isOverview?: boolean
   sidebarOpen?: boolean
+  sidebarExpanded?: boolean
   hideFibersInOverview?: boolean
   onToggleHideFibers?: () => void
 }
 
-const TAB_BAR_OFFSET = 48 // 36px tab bar + 12px gap
+const TAB_BAR_OFFSET = 56 // 36px tab bar + 12px collapsed toggle gap + 8px spacing
 
 export function Legend({
   displayMode,
   onToggleDisplayMode,
   isOverview,
   sidebarOpen,
+  sidebarExpanded,
   hideFibersInOverview,
   onToggleHideFibers,
 }: LegendProps) {
   const sidebarWidth = useSidebarWidth()
   const right = sidebarOpen && sidebarWidth > 0 ? `${sidebarWidth + 12}px` : `${TAB_BAR_OFFSET}px`
 
+  // Enable CSS transition only for sidebar open/close (transform-based slide).
+  // During expand/collapse the sidebar width animates via CSS and ResizeObserver
+  // tracks it at ~60fps — adding a transition on top would cause lag.
+  const prevOpenRef = useRef(sidebarOpen)
+  const [animating, setAnimating] = useState(false)
+  if (prevOpenRef.current !== sidebarOpen) {
+    prevOpenRef.current = sidebarOpen
+    setAnimating(true)
+  }
+  useEffect(() => {
+    if (!animating) return
+    const id = setTimeout(() => setAnimating(false), sidebarExpanded ? 450 : 250)
+    return () => clearTimeout(id)
+  }, [animating, sidebarExpanded])
+
   return (
     <div
       className="absolute top-3 z-30 h-9 w-[120px] flex items-center rounded-lg
                         bg-[var(--proto-surface)]/90 border border-[var(--proto-border)]
-                        backdrop-blur-sm pointer-events-auto transition-[right] duration-200 ease-in-out overflow-hidden"
-      style={{ right }}
+                        backdrop-blur-sm pointer-events-auto overflow-hidden"
+      style={{
+        right,
+        transition: animating ? `right ${sidebarExpanded ? '400ms' : '200ms'} ease-in-out` : 'none',
+      }}
     >
       {isOverview ? (
         <div className="flex items-center justify-center gap-1.5 w-full">

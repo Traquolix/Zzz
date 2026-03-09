@@ -132,9 +132,12 @@ export function SidePanel({
     }
   }, [sidebarOpen])
 
-  const handleTransitionEnd = () => {
+  const handleTransitionEnd = (e: React.TransitionEvent) => {
+    // Only act on the transform transition (the slide), not width or other properties
+    if (e.propertyName !== 'transform') return
     if (!sidebarOpen) {
       setFullyClosed(true)
+      if (sidebarExpanded) dispatch({ type: 'RESET_SIDEBAR_EXPANDED' })
     }
   }
 
@@ -172,7 +175,9 @@ export function SidePanel({
           style={{
             right: '100%',
             opacity: sidebarOpen ? 1 : 0,
-            transition: sidebarOpen ? 'opacity 150ms 80ms ease-in' : 'opacity 100ms ease-out',
+            transition: sidebarOpen
+              ? 'opacity 150ms 80ms ease-in'
+              : `opacity ${sidebarExpanded ? '200ms' : '100ms'} ease-out`,
           }}
         >
           <div className="flex flex-col gap-1.5 mt-8">
