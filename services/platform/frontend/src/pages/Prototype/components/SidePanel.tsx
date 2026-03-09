@@ -6,8 +6,8 @@ import { cn } from '@/lib/utils'
 import { severityColor, fibers, getSpeedColor, chartColors, defaultSpeedThresholds, fiberLineId } from '../data'
 import { useIncidentSnapshot } from '@/hooks/useIncidentSnapshot'
 import { fetchSectionHistory } from '@/api/sections'
-import type { Incident } from '../types'
 import type {
+  ProtoIncident,
   ProtoState,
   ProtoAction,
   Severity,
@@ -1066,7 +1066,7 @@ function IncidentList({
   unseenIds,
   onMarkSeen,
 }: {
-  incidents: Incident[]
+  incidents: ProtoIncident[]
   filterSeverity: Severity | null
   hideResolved: boolean
   sortBy: 'newest' | 'oldest'
@@ -1080,8 +1080,8 @@ function IncidentList({
   if (hideResolved) filtered = filtered.filter(i => !i.resolved)
 
   const sorted = [...filtered].sort((a, b) => {
-    const ta = new Date(a.timestamp).getTime()
-    const tb = new Date(b.timestamp).getTime()
+    const ta = new Date(a.detectedAt).getTime()
+    const tb = new Date(b.detectedAt).getTime()
     return sortBy === 'newest' ? tb - ta : ta - tb
   })
 
@@ -1116,7 +1116,7 @@ function IncidentList({
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm text-[var(--proto-text)] font-medium truncate">{inc.title}</span>
                     <span className="shrink-0 text-xs tabular-nums text-[var(--proto-text-secondary)]">
-                      {new Date(inc.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(inc.detectedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 text-[11px] text-[var(--proto-text-muted)] mt-0.5">
@@ -1125,7 +1125,7 @@ function IncidentList({
                       {inc.channelEnd && inc.channelEnd !== inc.channel ? `–${inc.channelEnd}` : ''}
                     </span>
                     <span className="opacity-40">·</span>
-                    <span>{new Date(inc.timestamp).toLocaleDateString([], { day: 'numeric', month: 'short' })}</span>
+                    <span>{new Date(inc.detectedAt).toLocaleDateString([], { day: 'numeric', month: 'short' })}</span>
                     {inc.resolved && (
                       <>
                         <span className="opacity-40">·</span>
@@ -1260,7 +1260,7 @@ function IncidentDetail({
   dispatch,
   onBack,
 }: {
-  incident: Incident
+  incident: ProtoIncident
   sections: Section[]
   dispatch: React.Dispatch<ProtoAction>
   onBack: () => void
@@ -1382,7 +1382,7 @@ function IncidentDetail({
               Type: <span className="capitalize">{incident.type}</span>
             </span>
             <span>
-              Time: {new Date(incident.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              Time: {new Date(incident.detectedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
             <span>
               Location: {incident.location[1].toFixed(4)}N, {incident.location[0].toFixed(4)}E
@@ -1431,7 +1431,7 @@ function IncidentDetail({
           ) : snapshotData ? (
             <TimeSeriesChart
               data={snapshotData}
-              incidentTime={new Date(incident.timestamp).toLocaleTimeString([], {
+              incidentTime={new Date(incident.detectedAt).toLocaleTimeString([], {
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit',

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import type { Incident } from '../types'
+import type { ProtoIncident } from '../types'
 
 export interface IncidentToast {
   id: string
@@ -10,7 +10,7 @@ export interface IncidentToast {
   createdAt: number
 }
 
-export function useUnseenIncidents(incidents: Incident[], loading: boolean) {
+export function useUnseenIncidents(incidents: ProtoIncident[], loading: boolean) {
   const [unseenIds, setUnseenIds] = useState<Set<string>>(new Set())
   const [toasts, setToasts] = useState<IncidentToast[]>([])
   const prevIdsRef = useRef<Set<string>>(new Set())

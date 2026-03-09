@@ -1,6 +1,6 @@
 import { useReducer, useEffect, useCallback, useRef, useState, useMemo } from 'react'
 import { toast } from 'sonner'
-import type { ProtoState, ProtoAction, Incident, PendingPoint } from './types'
+import type { ProtoState, ProtoAction, ProtoIncident, PendingPoint } from './types'
 import { fibers, defaultSpeedThresholds, buildThresholdLookup, fiberLineId, channelToCoord } from './data'
 import { PrototypeMap, type PrototypeMapHandle } from './components/PrototypeMap'
 import { StatusBar } from './components/StatusBar'
@@ -17,8 +17,8 @@ import { IncidentToastStack } from './components/IncidentToastStack'
 import type { Incident as ApiIncident } from '@/types/incident'
 import './prototype.css'
 
-/** Map an API incident to the prototype Incident shape. */
-function toProtoIncident(api: ApiIncident): Incident {
+/** Enrich an API incident with display fields computed from fiber geometry. */
+function toProtoIncident(api: ApiIncident): ProtoIncident {
   const dirFiber = fiberLineId(api.fiberId, api.direction)
   const loc = channelToCoord(dirFiber, api.channel)
   const fiberName =
@@ -32,22 +32,11 @@ function toProtoIncident(api: ApiIncident): Incident {
   }
 
   return {
-    id: api.id,
-    fiberId: dirFiber,
-    type: api.type as Incident['type'],
-    severity: api.severity as Incident['severity'],
+    ...api,
     title,
     description,
     location: loc ?? [7.24, 43.72],
-    timestamp: api.detectedAt,
     resolved: api.status !== 'active',
-    channel: api.channel,
-    channelEnd: api.channelEnd,
-    status: api.status,
-    duration: api.duration,
-    speedBefore: api.speedBefore,
-    speedDuring: api.speedDuring,
-    speedDropPercent: api.speedDropPercent,
   }
 }
 
@@ -326,7 +315,7 @@ export function Prototype() {
     dispatch({ type: 'SELECT_CHANNEL', channel: point })
   }, [])
 
-  const emptyIncidents = useMemo(() => [] as Incident[], [])
+  const emptyIncidents = useMemo(() => [] as ProtoIncident[], [])
   const visibleIncidents = state.showIncidentsOnMap ? state.incidents : emptyIncidents
 
   // FlyTo on incident selection

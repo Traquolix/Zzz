@@ -1,5 +1,6 @@
-export type Severity = 'critical' | 'high' | 'medium' | 'low'
-export type IncidentType = 'accident' | 'congestion' | 'slowdown' | 'anomaly'
+import type { Severity, IncidentType, ProtoIncident } from '@/types/incident'
+
+export type { Severity, IncidentType, ProtoIncident }
 export type SidebarTab = 'incidents' | 'sections' | 'settings' | 'shm' | 'channel' | 'waterfall'
 
 export interface Fiber {
@@ -33,25 +34,6 @@ export interface Section {
   speedHistory: number[]
   countHistory: number[]
   speedThresholds: SpeedThresholds
-}
-
-export interface Incident {
-  id: string
-  fiberId: string
-  type: IncidentType
-  severity: Severity
-  title: string
-  description: string
-  location: [number, number]
-  timestamp: string
-  resolved: boolean
-  channel: number
-  channelEnd?: number
-  status: string
-  duration?: number | null
-  speedBefore?: number | null
-  speedDuring?: number | null
-  speedDropPercent?: number | null
 }
 
 export interface TimeSeriesPoint {
@@ -109,7 +91,7 @@ export interface ProtoState {
   hideResolved: boolean
   sectionMetric: MetricKey
   sections: Section[]
-  incidents: Incident[]
+  incidents: ProtoIncident[]
   sectionCreationMode: boolean
   pendingPoint: PendingPoint | null
   showNamingDialog: boolean
@@ -153,7 +135,7 @@ export type ProtoAction =
   | { type: 'TOGGLE_STRUCTURES_ON_MAP' }
   | { type: 'TOGGLE_STRUCTURE_LABELS' }
   | { type: 'SELECT_CHANNEL'; channel: SelectedChannel }
-  | { type: 'SET_INCIDENTS'; incidents: Incident[] }
+  | { type: 'SET_INCIDENTS'; incidents: ProtoIncident[] }
   | { type: 'SET_SECTIONS'; sections: Section[] }
   | { type: 'TOGGLE_HIDE_RESOLVED' }
   | { type: 'TOGGLE_INCIDENTS_ON_MAP' }

@@ -1,9 +1,11 @@
+export type IncidentType = 'accident' | 'congestion' | 'slowdown' | 'anomaly'
+export type Severity = 'critical' | 'high' | 'medium' | 'low'
 export type IncidentStatus = 'active' | 'acknowledged' | 'investigating' | 'resolved'
 
 export type Incident = {
   id: string
-  type: 'slowdown' | 'congestion' | 'accident' | 'anomaly'
-  severity: 'low' | 'medium' | 'high' | 'critical'
+  type: IncidentType
+  severity: Severity
   fiberId: string
   direction: number
   channel: number // which channel (array index)
@@ -14,6 +16,14 @@ export type Incident = {
   speedBefore?: number | null
   speedDuring?: number | null
   speedDropPercent?: number | null
+}
+
+/** Enriched incident with display fields computed from fiber geometry. */
+export type ProtoIncident = Incident & {
+  title: string
+  description: string
+  location: [number, number]
+  resolved: boolean
 }
 
 export type IncidentAction = {

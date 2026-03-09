@@ -17,7 +17,7 @@ import {
   fiberLineId,
   channelToCoord,
 } from '../data'
-import type { Section, PendingPoint, LiveSectionStats, SpeedThresholds, Incident } from '../types'
+import type { Section, PendingPoint, LiveSectionStats, SpeedThresholds, ProtoIncident } from '../types'
 import type { Infrastructure } from '@/types/infrastructure'
 import type { VehiclePosition } from '../hooks/useVehicleSim'
 
@@ -32,7 +32,7 @@ export interface PrototypeMapHandle {
 }
 
 interface PrototypeMapProps {
-  incidents?: Incident[]
+  incidents?: ProtoIncident[]
   onIncidentClick?: (id: string) => void
   onMapClick?: () => void
   sectionCreationMode?: boolean
