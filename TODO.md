@@ -15,6 +15,8 @@
 8. [ ] **Consolidate dual Incident type definitions** [#42] — refactor, prototype vs canonical
 9. [ ] **Sim stats: `detectionsPerSecond` always 0** [#41] — enhancement
 10. [ ] **Optimistic flow switch rollback** [#15] — bug, frontend/backend flow state desync
+11. [ ] **Remove dead frontend type files** [#61] — tech-debt, delete unused types in `src/types/` (selection.ts, admin.ts, report.ts, user.ts, section.ts, metrics.ts)
+12. [ ] **Replace `fiberLineId()` composite keys with structured keys** [#62] — refactor, stop re-encoding direction into strings at the display layer
 
 ## High Priority
 

@@ -681,7 +681,7 @@ class SectionListView(APIView):
         serializer.is_valid(raise_exception=True)
 
         fiber_id = serializer.validated_data["fiberId"]
-        direction = serializer.validated_data.get("direction", 0)
+        direction = serializer.validated_data["direction"]
         name = serializer.validated_data["name"]
         channel_start = serializer.validated_data["channelStart"]
         channel_end = serializer.validated_data["channelEnd"]

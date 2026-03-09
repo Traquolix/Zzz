@@ -21,6 +21,9 @@ ALTER TABLE sequoia.fiber_danger_zones
 -- Existing rows may have fiber_id = "carros:0" (direction encoded in string).
 -- Extract direction into the new column and strip the suffix from fiber_id.
 -- ReplacingMergeTree merges on updated_at, so the newer corrected row wins.
+-- Note: splitByChar(':', fiber_id)[2] returns '' for rows without ':'.
+-- toUInt8('') returns 0 in ClickHouse, which is the correct default.
+-- The WHERE guard ensures we only touch rows that actually have the suffix.
 
 INSERT INTO sequoia.fiber_monitored_sections
     (section_id, fiber_id, direction, section_name, channel_start, channel_end,

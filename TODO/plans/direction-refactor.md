@@ -75,7 +75,6 @@ rather than guessing (defaulting direction to 0).
 
 - `_ensure_directional_fiber_id()` — incident_service.py
 - `strip_directional_suffix()` — incident_service.py
-- `parse_directional_fiber_id()` — incident_service.py
 - `_strip_directional_suffix()` — broadcast.py
 - `resolveDirectionalFiber()` — data.ts
 - Section expansion logic (`f"{fid}:0"`, `f"{fid}:1"`) — section_service.py
