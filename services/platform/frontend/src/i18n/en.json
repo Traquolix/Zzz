@@ -296,6 +296,9 @@
     "expandPanel": "Expand panel",
     "collapsePanel": "Collapse panel"
   },
+  "channelDetail": {
+    "detectionsWindow": "in 60s"
+  },
   "map": {
     "direction": "Direction:",
     "layers": "Map layers",

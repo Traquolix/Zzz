@@ -23,6 +23,7 @@ import type { Fiber, Section, PendingPoint, LiveSectionStats, SpeedThresholds, P
 import type { Infrastructure } from '@/types/infrastructure'
 import type { VehiclePosition } from '../hooks/useVehicleSim'
 import { getSidebarWidth, SidebarRefContext } from '../hooks/useSidebarWidth'
+import i18n from '@/i18n'
 
 export interface PrototypeMapHandle {
   flyTo: (center: [number, number], zoom?: number) => void
@@ -683,15 +684,17 @@ export const PrototypeMap = memo(
           const fiberName = fiber?.name ?? v.fiberId
           const dir = v.direction === 0 ? '→' : '←'
           const lookup = thresholdLookupRef.current
-          const t = lookup?.(v.fiberId, v.direction, v.channel)
-          const speedColor = getSpeedColor(v.speed, t)
+          const thresholds = lookup?.(v.fiberId, v.direction, v.channel)
+          const speedColor = getSpeedColor(v.detectionSpeed, thresholds)
+          const vehicleLabel =
+            v.carCount > 1 ? `${v.carCount} ${i18n.t('common.vehicles')}` : `1 ${i18n.t('common.vehicles')}`
           vehiclePopup
             .setLngLat([v.position[0], v.position[1]])
             .setHTML(
-              `<div style="font-size:11px;line-height:1.5;color:#e2e8f0">` +
-                `<div style="font-size:13px;font-weight:600;margin-bottom:2px;color:${speedColor}">${Math.round(v.speed)} km/h</div>` +
-                `<div style="color:#94a3b8">${fiberName} ${dir} · ch ${v.channel}</div>` +
-                `<div style="color:#94a3b8">${v.carCount > 1 ? v.carCount + ' vehicles' : '1 vehicle'}</div>` +
+              `<div class="proto-vehicle-popup-body">` +
+                `<div class="proto-vehicle-popup-speed" style="color:${speedColor}">${Math.round(v.detectionSpeed)} km/h</div>` +
+                `<div class="proto-vehicle-popup-detail">${fiberName} ${dir} · ch ${v.channel}</div>` +
+                `<div class="proto-vehicle-popup-detail">${vehicleLabel}</div>` +
                 `</div>`,
             )
           if (!vehiclePopup.isOpen()) vehiclePopup.addTo(map)
@@ -942,8 +945,8 @@ export const PrototypeMap = memo(
                 getColor: (d: VehiclePosition) => {
                   if (d.id === selectedVehicleId) return [255, 255, 255, 220] as [number, number, number, number]
                   const lookup = thresholdLookupRef.current
-                  const t = lookup?.(d.fiberId, d.direction, d.channel)
-                  return getSpeedColorRGBA(d.speed, d.opacity, t)
+                  const thresholds = lookup?.(d.fiberId, d.direction, d.channel)
+                  return getSpeedColorRGBA(d.detectionSpeed, d.opacity, thresholds)
                 },
                 getOrientation,
                 getScale,

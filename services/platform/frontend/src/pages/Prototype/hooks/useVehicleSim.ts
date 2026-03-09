@@ -9,7 +9,6 @@ import { fibers } from '../data'
 
 export interface VehiclePosition {
   id: string
-  trackId: string
   position: [number, number, number]
   angle: number
   speed: number
@@ -18,8 +17,6 @@ export interface VehiclePosition {
   fiberId: string // raw cable ID (e.g. "carros"), not the internal composite ID
   direction: 0 | 1
   channel: number
-  trackState: 'tentative' | 'confirmed' | 'coasting'
-  detectionCount: number
   carCount: number
 }
 
@@ -131,7 +128,6 @@ export function useVehicleSim(): {
           if (car.opacity <= 0) continue
           positions.push({
             id: car.id,
-            trackId: track.id,
             position: [coord[0], coord[1], 0],
             angle: bearing,
             speed,
@@ -140,8 +136,6 @@ export function useVehicleSim(): {
             fiberId: fe.cableId,
             direction: fe.direction,
             channel: Math.round(track.renderPosition),
-            trackState: track.state,
-            detectionCount: track.detectionCount,
             carCount: activeCarCount,
           })
         }
