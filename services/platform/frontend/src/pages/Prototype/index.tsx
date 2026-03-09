@@ -141,7 +141,12 @@ function reducer(state: ProtoState, action: ProtoAction): ProtoState {
       return {
         ...state,
         showNamingDialog: true,
-        pendingSection: { fiberId: action.fiberId, startChannel: action.startChannel, endChannel: action.endChannel },
+        pendingSection: {
+          fiberId: action.fiberId,
+          direction: action.direction,
+          startChannel: action.startChannel,
+          endChannel: action.endChannel,
+        },
         sectionCreationMode: false,
         pendingPoint: null,
       }
@@ -306,9 +311,12 @@ export function Prototype() {
     dispatch({ type: 'SET_PENDING_POINT', point })
   }, [])
 
-  const handleSectionComplete = useCallback((fiberId: string, startChannel: number, endChannel: number) => {
-    dispatch({ type: 'OPEN_NAMING_DIALOG', fiberId, startChannel, endChannel })
-  }, [])
+  const handleSectionComplete = useCallback(
+    (fiberId: string, direction: number, startChannel: number, endChannel: number) => {
+      dispatch({ type: 'OPEN_NAMING_DIALOG', fiberId, direction, startChannel, endChannel })
+    },
+    [],
+  )
 
   const handleStructureClick = useCallback((id: string) => {
     dispatch({ type: 'SELECT_STRUCTURE', id })
@@ -526,7 +534,7 @@ export function Prototype() {
             const ps = state.pendingSection!
             dispatch({ type: 'CLOSE_NAMING_DIALOG' })
             try {
-              const section = await addSection(ps.fiberId, name, ps.startChannel, ps.endChannel)
+              const section = await addSection(ps.fiberId, ps.direction, name, ps.startChannel, ps.endChannel)
               dispatch({ type: 'CREATE_SECTION', section })
             } catch {
               toast.error('Failed to create section')
@@ -544,12 +552,13 @@ function NamingDialog({
   onSave,
   onCancel,
 }: {
-  pendingSection: { fiberId: string; startChannel: number; endChannel: number }
+  pendingSection: { fiberId: string; direction: number; startChannel: number; endChannel: number }
   onSave: (name: string) => void
   onCancel: () => void
 }) {
   const [name, setName] = useState('')
-  const fiber = fibers.find(f => f.id === pendingSection.fiberId)
+  const dirId = fiberLineId(pendingSection.fiberId, pendingSection.direction)
+  const fiber = fibers.find(f => f.id === dirId)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">

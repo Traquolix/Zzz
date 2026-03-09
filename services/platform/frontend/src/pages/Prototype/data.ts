@@ -207,9 +207,3 @@ export const chartColors = {
   flow: { label: 'Flow', unit: 'veh/min', color: '#8b5cf6' },
   occupancy: { label: 'Occupancy', unit: '%', color: '#0ea5e9' },
 }
-
-/** @deprecated Use fiberLineId(fiberId, direction) instead. */
-export function resolveDirectionalFiber(cableFiberId: string): string {
-  if (cableFiberId.includes(':')) return cableFiberId
-  return `${cableFiberId}:0`
-}

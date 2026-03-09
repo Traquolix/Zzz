@@ -40,7 +40,7 @@ interface PrototypeMapProps {
   sections?: Section[]
   selectedSectionId?: string | null
   onFiberClick?: (point: PendingPoint) => void
-  onSectionComplete?: (fiberId: string, startChannel: number, endChannel: number) => void
+  onSectionComplete?: (fiberId: string, direction: number, startChannel: number, endChannel: number) => void
   buildVehicleGeoJSON?: () => GeoJSON.FeatureCollection
   tickAndCollect?: (now: number, deltaMs: number) => VehiclePosition[]
   displayMode?: 'dots' | 'vehicles'
@@ -660,14 +660,14 @@ export const PrototypeMap = memo(
           if (!pending) {
             handlersRef.current.onFiberClick?.(hit)
           } else {
-            const pendingCable = fibers.find(f => f.id === pending.fiberId)?.parentCableId
-            if (hit.parentCableId !== pendingCable) return
+            const pendingFiber = fibers.find(f => f.id === pending.fiberId)
+            if (!pendingFiber || hit.parentCableId !== pendingFiber.parentCableId) return
 
             const start = Math.min(pending.channel, hit.channel)
             const end = Math.max(pending.channel, hit.channel)
             if (end - start < 10) return
 
-            handlersRef.current.onSectionComplete?.(pending.fiberId, start, end)
+            handlersRef.current.onSectionComplete?.(pendingFiber.parentCableId, pendingFiber.direction, start, end)
           }
         })
 

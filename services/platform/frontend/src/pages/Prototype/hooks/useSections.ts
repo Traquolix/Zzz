@@ -42,12 +42,15 @@ export function useSections() {
     }
   }, [])
 
-  const addSection = useCallback(async (fiberId: string, name: string, startChannel: number, endChannel: number) => {
-    const api = await createSection({ fiberId, name, channelStart: startChannel, channelEnd: endChannel })
-    const section = toProtoSection(api)
-    setSections(prev => [...prev, section])
-    return section
-  }, [])
+  const addSection = useCallback(
+    async (fiberId: string, direction: number, name: string, startChannel: number, endChannel: number) => {
+      const api = await createSection({ fiberId, direction, name, channelStart: startChannel, channelEnd: endChannel })
+      const section = toProtoSection(api)
+      setSections(prev => [...prev, section])
+      return section
+    },
+    [],
+  )
 
   const removeSection = useCallback(async (id: string) => {
     await deleteSection(id)

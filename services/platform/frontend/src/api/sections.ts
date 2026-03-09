@@ -26,6 +26,7 @@ export async function fetchSections(): Promise<ApiSection[]> {
 
 export async function createSection(data: {
   fiberId: string
+  direction: number
   name: string
   channelStart: number
   channelEnd: number

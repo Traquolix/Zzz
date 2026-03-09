@@ -681,6 +681,7 @@ class SectionListView(APIView):
         serializer.is_valid(raise_exception=True)
 
         fiber_id = serializer.validated_data["fiberId"]
+        direction = serializer.validated_data.get("direction", 0)
         name = serializer.validated_data["name"]
         channel_start = serializer.validated_data["channelStart"]
         channel_end = serializer.validated_data["channelEnd"]
@@ -698,6 +699,7 @@ class SectionListView(APIView):
             name=name,
             channel_start=channel_start,
             channel_end=channel_end,
+            direction=direction,
             user=str(request.user.id) if hasattr(request.user, "id") else "",
         )
         return Response(section, status=201)
