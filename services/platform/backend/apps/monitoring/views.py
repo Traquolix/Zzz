@@ -662,9 +662,10 @@ class SectionListView(APIView):
     permission_classes = [IsActiveUser]
 
     def get_permissions(self):
+        perms = [IsActiveUser()]
         if self.request.method == "POST":
-            return [IsNotViewer()]
-        return super().get_permissions()
+            perms.append(IsNotViewer())
+        return perms
 
     @extend_schema(
         responses={200: SectionSerializer(many=True)},
@@ -717,7 +718,7 @@ class SectionDeleteView(APIView):
     Org-scoped via Section.organization FK. Requires non-viewer role.
     """
 
-    permission_classes = [IsNotViewer]
+    permission_classes = [IsActiveUser, IsNotViewer]
 
     def delete(self, request, section_id):
         org_id = None if request.user.is_superuser else request.user.organization_id
