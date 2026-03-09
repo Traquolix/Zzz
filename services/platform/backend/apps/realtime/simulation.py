@@ -641,11 +641,11 @@ class IncidentOverseer:
     """
 
     WINDOW_STEP = 30  # Monitoring points every 30 channels (~150m)
-    EMA_ALPHA = 0.15  # EMA smoothing factor (higher = more responsive)
+    EMA_ALPHA = 0.3  # EMA smoothing factor (higher = more responsive to stopped vehicles)
     MIN_SPEED_DECAY = 0.05  # recent_min_speed decays toward ema_speed per tick
     # Thresholds for incident detection
     SPEED_DROP_PCT_THRESHOLD = 40  # 40% drop from free-flow triggers incident
-    MIN_ANOMALY_DURATION_S = 15  # Anomaly must persist 15s before declaring incident
+    MIN_ANOMALY_DURATION_S = 8  # Anomaly must persist 8s before declaring incident
     RECOVERY_PCT = 75  # Speed must recover to 75% of free-flow
     RECOVERY_DURATION_S = 20  # Must stay recovered for 20s
     # Spatial deduplication: no new incident within this many channels of an existing one
@@ -844,9 +844,9 @@ class RoadEventManager:
 
     # Probabilities per sim-hour (scaled by traffic density)
     EVENT_RATES: dict[str, float] = {
-        "stopped_vehicle": 0.4,  # Per sim-hour
-        "slow_vehicle": 0.6,
-        "lane_closure": 0.15,
+        "stopped_vehicle": 0.8,  # Per sim-hour
+        "slow_vehicle": 1.0,
+        "lane_closure": 0.3,
     }
 
     # Duration ranges in sim-seconds
@@ -955,7 +955,7 @@ class RoadEventManager:
             dur_range = self.EVENT_DURATIONS[event_type]
             dur_sim = dur_range[0] + random.random() * (dur_range[1] - dur_range[0])
             dur_real = dur_sim / hour_advance_rate
-            dur_real = max(dur_real, 30)  # Minimum 30s real-time
+            dur_real = max(dur_real, 90)  # Minimum 90s real-time for EMA to respond
 
             forced_speed = 0.0
             if event_type == "slow_vehicle":
