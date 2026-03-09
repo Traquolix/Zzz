@@ -977,7 +977,6 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
     shm_counter = 0
     incident_counter = 0
     snapshot_counter = 0
-    count_counter = 0
     last_detection_broadcast = time.time()
     detection_broadcast_interval = 0.1  # 100ms (10 Hz)
     pending_detections: list[Detection] = []  # Accumulate detections between broadcasts
@@ -1000,8 +999,6 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
         shm_counter += 1
         incident_counter += 1
         snapshot_counter += 1
-        count_counter += 1
-
         # Accumulate detections
         pending_detections.extend(detections)
         # Accumulate incidents (broadcast happens every 100 ticks)
@@ -1080,19 +1077,6 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
             pending_new_incidents.clear()
             pending_resolved_incidents.clear()
 
-        # Broadcast vehicle counts every 100 ticks (5 seconds) — per-org
-        if count_counter >= 100:
-            count_counter = 0
-            counts = _compute_section_counts(engine)
-            if counts:
-                await broadcast_per_org(
-                    channel_layer,
-                    "counts",
-                    counts,
-                    fiber_org_map,
-                    flow="sim",
-                )
-
         # Log stats periodically
         if engine.tick_count % 400 == 0:
             active = sum(1 for i in engine.incidents if i.status == "active")
@@ -1107,42 +1091,3 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
         elapsed = time.time() - tick_start
         sleep_time = max(0.001, tick_interval - elapsed)
         await asyncio.sleep(sleep_time)
-
-
-def _compute_section_counts(engine: SimulationEngine) -> list[dict]:
-    """
-    Compute section-level vehicle counts from simulation state.
-
-    Divides each fiber into sections and counts vehicles within each direction.
-    Produces the same shape as transform_count_message output (VehicleCount).
-    """
-    now_ms = int(time.time() * 1000)
-    counts = []
-    section_size = 300  # channels per section (~1.5 km at 5m/channel)
-
-    for fiber in engine.fibers:
-        for direction in (0, 1):
-            for start_ch in range(0, fiber.channel_count, section_size):
-                end_ch = min(start_ch + section_size - 1, fiber.channel_count - 1)
-
-                vehicle_count = sum(
-                    1
-                    for v in engine.vehicles
-                    if v.fiber_line == fiber.id
-                    and v.direction == direction
-                    and start_ch <= v.channel <= end_ch
-                )
-
-                if vehicle_count > 0:
-                    counts.append(
-                        {
-                            "fiberId": fiber.id,
-                            "direction": direction,
-                            "channelStart": start_ch,
-                            "channelEnd": end_ch,
-                            "vehicleCount": float(vehicle_count),
-                            "timestamp": now_ms,
-                        }
-                    )
-
-    return counts

@@ -868,7 +868,7 @@ function ChannelDetail({
 
   // Subscribe to detections and collect speed dots
   useEffect(() => {
-    const NEIGHBOR_RANGE = 2
+    const NEIGHBOR_RANGE = 0
 
     const unsub = subscribe('detections', (data: unknown) => {
       const detections = parseDetections(data)

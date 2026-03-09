@@ -1,0 +1,11 @@
+[
+  {
+    "id": "pont-var",
+    "type": "bridge",
+    "name": "Pont du Var",
+    "fiberId": "carros",
+    "startChannel": 800,
+    "endChannel": 850,
+    "image": "pont-du-var.jpg"
+  }
+]

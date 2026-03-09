@@ -8,7 +8,7 @@
         format format-pipeline format-backend format-frontend \
         typecheck typecheck-pipeline typecheck-backend typecheck-frontend \
         security security-pipeline security-backend security-frontend \
-        ci up down logs rebuild shell clean dev dev-backend dev-frontend \
+        ci up down logs rebuild shell clean dev dev-deps dev-stop dev-backend dev-frontend \
         backup restore _check-python
 
 SHELL := /bin/bash
@@ -177,13 +177,28 @@ shell: ## Open a shell in a service container (usage: make shell SERVICE=platfor
 # ---------------------------------------------------------------------------
 # Local Development
 # ---------------------------------------------------------------------------
-dev: ## Start backend + frontend for local development (auto-setup on first run)
-	@trap 'kill 0' EXIT; \
+dev: dev-deps ## Start backend + frontend for local development (auto-setup on first run)
+	@trap 'echo ""; echo "==> Shutting down..."; kill 0; docker compose stop postgres clickhouse redis 2>/dev/null' EXIT; \
 	$(MAKE) dev-backend & \
 	$(MAKE) dev-frontend & \
 	wait
 
+dev-stop: ## Stop all local dev services (Docker deps + stale processes)
+	@echo "==> Stopping Docker dependencies..."
+	@docker compose stop postgres clickhouse redis 2>/dev/null || true
+	@echo "==> Killing stale dev processes..."
+	@pkill -f "daphne.*sequoia.asgi" 2>/dev/null || true
+	@pkill -f "vite preview" 2>/dev/null || true
+	@echo "==> Dev environment stopped."
+
+dev-deps: ## Start Docker dependencies for local dev (PostgreSQL + ClickHouse + Redis)
+	@echo "==> Ensuring PostgreSQL, ClickHouse, and Redis are running..."
+	@docker compose up -d postgres clickhouse redis
+	@echo "==> Waiting for PostgreSQL to be ready..."
+	@until docker compose exec -T postgres pg_isready -U $${POSTGRES_USER:-sequoia} -d $${POSTGRES_DB:-sequoia} > /dev/null 2>&1; do sleep 1; done
+
 dev-backend: ## Start backend dev server (auto-setup on first run)
+	@pkill -f "daphne.*sequoia.asgi" 2>/dev/null || true
 	@if [ ! -d "$(BACKEND_DIR)/.venv" ]; then \
 		if echo "$(SYSTEM_PYTHON)" | grep -q NOT_FOUND; then \
 			echo "ERROR: Python $(REQUIRED_PYTHON) not found. Install it: brew install python@$(REQUIRED_PYTHON)"; \
@@ -196,18 +211,20 @@ dev-backend: ## Start backend dev server (auto-setup on first run)
 		echo "==> Installing backend dependencies..."; \
 		$(BACKEND_PY) -m pip install -r $(BACKEND_DIR)/requirements.txt -q; \
 	fi
-	@if [ ! -f "$(BACKEND_DIR)/db.sqlite3" ]; then \
-		echo "==> Running migrations..."; \
-		cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python manage.py migrate --run-syncdb; \
+	@echo "==> Running migrations..."
+	@cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python manage.py migrate --run-syncdb
+	@if [ ! -f "$(BACKEND_DIR)/.dev-seeded" ]; then \
 		echo "==> Seeding dev users..."; \
-		cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python manage.py seed_users; \
+		(cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python manage.py seed_users); \
 		echo "==> Seeding infrastructure..."; \
-		cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python manage.py seed_infrastructure; \
+		(cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python manage.py seed_infrastructure); \
+		touch $(BACKEND_DIR)/.dev-seeded; \
 	fi
 	@echo "==> Starting backend on http://localhost:8001"
 	cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/daphne -b 127.0.0.1 -p 8001 sequoia.asgi:application
 
 dev-frontend: ## Build and preview frontend locally (auto-setup on first run)
+	@pkill -f "vite preview" 2>/dev/null || true
 	@if [ ! -d "$(FRONTEND_DIR)/node_modules" ]; then \
 		echo "==> Installing frontend dependencies..."; \
 		cd $(FRONTEND_DIR) && npm install; \

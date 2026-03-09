@@ -7,7 +7,7 @@
  * - Console warnings on invalid items (first 3 shown for debugging)
  * - Graceful handling of non-array input (returns [])
  */
-import type { Detection, VehicleCount } from '@/types/realtime'
+import type { Detection } from '@/types/realtime'
 import type { Incident } from '@/types/incident'
 import type { FrequencyReading } from '@/types/infrastructure'
 import { logger } from '@/lib/logger'
@@ -39,18 +39,6 @@ function isDetection(d: unknown): d is Detection {
     typeof d.count === 'number' &&
     typeof d.nCars === 'number' &&
     typeof d.nTrucks === 'number' &&
-    typeof d.timestamp === 'number'
-  )
-}
-
-function isVehicleCount(d: unknown): d is VehicleCount {
-  return (
-    isObject(d) &&
-    typeof d.fiberId === 'string' &&
-    typeof d.direction === 'number' &&
-    typeof d.channelStart === 'number' &&
-    typeof d.channelEnd === 'number' &&
-    typeof d.vehicleCount === 'number' &&
     typeof d.timestamp === 'number'
   )
 }
@@ -123,16 +111,10 @@ function createArrayParser<T>(channel: string, guard: (item: unknown) => item is
 // --- Exported array parsers ---
 
 export const parseDetections = createArrayParser<Detection>('detections', isDetection)
-export const parseVehicleCounts = createArrayParser<VehicleCount>('vehicleCounts', isVehicleCount)
 export const parseIncidents = createArrayParser<Incident>('incidents', isIncident)
 export const parseFrequencyReadings = createArrayParser<FrequencyReading>('frequencyReadings', isFrequencyReading)
 
 // --- Single-item parsers (for WebSocket messages arriving as individual objects) ---
-
-/** Parse a single VehicleCount from unknown data. Returns null if invalid. */
-export function parseVehicleCount(data: unknown): VehicleCount | null {
-  return isVehicleCount(data) ? data : null
-}
 
 /** Parse a single Incident from unknown data. Returns null if invalid. */
 export function parseIncident(data: unknown): Incident | null {
