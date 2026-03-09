@@ -63,6 +63,8 @@ export interface TimeSeriesPoint {
 
 export interface PendingPoint {
   fiberId: string
+  parentCableId: string
+  direction: number
   channel: number
   lng: number
   lat: number

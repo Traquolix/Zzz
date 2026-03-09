@@ -62,8 +62,14 @@ interface PrototypeMapProps {
 }
 
 function findNearestFiberPoint(lngLat: [number, number], maxDistDeg = 0.003) {
-  let best: { fiberId: string; parentCableId: string; channel: number; dist: number; coord: [number, number] } | null =
-    null
+  let best: {
+    fiberId: string
+    parentCableId: string
+    direction: number
+    channel: number
+    dist: number
+    coord: [number, number]
+  } | null = null
 
   for (const fiber of fibers) {
     // Use offset coords (what's actually rendered on the map) so the dot
@@ -80,6 +86,7 @@ function findNearestFiberPoint(lngLat: [number, number], maxDistDeg = 0.003) {
         best = {
           fiberId: fiber.id,
           parentCableId: fiber.parentCableId,
+          direction: fiber.direction,
           channel: ch,
           dist,
           coord: c as [number, number],
@@ -92,6 +99,7 @@ function findNearestFiberPoint(lngLat: [number, number], maxDistDeg = 0.003) {
   return {
     fiberId: best.fiberId,
     parentCableId: best.parentCableId,
+    direction: best.direction,
     channel: best.channel,
     lng: best.coord[0],
     lat: best.coord[1],
@@ -660,14 +668,13 @@ export const PrototypeMap = memo(
           if (!pending) {
             handlersRef.current.onFiberClick?.(hit)
           } else {
-            const pendingFiber = fibers.find(f => f.id === pending.fiberId)
-            if (!pendingFiber || hit.parentCableId !== pendingFiber.parentCableId) return
+            if (hit.parentCableId !== pending.parentCableId) return
 
             const start = Math.min(pending.channel, hit.channel)
             const end = Math.max(pending.channel, hit.channel)
             if (end - start < 10) return
 
-            handlersRef.current.onSectionComplete?.(pendingFiber.parentCableId, pendingFiber.direction, start, end)
+            handlersRef.current.onSectionComplete?.(pending.parentCableId, pending.direction, start, end)
           }
         })
 
@@ -681,8 +688,7 @@ export const PrototypeMap = memo(
           const sectionSource = map.getSource('pending-section') as mapboxgl.GeoJSONSource | undefined
           if (!sectionSource) return
 
-          const pendingCable = fibers.find(f => f.id === pending.fiberId)?.parentCableId
-          if (!hit || hit.parentCableId !== pendingCable) {
+          if (!hit || hit.parentCableId !== pending.parentCableId) {
             sectionSource.setData({ type: 'FeatureCollection', features: [] })
             return
           }
