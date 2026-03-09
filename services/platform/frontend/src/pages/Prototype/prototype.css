@@ -63,7 +63,9 @@
   background: rgba(255, 255, 255, 0.2);
 }
 
-/* Collapsible sidebar */
+/* Collapsible sidebar
+   Transition duration (200ms) must be less than useDebouncedResize delay (250ms)
+   so the debounce timer fires after the CSS transition settles. */
 .proto-sidebar {
   container-type: inline-size;
   --sidebar-width: clamp(340px, 28vw, 480px);

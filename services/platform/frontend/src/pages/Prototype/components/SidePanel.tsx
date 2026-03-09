@@ -113,6 +113,7 @@ export function SidePanel({
     showIncidentsOnMap,
   } = state
   const realtimeCtx = useRealtime()
+  const { t } = useTranslation()
   const [incidentSortBy, setIncidentSortBy] = useState<'newest' | 'oldest'>('newest')
   const [shmSearch, setShmSearch] = useState('')
   const [sectionSearch, setSectionSearch] = useState('')
@@ -210,7 +211,7 @@ export function SidePanel({
               />
             )}
             <button
-              title={sidebarExpanded ? 'Collapse panel' : 'Expand panel'}
+              title={sidebarExpanded ? t('sidebar.collapsePanel') : t('sidebar.expandPanel')}
               onClick={() => dispatch({ type: 'TOGGLE_SIDEBAR_EXPANDED' })}
               className="group/exp flex items-center justify-center self-end w-[32px] hover:w-full h-7 rounded-l-lg border border-r-0 border-transparent bg-[var(--proto-surface)]/40 text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)] hover:bg-[var(--proto-surface)]/80 transition-all cursor-pointer"
             >
@@ -2015,7 +2016,7 @@ function SectionDetail({
   const [timeRange, setTimeRange] = useState<TimeRange>('1m')
 
   // Chart data fetched at the resolution matching the selected time range
-  const historySeries = useSectionHistory(section.id, timeRange)
+  const { series: historySeries, stale: historyStale } = useSectionHistory(section.id, timeRange)
 
   // KPIs use the always-on page-level stats (stable regardless of chart time range)
   const live = liveStats.get(section.id)
@@ -2144,11 +2145,17 @@ function SectionDetail({
               ))}
             </div>
           </div>
-          <TimeSeriesChart data={chartData} timeRange={timeRange} />
+          <div
+            className={historyStale ? 'opacity-50 transition-opacity duration-200' : 'transition-opacity duration-200'}
+          >
+            <TimeSeriesChart data={chartData} timeRange={timeRange} />
+          </div>
         </div>
 
         {/* Data table */}
-        <div className="border-t border-[var(--proto-border)] pt-3">
+        <div
+          className={`border-t border-[var(--proto-border)] pt-3 ${historyStale ? 'opacity-50 transition-opacity duration-200' : 'transition-opacity duration-200'}`}
+        >
           <h3 className="text-[length:var(--text-xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
             Recent Data
           </h3>

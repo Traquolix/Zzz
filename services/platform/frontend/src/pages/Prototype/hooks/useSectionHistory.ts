@@ -21,10 +21,13 @@ const TIME_RANGE_MINUTES: Record<string, number> = {
  * - 15m/1h → backend serves per-minute buffer (1min resolution)
  *
  * Resets and re-fetches when time range or flow changes.
+ * Returns `stale: true` while awaiting the first fetch after a range/flow change,
+ * so the UI can show a visual cue (e.g. reduced opacity) over the old data.
  */
 export function useSectionHistory(sectionId: string, timeRange: string) {
   const { flow } = useRealtime()
   const [series, setSeries] = useState<SectionDataPoint[]>([])
+  const [stale, setStale] = useState(false)
   const sinceRef = useRef<number | undefined>(undefined)
   const accumulatedRef = useRef<SectionDataPoint[]>([])
 
@@ -60,6 +63,7 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
 
       accumulatedRef.current = accumulated
       setSeries([...accumulated])
+      setStale(false)
 
       if (res.points.length > 0) {
         sinceRef.current = res.points[res.points.length - 1].time
@@ -73,6 +77,7 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
   useEffect(() => {
     sinceRef.current = undefined
     accumulatedRef.current = []
+    setStale(true)
     fetchData()
     const timer = setInterval(fetchData, POLL_INTERVAL)
     return () => {
@@ -81,5 +86,5 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
     }
   }, [fetchData])
 
-  return series
+  return { series, stale }
 }
