@@ -146,6 +146,8 @@ services:
           cpus: '4.0'
     environment:
       FIBER_ID: carros
+      no_proxy: localhost,127.0.0.1,kafka,schema-registry,otel-lgtm
+      NO_PROXY: localhost,127.0.0.1,kafka,schema-registry,otel-lgtm
     env_file: .env
     networks: [ internal ]
 
@@ -240,6 +242,8 @@ services:
       OMP_NUM_THREADS: "4"
       MKL_NUM_THREADS: "4"
       FIBER_ID: carros
+      no_proxy: localhost,127.0.0.1,kafka,schema-registry,otel-lgtm
+      NO_PROXY: localhost,127.0.0.1,kafka,schema-registry,otel-lgtm
     volumes: &ai-engine-volumes
       - ${CALIBRATION_DATA_PATH:-./data/calibration}:/app/calibration:ro
       - ${VISUALIZATION_OUTPUT_PATH:-./data/visualizations}:/app/visualizations:rw
@@ -473,6 +477,8 @@ services:
       SEQUOIA_DATA_DIR: /infrastructure
       # Schema Registry for Kafka Avro deserialization
       SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      no_proxy: localhost,127.0.0.1,kafka,schema-registry,postgres,clickhouse,redis,otel-lgtm
+      NO_PROXY: localhost,127.0.0.1,kafka,schema-registry,postgres,clickhouse,redis,otel-lgtm
     volumes:
       - ./infrastructure:/infrastructure:ro
       - ./services/platform/backend/data/shm:/app/data/shm:ro
