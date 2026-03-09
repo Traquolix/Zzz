@@ -1,6 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { fetchSectionHistory, type SectionHistoryPoint } from '@/api/sections'
-import { useFlowReset } from '@/hooks/useFlowReset'
 import { useRealtime } from '@/hooks/useRealtime'
 import type { Section } from '../types'
 import type { SectionDataPoint, LiveSectionStats } from '../types'
@@ -27,14 +26,6 @@ export function useLiveStats(sections: Section[]) {
   const sinceRef = useRef<Map<string, number>>(new Map())
   // Store accumulated points per section
   const accumulatedRef = useRef<Map<string, SectionDataPoint[]>>(new Map())
-
-  // Clear on flow switch
-  useFlowReset(() => {
-    sinceRef.current.clear()
-    accumulatedRef.current.clear()
-    setStats(new Map())
-    setSeriesData(new Map())
-  })
 
   const fetchAll = useCallback(async () => {
     const secs = sectionsRef.current
@@ -98,9 +89,10 @@ export function useLiveStats(sections: Section[]) {
 
   // Poll on mount and every POLL_INTERVAL, re-poll when flow changes
   useEffect(() => {
-    // Reset cursors on flow change so first fetch is full
     sinceRef.current.clear()
     accumulatedRef.current.clear()
+    setStats(new Map())
+    setSeriesData(new Map())
     fetchAll()
     const timer = setInterval(fetchAll, POLL_INTERVAL)
     return () => clearInterval(timer)

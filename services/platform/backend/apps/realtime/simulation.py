@@ -22,6 +22,7 @@ from typing import Optional, TypedDict
 from channels.layers import get_channel_layer
 
 from apps.alerting.integration import check_alerts_for_detections, check_alerts_for_incident
+from apps.monitoring.section_service import compute_occupancy
 from apps.realtime.broadcast import (
     broadcast_per_org,
     broadcast_shm,
@@ -74,9 +75,6 @@ def get_simulation_snapshot(incident_id: str) -> dict | None:
 def get_simulation_stats() -> dict[str, int]:
     """Get simulation-wide stats (fiber count, channel count, active vehicles)."""
     return dict(_simulation_stats)
-
-
-_AVG_VEHICLE_LENGTH_M = 6  # meters, for occupancy estimation
 
 
 def get_simulation_section_history(
@@ -141,12 +139,7 @@ def get_simulation_section_history(
         avg_speed = b["speed_sum"] / b["count"] if b["count"] > 0 else 0
         samples = b["samples"]
         flow = samples
-        speed_ms = avg_speed * (1000 / 3600)
-        if speed_ms > 0 and flow > 0:
-            flow_per_hour = flow * (3600 / bucket_seconds)
-            occupancy = min(100, round((flow_per_hour * _AVG_VEHICLE_LENGTH_M) / (speed_ms * 1000)))
-        else:
-            occupancy = 100 if flow > 0 else 0
+        occupancy = compute_occupancy(avg_speed, flow, bucket_seconds)
 
         result.append(
             {

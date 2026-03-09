@@ -248,7 +248,19 @@ def _query_section_history_1m(
     return _transform_history_rows(rows, bucket_seconds=60)
 
 
-AVG_VEHICLE_LENGTH_M = 6  # meters, for occupancy estimation
+_AVG_VEHICLE_LENGTH_M = 6  # meters, for occupancy estimation
+
+
+def compute_occupancy(speed_kmh: float, flow: int, bucket_seconds: int) -> int:
+    """Compute road occupancy percentage.
+
+    Uses: (flow_per_hour * vehicle_length) / (speed_m_s * 1000)
+    """
+    speed_ms = speed_kmh * (1000 / 3600)
+    if speed_ms > 0 and flow > 0:
+        flow_per_hour = flow * (3600 / bucket_seconds)
+        return min(100, round((flow_per_hour * _AVG_VEHICLE_LENGTH_M) / (speed_ms * 1000)))
+    return 100 if flow > 0 else 0
 
 
 def _transform_history_rows(rows: list[dict], bucket_seconds: int = 60) -> list[dict]:
@@ -272,15 +284,7 @@ def _transform_history_point(r: dict, bucket_seconds: int) -> dict:
 
     # Flow = samples per bucket (each row is one time bucket)
     flow = samples
-
-    # Occupancy: (flow_per_hour * vehicle_length) / (speed_m_s * 1000)
-    speed_ms = speed * (1000 / 3600)
-    if speed_ms > 0 and flow > 0:
-        # Scale flow to per-hour based on actual bucket duration
-        flow_per_hour = flow * (3600 / bucket_seconds)
-        occupancy = min(100, round((flow_per_hour * AVG_VEHICLE_LENGTH_M) / (speed_ms * 1000)))
-    else:
-        occupancy = 100 if flow > 0 else 0
+    occupancy = compute_occupancy(speed, flow, bucket_seconds)
 
     return {
         "time": int(r["time_ms"]),

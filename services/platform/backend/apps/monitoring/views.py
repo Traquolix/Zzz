@@ -784,6 +784,8 @@ class SectionHistoryView(FlowAwareMixin, APIView):
                 since_ms = int(since_raw)
             except (ValueError, TypeError):
                 pass
+        if since_ms is not None and since_ms < 0:
+            since_ms = None
 
         # Sim flow: cap at 60 min (buffer limit)
         if self._is_sim(request):
