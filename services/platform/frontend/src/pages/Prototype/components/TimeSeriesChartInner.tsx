@@ -1,6 +1,7 @@
 import { useRef, useState, useEffect } from 'react'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from 'recharts'
 import type { TimeSeriesPoint } from '../types'
+import { useDebouncedResize } from '../hooks/useDebouncedResize'
 
 interface Props {
   data: TimeSeriesPoint[]
@@ -16,32 +17,25 @@ export default function TimeSeriesChartInner({ data, metric, config, timeRange, 
     ? (value: string) => value?.slice(0, 5) // "HH:MM:SS" → "HH:MM"
     : undefined
 
+  const containerRef = useRef<HTMLDivElement>(null)
+  const { width, transitioning } = useDebouncedResize(containerRef)
+
   // Defer rendering until the container has positive dimensions to prevent
   // Recharts "width(-1) height(-1)" warnings on hidden/collapsed panels
-  const containerRef = useRef<HTMLDivElement>(null)
   const [visible, setVisible] = useState(false)
   useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    if (el.clientWidth > 0 && el.clientHeight > 0) {
-      setVisible(true)
-      return
-    }
-    const observer = new ResizeObserver(([entry]) => {
-      if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
-        setVisible(true)
-        observer.disconnect()
-      }
-    })
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [])
+    if (width > 0) setVisible(true)
+  }, [width])
+
+  const chartHeight = 200
 
   return (
     <div ref={containerRef} className="h-[200px]">
-      {visible && (
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
+      {!visible || transitioning ? (
+        <ChartSkeleton />
+      ) : (
+        width > 0 && (
+          <LineChart data={data} width={width} height={chartHeight} margin={{ top: 4, right: 4, bottom: 4, left: 4 }}>
             <CartesianGrid stroke="var(--proto-chart-grid, rgba(255,255,255,0.03))" strokeDasharray="3 3" />
             <XAxis
               dataKey="time"
@@ -51,7 +45,13 @@ export default function TimeSeriesChartInner({ data, metric, config, timeRange, 
               interval={Math.max(0, Math.floor(data.length / 6) - 1)}
               tickFormatter={tickFormatter}
             />
-            <YAxis tick={{ fill: '#64748b', fontSize: 10 }} tickLine={false} axisLine={false} width={36} />
+            <YAxis
+              tick={{ fill: '#64748b', fontSize: 10 }}
+              tickLine={false}
+              axisLine={false}
+              width={36}
+              domain={[0, (max: number) => Math.ceil(max * 1.1)]}
+            />
             <Tooltip
               contentStyle={{
                 backgroundColor: '#2b2d31',
@@ -83,8 +83,12 @@ export default function TimeSeriesChartInner({ data, metric, config, timeRange, 
               isAnimationActive={false}
             />
           </LineChart>
-        </ResponsiveContainer>
+        )
       )}
     </div>
   )
+}
+
+function ChartSkeleton() {
+  return <div className="w-full h-full rounded-lg bg-[var(--proto-surface-raised)] animate-pulse" />
 }

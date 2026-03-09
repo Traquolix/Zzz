@@ -14,6 +14,7 @@ import { useSections } from './hooks/useSections'
 import { useIncidents } from '@/hooks/useIncidents'
 import { useUnseenIncidents } from './hooks/useUnseenIncidents'
 import { IncidentToastStack } from './components/IncidentToastStack'
+import { SidebarRefContext } from './hooks/useSidebarWidth'
 import type { Incident as ApiIncident } from '@/types/incident'
 import './prototype.css'
 
@@ -53,6 +54,7 @@ const initialState: ProtoState = {
   showNamingDialog: false,
   pendingSection: null,
   sidebarOpen: true,
+  sidebarExpanded: false,
   displayMode: 'dots',
   fiberThresholds: Object.fromEntries(fibers.map(f => [f.id, { ...defaultSpeedThresholds }])),
   fiberColors: Object.fromEntries(fibers.map(f => [f.id, f.color])),
@@ -160,7 +162,7 @@ function reducer(state: ProtoState, action: ProtoAction): ProtoState {
         selectedSectionId: state.selectedSectionId === action.id ? null : state.selectedSectionId,
       }
     case 'TOGGLE_SIDEBAR':
-      return { ...state, sidebarOpen: !state.sidebarOpen }
+      return { ...state, sidebarOpen: !state.sidebarOpen, sidebarExpanded: false }
     case 'OPEN_SIDEBAR':
       return {
         ...state,
@@ -240,6 +242,8 @@ function reducer(state: ProtoState, action: ProtoAction): ProtoState {
       return { ...state, show3DBuildings: !state.show3DBuildings }
     case 'TOGGLE_CHANNEL_HELPER':
       return { ...state, showChannelHelper: !state.showChannelHelper }
+    case 'TOGGLE_SIDEBAR_EXPANDED':
+      return { ...state, sidebarExpanded: !state.sidebarExpanded }
     default:
       return state
   }
@@ -249,6 +253,7 @@ export function Prototype() {
   const [state, dispatch] = useReducer(reducer, initialState)
   const [isOverview, setIsOverview] = useState(false)
   const mapRef = useRef<PrototypeMapHandle>(null)
+  const sidebarRef = useRef<HTMLDivElement>(null)
   const { buildGeoJSON, connected, lastDetectionTsRef } = useDetections()
   const { tickAndCollect } = useVehicleSim()
   const { stats: liveStats, seriesData: liveSeriesData } = useLiveStats(state.sections)
@@ -421,117 +426,120 @@ export function Prototype() {
   ])
 
   return (
-    <div className="prototype w-screen h-screen relative overflow-hidden">
-      {/* Map area — full screen */}
-      <div className="absolute inset-0">
-        <PrototypeMap
-          ref={mapRef}
-          incidents={visibleIncidents}
-          onIncidentClick={handleIncidentClick}
-          onMapClick={handleMapClick}
-          sectionCreationMode={state.sectionCreationMode}
-          pendingPoint={state.pendingPoint}
-          sections={state.sections}
-          selectedSectionId={state.selectedSectionId}
-          onFiberClick={handleFiberClick}
-          onSectionComplete={handleSectionComplete}
-          buildVehicleGeoJSON={buildGeoJSON}
-          tickAndCollect={tickAndCollect}
+    <SidebarRefContext.Provider value={sidebarRef}>
+      <div className="prototype w-screen h-screen relative overflow-hidden">
+        {/* Map area — full screen */}
+        <div className="absolute inset-0">
+          <PrototypeMap
+            ref={mapRef}
+            incidents={visibleIncidents}
+            onIncidentClick={handleIncidentClick}
+            onMapClick={handleMapClick}
+            sectionCreationMode={state.sectionCreationMode}
+            pendingPoint={state.pendingPoint}
+            sections={state.sections}
+            selectedSectionId={state.selectedSectionId}
+            onFiberClick={handleFiberClick}
+            onSectionComplete={handleSectionComplete}
+            buildVehicleGeoJSON={buildGeoJSON}
+            tickAndCollect={tickAndCollect}
+            displayMode={state.displayMode}
+            liveStats={liveStats}
+            onOverviewChange={setIsOverview}
+            thresholdLookup={thresholdLookup}
+            fiberColors={state.fiberColors}
+            structures={structureData.structures}
+            structureStatuses={structureData.allStatuses}
+            showStructuresOnMap={state.showStructuresOnMap}
+            showStructureLabels={state.showStructureLabels}
+            selectedStructureId={state.selectedStructureId}
+            onStructureClick={handleStructureClick}
+            onChannelClick={handleChannelClick}
+            sidebarOpen={state.sidebarOpen}
+            hideFibersInOverview={state.hideFibersInOverview}
+            show3DBuildings={state.show3DBuildings}
+            showChannelHelper={state.showChannelHelper}
+          />
+
+          {/* Section creation banner */}
+          {state.sectionCreationMode && (
+            <div className="proto-creation-banner absolute top-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 px-4 py-2 rounded-lg bg-amber-500/15 border border-amber-500/30 text-sm text-amber-200">
+              <span>
+                {state.pendingPoint
+                  ? 'Click another point on the same cable to complete the section'
+                  : 'Click on a fiber to set the start point'}
+              </span>
+              <button
+                onClick={() => dispatch({ type: 'EXIT_SECTION_CREATION' })}
+                className="text-xs px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+
+          {/* Map overlays */}
+          <StatusBar
+            connected={connected}
+            sectionCount={state.sections.length}
+            incidentCount={state.incidents.filter(i => !i.resolved).length}
+            lastDetectionTsRef={lastDetectionTsRef}
+          />
+        </div>
+
+        {/* Legend — top-right, moves with sidebar */}
+        <Legend
           displayMode={state.displayMode}
-          liveStats={liveStats}
-          onOverviewChange={setIsOverview}
-          thresholdLookup={thresholdLookup}
-          fiberColors={state.fiberColors}
-          structures={structureData.structures}
-          structureStatuses={structureData.allStatuses}
-          showStructuresOnMap={state.showStructuresOnMap}
-          showStructureLabels={state.showStructureLabels}
-          selectedStructureId={state.selectedStructureId}
-          onStructureClick={handleStructureClick}
-          onChannelClick={handleChannelClick}
+          onToggleDisplayMode={() =>
+            dispatch({ type: 'SET_DISPLAY_MODE', mode: state.displayMode === 'dots' ? 'vehicles' : 'dots' })
+          }
+          isOverview={isOverview}
           sidebarOpen={state.sidebarOpen}
           hideFibersInOverview={state.hideFibersInOverview}
-          show3DBuildings={state.show3DBuildings}
-          showChannelHelper={state.showChannelHelper}
+          onToggleHideFibers={() => dispatch({ type: 'TOGGLE_HIDE_FIBERS_OVERVIEW' })}
         />
 
-        {/* Section creation banner */}
-        {state.sectionCreationMode && (
-          <div className="proto-creation-banner absolute top-4 left-1/2 -translate-x-1/2 z-30 flex items-center gap-3 px-4 py-2 rounded-lg bg-amber-500/15 border border-amber-500/30 text-sm text-amber-200">
-            <span>
-              {state.pendingPoint
-                ? 'Click another point on the same cable to complete the section'
-                : 'Click on a fiber to set the start point'}
-            </span>
-            <button
-              onClick={() => dispatch({ type: 'EXIT_SECTION_CREATION' })}
-              className="text-xs px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-          </div>
+        {/* Toast notifications for new incidents */}
+        <IncidentToastStack toasts={toasts} onDismiss={dismissToast} />
+
+        {/* Sidebar — overlays the map from the right */}
+        <div className="absolute top-0 right-0 h-full z-20 pointer-events-none">
+          <SidePanel
+            state={state}
+            dispatch={wrappedDispatch}
+            panelRef={sidebarRef}
+            liveStats={liveStats}
+            liveSeriesData={liveSeriesData}
+            onHighlightFiber={fiberId => mapRef.current?.highlightFiber(fiberId)}
+            onHighlightSection={sectionId => mapRef.current?.highlightSection(sectionId)}
+            onHighlightIncident={incidentId => mapRef.current?.highlightIncident(incidentId)}
+            onClearHighlight={() => mapRef.current?.clearHighlight()}
+            structureData={structureData}
+            unseenIds={unseenIds}
+            hasUnseen={hasUnseen}
+            onMarkSeen={markSeen}
+          />
+        </div>
+
+        {/* Naming dialog overlay */}
+        {state.showNamingDialog && state.pendingSection && (
+          <NamingDialog
+            pendingSection={state.pendingSection}
+            onSave={async name => {
+              const ps = state.pendingSection!
+              dispatch({ type: 'CLOSE_NAMING_DIALOG' })
+              try {
+                const section = await addSection(ps.fiberId, ps.direction, name, ps.startChannel, ps.endChannel)
+                dispatch({ type: 'CREATE_SECTION', section })
+              } catch {
+                toast.error('Failed to create section')
+              }
+            }}
+            onCancel={() => dispatch({ type: 'CLOSE_NAMING_DIALOG' })}
+          />
         )}
-
-        {/* Map overlays */}
-        <StatusBar
-          connected={connected}
-          sectionCount={state.sections.length}
-          incidentCount={state.incidents.filter(i => !i.resolved).length}
-          lastDetectionTsRef={lastDetectionTsRef}
-        />
       </div>
-
-      {/* Legend — top-right, moves with sidebar */}
-      <Legend
-        displayMode={state.displayMode}
-        onToggleDisplayMode={() =>
-          dispatch({ type: 'SET_DISPLAY_MODE', mode: state.displayMode === 'dots' ? 'vehicles' : 'dots' })
-        }
-        isOverview={isOverview}
-        sidebarOpen={state.sidebarOpen}
-        hideFibersInOverview={state.hideFibersInOverview}
-        onToggleHideFibers={() => dispatch({ type: 'TOGGLE_HIDE_FIBERS_OVERVIEW' })}
-      />
-
-      {/* Toast notifications for new incidents */}
-      <IncidentToastStack toasts={toasts} onDismiss={dismissToast} />
-
-      {/* Sidebar — overlays the map from the right */}
-      <div className="absolute top-0 right-0 h-full z-20 pointer-events-none">
-        <SidePanel
-          state={state}
-          dispatch={wrappedDispatch}
-          liveStats={liveStats}
-          liveSeriesData={liveSeriesData}
-          onHighlightFiber={fiberId => mapRef.current?.highlightFiber(fiberId)}
-          onHighlightSection={sectionId => mapRef.current?.highlightSection(sectionId)}
-          onHighlightIncident={incidentId => mapRef.current?.highlightIncident(incidentId)}
-          onClearHighlight={() => mapRef.current?.clearHighlight()}
-          structureData={structureData}
-          unseenIds={unseenIds}
-          hasUnseen={hasUnseen}
-          onMarkSeen={markSeen}
-        />
-      </div>
-
-      {/* Naming dialog overlay */}
-      {state.showNamingDialog && state.pendingSection && (
-        <NamingDialog
-          pendingSection={state.pendingSection}
-          onSave={async name => {
-            const ps = state.pendingSection!
-            dispatch({ type: 'CLOSE_NAMING_DIALOG' })
-            try {
-              const section = await addSection(ps.fiberId, ps.direction, name, ps.startChannel, ps.endChannel)
-              dispatch({ type: 'CREATE_SECTION', section })
-            } catch {
-              toast.error('Failed to create section')
-            }
-          }}
-          onCancel={() => dispatch({ type: 'CLOSE_NAMING_DIALOG' })}
-        />
-      )}
-    </div>
+    </SidebarRefContext.Provider>
   )
 }
 

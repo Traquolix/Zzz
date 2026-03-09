@@ -1,3 +1,5 @@
+import { useSidebarWidth } from '../hooks/useSidebarWidth'
+
 interface LegendProps {
   displayMode: 'dots' | 'vehicles'
   onToggleDisplayMode: () => void
@@ -7,6 +9,8 @@ interface LegendProps {
   onToggleHideFibers?: () => void
 }
 
+const TAB_BAR_OFFSET = 48 // 36px tab bar + 12px gap
+
 export function Legend({
   displayMode,
   onToggleDisplayMode,
@@ -15,7 +19,8 @@ export function Legend({
   hideFibersInOverview,
   onToggleHideFibers,
 }: LegendProps) {
-  const right = sidebarOpen ? 'calc(clamp(340px, 40vw, 680px) + 0.75rem)' : 'calc(0.75rem + 36px + 0.5rem)'
+  const sidebarWidth = useSidebarWidth()
+  const right = sidebarOpen && sidebarWidth > 0 ? `${sidebarWidth + 12}px` : `${TAB_BAR_OFFSET}px`
 
   return (
     <div

@@ -292,6 +292,10 @@
       "shm": "Sante structurelle"
     }
   },
+  "sidebar": {
+    "expandPanel": "Agrandir le panneau",
+    "collapsePanel": "Réduire le panneau"
+  },
   "map": {
     "direction": "Direction :",
     "layers": "Couches de la carte",

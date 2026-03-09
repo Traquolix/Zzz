@@ -292,6 +292,10 @@
       "shm": "Structural Health"
     }
   },
+  "sidebar": {
+    "expandPanel": "Expand panel",
+    "collapsePanel": "Collapse panel"
+  },
   "map": {
     "direction": "Direction:",
     "layers": "Map layers",
