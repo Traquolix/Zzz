@@ -156,7 +156,8 @@
     "live": "Live",
     "sim": "Sim",
     "unavailable": "{{label}} data source unavailable",
-    "switchTo": "Switch to {{label}} data"
+    "switchTo": "Switch to {{label}} data",
+    "switchTimeout": "Flow switch timed out — please try again"
   },
   "chart": {
     "scatter": "Scatter",

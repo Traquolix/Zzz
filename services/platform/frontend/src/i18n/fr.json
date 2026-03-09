@@ -156,7 +156,8 @@
     "live": "Live",
     "sim": "Sim",
     "unavailable": "Source de données {{label}} indisponible",
-    "switchTo": "Basculer vers les données {{label}}"
+    "switchTo": "Basculer vers les données {{label}}",
+    "switchTimeout": "Changement de flux échoué — veuillez réessayer"
   },
   "chart": {
     "scatter": "Dispersion",

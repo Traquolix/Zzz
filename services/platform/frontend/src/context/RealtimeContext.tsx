@@ -7,6 +7,7 @@ export type RealtimeContextType = {
   reconnecting: boolean
   authFailed: boolean
   flow: DataFlow
+  switchingFlow: boolean
   availableFlows: DataFlow[]
   setFlow: (flow: DataFlow) => void
   onFlowChange: (cb: (flow: DataFlow) => void) => () => void

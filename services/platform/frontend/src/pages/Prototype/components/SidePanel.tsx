@@ -537,6 +537,7 @@ export function SidePanel({
               show3DBuildings={state.show3DBuildings}
               showChannelHelper={state.showChannelHelper}
               flow={realtimeCtx.flow}
+              switchingFlow={realtimeCtx.switchingFlow}
               availableFlows={realtimeCtx.availableFlows}
               onFlowToggle={realtimeCtx.setFlow}
             />
@@ -1690,6 +1691,7 @@ function SettingsPanel({
   show3DBuildings,
   showChannelHelper,
   flow,
+  switchingFlow,
   availableFlows,
   onFlowToggle,
 }: {
@@ -1701,6 +1703,7 @@ function SettingsPanel({
   show3DBuildings: boolean
   showChannelHelper: boolean
   flow: DataFlow
+  switchingFlow: boolean
   availableFlows: DataFlow[]
   onFlowToggle: (flow: DataFlow) => void
 }) {
@@ -1726,7 +1729,7 @@ function SettingsPanel({
       {/* Data source */}
       <div className="flex flex-col gap-2">
         <span className="text-xs text-[var(--proto-text-secondary)]">{t('flow.label')}</span>
-        <FlowToggle flow={flow} availableFlows={availableFlows} onToggle={onFlowToggle} />
+        <FlowToggle flow={flow} switchingFlow={switchingFlow} availableFlows={availableFlows} onToggle={onFlowToggle} />
       </div>
 
       <div className="h-px bg-[var(--proto-border)]" />
