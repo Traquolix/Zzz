@@ -223,18 +223,14 @@ class Command(BaseCommand):
         return Path(settings.DATA_DIR) / "clickhouse" / "cables"
 
     def _load_fibers(self) -> list[FiberConfig]:
-        """Load fiber configs from JSON data files."""
+        """Load fiber configs from JSON data files with per-road calibration."""
+        from apps.realtime.fiber_calibration import FIBER_CONFIGS
+
         data_dir = self._get_data_dir()
 
-        fiber_files: list[tuple[str, int, float, str]] = [
-            ("carros.json", 6, 110, "high"),
-            ("promenade.json", 4, 50, "medium"),
-            ("mathis.json", 4, 90, "low"),
-        ]
-
         fibers = []
-        for filename, lanes, speed_limit, traffic_density in fiber_files:
-            path = data_dir / filename
+        for fiber_id, cfg in FIBER_CONFIGS.items():
+            path = data_dir / f"{fiber_id}.json"
             if not path.exists():
                 self.stderr.write(f"Warning: {path} not found, skipping")
                 continue
@@ -251,12 +247,21 @@ class Command(BaseCommand):
                     color=data.get("color", "#000000"),
                     coordinates=coords,
                     channel_count=len(coords),
-                    lanes=lanes,
-                    speed_limit=speed_limit,
-                    traffic_density=traffic_density,
+                    lanes=cfg["lanes"],
+                    speed_limit=cfg["speed_limit"],
+                    traffic_density=cfg["traffic_density"],
+                    typical_speed_range=cfg["typical_speed_range"],
+                    max_channel_dir0=cfg["max_channel_dir0"],
+                    max_channel_dir1=cfg["max_channel_dir1"],
                 )
             )
-            self.stdout.write(f"  Loaded {data['name']} ({len(coords)} channels)")
+            max_ch_0 = cfg["max_channel_dir0"] or len(coords)
+            max_ch_1 = cfg["max_channel_dir1"] or len(coords)
+            self.stdout.write(
+                f"  Loaded {data['name']} ({len(coords)} channels, "
+                f"dir0≤{max_ch_0}, dir1≤{max_ch_1}, "
+                f"{cfg['speed_limit']}km/h, {cfg['traffic_density']} density)"
+            )
 
         return fibers
 

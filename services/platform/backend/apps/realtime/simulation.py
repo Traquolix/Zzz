@@ -1,8 +1,16 @@
 """
-Traffic simulation engine — Python port of the Node.js simulation server.
+Traffic simulation engine — physically coherent vehicle simulation.
 
 Generates realistic traffic data (vehicles, detections, incidents, SHM readings)
 and broadcasts them through Django Channels groups.
+
+Architecture:
+    Vehicle Physics → Detections → Incident Overseer → Incidents
+    - Vehicles only see other vehicles (car-following), never incidents directly
+    - Road Events (stopped vehicle, slow vehicle, lane closure) cause physical
+      obstructions that propagate upstream via car-following
+    - The Overseer monitors aggregated speed metrics and declares incidents
+      when it detects anomalies — incidents emerge from behavior, not RNG
 
 This runs as a background async loop, started by the `run_simulation` management command.
 
@@ -189,14 +197,12 @@ def _buckets_to_points(snap: dict, now_ms: float) -> list[dict]:
             points.append({"time": t, "speed": None, "flow": None, "occupancy": None})
         else:
             avg_speed = round(b["speed_sum"] / b["speed_count"])
-            flow = b["vehicle_count"]
-            speed_ms = avg_speed * (1000 / 3600)
-            occupancy = (
-                min(100, round((flow * 3600 * AVG_VEHICLE_LENGTH_M) / (speed_ms * 1000)))
-                if speed_ms > 0
-                else None
-            )
-            points.append({"time": t, "speed": avg_speed, "flow": flow, "occupancy": occupancy})
+            # flow: raw vehicle count across ±SNAPSHOT_CHANNEL_RADIUS window per 1s bucket
+            # Normalize to per-channel then scale to veh/h (same as section history)
+            total_ch = max(1, SNAPSHOT_CHANNEL_RADIUS * 2)
+            flow_vph = round(b["vehicle_count"] / total_ch * 3600)
+            occupancy = compute_occupancy(avg_speed, flow_vph)
+            points.append({"time": t, "speed": avg_speed, "flow": flow_vph, "occupancy": occupancy})
     return points
 
 
@@ -238,6 +244,15 @@ class FiberConfig:
     lanes: int = 4
     speed_limit: float = 110.0
     traffic_density: str = "medium"
+    # Per-fiber calibration: typical free-flow speed range [min, max] km/h
+    typical_speed_range: tuple[float, float] = (60.0, 90.0)
+    # Per-direction channel limits: channels beyond these are off-road / dead fiber.
+    # None means use full channel_count.
+    max_channel_dir0: int | None = None
+    max_channel_dir1: int | None = None
+    # Per-fiber daily traffic curve (24 values, 0.0-1.0).
+    # None means use the default curve.
+    daily_traffic: list[float] | None = None
 
 
 @dataclass
@@ -252,6 +267,9 @@ class Vehicle:
     vehicle_type: str
     aggressiveness: float
     created_at: float
+    # Road event: if set, this vehicle is affected by a road event
+    # and has a forced target speed override
+    forced_speed: float | None = None
 
 
 @dataclass
@@ -281,6 +299,27 @@ class Incident:
 
 
 @dataclass
+class RoadEvent:
+    """A physical road event that affects vehicle behavior.
+
+    Unlike Incidents (which are *detected* anomalies), RoadEvents are the *causes*:
+    a stopped vehicle, a slow vehicle, or a lane closure. The car-following model
+    propagates their effects upstream naturally.
+    """
+
+    id: str
+    fiber_id: str
+    direction: int
+    channel: float
+    event_type: str  # "stopped_vehicle", "slow_vehicle", "lane_closure"
+    created_at: float  # wall-clock seconds
+    duration_s: float  # how long the event lasts (real-time seconds)
+    affected_lane: int
+    # For slow_vehicle: the forced speed (km/h). For stopped_vehicle: 0.
+    forced_speed: float = 0.0
+
+
+@dataclass
 class SHMReading:
     infrastructure_id: str
     frequency: float
@@ -293,10 +332,10 @@ class SHMReading:
 # ============================================================================
 
 VEHICLE_PROFILES = {
-    "car": {"min_speed": 60, "max_speed": 130, "accel": 3.5, "decel": 6, "length": 1.5},
-    "truck": {"min_speed": 40, "max_speed": 90, "accel": 1.5, "decel": 4, "length": 4},
-    "motorcycle": {"min_speed": 50, "max_speed": 150, "accel": 5, "decel": 7, "length": 0.8},
-    "bus": {"min_speed": 40, "max_speed": 100, "accel": 2, "decel": 5, "length": 3.5},
+    "car": {"min_speed": 30, "max_speed": 130, "accel": 3.5, "decel": 6, "length": 1.5},
+    "truck": {"min_speed": 30, "max_speed": 90, "accel": 1.5, "decel": 4, "length": 4},
+    "motorcycle": {"min_speed": 30, "max_speed": 150, "accel": 5, "decel": 7, "length": 0.8},
+    "bus": {"min_speed": 30, "max_speed": 100, "accel": 2, "decel": 5, "length": 3.5},
 }
 
 METERS_PER_CHANNEL = 5
@@ -304,41 +343,120 @@ SAFE_FOLLOWING_SECONDS = 2
 MIN_GAP_CHANNELS = 3
 VEHICLE_TYPES = ["car", "car", "car", "car", "truck", "motorcycle", "bus"]
 
-DAILY_TRAFFIC = [
-    0.2,
-    0.1,
-    0.1,
-    0.1,
+# Default daily traffic curve — generic French urban double-peak
+DEFAULT_DAILY_TRAFFIC = [
     0.15,
-    0.3,
-    0.6,
-    0.9,
-    1.0,
+    0.08,
+    0.06,
+    0.06,
+    0.10,
+    0.25,  # 00-05
+    0.55,
     0.85,
-    0.7,
+    1.00,
+    0.80,
+    0.65,
+    0.70,  # 06-11
     0.75,
-    0.8,
-    0.75,
-    0.7,
-    0.75,
+    0.70,
+    0.65,
+    0.70,
     0.85,
-    1.0,
-    0.95,
-    0.8,
-    0.6,
-    0.45,
+    1.00,  # 12-17
+    0.90,
+    0.70,
+    0.50,
     0.35,
     0.25,
+    0.18,  # 18-23
 ]
 
+# Per-fiber traffic curves — calibrated to Nice road characteristics
+FIBER_DAILY_TRAFFIC: dict[str, list[float]] = {
+    # D6202 / Carros: commuter highway, sharp peaks, low overnight
+    "carros": [
+        0.10,
+        0.06,
+        0.05,
+        0.05,
+        0.08,
+        0.20,  # 00-05
+        0.55,
+        0.90,
+        1.00,
+        0.75,
+        0.60,
+        0.65,  # 06-11 (morning peak 07-09)
+        0.70,
+        0.65,
+        0.60,
+        0.70,
+        0.90,
+        1.00,  # 12-17 (evening peak 17-18)
+        0.85,
+        0.60,
+        0.40,
+        0.25,
+        0.18,
+        0.12,  # 18-23
+    ],
+    # Route de Turin / Mathis: urban road, steadier throughout day
+    "mathis": [
+        0.12,
+        0.08,
+        0.06,
+        0.06,
+        0.08,
+        0.18,  # 00-05
+        0.40,
+        0.75,
+        0.90,
+        0.80,
+        0.70,
+        0.75,  # 06-11
+        0.80,
+        0.75,
+        0.70,
+        0.75,
+        0.85,
+        0.95,  # 12-17
+        1.00,
+        0.80,
+        0.55,
+        0.35,
+        0.22,
+        0.15,  # 18-23 (evening peak extends later)
+    ],
+    # Promenade des Anglais: tourist/coastal, late morning buildup, late evening
+    "promenade": [
+        0.18,
+        0.12,
+        0.08,
+        0.06,
+        0.08,
+        0.15,  # 00-05
+        0.35,
+        0.65,
+        0.85,
+        0.80,
+        0.75,
+        0.80,  # 06-11
+        0.85,
+        0.80,
+        0.75,
+        0.80,
+        0.90,
+        1.00,  # 12-17
+        0.95,
+        0.85,
+        0.65,
+        0.45,
+        0.30,
+        0.22,  # 18-23 (tourist traffic extends late)
+    ],
+}
+
 BASE_SPAWN_RATES = {"low": 4, "medium": 10, "high": 20}
-
-
-class _IncidentConfig(TypedDict):
-    type: str
-    prob: float
-    dur: tuple[int, int]
-    weights: list[float]
 
 
 class _SpawnPoint(TypedDict):
@@ -349,35 +467,9 @@ class _SpawnPoint(TypedDict):
     last: float
 
 
-INCIDENT_CONFIGS: list[_IncidentConfig] = [
-    {
-        "type": "slowdown",
-        "prob": 0.3,
-        "dur": (300_000, 1_800_000),
-        "weights": [0.4, 0.4, 0.15, 0.05],
-    },
-    {
-        "type": "congestion",
-        "prob": 0.5,
-        "dur": (900_000, 3_600_000),
-        "weights": [0.3, 0.5, 0.15, 0.05],
-    },
-    {
-        "type": "accident",
-        "prob": 0.05,
-        "dur": (1_800_000, 7_200_000),
-        "weights": [0.1, 0.3, 0.4, 0.2],
-    },
-    {
-        "type": "anomaly",
-        "prob": 0.15,
-        "dur": (600_000, 3_600_000),
-        "weights": [0.5, 0.3, 0.15, 0.05],
-    },
-]
 SEVERITIES = ["low", "medium", "high", "critical"]
 
-SNAPSHOT_CHANNEL_RADIUS = 100  # ±100 channels (~1km) around incident center
+SNAPSHOT_CHANNEL_RADIUS = 30  # ±30 channels (~300m) around incident center
 SNAPSHOT_WINDOW_S = 60  # Record ±60s around incident detected_at
 AVG_VEHICLE_LENGTH_M = 6  # For occupancy estimation
 
@@ -394,11 +486,23 @@ def _weighted_choice(items: list[str], weights: list[float]) -> str:
     return items[-1]
 
 
+def _get_max_channel(fiber: FiberConfig, direction: int) -> int:
+    """Get the maximum valid channel for a fiber+direction."""
+    if direction == 0 and fiber.max_channel_dir0 is not None:
+        return fiber.max_channel_dir0
+    if direction == 1 and fiber.max_channel_dir1 is not None:
+        return fiber.max_channel_dir1
+    return fiber.channel_count
+
+
 def _create_vehicle(fiber: FiberConfig, channel: float, direction: int, lane: int) -> Vehicle:
     vtype = random.choice(VEHICLE_TYPES)
     profile = VEHICLE_PROFILES[vtype]
-    speed_var = 0.8 + random.random() * 0.4
-    target = min(profile["max_speed"], fiber.speed_limit * speed_var)
+    # Use fiber's typical speed range for target speed
+    low, high = fiber.typical_speed_range
+    target = low + random.random() * (high - low)
+    # Cap at vehicle profile max and fiber speed limit
+    target = min(target, profile["max_speed"], fiber.speed_limit)
     return Vehicle(
         id=f"v-{int(time.time() * 1000)}-{uuid.uuid4().hex[:6]}",
         fiber_line=fiber.id,
@@ -417,12 +521,19 @@ def _update_vehicle(
     v: Vehicle,
     vehicles: list[Vehicle],
     fiber: FiberConfig,
-    incidents: list[Incident],
     delta_s: float,
 ) -> Optional[Vehicle]:
+    """Update a single vehicle's speed and position using car-following physics.
+
+    Vehicles only see other vehicles — they don't know about incidents.
+    Road events work by setting forced_speed on the affected vehicle,
+    which then naturally slows down traffic behind it via car-following.
+    """
     profile = VEHICLE_PROFILES[v.vehicle_type]
 
-    if v.channel < 0 or v.channel >= fiber.channel_count:
+    # Bounds check: remove vehicles outside valid channel range
+    max_ch = _get_max_channel(fiber, v.direction)
+    if v.channel < 0 or v.channel >= max_ch:
         return None
     if time.time() - v.created_at > 600:
         return None
@@ -446,18 +557,10 @@ def _update_vehicle(
     else:
         vehicle_ahead = None
 
-    effective_target = v.target_speed
+    # Use forced_speed if this vehicle is affected by a road event
+    effective_target = v.forced_speed if v.forced_speed is not None else v.target_speed
 
-    # Incident slowdown
-    for inc in incidents:
-        if inc.fiber_line == v.fiber_line and inc.status == "active":
-            dist = abs(inc.channel - v.channel)
-            if dist < 30:
-                effective_target *= 0.3
-            elif dist < 50:
-                effective_target *= 0.6
-
-    # Car-following
+    # Car-following model (IDM-inspired)
     new_speed = v.speed
     if vehicle_ahead:
         gap = abs(vehicle_ahead.channel - v.channel) - profile["length"]
@@ -496,18 +599,429 @@ def _update_vehicle(
 
 
 # ============================================================================
+# INCIDENT OVERSEER — detects incidents from vehicle behavior
+# ============================================================================
+
+
+@dataclass
+class _SectionMetrics:
+    """Rolling EMA metrics for a (fiber, direction) channel window."""
+
+    # Exponential moving average of speed (initialized to free-flow)
+    ema_speed: float = 80.0
+    # Minimum speed seen in recent ticks (decays toward ema_speed)
+    recent_min_speed: float = 999.0
+    # Baseline free-flow speed for comparison
+    free_flow_speed: float = 80.0
+    # How long the anomaly has persisted (real-time seconds)
+    anomaly_duration_s: float = 0.0
+    # Whether we already declared an incident for this anomaly
+    incident_declared: bool = False
+    incident_id: str | None = None
+    # Track when last detection was seen
+    last_detection_time: float = 0.0
+
+    @property
+    def speed_drop_pct(self) -> float:
+        if self.free_flow_speed <= 0:
+            return 0.0
+        return max(0.0, (1.0 - self.ema_speed / self.free_flow_speed) * 100)
+
+
+class IncidentOverseer:
+    """Monitors detection metrics and declares incidents when speed anomalies are detected.
+
+    Uses per-detection EMA (exponential moving average) instead of per-tick window
+    averaging. Each detection updates the EMA for the nearest monitoring point.
+    This means a single stopped vehicle at 0 km/h will quickly pull the local
+    EMA down, triggering incident detection.
+
+    Monitoring points are spaced every WINDOW_STEP channels. Each detection
+    updates the nearest point's EMA. Smaller spacing = more granular detection.
+    """
+
+    WINDOW_STEP = 30  # Monitoring points every 30 channels (~150m)
+    EMA_ALPHA = 0.15  # EMA smoothing factor (higher = more responsive)
+    MIN_SPEED_DECAY = 0.05  # recent_min_speed decays toward ema_speed per tick
+    # Thresholds for incident detection
+    SPEED_DROP_PCT_THRESHOLD = 40  # 40% drop from free-flow triggers incident
+    MIN_ANOMALY_DURATION_S = 15  # Anomaly must persist 15s before declaring incident
+    RECOVERY_PCT = 75  # Speed must recover to 75% of free-flow
+    RECOVERY_DURATION_S = 20  # Must stay recovered for 20s
+    # Spatial deduplication: no new incident within this many channels of an existing one
+    INCIDENT_MIN_SPACING_CH = 120  # ~600m between incidents on same fiber/direction
+
+    def __init__(self, fibers: list[FiberConfig]):
+        # Per-point metrics: keyed by (fiber_id, direction, channel_point)
+        self._metrics: dict[tuple[str, int, int], _SectionMetrics] = {}
+        self._recovery_timers: dict[str, float] = {}
+        for fiber in fibers:
+            for direction in (0, 1):
+                max_ch = _get_max_channel(fiber, direction)
+                low, high = fiber.typical_speed_range
+                free_flow = (low + high) / 2
+                for ch in range(0, max_ch, self.WINDOW_STEP):
+                    key = (fiber.id, direction, ch)
+                    self._metrics[key] = _SectionMetrics(
+                        ema_speed=free_flow,
+                        free_flow_speed=free_flow,
+                    )
+
+    def _nearest_point(self, channel: int) -> int:
+        """Snap a channel to the nearest monitoring point."""
+        return round(channel / self.WINDOW_STEP) * self.WINDOW_STEP
+
+    def ingest_detections(self, detections: list[Detection], delta_s: float):
+        """Update EMA speed at monitoring points from detections."""
+        now = time.time()
+
+        # Update EMA for each detection at its nearest monitoring point
+        for d in detections:
+            pt = self._nearest_point(d.channel)
+            key = (d.fiber_line, d.direction, pt)
+            m = self._metrics.get(key)
+            if m is None:
+                continue
+            # EMA update: new_ema = alpha * observation + (1 - alpha) * old_ema
+            m.ema_speed = self.EMA_ALPHA * d.speed + (1 - self.EMA_ALPHA) * m.ema_speed
+            m.recent_min_speed = min(m.recent_min_speed, d.speed)
+            m.last_detection_time = now
+
+        # Update anomaly durations and decay min_speed
+        for m in self._metrics.values():
+            # Only track anomalies at points that have recent detections
+            if now - m.last_detection_time > 10:
+                m.anomaly_duration_s = max(0, m.anomaly_duration_s - delta_s)
+                continue
+            # Decay recent_min_speed toward ema_speed
+            m.recent_min_speed += (m.ema_speed - m.recent_min_speed) * self.MIN_SPEED_DECAY
+            if m.speed_drop_pct >= self.SPEED_DROP_PCT_THRESHOLD:
+                m.anomaly_duration_s += delta_s
+            else:
+                m.anomaly_duration_s = max(0, m.anomaly_duration_s - delta_s * 2)
+
+    def check_for_incidents(
+        self,
+        now: float,
+        now_ms: float,
+        fibers: list[FiberConfig],
+        existing_incidents: list[Incident] | None = None,
+    ) -> list[Incident]:
+        """Check all monitoring points for new incidents."""
+        new_incidents: list[Incident] = []
+        # Build set of active incident locations for spatial dedup
+        active_locations: list[tuple[str, int, int]] = []
+        for inc in existing_incidents or []:
+            if inc.status == "active":
+                active_locations.append((inc.fiber_line, inc.direction, inc.channel))
+        # Include newly declared incidents in this tick too
+        for inc in new_incidents:
+            active_locations.append((inc.fiber_line, inc.direction, inc.channel))
+
+        for (fiber_id, direction, ch), m in self._metrics.items():
+            if m.incident_declared:
+                continue
+            if m.anomaly_duration_s < self.MIN_ANOMALY_DURATION_S:
+                continue
+            if m.speed_drop_pct < self.SPEED_DROP_PCT_THRESHOLD:
+                continue
+
+            # Spatial dedup: skip if too close to an existing active incident
+            too_close = any(
+                fid == fiber_id and d == direction and abs(c - ch) < self.INCIDENT_MIN_SPACING_CH
+                for fid, d, c in active_locations
+            )
+            if too_close:
+                continue
+
+            # Determine incident type and severity
+            ema = m.ema_speed
+            drop_pct = m.speed_drop_pct
+
+            if ema < 5:
+                inc_type = "accident"
+            elif drop_pct > 70:
+                inc_type = "congestion"
+            elif drop_pct > 50:
+                inc_type = "slowdown"
+            else:
+                inc_type = "anomaly"
+
+            if drop_pct > 80 or ema < 5:
+                severity = "critical"
+            elif drop_pct > 60:
+                severity = "high"
+            elif drop_pct > 50:
+                severity = "medium"
+            else:
+                severity = "low"
+
+            fiber = next((f for f in fibers if f.id == fiber_id), None)
+            inc_ch = min(ch, _get_max_channel(fiber, direction) - 1) if fiber else ch
+
+            inc_id = f"inc-{int(now_ms)}-{uuid.uuid4().hex[:4]}"
+            inc = Incident(
+                id=inc_id,
+                type=inc_type,
+                severity=severity,
+                fiber_line=fiber_id,
+                channel=inc_ch,
+                detected_at=time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(now)),
+                detected_at_ms=now_ms,
+                direction=direction,
+                status="active",
+            )
+            m.incident_declared = True
+            m.incident_id = inc_id
+            new_incidents.append(inc)
+            active_locations.append((fiber_id, direction, inc_ch))
+            logger.info(
+                "Incident detected: %s %s on %s dir %d ch %d (EMA=%.1f, drop=%.0f%%)",
+                inc_type,
+                severity,
+                fiber_id,
+                direction,
+                inc_ch,
+                ema,
+                drop_pct,
+            )
+
+        return new_incidents
+
+    def check_for_resolutions(self, incidents: list[Incident], now: float) -> list[Incident]:
+        """Check if any active incidents should be resolved (speed recovered)."""
+        resolved: list[Incident] = []
+        for inc in incidents:
+            if inc.status != "active":
+                continue
+            # Find the monitoring point that declared this incident
+            point_key = None
+            for key, m in self._metrics.items():
+                if m.incident_id == inc.id:
+                    point_key = key
+                    break
+            if point_key is None:
+                continue
+
+            m = self._metrics[point_key]
+            recovered = m.ema_speed >= m.free_flow_speed * (self.RECOVERY_PCT / 100)
+            if recovered:
+                if inc.id not in self._recovery_timers:
+                    self._recovery_timers[inc.id] = now
+                elif now - self._recovery_timers[inc.id] >= self.RECOVERY_DURATION_S:
+                    inc.status = "resolved"
+                    m.incident_declared = False
+                    m.incident_id = None
+                    m.anomaly_duration_s = 0
+                    self._recovery_timers.pop(inc.id, None)
+                    resolved.append(inc)
+                    logger.info("Incident resolved: %s on %s", inc.id, inc.fiber_line)
+            else:
+                self._recovery_timers.pop(inc.id, None)
+                # Escalate severity if anomaly deepens
+                drop_pct = m.speed_drop_pct
+                if drop_pct > 80 and inc.severity != "critical":
+                    inc.severity = "critical"
+                elif drop_pct > 60 and inc.severity in ("low", "medium"):
+                    inc.severity = "high"
+
+        return resolved
+
+
+# ============================================================================
+# ROAD EVENT SYSTEM — physical causes that trigger incidents
+# ============================================================================
+
+
+class RoadEventManager:
+    """Spawns and manages road events that create physical obstructions.
+
+    Events are the *causes* — stopped vehicles, slow vehicles, lane closures.
+    They affect specific vehicles, which then propagate slowdowns upstream
+    through the car-following model. The Overseer detects the resulting
+    speed anomalies and declares incidents.
+    """
+
+    # Probabilities per sim-hour (scaled by traffic density)
+    EVENT_RATES: dict[str, float] = {
+        "stopped_vehicle": 0.4,  # Per sim-hour
+        "slow_vehicle": 0.6,
+        "lane_closure": 0.15,
+    }
+
+    # Duration ranges in sim-seconds
+    EVENT_DURATIONS: dict[str, tuple[float, float]] = {
+        "stopped_vehicle": (120, 600),  # 2-10 min sim time
+        "slow_vehicle": (60, 300),  # 1-5 min sim time
+        "lane_closure": (300, 1800),  # 5-30 min sim time
+    }
+
+    def __init__(self):
+        self.events: list[RoadEvent] = []
+
+    def tick(
+        self,
+        delta_s: float,
+        sim_hour: float,
+        vehicles: list[Vehicle],
+        fibers: list[FiberConfig],
+        hour_advance_rate: float,
+        now: float,
+    ) -> None:
+        """Possibly spawn new events and update existing ones."""
+        # Remove expired events and release affected vehicles
+        expired = [e for e in self.events if now - e.created_at > e.duration_s]
+        for e in expired:
+            for v in vehicles:
+                if v.fiber_line == e.fiber_id and v.forced_speed is not None:
+                    # Only release if this vehicle is near the event
+                    if abs(v.channel - e.channel) < 60:
+                        v.forced_speed = None
+        self.events = [e for e in self.events if now - e.created_at <= e.duration_s]
+
+        # Enforce road events on nearby vehicles.
+        # Track which vehicles are currently in any event's zone so we can
+        # release those that have moved past all zones.
+        affected_vehicle_ids: set[str] = set()
+        for e in self.events:
+            for v in vehicles:
+                if v.fiber_line != e.fiber_id or v.direction != e.direction:
+                    continue
+                dist = abs(v.channel - e.channel)
+                # Check if vehicle is upstream of the event (would approach it)
+                upstream = (v.direction == 0 and v.channel < e.channel) or (
+                    v.direction == 1 and v.channel > e.channel
+                )
+                if e.event_type == "stopped_vehicle":
+                    if v.lane == e.affected_lane and dist < 5:
+                        v.forced_speed = 0.0
+                        affected_vehicle_ids.add(v.id)
+                    elif dist < 40 and upstream:
+                        # All lanes slow in the upstream approach zone
+                        # Closer = slower (linear gradient)
+                        approach_speed = 5.0 + (dist / 40) * 25.0  # 5-30 km/h
+                        v.forced_speed = min(v.forced_speed or 999, approach_speed)
+                        affected_vehicle_ids.add(v.id)
+                    elif dist < 15:
+                        # Downstream/adjacent rubbernecking
+                        v.forced_speed = min(v.forced_speed or 999, 25.0)
+                        affected_vehicle_ids.add(v.id)
+                elif e.event_type == "slow_vehicle":
+                    if v.lane == e.affected_lane and dist < 10:
+                        v.forced_speed = e.forced_speed
+                        affected_vehicle_ids.add(v.id)
+                    elif dist < 30 and upstream:
+                        approach_speed = e.forced_speed + (dist / 30) * 15.0
+                        v.forced_speed = min(v.forced_speed or 999, approach_speed)
+                        affected_vehicle_ids.add(v.id)
+                elif e.event_type == "lane_closure":
+                    if v.lane == e.affected_lane and dist < 10:
+                        v.forced_speed = 0.0
+                        affected_vehicle_ids.add(v.id)
+                    elif dist < 50 and upstream:
+                        approach_speed = 5.0 + (dist / 50) * 25.0
+                        v.forced_speed = min(v.forced_speed or 999, approach_speed)
+                        affected_vehicle_ids.add(v.id)
+                    elif dist < 20:
+                        v.forced_speed = min(v.forced_speed or 999, 15.0)
+                        affected_vehicle_ids.add(v.id)
+
+        # Release vehicles that have moved past all event zones
+        for v in vehicles:
+            if v.forced_speed is not None and v.id not in affected_vehicle_ids:
+                v.forced_speed = None
+
+        # Maybe spawn new events (probability per sim-hour, scaled by density)
+        for event_type, base_rate in self.EVENT_RATES.items():
+            # Pick a fiber first so we use its per-fiber traffic curve
+            fiber = random.choice(fibers)
+            density = _get_density_multiplier(sim_hour, fiber)
+            # Real-time probability per tick
+            rate = base_rate * density * hour_advance_rate
+            prob_per_tick = rate * delta_s / 3600
+            if random.random() > prob_per_tick:
+                continue
+            fiber_vehicles = [
+                v for v in vehicles if v.fiber_line == fiber.id and v.forced_speed is None
+            ]
+            if not fiber_vehicles:
+                continue
+            target = random.choice(fiber_vehicles)
+            max_ch = _get_max_channel(fiber, target.direction)
+            if target.channel < 10 or target.channel > max_ch - 10:
+                continue
+
+            # Duration in real-time seconds (divide by hour_advance_rate)
+            dur_range = self.EVENT_DURATIONS[event_type]
+            dur_sim = dur_range[0] + random.random() * (dur_range[1] - dur_range[0])
+            dur_real = dur_sim / hour_advance_rate
+            dur_real = max(dur_real, 30)  # Minimum 30s real-time
+
+            forced_speed = 0.0
+            if event_type == "slow_vehicle":
+                forced_speed = 10 + random.random() * 20  # 10-30 km/h
+
+            event = RoadEvent(
+                id=f"evt-{int(now * 1000)}-{uuid.uuid4().hex[:4]}",
+                fiber_id=fiber.id,
+                direction=target.direction,
+                channel=target.channel,
+                event_type=event_type,
+                created_at=now,
+                duration_s=dur_real,
+                affected_lane=target.lane,
+                forced_speed=forced_speed,
+            )
+            self.events.append(event)
+
+            # Immediately affect the target vehicle
+            if event_type == "stopped_vehicle":
+                target.forced_speed = 0.0
+            elif event_type == "slow_vehicle":
+                target.forced_speed = forced_speed
+
+            logger.debug(
+                "Road event: %s on %s dir %d ch %.0f lane %d (%.0fs real)",
+                event_type,
+                fiber.id,
+                target.direction,
+                target.channel,
+                target.lane,
+                dur_real,
+            )
+
+
+def _get_density_multiplier(sim_hour: float, fiber: FiberConfig | None) -> float:
+    """Get traffic density multiplier for the current simulated hour."""
+    curve = DEFAULT_DAILY_TRAFFIC
+    if fiber is not None and fiber.daily_traffic is not None:
+        curve = fiber.daily_traffic
+    elif fiber is not None:
+        curve = FIBER_DAILY_TRAFFIC.get(fiber.id, DEFAULT_DAILY_TRAFFIC)
+    h = int(sim_hour) % 24
+    h_next = (h + 1) % 24
+    frac = sim_hour - int(sim_hour)
+    return curve[h] + (curve[h_next] - curve[h]) * frac
+
+
+# ============================================================================
 # SIMULATION ENGINE
 # ============================================================================
 
 
 class SimulationEngine:
-    """Self-contained traffic simulation that broadcasts via Channels."""
+    """Self-contained traffic simulation with emergent incidents."""
 
     def __init__(self, fibers: list[FiberConfig], infrastructure: list[dict]):
         self.fibers = fibers
         self.infrastructure = infrastructure
         self.vehicles: list[Vehicle] = []
         self.incidents: list[Incident] = []
+        # Real-clock mode: uncomment below for demos to sync with wall clock time.
+        # import datetime
+        # _now = datetime.datetime.now()
+        # self.simulated_hour = _now.hour + _now.minute / 60 + _now.second / 3600
+        # self.hour_advance_rate = 1
         self.simulated_hour = 8.0
         self.hour_advance_rate = 30  # 30x speed
         self.tick_count = 0
@@ -521,8 +1035,8 @@ class SimulationEngine:
         self._detection_ring: dict[str, list[dict]] = {f.id: [] for f in fibers}
 
         # SHM state
-        self.shm_base_freq = {}
-        self.shm_phase = {}
+        self.shm_base_freq: dict[str, float] = {}
+        self.shm_phase: dict[str, float] = {}
         for infra in infrastructure:
             iid = infra["id"]
             self.shm_base_freq[iid] = (
@@ -530,30 +1044,37 @@ class SimulationEngine:
             )
             self.shm_phase[iid] = random.random() * math.pi * 2
 
-        # Spawn points
+        # Spawn points — use per-direction channel limits
         self.spawn_points: list[_SpawnPoint] = []
         for fiber in fibers:
             rate = BASE_SPAWN_RATES.get(fiber.traffic_density, 10)
+            max_ch_0 = _get_max_channel(fiber, 0)
+            max_ch_1 = _get_max_channel(fiber, 1)
+            # Direction 0: spawn at low channel end
             self.spawn_points.append(
                 {"fiber": fiber.id, "ch": 5, "dir": 0, "rate": rate, "last": 0}
             )
+            # Direction 1: spawn at high channel end (within valid range)
             self.spawn_points.append(
-                {
-                    "fiber": fiber.id,
-                    "ch": fiber.channel_count - 5,
-                    "dir": 1,
-                    "rate": rate,
-                    "last": 0,
-                }
+                {"fiber": fiber.id, "ch": max_ch_1 - 5, "dir": 1, "rate": rate, "last": 0}
             )
-            if fiber.channel_count > 200:
-                mid = fiber.channel_count // 2
+            # Mid-point spawners for long fibers
+            if max_ch_0 > 200:
+                mid = max_ch_0 // 2
                 self.spawn_points.append(
                     {"fiber": fiber.id, "ch": mid, "dir": 0, "rate": rate * 0.3, "last": 0}
                 )
+            if max_ch_1 > 200:
+                mid = max_ch_1 // 2
                 self.spawn_points.append(
                     {"fiber": fiber.id, "ch": mid, "dir": 1, "rate": rate * 0.3, "last": 0}
                 )
+
+        # Road event manager (physical causes)
+        self._road_events = RoadEventManager()
+
+        # Incident overseer (detects anomalies from behavior)
+        self._overseer = IncidentOverseer(fibers)
 
         # Section history: per-channel per-second accumulator
         # Keyed by (fiber_id, direction, channel), accumulates within the current second
@@ -564,13 +1085,7 @@ class SimulationEngine:
         # Track when simulation started — incidents only spawn after warmup period
         # so snapshot data has time to accumulate
         self._started_at = time.time()
-        self._incident_warmup_s = 180  # 3 minutes
-
-    def _density_multiplier(self) -> float:
-        h = int(self.simulated_hour) % 24
-        h_next = (h + 1) % 24
-        frac = self.simulated_hour - int(self.simulated_hour)
-        return DAILY_TRAFFIC[h] + (DAILY_TRAFFIC[h_next] - DAILY_TRAFFIC[h]) * frac
+        self._incident_warmup_s = 120  # 2 minutes
 
     def tick(self, delta_ms: float) -> tuple[list[Detection], list[Incident], list[Incident]]:
         """Run one simulation tick. Returns (detections, new_incidents, resolved_incidents)."""
@@ -579,28 +1094,42 @@ class SimulationEngine:
         now = time.time()
         now_ms = now * 1000
 
-        # Advance time
+        # Advance simulated time
+        # Real-clock mode: uncomment below to sync with wall clock.
+        # import datetime
+        # _now = datetime.datetime.now()
+        # self.simulated_hour = _now.hour + _now.minute / 60 + _now.second / 3600
         hours = (delta_ms / 1000 / 3600) * self.hour_advance_rate
         self.simulated_hour = (self.simulated_hour + hours) % 24
 
-        active_incidents = [i for i in self.incidents if i.status == "active"]
+        # Update road events (spawn new ones, expire old ones, enforce on vehicles)
+        past_warmup = now - self._started_at >= self._incident_warmup_s
+        if past_warmup:
+            self._road_events.tick(
+                delta_s,
+                self.simulated_hour,
+                self.vehicles,
+                self.fibers,
+                self.hour_advance_rate,
+                now,
+            )
 
-        # Update vehicles
+        # Update vehicles (pure car-following, no incident awareness)
         surviving = []
         for v in self.vehicles:
             fiber = next((f for f in self.fibers if f.id == v.fiber_line), None)
             if fiber:
-                result = _update_vehicle(v, self.vehicles, fiber, active_incidents, delta_s)
+                result = _update_vehicle(v, self.vehicles, fiber, delta_s)
                 if result:
                     surviving.append(result)
         self.vehicles = surviving
 
         # Spawn new vehicles
-        density_mult = self._density_multiplier()
         for sp in self.spawn_points:
             fiber = next((f for f in self.fibers if f.id == sp["fiber"]), None)
             if not fiber:
                 continue
+            density_mult = _get_density_multiplier(self.simulated_hour, fiber)
             eff_rate = sp["rate"] * density_mult
             ms_per_vehicle = 60_000 / max(eff_rate, 0.1)
             if (now_ms - sp["last"]) < ms_per_vehicle:
@@ -625,64 +1154,37 @@ class SimulationEngine:
         # Record detections near active incidents for snapshot queries
         self._record_incident_detections(detections, now_ms)
 
-        # Resolve expired incidents + maybe create new ones
+        # Feed detections to the overseer
         new_incidents: list[Incident] = []
         resolved_incidents: list[Incident] = []
 
-        for inc in self.incidents:
-            if inc.status == "active" and inc.duration:
-                if now_ms - inc.detected_at_ms > inc.duration:
-                    inc.status = "resolved"
-                    resolved_incidents.append(inc)
+        if past_warmup:
+            self._overseer.ingest_detections(detections, delta_s)
 
-        # Only generate new incidents after warmup (so snapshot data can accumulate)
-        if now - self._started_at < self._incident_warmup_s:
-            return detections, new_incidents, resolved_incidents
+            if not hasattr(self, "_warmup_logged"):
+                self._warmup_logged = True
+                logger.info(
+                    "Warmup complete (%ds), incident detection active",
+                    self._incident_warmup_s,
+                )
 
-        if not hasattr(self, "_warmup_logged"):
-            self._warmup_logged = True
-            logger.info("Warmup complete (%ds), incidents will now spawn", self._incident_warmup_s)
+            # Check for new incidents
+            new_incs = self._overseer.check_for_incidents(now, now_ms, self.fibers, self.incidents)
+            for inc in new_incs:
+                self.incidents.append(inc)
+                self._init_snapshot(inc)
+                new_incidents.append(inc)
 
-        # Maybe generate new incidents (15x multiplier for dev testing)
-        hours_frac = delta_ms / 3_600_000 * 15
-        for cfg in INCIDENT_CONFIGS:
-            if random.random() > cfg["prob"] * hours_frac:
-                continue
-            fiber = random.choice(self.fibers)
-            # Place incident near an existing vehicle so snapshots have data
-            fiber_vehicles = [v for v in self.vehicles if v.fiber_line == fiber.id]
-            if fiber_vehicles:
-                target = random.choice(fiber_vehicles)
-                ch = max(10, min(fiber.channel_count - 10, round(target.channel)))
-            else:
-                continue  # No vehicles on this fiber — skip
-            severity = _weighted_choice(SEVERITIES, cfg["weights"])
-            dur = (cfg["dur"][0] + random.random() * (cfg["dur"][1] - cfg["dur"][0])) / 15
-            dur = max(dur, 120_000)  # Minimum 2 minutes real-time so incidents are visible
-            inc = Incident(
-                id=f"inc-{int(now_ms)}-{uuid.uuid4().hex[:4]}",
-                type=cfg["type"],
-                severity=severity,
-                fiber_line=fiber.id,
-                channel=ch,
-                detected_at=time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(now)),
-                detected_at_ms=now_ms,
-                direction=target.direction,
-                status="active",
-                duration=dur,
-            )
-            self.incidents.append(inc)
-            self._init_snapshot(inc)  # Seed with pre-incident data from rolling buffer
-            new_incidents.append(inc)
+            # Check for resolved incidents
+            resolved_incs = self._overseer.check_for_resolutions(self.incidents, now)
+            resolved_incidents.extend(resolved_incs)
 
         # Prune old resolved — keep ~1 month of history (~360 incidents/day)
-        # Each incident + snapshot ≈ 5.5 KB, so 10 000 ≈ 55 MB
         resolved_all = [i for i in self.incidents if i.status == "resolved"]
         if len(resolved_all) > 10_000:
             to_remove = set(id(i) for i in resolved_all[:-10_000])
             removed_ids = {i.id for i in self.incidents if id(i) in to_remove}
             self.incidents = [i for i in self.incidents if id(i) not in to_remove]
-            # Clean up snapshots for pruned incidents
             for rid in removed_ids:
                 self.incident_snapshots.pop(rid, None)
 
@@ -692,7 +1194,7 @@ class SimulationEngine:
         """Group nearby vehicles and produce DAS-like detections."""
         now_ms = int(time.time() * 1000)
         detections = []
-        processed = set()
+        processed: set[str] = set()
 
         sorted_v = sorted(self.vehicles, key=lambda v: (v.fiber_line, v.direction, v.channel))
         for v in sorted_v:
@@ -712,20 +1214,16 @@ class SimulationEngine:
             avg_sp = sum(o.speed for o in nearby) / len(nearby)
             for o in nearby:
                 processed.add(o.id)
-            # Noise disabled — keep detections clean and smooth for now
-            # ch_noise = (random.random() - 0.5) * 4
-            # sp_noise = (random.random() - 0.5) * 10
-            ch_noise = 0
-            sp_noise = 0
             count = len(nearby)
+            n_trucks = sum(1 for o in nearby if o.vehicle_type == "truck")
             detections.append(
                 Detection(
                     fiber_line=v.fiber_line,
-                    channel=round(avg_ch + ch_noise),
-                    speed=max(0.0, avg_sp + sp_noise),
+                    channel=round(avg_ch),
+                    speed=max(0.0, avg_sp),
                     count=count,
-                    n_cars=count,
-                    n_trucks=0,
+                    n_cars=count - n_trucks,
+                    n_trucks=n_trucks,
                     direction=v.direction,
                     timestamp=now_ms,
                 )
@@ -765,7 +1263,6 @@ class SimulationEngine:
         end_ms = inc.detected_at_ms + SNAPSHOT_WINDOW_S * 1000
 
         # Pre-fill all 120 one-second buckets so the time axis is always complete
-        # Key: seconds offset from start (0..119) → {speed_sum, speed_count, vehicle_count}
         buckets: dict[int, dict] = {}
         for s in range(SNAPSHOT_WINDOW_S * 2):
             buckets[s] = {"speed_sum": 0.0, "speed_count": 0, "vehicle_count": 0}
@@ -796,19 +1293,14 @@ class SimulationEngine:
         }
 
     def _record_incident_detections(self, detections: list[Detection], now_ms: float):
-        """Aggregate detections into 1-second snapshot buckets.
-
-        Each snapshot has a fixed window: detected_at ± SNAPSHOT_WINDOW_S.
-        Pre-incident data is seeded from the rolling detection buffer.
-        Once now_ms exceeds end_ms, the snapshot is marked complete.
-        """
+        """Aggregate detections into 1-second snapshot buckets."""
         # Always update the rolling buffer (needed for pre-incident seeding)
         self._update_detection_ring(detections, now_ms)
 
         if not detections:
             return
 
-        # Only scan incomplete snapshots — avoids iterating all 10k+ resolved incidents
+        # Only scan incomplete snapshots
         for snap in self.incident_snapshots.values():
             if snap["complete"]:
                 continue
@@ -836,11 +1328,7 @@ class SimulationEngine:
                     buckets[s]["vehicle_count"] += d.count
 
     def accumulate_detections_for_history(self, detections: list[Detection], now_ms: float):
-        """Accumulate detections into per-second buckets for section history.
-
-        When the second boundary changes, flushes the previous second's data
-        into the global per-second buffer.
-        """
+        """Accumulate detections into per-second buckets for section history."""
         bucket_ms = int(now_ms // 1000) * 1000
 
         # Second boundary crossed — flush previous accumulator
@@ -1010,9 +1498,7 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
     detection_broadcast_interval = 0.1  # 100ms (10 Hz)
     pending_detections: list[Detection] = []  # Accumulate detections between broadcasts
     pending_new_incidents: list[Incident] = []  # Accumulate new incidents between broadcasts
-    pending_resolved_incidents: list[
-        Incident
-    ] = []  # Accumulate resolved incidents between broadcasts
+    pending_resolved_incidents: list[Incident] = []
 
     while True:
         tick_start = time.time()
@@ -1107,11 +1593,13 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
         # Log stats periodically
         if engine.tick_count % 400 == 0:
             active = sum(1 for i in engine.incidents if i.status == "active")
+            events = len(engine._road_events.events)
             logger.info(
-                "[%.1fh] Vehicles: %d | Active incidents: %d",
+                "[%.1fh] Vehicles: %d | Active incidents: %d | Road events: %d",
                 engine.simulated_hour,
                 len(engine.vehicles),
                 active,
+                events,
             )
 
         # Sleep for remaining tick time (minimum 1ms to allow event loop I/O)
