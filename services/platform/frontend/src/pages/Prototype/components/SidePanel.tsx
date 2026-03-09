@@ -121,22 +121,17 @@ export function SidePanel({
   const section = selectedSectionId ? sections.find(s => s.id === selectedSectionId) : null
 
   // Track when the slide transition finishes so we can delay showing/hiding elements
-  const [, setFullyOpen] = useState(sidebarOpen)
   const [fullyClosed, setFullyClosed] = useState(!sidebarOpen)
   const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (sidebarOpen) {
       setFullyClosed(false)
-    } else {
-      setFullyOpen(false)
     }
   }, [sidebarOpen])
 
   const handleTransitionEnd = () => {
-    if (sidebarOpen) {
-      setFullyOpen(true)
-    } else {
+    if (!sidebarOpen) {
       setFullyClosed(true)
     }
   }
@@ -2539,6 +2534,34 @@ function StructureDetail({
   )
 }
 
+// ── Shared SHM helpers ───────────────────────────────────────────────
+
+/** Compute hour-aligned tick positions for a time range. Returns {frac, label} tuples. */
+function computeHourTicks(tMin: number, tMax: number): { frac: number; label: string }[] {
+  const ticks: { frac: number; label: string }[] = []
+  const durH = (tMax - tMin) / (1000 * 3600)
+  let interval = 1
+  if (durH > 72) interval = 12
+  else if (durH > 24) interval = 6
+  else if (durH > 12) interval = 3
+  else if (durH > 6) interval = 2
+  const cur = new Date(tMin)
+  cur.setMinutes(0, 0, 0)
+  if (cur.getTime() < tMin) cur.setHours(cur.getHours() + 1)
+  const aligned = Math.ceil(cur.getHours() / interval) * interval
+  cur.setHours(aligned)
+  while (cur.getTime() <= tMax) {
+    if (cur.getTime() >= tMin) {
+      ticks.push({
+        frac: (cur.getTime() - tMin) / (tMax - tMin || 1),
+        label: `${cur.getHours().toString().padStart(2, '0')}:00`,
+      })
+    }
+    cur.setHours(cur.getHours() + interval)
+  }
+  return ticks
+}
+
 // ── Spectral heatmap (canvas) ────────────────────────────────────────
 
 // Viridis colormap (256 colors, RGB)
@@ -2845,30 +2868,14 @@ function SpectralHeatmapCanvas({ data }: { data: SpectralTimeSeries }) {
       ctx.fillStyle = '#64748b'
       ctx.font = '10px sans-serif'
 
-      // X axis (time) — hour-aligned ticks like PeakScatterPlot
+      // X axis (time) — hour-aligned ticks
       ctx.textAlign = 'center'
       const t0 = new Date(data.t0)
       const tMin = t0.getTime()
       const tMax = tMin + (data.dt[data.dt.length - 1] || 0) * 1000
-      const durH = (tMax - tMin) / (1000 * 3600)
-      let interval = 1
-      if (durH > 72) interval = 12
-      else if (durH > 24) interval = 6
-      else if (durH > 12) interval = 3
-      else if (durH > 6) interval = 2
-      const cur = new Date(tMin)
-      cur.setMinutes(0, 0, 0)
-      if (cur.getTime() < tMin) cur.setHours(cur.getHours() + 1)
-      const aligned = Math.ceil(cur.getHours() / interval) * interval
-      cur.setHours(aligned)
-      while (cur.getTime() <= tMax) {
-        if (cur.getTime() >= tMin) {
-          const frac = (cur.getTime() - tMin) / (tMax - tMin || 1)
-          const x = margin.left + frac * plotW
-          const label = `${cur.getHours().toString().padStart(2, '0')}:00`
-          ctx.fillText(label, x, height - 4)
-        }
-        cur.setHours(cur.getHours() + interval)
+      for (const tick of computeHourTicks(tMin, tMax)) {
+        const x = margin.left + tick.frac * plotW
+        ctx.fillText(tick.label, x, height - 4)
       }
 
       // Y axis (frequency) — integer Hz ticks
@@ -2915,10 +2922,6 @@ function SpectralHeatmapCanvas({ data }: { data: SpectralTimeSeries }) {
 type ScatterTooltip = { x: number; y: number; freq: number; power: number; timestamp: Date } | null
 type ScatterBrush = { startX: number; currentX: number } | null
 type ScatterZoom = { startMs: number; endMs: number } | null
-
-function formatScatterHour(date: Date): string {
-  return `${date.getHours().toString().padStart(2, '0')}:00`
-}
 
 function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -2988,24 +2991,8 @@ function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
   }, [freqMin, freqMax])
 
   const xTicks = useMemo(() => {
-    const ticks: { x: number; label: string }[] = []
     const { min: tMin, max: tMax } = timeRange
-    const durH = (tMax - tMin) / (1000 * 3600)
-    let interval = 1
-    if (durH > 72) interval = 12
-    else if (durH > 24) interval = 6
-    else if (durH > 12) interval = 3
-    else if (durH > 6) interval = 2
-    const cur = new Date(tMin)
-    cur.setMinutes(0, 0, 0)
-    if (cur.getTime() < tMin) cur.setHours(cur.getHours() + 1)
-    const aligned = Math.ceil(cur.getHours() / interval) * interval
-    cur.setHours(aligned)
-    while (cur.getTime() <= tMax) {
-      if (cur.getTime() >= tMin) ticks.push({ x: xScale(cur.getTime()), label: formatScatterHour(cur) })
-      cur.setHours(cur.getHours() + interval)
-    }
-    return ticks
+    return computeHourTicks(tMin, tMax).map(t => ({ x: xScale(tMin + t.frac * (tMax - tMin)), label: t.label }))
   }, [timeRange, xScale])
 
   // Brush handlers

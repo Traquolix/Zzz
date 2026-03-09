@@ -51,7 +51,9 @@ export function useDebouncedResize(
       observer.disconnect()
       if (timerRef.current) clearTimeout(timerRef.current)
     }
-  }, [ref, delay])
+    // ref identity is stable across renders; only delay matters
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [delay])
 
   return { width, transitioning }
 }
