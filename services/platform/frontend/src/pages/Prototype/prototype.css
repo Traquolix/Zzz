@@ -114,6 +114,22 @@
   border-top-color: rgba(30, 32, 36, 0.92);
 }
 
+.proto-vehicle-popup-body {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--proto-text);
+}
+
+.proto-vehicle-popup-speed {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.proto-vehicle-popup-detail {
+  color: var(--proto-text-secondary);
+}
+
 /* Incident marker pulse on hover */
 @keyframes proto-marker-pulse {
   0%,

@@ -218,13 +218,6 @@ export function SidePanel({
                 onClick={() => dispatch({ type: 'SELECT_CHANNEL', channel: selectedChannel })}
               />
             )}
-            <button
-              title={sidebarExpanded ? t('sidebar.collapsePanel') : t('sidebar.expandPanel')}
-              onClick={() => dispatch({ type: 'TOGGLE_SIDEBAR_EXPANDED' })}
-              className="group/exp flex items-center justify-center self-end w-[32px] hover:w-full h-7 rounded-l-lg border border-r-0 border-transparent bg-[var(--proto-surface)]/40 text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)] hover:bg-[var(--proto-surface)]/80 transition-all cursor-pointer"
-            >
-              <ExpandIcon expanded={!!sidebarExpanded} />
-            </button>
             <TabButton
               label="Settings"
               icon={<SettingsIcon />}
@@ -967,6 +960,7 @@ function ChannelDetail({
   dispatch: React.Dispatch<ProtoAction>
   fiberColors: Record<string, string>
 }) {
+  const { t } = useTranslation()
   const fiber = findFiber(channel.fiberId, channel.direction)
   const fiberColor = fiber ? getFiberColor(fiber, fiberColors) : '#6366f1'
   const directionLabel = fiber?.direction === 0 ? 'Dir A' : 'Dir B'
@@ -1139,7 +1133,9 @@ function ChannelDetail({
             </div>
             <div>
               <span className="text-[length:var(--text-xl)] font-semibold text-[var(--proto-text)]">{liveCount}</span>
-              <span className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)] ml-1">in 60s</span>
+              <span className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)] ml-1">
+                {t('channelDetail.detectionsWindow')}
+              </span>
             </div>
           </div>
           <div className="rounded-lg border border-[var(--proto-border)] p-3">
