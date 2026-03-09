@@ -654,12 +654,17 @@ class StatsView(FlowAwareMixin, APIView):
 class SectionListView(APIView):
     """
     GET  /api/sections — list active monitored sections.
-    POST /api/sections — create a new monitored section.
+    POST /api/sections — create a new monitored section (requires non-viewer role).
 
     Org-scoped via Section.organization FK.
     """
 
     permission_classes = [IsActiveUser]
+
+    def get_permissions(self):
+        if self.request.method == "POST":
+            return [IsNotViewer()]
+        return super().get_permissions()
 
     @extend_schema(
         responses={200: SectionSerializer(many=True)},
@@ -709,21 +714,18 @@ class SectionDeleteView(APIView):
     """
     DELETE /api/sections/<id> — delete a monitored section.
 
-    Org-scoped via Section.organization FK.
+    Org-scoped via Section.organization FK. Requires non-viewer role.
     """
 
-    permission_classes = [IsActiveUser]
+    permission_classes = [IsNotViewer]
 
     def delete(self, request, section_id):
         org_id = None if request.user.is_superuser else request.user.organization_id
-        section = get_section(section_id, organization_id=org_id)
-        if not section:
+        if not delete_section(section_id, organization_id=org_id):
             return Response(
                 {"detail": "Section not found", "code": "not_found"},
                 status=404,
             )
-
-        delete_section(section_id, organization_id=org_id)
         return Response(status=204)
 
 

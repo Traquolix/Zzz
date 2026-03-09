@@ -283,9 +283,6 @@ def _transform_history_point(r: dict, bucket_seconds: int) -> dict:
 
 def _section_to_dict(section: Section) -> dict:
     """Convert a Section model instance to the API response dict."""
-    ca = section.created_at
-    created = ca.isoformat() if hasattr(ca, "isoformat") else str(ca)
-
     return {
         "id": section.id,
         "fiberId": section.fiber_id,
@@ -295,5 +292,5 @@ def _section_to_dict(section: Section) -> dict:
         "channelEnd": section.channel_end,
         "expectedTravelTime": section.expected_travel_time_seconds,
         "isActive": section.is_active,
-        "createdAt": created,
+        "createdAt": section.created_at.isoformat(),
     }
