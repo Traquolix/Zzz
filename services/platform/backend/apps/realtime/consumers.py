@@ -125,7 +125,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         self.subscriptions = set()
         self._user = user
         self._authenticated = True
-        self._flow = "sim"  # Overwritten in _handle_authenticate based on availability
+        self._flow = "live"  # Overwritten in _handle_authenticate based on availability
         # Rate limiting state
         self._message_times = []
         # Pub/sub state (lazily initialized on first high-frequency subscribe)
