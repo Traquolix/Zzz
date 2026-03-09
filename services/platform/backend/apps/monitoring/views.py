@@ -61,6 +61,7 @@ _PROCESS_START_TIME = time.time()
 
 INCIDENTS_CACHE_TTL = 10  # 10 seconds
 STATS_CACHE_TTL = 5  # 5 seconds
+MAX_SECTIONS_PER_ORG = 50
 
 
 def _get_fiber_ids_or_none(user):
@@ -699,6 +700,21 @@ class SectionListView(APIView):
                 status=400,
             )
 
+        # Enforce per-org section limit
+        from apps.monitoring.models import Section
+
+        org_count = Section.objects.filter(
+            organization_id=request.user.organization_id, is_active=True
+        ).count()
+        if org_count >= MAX_SECTIONS_PER_ORG:
+            return Response(
+                {
+                    "detail": f"Section limit reached ({MAX_SECTIONS_PER_ORG} per organization)",
+                    "code": "limit_reached",
+                },
+                status=400,
+            )
+
         # Org-scoping: verify the fiber belongs to user's org
         fiber_ids = _get_fiber_ids_or_none(request.user)
         if fiber_ids is not None and not fiber_belongs_to_org(fiber_id, fiber_ids):
@@ -867,9 +883,13 @@ class BatchSectionHistoryView(FlowAwareMixin, APIView):
                 status=400,
             )
 
-        if len(section_ids) > 100:
+        if len(section_ids) > MAX_SECTIONS_PER_ORG:
             return Response(
-                {"detail": "Too many sections (max 100)", "code": "validation_error"},
+                {
+                    "detail": f"Too many sections: {len(section_ids)} requested, "
+                    f"max {MAX_SECTIONS_PER_ORG} per request",
+                    "code": "validation_error",
+                },
                 status=400,
             )
 
@@ -894,9 +914,13 @@ class BatchSectionHistoryView(FlowAwareMixin, APIView):
         if self._is_sim(request):
             minutes = min(minutes, 60)
 
-        # Fetch sections from DB, org-scoped
+        # Fetch sections from DB, org-scoped (cached — sections rarely change)
         org_id = None if request.user.is_superuser else request.user.organization_id
-        sections = query_sections(organization_id=org_id)
+        cache_key = f"sections:{org_id or '__all__'}"
+        sections = django_cache.get(cache_key)
+        if sections is None:
+            sections = query_sections(organization_id=org_id)
+            django_cache.set(cache_key, sections, 30)
 
         # Filter to requested IDs only
         sections_by_id = {s["id"]: s for s in sections}

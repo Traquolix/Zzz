@@ -1,5 +1,7 @@
 import { apiRequest } from './client'
 
+export const MAX_SECTIONS_PER_ORG = 50
+
 export interface ApiSection {
   id: string
   fiberId: string

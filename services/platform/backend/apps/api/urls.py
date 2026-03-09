@@ -48,12 +48,12 @@ urlpatterns = [
         name="section-batch-history",
     ),
     path(
-        "sections/<path:section_id>/history",
+        "sections/<str:section_id>/history",
         monitoring_views.SectionHistoryView.as_view(),
         name="section-history",
     ),
     path(
-        "sections/<path:section_id>",
+        "sections/<str:section_id>",
         monitoring_views.SectionDeleteView.as_view(),
         name="section-delete",
     ),

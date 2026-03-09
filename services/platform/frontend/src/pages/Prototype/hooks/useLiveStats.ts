@@ -95,8 +95,8 @@ export function useLiveStats(sections: Section[]) {
         setSeriesData(nextSeries)
         setStats(nextStats)
       }
-    } catch {
-      // Keep previous data on error
+    } catch (e) {
+      if (import.meta.env.DEV) console.error('useLiveStats: batch fetch failed', e)
     }
   }, [flow])
 
