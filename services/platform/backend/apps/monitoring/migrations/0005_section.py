@@ -70,6 +70,18 @@ class Migration(migrations.Migration):
             ],
             options={
                 "ordering": ["fiber_id", "channel_start"],
+                "constraints": [
+                    models.UniqueConstraint(
+                        fields=[
+                            "organization",
+                            "fiber_id",
+                            "direction",
+                            "channel_start",
+                            "channel_end",
+                        ],
+                        name="unique_section_range",
+                    ),
+                ],
             },
         ),
     ]

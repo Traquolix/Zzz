@@ -9,6 +9,7 @@ import logging
 import time
 
 from django.core.cache import cache as django_cache
+from django.db import IntegrityError
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.exceptions import NotFound, ParseError
 from rest_framework.response import Response
@@ -705,15 +706,21 @@ class SectionListView(APIView):
                 status=404,
             )
 
-        section = insert_section(
-            fiber_id=fiber_id,
-            name=name,
-            channel_start=channel_start,
-            channel_end=channel_end,
-            direction=direction,
-            organization_id=request.user.organization_id,
-            user_id=request.user.id,
-        )
+        try:
+            section = insert_section(
+                fiber_id=fiber_id,
+                name=name,
+                channel_start=channel_start,
+                channel_end=channel_end,
+                direction=direction,
+                organization_id=request.user.organization_id,
+                user_id=request.user.id,
+            )
+        except IntegrityError:
+            return Response(
+                {"detail": "A section with this range already exists", "code": "duplicate"},
+                status=409,
+            )
         return Response(section, status=201)
 
 
