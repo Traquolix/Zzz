@@ -51,6 +51,7 @@ jobs:
         run: |
           cd ${{ env.DEPLOY_DIR }}
           docker compose build --parallel
+          docker compose down --remove-orphans
           docker compose up -d
 
       - name: Health check
