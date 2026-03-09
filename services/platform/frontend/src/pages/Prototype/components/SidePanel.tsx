@@ -44,6 +44,7 @@ import { useWaterfallBuffer } from '../hooks/useWaterfallBuffer'
 import { WaterfallCanvas } from './WaterfallCanvas'
 import { FlowToggle } from './FlowToggle'
 import { useSectionHistory } from '../hooks/useSectionHistory'
+import { useDebouncedResize } from '../hooks/useDebouncedResize'
 import type { DataFlow } from '@/context/RealtimeContext'
 
 interface StructureDataProp {
@@ -2685,122 +2686,121 @@ const VIRIDIS: [number, number, number][] = [
 function SpectralHeatmapCanvas({ data }: { data: SpectralTimeSeries }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const { width: debouncedWidth } = useDebouncedResize(containerRef)
 
-  const draw = useCallback(() => {
-    const canvas = canvasRef.current
-    const container = containerRef.current
-    if (!canvas || !container) return
+  const draw = useCallback(
+    (width: number) => {
+      const canvas = canvasRef.current
+      if (!canvas || width <= 0) return
 
-    const width = container.clientWidth
-    const height = 200
-    const dpr = window.devicePixelRatio || 1
-    canvas.width = width * dpr
-    canvas.height = height * dpr
-    canvas.style.width = `${width}px`
-    canvas.style.height = `${height}px`
+      const height = 200
+      const dpr = window.devicePixelRatio || 1
+      canvas.width = width * dpr
+      canvas.height = height * dpr
+      canvas.style.width = `${width}px`
+      canvas.style.height = `${height}px`
 
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    ctx.scale(dpr, dpr)
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+      ctx.scale(dpr, dpr)
 
-    const { spectra, freqs } = data
-    if (!spectra.length || !freqs.length) return
+      const { spectra, freqs } = data
+      if (!spectra.length || !freqs.length) return
 
-    const margin = { top: 4, right: 8, bottom: 24, left: 48 }
-    const plotW = width - margin.left - margin.right
-    const plotH = height - margin.top - margin.bottom
+      const margin = { top: 4, right: 8, bottom: 24, left: 48 }
+      const plotW = width - margin.left - margin.right
+      const plotH = height - margin.top - margin.bottom
 
-    const numTime = spectra.length
-    const numFreq = freqs.length
+      const numTime = spectra.length
+      const numFreq = freqs.length
 
-    // Find min/max power for color scaling
-    let minP = Infinity,
-      maxP = -Infinity
-    for (const row of spectra) {
-      for (const v of row) {
-        if (v < minP) minP = v
-        if (v > maxP) maxP = v
+      // Find min/max power for color scaling
+      let minP = Infinity,
+        maxP = -Infinity
+      for (const row of spectra) {
+        for (const v of row) {
+          if (v < minP) minP = v
+          if (v > maxP) maxP = v
+        }
       }
-    }
-    const range = maxP - minP || 1
+      const range = maxP - minP || 1
 
-    // Draw heatmap
-    const cellW = plotW / numTime
-    const cellH = plotH / numFreq
+      // Draw heatmap
+      const cellW = plotW / numTime
+      const cellH = plotH / numFreq
 
-    for (let ti = 0; ti < numTime; ti++) {
-      for (let fi = 0; fi < numFreq; fi++) {
-        const norm = (spectra[ti][fi] - minP) / range
-        const idx = Math.floor(norm * (VIRIDIS.length - 1))
-        const [r, g, b] = VIRIDIS[Math.max(0, Math.min(idx, VIRIDIS.length - 1))]
-        ctx.fillStyle = `rgb(${r},${g},${b})`
-        ctx.fillRect(
-          margin.left + ti * cellW,
-          margin.top + (numFreq - 1 - fi) * cellH,
-          Math.ceil(cellW) + 1,
-          Math.ceil(cellH) + 1,
-        )
+      for (let ti = 0; ti < numTime; ti++) {
+        for (let fi = 0; fi < numFreq; fi++) {
+          const norm = (spectra[ti][fi] - minP) / range
+          const idx = Math.floor(norm * (VIRIDIS.length - 1))
+          const [r, g, b] = VIRIDIS[Math.max(0, Math.min(idx, VIRIDIS.length - 1))]
+          ctx.fillStyle = `rgb(${r},${g},${b})`
+          ctx.fillRect(
+            margin.left + ti * cellW,
+            margin.top + (numFreq - 1 - fi) * cellH,
+            Math.ceil(cellW) + 1,
+            Math.ceil(cellH) + 1,
+          )
+        }
       }
-    }
 
-    // Axes
-    ctx.fillStyle = '#64748b'
-    ctx.font = '10px sans-serif'
+      // Axes
+      ctx.fillStyle = '#64748b'
+      ctx.font = '10px sans-serif'
 
-    // X axis (time) — hour-aligned ticks like PeakScatterPlot
-    ctx.textAlign = 'center'
-    const t0 = new Date(data.t0)
-    const tMin = t0.getTime()
-    const tMax = tMin + (data.dt[data.dt.length - 1] || 0) * 1000
-    const durH = (tMax - tMin) / (1000 * 3600)
-    let interval = 1
-    if (durH > 72) interval = 12
-    else if (durH > 24) interval = 6
-    else if (durH > 12) interval = 3
-    else if (durH > 6) interval = 2
-    const cur = new Date(tMin)
-    cur.setMinutes(0, 0, 0)
-    if (cur.getTime() < tMin) cur.setHours(cur.getHours() + 1)
-    const aligned = Math.ceil(cur.getHours() / interval) * interval
-    cur.setHours(aligned)
-    while (cur.getTime() <= tMax) {
-      if (cur.getTime() >= tMin) {
-        const frac = (cur.getTime() - tMin) / (tMax - tMin || 1)
-        const x = margin.left + frac * plotW
-        const label = `${cur.getHours().toString().padStart(2, '0')}:00`
-        ctx.fillText(label, x, height - 4)
+      // X axis (time) — hour-aligned ticks like PeakScatterPlot
+      ctx.textAlign = 'center'
+      const t0 = new Date(data.t0)
+      const tMin = t0.getTime()
+      const tMax = tMin + (data.dt[data.dt.length - 1] || 0) * 1000
+      const durH = (tMax - tMin) / (1000 * 3600)
+      let interval = 1
+      if (durH > 72) interval = 12
+      else if (durH > 24) interval = 6
+      else if (durH > 12) interval = 3
+      else if (durH > 6) interval = 2
+      const cur = new Date(tMin)
+      cur.setMinutes(0, 0, 0)
+      if (cur.getTime() < tMin) cur.setHours(cur.getHours() + 1)
+      const aligned = Math.ceil(cur.getHours() / interval) * interval
+      cur.setHours(aligned)
+      while (cur.getTime() <= tMax) {
+        if (cur.getTime() >= tMin) {
+          const frac = (cur.getTime() - tMin) / (tMax - tMin || 1)
+          const x = margin.left + frac * plotW
+          const label = `${cur.getHours().toString().padStart(2, '0')}:00`
+          ctx.fillText(label, x, height - 4)
+        }
+        cur.setHours(cur.getHours() + interval)
       }
-      cur.setHours(cur.getHours() + interval)
-    }
 
-    // Y axis (frequency) — integer Hz ticks
-    ctx.textAlign = 'right'
-    const freqLo = Math.ceil(freqs[0])
-    const freqHi = Math.floor(freqs[freqs.length - 1])
-    for (let hz = freqLo; hz <= freqHi; hz++) {
-      const frac = (hz - freqs[0]) / (freqs[freqs.length - 1] - freqs[0])
-      const y = margin.top + (1 - frac) * plotH + 3
-      ctx.fillText(`${hz}`, margin.left - 4, y)
-    }
+      // Y axis (frequency) — integer Hz ticks
+      ctx.textAlign = 'right'
+      const freqLo = Math.ceil(freqs[0])
+      const freqHi = Math.floor(freqs[freqs.length - 1])
+      for (let hz = freqLo; hz <= freqHi; hz++) {
+        const frac = (hz - freqs[0]) / (freqs[freqs.length - 1] - freqs[0])
+        const y = margin.top + (1 - frac) * plotH + 3
+        ctx.fillText(`${hz}`, margin.left - 4, y)
+      }
 
-    // Rotated vertical label: "Freq (Hz)"
-    ctx.save()
-    ctx.font = '9px sans-serif'
-    ctx.textAlign = 'center'
-    const labelX = 15
-    const labelY = margin.top + plotH / 2
-    ctx.translate(labelX, labelY)
-    ctx.rotate(-Math.PI / 2)
-    ctx.fillText('Freq (Hz)', 0, 0)
-    ctx.restore()
-  }, [data])
+      // Rotated vertical label: "Freq (Hz)"
+      ctx.save()
+      ctx.font = '9px sans-serif'
+      ctx.textAlign = 'center'
+      const labelX = 15
+      const labelY = margin.top + plotH / 2
+      ctx.translate(labelX, labelY)
+      ctx.rotate(-Math.PI / 2)
+      ctx.fillText('Freq (Hz)', 0, 0)
+      ctx.restore()
+    },
+    [data],
+  )
 
   useEffect(() => {
-    draw()
-    const observer = new ResizeObserver(draw)
-    if (containerRef.current) observer.observe(containerRef.current)
-    return () => observer.disconnect()
-  }, [draw])
+    draw(debouncedWidth)
+  }, [draw, debouncedWidth])
 
   return (
     <div ref={containerRef} className="w-full">
@@ -2822,23 +2822,12 @@ function formatScatterHour(date: Date): string {
 function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
-  const [width, setWidth] = useState(280)
+  const { width } = useDebouncedResize(containerRef)
   const [tooltip, setTooltip] = useState<ScatterTooltip>(null)
   const [brush, setBrush] = useState<ScatterBrush>(null)
   const [zoom, setZoom] = useState<ScatterZoom>(null)
   const rawId = useRef(Math.random().toString(36).slice(2)).current
   const clipId = `proto-scatter-${rawId}`
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const obs = new ResizeObserver(entries => {
-      for (const entry of entries) setWidth(entry.contentRect.width)
-    })
-    obs.observe(el)
-    setWidth(el.clientWidth)
-    return () => obs.disconnect()
-  }, [])
 
   const height = 170
   const padding = { top: 16, right: 12, bottom: 28, left: 48 }
@@ -3304,7 +3293,8 @@ function ComparisonSection({
   onStats?: (stats: ComparisonStats | null) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
-  const [chartWidth, setChartWidth] = useState(280)
+  const { width: rawChartWidth } = useDebouncedResize(containerRef)
+  const chartWidth = Math.max(160, rawChartWidth)
   const [mode, setMode] = useState<ComparisonMode>('day')
   const [focus, setFocus] = useState<FocusMode>('equal')
   const [windowA, setWindowA] = useState<{ data: PeakFrequencyData | null; loading: boolean }>({
@@ -3315,18 +3305,6 @@ function ComparisonSection({
     data: null,
     loading: false,
   })
-
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
-    const measure = () => {
-      if (el) setChartWidth(Math.max(160, el.clientWidth))
-    }
-    measure()
-    const obs = new ResizeObserver(measure)
-    obs.observe(el)
-    return () => obs.disconnect()
-  }, [])
 
   // Compute comparison date ranges
   const referenceDate = useMemo(() => {
