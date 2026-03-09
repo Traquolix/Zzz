@@ -868,13 +868,15 @@ function ChannelDetail({
 
   // Subscribe to detections and collect speed dots
   useEffect(() => {
+    const NEIGHBOR_RANGE = 0
+
     const unsub = subscribe('detections', (data: unknown) => {
       const detections = parseDetections(data)
       const now = Date.now()
 
       for (const d of detections) {
         if (d.fiberId !== channel.fiberId || d.direction !== channel.direction) continue
-        if (d.channel !== channel.channel) continue
+        if (Math.abs(d.channel - channel.channel) > NEIGHBOR_RANGE) continue
         dotsRef.current.push({ time: now, speed: d.speed })
       }
     })
