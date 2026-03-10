@@ -1,8 +1,9 @@
 """
 ClickHouse connection manager with circuit breaker.
 
-Provides thread-local clients for read-only queries to the ClickHouse
-time-series database that stores pipeline data (speeds, counts, incidents).
+Provides thread-local clients for queries and DDL/DML commands against the
+ClickHouse time-series database that stores pipeline data (speeds, counts,
+incidents).
 
 Uses thread-local storage to avoid "concurrent queries within same session"
 errors when the Kafka bridge and API requests run simultaneously.
@@ -183,6 +184,32 @@ def query_scalar(sql, parameters=None):
     if rows and rows[0]:
         return list(rows[0].values())[0]
     return None
+
+
+def command(sql: str) -> None:
+    """Execute a DDL/DML statement (ALTER, DROP, CREATE, etc.)."""
+    from apps.shared.metrics import CLICKHOUSE_QUERIES
+
+    try:
+        client = get_client()
+        client.command(sql)
+        CLICKHOUSE_QUERIES.labels(query_type="command", status="success").inc()
+    except ClickHouseUnavailableError:
+        CLICKHOUSE_QUERIES.labels(query_type="command", status="circuit_breaker").inc()
+        raise
+    except Exception as e:
+        _local.client = None
+        _record_failure()
+        sql_preview = (sql or "").strip()[:500]
+        logger.error("ClickHouse command failed: %s | SQL: %s", e, sql_preview)
+        CLICKHOUSE_QUERIES.labels(query_type="command", status="error").inc()
+        try:
+            import sentry_sdk
+
+            sentry_sdk.capture_exception(e)
+        except Exception:
+            pass
+        raise ClickHouseUnavailableError(str(e))
 
 
 def health() -> dict:

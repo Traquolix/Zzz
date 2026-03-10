@@ -23,6 +23,13 @@ fi
 echo "Running database migrations..."
 python manage.py migrate --noinput
 
+# Apply ClickHouse migrations (idempotent — safe to re-run on every deploy)
+echo "Applying ClickHouse migrations..."
+python manage.py apply_clickhouse_migrations || {
+    echo "WARNING: ClickHouse migrations failed or ClickHouse is unavailable." >&2
+    echo "         The backend will start, but schema may be outdated." >&2
+}
+
 # Seed users only in DEBUG mode (seed_users command enforces this internally too)
 if [ "${DJANGO_SETTINGS_MODULE}" = "sequoia.settings.dev" ]; then
     echo "Seeding development users..."
