@@ -2849,6 +2849,7 @@ function SpectralHeatmapCanvas({ data }: { data: SpectralTimeSeries }) {
       const margin = { top: 4, right: 8, bottom: 24, left: 36 }
       const plotW = width - margin.left - margin.right
       const plotH = height - margin.top - margin.bottom
+      if (plotW <= 0 || plotH <= 0) return
 
       const numTime = spectra.length
       const numFreq = freqs.length
