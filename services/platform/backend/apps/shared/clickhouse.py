@@ -185,6 +185,21 @@ def query_scalar(sql, parameters=None):
     return None
 
 
+def command(sql: str) -> None:
+    """Execute a DDL/DML statement (ALTER, DROP, CREATE, etc.)."""
+    client = get_client()
+    try:
+        client.command(sql)
+    except ClickHouseUnavailableError:
+        raise
+    except Exception as e:
+        _local.client = None
+        _record_failure()
+        sql_preview = (sql or "").strip()[:500]
+        logger.error("ClickHouse command failed: %s | SQL: %s", e, sql_preview)
+        raise ClickHouseUnavailableError(str(e))
+
+
 def health() -> dict:
     """Return circuit breaker state for health checks."""
     with _breaker_lock:
