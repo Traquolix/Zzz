@@ -9,6 +9,7 @@ All migrations are idempotent (IF NOT EXISTS / IF EXISTS) so this is safe
 to re-run on every deploy.
 """
 
+import argparse
 import re
 
 from django.conf import settings
@@ -19,21 +20,23 @@ from apps.shared.exceptions import ClickHouseUnavailableError
 
 
 def _strip_comments(sql: str) -> str:
-    """Remove SQL line comments (-- ...) so they don't interfere with splitting."""
-    return re.sub(r"--[^\n]*", "", sql)
+    """Remove SQL line comments (-- ...) and block comments (/* ... */)."""
+    sql = re.sub(r"/\*.*?\*/", "", sql, flags=re.DOTALL)
+    sql = re.sub(r"--[^\n]*", "", sql)
+    return sql
 
 
 class Command(BaseCommand):
     help = "Apply ClickHouse SQL migrations from infrastructure/clickhouse/migrations/."
 
-    def add_arguments(self, parser):
+    def add_arguments(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
             "--dry-run",
             action="store_true",
             help="Print statements without executing them.",
         )
 
-    def handle(self, *args, **options):
+    def handle(self, *args: object, **options: object) -> None:
         dry_run = options["dry_run"]
         migration_dir = settings.DATA_DIR / "clickhouse" / "migrations"
 
@@ -46,7 +49,6 @@ class Command(BaseCommand):
             self.stdout.write("  No .sql files found, skipping.")
             return
 
-        failed = False
         for sql_file in sql_files:
             name = sql_file.name
             raw_sql = sql_file.read_text()
@@ -69,11 +71,7 @@ class Command(BaseCommand):
                     self.stderr.write(
                         self.style.ERROR(f"  {name} stmt {i} FAILED: {e}\n    SQL: {sql_preview}")
                     )
-                    failed = True
-                    break  # Skip remaining statements in this file
+                    raise SystemExit(1)
 
-            if not dry_run and not failed:
+            if not dry_run:
                 self.stdout.write(self.style.SUCCESS(f"  Applied {name}"))
-
-        if failed:
-            raise SystemExit(1)
