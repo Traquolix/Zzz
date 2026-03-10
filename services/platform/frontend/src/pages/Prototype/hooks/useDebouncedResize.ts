@@ -17,6 +17,7 @@ export function useDebouncedResize(
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const latestWidthRef = useRef(0)
   const initialised = useRef(false)
+  const firstObservation = useRef(true)
 
   useEffect(() => {
     const el = ref.current
@@ -48,8 +49,14 @@ export function useDebouncedResize(
 
       latestWidthRef.current = w
 
-      // First observation — seed without marking as transitioning
-      if (!initialised.current) {
+      // First observation — seed without marking as transitioning.
+      // Cancel any pending RAF to avoid a redundant render.
+      if (firstObservation.current) {
+        firstObservation.current = false
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId)
+          rafId = null
+        }
         initialised.current = true
         setWidth(w)
         return
