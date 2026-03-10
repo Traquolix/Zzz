@@ -15,11 +15,13 @@ from datetime import timedelta
 
 from django.http import JsonResponse, StreamingHttpResponse
 from django.utils.dateparse import parse_datetime
+from rest_framework.exceptions import ParseError
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
 from apps.fibers.utils import get_org_fiber_ids
+from apps.monitoring.mixins import FlowAwareMixin
 from apps.shared.clickhouse import get_client
 from apps.shared.exceptions import ClickHouseUnavailableError
 from apps.shared.permissions import IsActiveUser
@@ -129,11 +131,20 @@ def _stream_csv(columns, rows):
         output.truncate(0)
 
 
-class ExportIncidentsView(APIView):
-    """GET /api/export/incidents — export incident data as CSV or JSON."""
+class ExportIncidentsView(FlowAwareMixin, APIView):
+    """
+    GET /api/export/incidents — export incident data as CSV or JSON.
+
+    Live flow only — sim data is ephemeral and not meant for export.
+    """
 
     permission_classes = [IsActiveUser]
     throttle_classes = [ExportThrottle]
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if self._is_sim(request):
+            raise ParseError("Export is not available for simulation data")
 
     def get(self, request):
         fiber_id, start, end, fmt, errors = _parse_params(request)
@@ -177,11 +188,20 @@ class ExportIncidentsView(APIView):
         return response
 
 
-class ExportDetectionsView(APIView):
-    """GET /api/export/detections — export detection data with automatic tier selection."""
+class ExportDetectionsView(FlowAwareMixin, APIView):
+    """
+    GET /api/export/detections — export detection data with automatic tier selection.
+
+    Live flow only — sim data is ephemeral and not meant for export.
+    """
 
     permission_classes = [IsActiveUser]
     throttle_classes = [ExportThrottle]
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if self._is_sim(request):
+            raise ParseError("Export is not available for simulation data")
 
     def get(self, request):
         fiber_id, start, end, fmt, errors = _parse_params(request)
