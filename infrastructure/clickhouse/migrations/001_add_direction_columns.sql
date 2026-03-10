@@ -11,5 +11,3 @@ ALTER TABLE sequoia.fiber_incidents
 
 -- fiber_monitored_sections and fiber_danger_zones removed from ClickHouse
 -- (sections moved to PostgreSQL, danger zones deleted as unused)
-
-SELECT 'Migration 001: direction column added to fiber_incidents' AS status;
