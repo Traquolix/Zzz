@@ -1038,7 +1038,7 @@ class SpectralDataView(APIView):
 
         if start_time_str or end_time_str:
             # Calculate absolute timestamps for all samples
-            timestamps = np.array([data.t0.timestamp() + offset for offset in data.dt])
+            timestamps = data.t0.timestamp() + data.dt
 
             # Parse filter times
             start_ts = (
@@ -1146,28 +1146,41 @@ class SpectralPeaksView(APIView):
             )
 
         # Defensive copies: cached arrays are process-global and must not be
-        # mutated in-place (numpy slices return views, not copies).
+        # mutated in-place. Subsequent basic slices (e.g. arr[si:ei]) produce
+        # views into these copies — safe because the copies isolate us from
+        # the cache, and we do no in-place mutation after slicing.
         dt = data.dt.copy()
         peak_freqs = all_peak_freqs.copy()
         peak_powers = all_peak_powers.copy()
         t0 = data.t0
 
         # Apply time filtering. When no startTime/endTime and no maxSamples
-        # are provided, default to the current day so the endpoint never
-        # returns the full unfiltered dataset by accident.
+        # are provided, default to the last day of available data so the
+        # endpoint never returns the full unfiltered dataset by accident.
         start_time_str = request.query_params.get("startTime")
         end_time_str = request.query_params.get("endTime")
         max_samples_param = request.query_params.get("maxSamples")
 
-        if not start_time_str and not end_time_str and max_samples_param is None:
-            today = datetime.now(tz=data.t0.tzinfo).replace(
-                hour=0, minute=0, second=0, microsecond=0
-            )
-            start_time_str = today.isoformat()
-            end_time_str = (today + timedelta(days=1)).isoformat()
+        try:
+            max_samples_int = int(max_samples_param) if max_samples_param is not None else None
+        except (ValueError, TypeError):
+            max_samples_int = None
+
+        if (
+            not start_time_str
+            and not end_time_str
+            and (max_samples_int is None or max_samples_int <= 0)
+        ):
+            # Use the file's own end time so this works for both live and
+            # historical/demo data (where "today" may not overlap the file).
+            last_offset = float(dt[-1])
+            file_end = t0 + timedelta(seconds=last_offset)
+            day_start = file_end.replace(hour=0, minute=0, second=0, microsecond=0)
+            start_time_str = day_start.isoformat()
+            end_time_str = (day_start + timedelta(days=1)).isoformat()
 
         if start_time_str or end_time_str:
-            timestamps = np.array([t0.timestamp() + offset for offset in dt])
+            timestamps = t0.timestamp() + dt
 
             start_ts = (
                 datetime.fromisoformat(start_time_str.replace("Z", "+00:00")).timestamp()
@@ -1194,13 +1207,11 @@ class SpectralPeaksView(APIView):
         # Downsample by selecting evenly-spaced indices.
         # When the caller passes an explicit maxSamples we honour it (capped at 10 000).
         # Otherwise we skip downsampling — the time filter already bounds the result.
-        if max_samples_param is not None:
-            try:
-                max_samples = min(int(max_samples_param), 10000)
-            except (ValueError, TypeError):
-                max_samples = 1000
-        else:
-            max_samples = 0
+        max_samples = (
+            min(max_samples_int, 10000)
+            if max_samples_int is not None and max_samples_int > 0
+            else 0
+        )
 
         n = len(dt)
         if max_samples > 0 and max_samples < n:

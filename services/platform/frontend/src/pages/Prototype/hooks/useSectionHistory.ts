@@ -32,73 +32,74 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
 
   const sinceRef = useRef<number | undefined>(undefined)
   const accumulatedRef = useRef<SectionDataPoint[]>([])
-
-  // Generation counter: incremented on every key change. The queryFn captures
-  // the current generation before awaiting; if it differs after the await,
-  // the response is stale and ref writes are skipped.
-  const generationRef = useRef(0)
+  const [series, setSeries] = useState<SectionDataPoint[]>([])
 
   // Stale flag: true only during key transitions (range/flow/section change),
   // NOT during regular background polls (which would cause 2s flicker).
-  // Uses useState (not useRef) so changes trigger a re-render — a ref mutation
-  // after the useEffect would be invisible until the next unrelated render.
+  // Uses useState (not useRef) so changes trigger a re-render.
+  // Initialized to true so the spinner shows on first mount.
   const [keyChanged, setKeyChanged] = useState(true)
 
-  // Reset cursors outside queryFn so concurrent retries don't double-append.
+  // Reset cursors on key change.
   useEffect(() => {
-    generationRef.current += 1
     sinceRef.current = undefined
     accumulatedRef.current = []
+    setSeries([])
     setKeyChanged(true)
   }, [sectionId, minutes, flow])
 
-  const { data, isFetching, error } = useQuery({
+  // queryFn fetches and eagerly advances the since cursor so the next poll
+  // (which may fire before the useEffect runs) never resends stale cursors.
+  // Ref writes are safe here — they don't trigger renders or affect React state.
+  const {
+    data: rawResponse,
+    isFetching,
+    dataUpdatedAt,
+    error,
+  } = useQuery({
     queryKey: ['section-history', sectionId, minutes, flow],
     queryFn: async () => {
-      const gen = generationRef.current
-      const since = sinceRef.current
-      const res = await fetchSectionHistory(sectionId, minutes, flow, since)
-
-      // Stale response from a previous key — discard ref writes.
-      // The return value goes to the old key's cache entry (not the current UI),
-      // so an empty array is safe here.
-      if (gen !== generationRef.current) return []
-
-      const newPoints = mapHistoryPoints(res.points)
-
-      let accumulated = accumulatedRef.current
-      if (since == null) {
-        accumulated = newPoints
-      } else if (newPoints.length > 0) {
-        accumulated.push(...newPoints)
-      }
-
-      // Trim to window
-      const cutoff = Date.now() - minutes * 60 * 1000
-      const firstValid = accumulated.findIndex(p => p.timestamp >= cutoff)
-      if (firstValid > 0) accumulated.splice(0, firstValid)
-
-      accumulatedRef.current = accumulated
-
+      const res = await fetchSectionHistory(sectionId, minutes, flow, sinceRef.current)
       if (res.points.length > 0) {
         sinceRef.current = res.points[res.points.length - 1].time
       }
-
-      // Clear the key-changed flag after first successful fetch for new key
-      setKeyChanged(false)
-
-      return [...accumulated]
+      return res
     },
     refetchInterval: POLL_INTERVAL,
     staleTime: 0,
   })
+
+  // Accumulate, trim, and update cursors outside queryFn.
+  // dataUpdatedAt changes on every successful fetch, so this fires reliably.
+  useEffect(() => {
+    if (!rawResponse) return
+
+    const newPoints = mapHistoryPoints(rawResponse.points)
+
+    let accumulated = accumulatedRef.current
+    if (sinceRef.current == null) {
+      accumulated = newPoints
+    } else if (newPoints.length > 0) {
+      accumulated = [...accumulated, ...newPoints]
+    }
+
+    // Trim to window
+    const cutoff = Date.now() - minutes * 60 * 1000
+    const firstValid = accumulated.findIndex(p => p.timestamp >= cutoff)
+    if (firstValid > 0) accumulated = accumulated.slice(firstValid)
+
+    accumulatedRef.current = accumulated
+
+    setSeries([...accumulated])
+    setKeyChanged(false)
+  }, [dataUpdatedAt]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (error) logger.error('useSectionHistory: fetch failed', error)
   }, [error])
 
   return {
-    series: data ?? [],
+    series,
     // Only report stale during key transitions, not regular 2s polls
     stale: isFetching && keyChanged,
   }

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type {
   Infrastructure,
@@ -51,10 +51,16 @@ export function useStructures(selectedId: string | null) {
     [structures],
   )
 
+  // Stable ref for structures to avoid stale closures in queryFn.
+  // queryKey uses structureIds (a string) to control cache invalidation,
+  // but queryFn needs the actual array — a closure would capture a stale copy.
+  const structuresRef = useRef(structures)
+  structuresRef.current = structures
+
   // Batch-fetch all statuses once structures are loaded
   const { data: allStatuses = new Map<string, SHMStatus>() } = useQuery({
     queryKey: ['shm-statuses', structureIds],
-    queryFn: () => fetchAllStatuses(structures),
+    queryFn: () => fetchAllStatuses(structuresRef.current),
     enabled: structures.length > 0,
     staleTime: 60_000,
   })
@@ -72,17 +78,7 @@ export function useStructures(selectedId: string | null) {
   const spectralData: SpectralTimeSeries | null = spectraQuery.data ?? null
   const spectralLoading = spectraQuery.isLoading
 
-  // Peak frequencies (heavy — cached aggressively, static HDF5)
-  const peaksQuery = useQuery({
-    queryKey: ['shm-peaks'],
-    queryFn: () => fetchPeakFrequencies(),
-    enabled: !!selectedId,
-    staleTime: Infinity,
-  })
-  const peakData: PeakFrequencyData | null = peaksQuery.data ?? null
-  const peakLoading = peaksQuery.isLoading
-
-  // Summary (lightweight metadata)
+  // Summary (lightweight metadata) — loaded first so peaks can use its date range
   const summaryQuery = useQuery({
     queryKey: ['shm-summary'],
     queryFn: () => fetchSpectralSummary(),
@@ -90,6 +86,22 @@ export function useStructures(selectedId: string | null) {
     staleTime: Infinity,
   })
   const dataSummary: SpectralSummary | null = summaryQuery.data ?? null
+
+  // Peak frequencies (heavy — cached aggressively, static HDF5).
+  // Pass the full data range from the summary so the backend doesn't
+  // apply its "default to today" guard (which returns empty for past data).
+  const peaksQuery = useQuery({
+    queryKey: ['shm-peaks'],
+    queryFn: () =>
+      fetchPeakFrequencies({
+        startTime: new Date(dataSummary!.t0),
+        endTime: new Date(dataSummary!.endTime),
+      }),
+    enabled: !!selectedId && !!dataSummary,
+    staleTime: Infinity,
+  })
+  const peakData: PeakFrequencyData | null = peaksQuery.data ?? null
+  const peakLoading = peaksQuery.isLoading
 
   // Memoize return object to keep the same reference when values haven't changed
   return useMemo(
