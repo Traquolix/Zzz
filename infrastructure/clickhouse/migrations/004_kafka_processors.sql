@@ -35,7 +35,7 @@ DROP TABLE IF EXISTS sequoia.detection_kafka;
 CREATE TABLE sequoia.detection_kafka
 (
     fiber_id String,
-    engine_version String DEFAULT '1.0',
+    engine_version String,
     `detections.timestamp_ns` Array(UInt64),
     `detections.channel` Array(UInt32),
     `detections.speed_kmh` Array(Float32),
