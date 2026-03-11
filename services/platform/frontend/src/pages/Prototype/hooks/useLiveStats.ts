@@ -37,6 +37,11 @@ export function useLiveStats(sections: Section[]) {
     seriesData: Map<string, SectionDataPoint[]>
   } | null>(null)
 
+  // Generation counter: incremented on every key change. The queryFn captures
+  // the current generation before awaiting; if it differs after the await,
+  // the response is stale and ref writes are skipped.
+  const generationRef = useRef(0)
+
   const sectionIds = useMemo(
     () =>
       sections
@@ -48,6 +53,7 @@ export function useLiveStats(sections: Section[]) {
 
   // Reset cursors outside queryFn so concurrent retries don't corrupt state.
   useEffect(() => {
+    generationRef.current += 1
     sinceRef.current.clear()
     accumulatedRef.current.clear()
     lastResultRef.current = null
@@ -56,6 +62,7 @@ export function useLiveStats(sections: Section[]) {
   const { data, error } = useQuery({
     queryKey: ['live-stats', sectionIds, flow],
     queryFn: async () => {
+      const gen = generationRef.current
       const secs = sectionsRef.current
 
       if (secs.length === 0) {
@@ -75,6 +82,16 @@ export function useLiveStats(sections: Section[]) {
         flow,
         Object.keys(sinceMap).length > 0 ? sinceMap : undefined,
       )
+
+      // Stale response from a previous key — discard ref writes
+      if (gen !== generationRef.current) {
+        return (
+          lastResultRef.current ?? {
+            stats: new Map<string, LiveSectionStats>(),
+            seriesData: new Map<string, SectionDataPoint[]>(),
+          }
+        )
+      }
 
       const nextStats = new Map<string, LiveSectionStats>()
       const nextSeries = new Map<string, SectionDataPoint[]>()
@@ -137,9 +154,9 @@ export function useLiveStats(sections: Section[]) {
     staleTime: 0,
   })
 
-  if (error) {
-    logger.error('useLiveStats: batch fetch failed', error)
-  }
+  useEffect(() => {
+    if (error) logger.error('useLiveStats: batch fetch failed', error)
+  }, [error])
 
   return {
     stats: data?.stats ?? new Map<string, LiveSectionStats>(),

@@ -116,11 +116,11 @@ class SpectralData:
                 dt=self.dt.copy(),
             )
 
-        # Use linear interpolation indices
+        # Use linear interpolation indices (fancy indexing returns copies for spectra/dt)
         indices = np.linspace(0, self.num_time_samples - 1, target_samples, dtype=int)
         return SpectralData(
             spectra=self.spectra[indices],
-            freqs=self.freqs,
+            freqs=self.freqs.copy(),
             t0=self.t0,
             dt=self.dt[indices],
         )
@@ -148,7 +148,7 @@ class SpectralData:
             spectra=self.spectra[:, indices],
             freqs=self.freqs[indices],
             t0=self.t0,
-            dt=self.dt,
+            dt=self.dt.copy(),
         )
 
     def slice_time(self, start_idx: int, end_idx: int) -> "SpectralData":

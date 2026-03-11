@@ -33,12 +33,18 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
   const sinceRef = useRef<number | undefined>(undefined)
   const accumulatedRef = useRef<SectionDataPoint[]>([])
 
+  // Generation counter: incremented on every key change. The queryFn captures
+  // the current generation before awaiting; if it differs after the await,
+  // the response is stale and ref writes are skipped.
+  const generationRef = useRef(0)
+
   // Stale flag: true only during key transitions (range/flow/section change),
   // NOT during regular background polls (which would cause 2s flicker).
   const keyChangedRef = useRef(true)
 
   // Reset cursors outside queryFn so concurrent retries don't double-append.
   useEffect(() => {
+    generationRef.current += 1
     sinceRef.current = undefined
     accumulatedRef.current = []
     keyChangedRef.current = true
@@ -47,8 +53,13 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
   const { data, isFetching, error } = useQuery({
     queryKey: ['section-history', sectionId, minutes, flow],
     queryFn: async () => {
+      const gen = generationRef.current
       const since = sinceRef.current
       const res = await fetchSectionHistory(sectionId, minutes, flow, since)
+
+      // Stale response from a previous key — discard ref writes
+      if (gen !== generationRef.current) return [...accumulatedRef.current]
+
       const newPoints = mapHistoryPoints(res.points)
 
       let accumulated = accumulatedRef.current
@@ -78,9 +89,9 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
     staleTime: 0,
   })
 
-  if (error) {
-    logger.error('useSectionHistory: fetch failed', error)
-  }
+  useEffect(() => {
+    if (error) logger.error('useSectionHistory: fetch failed', error)
+  }, [error])
 
   return {
     series: data ?? [],
