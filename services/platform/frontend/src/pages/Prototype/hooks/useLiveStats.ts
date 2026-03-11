@@ -1,6 +1,8 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useRef, useMemo, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { fetchBatchSectionHistory } from '@/api/sections'
 import { useRealtime } from '@/hooks/useRealtime'
+import { logger } from '@/lib/logger'
 import type { Section, SectionDataPoint, LiveSectionStats } from '../types'
 import { mapHistoryPoints } from './mapHistoryPoints'
 
@@ -15,11 +17,11 @@ const MAX_POINTS = 60 // 1 minute at 1s resolution
  * occupancy, and short sparklines. Uses a single batch endpoint instead of
  * N parallel requests. The section detail view uses useSectionHistory for
  * time-range-aware chart data.
+ *
+ * React Query's refetchInterval auto-pauses when the tab is hidden.
  */
 export function useLiveStats(sections: Section[]) {
   const { flow } = useRealtime()
-  const [stats, setStats] = useState<Map<string, LiveSectionStats>>(() => new Map())
-  const [seriesData, setSeriesData] = useState<Map<string, SectionDataPoint[]>>(() => new Map())
   const sectionsRef = useRef(sections)
   sectionsRef.current = sections
 
@@ -29,11 +31,44 @@ export function useLiveStats(sections: Section[]) {
   // Store accumulated points per section
   const accumulatedRef = useRef<Map<string, SectionDataPoint[]>>(new Map())
 
-  const fetchAll = useCallback(async () => {
-    const secs = sectionsRef.current
-    if (secs.length === 0) return
+  // Last non-empty result — preserved when a poll cycle returns no new points
+  const lastResultRef = useRef<{
+    stats: Map<string, LiveSectionStats>
+    seriesData: Map<string, SectionDataPoint[]>
+  } | null>(null)
 
-    try {
+  // Generation counter: incremented on every key change. The queryFn captures
+  // the current generation before awaiting; if it differs after the await,
+  // the response is stale and ref writes are skipped.
+  const generationRef = useRef(0)
+
+  const sectionIds = useMemo(
+    () =>
+      sections
+        .map(s => s.id)
+        .sort()
+        .join(','),
+    [sections],
+  )
+
+  // Reset cursors outside queryFn so concurrent retries don't corrupt state.
+  useEffect(() => {
+    generationRef.current += 1
+    sinceRef.current.clear()
+    accumulatedRef.current.clear()
+    lastResultRef.current = null
+  }, [sectionIds, flow])
+
+  const { data, error } = useQuery({
+    queryKey: ['live-stats', sectionIds, flow],
+    queryFn: async () => {
+      const gen = generationRef.current
+      const secs = sectionsRef.current
+
+      if (secs.length === 0) {
+        return { stats: new Map<string, LiveSectionStats>(), seriesData: new Map<string, SectionDataPoint[]>() }
+      }
+
       // Build per-section since map — backend applies each cursor individually
       const sinceMap: Record<string, number> = {}
       for (const sec of secs) {
@@ -47,6 +82,16 @@ export function useLiveStats(sections: Section[]) {
         flow,
         Object.keys(sinceMap).length > 0 ? sinceMap : undefined,
       )
+
+      // Stale response from a previous key — discard ref writes
+      if (gen !== generationRef.current) {
+        return (
+          lastResultRef.current ?? {
+            stats: new Map<string, LiveSectionStats>(),
+            seriesData: new Map<string, SectionDataPoint[]>(),
+          }
+        )
+      }
 
       const nextStats = new Map<string, LiveSectionStats>()
       const nextSeries = new Map<string, SectionDataPoint[]>()
@@ -91,26 +136,32 @@ export function useLiveStats(sections: Section[]) {
         }
       }
 
-      if (nextSeries.size > 0) {
-        setSeriesData(nextSeries)
-        setStats(nextStats)
+      const result = { stats: nextStats, seriesData: nextSeries }
+
+      // Preserve previous data when all sections return empty (e.g. no new
+      // points in this poll cycle) to avoid briefly clearing sparklines.
+      if (nextSeries.size === 0 && secs.length > 0 && lastResultRef.current) {
+        return lastResultRef.current
       }
-    } catch (e) {
-      if (import.meta.env.DEV) console.error('useLiveStats: batch fetch failed', e)
-    }
-  }, [flow])
+
+      if (nextSeries.size > 0) {
+        lastResultRef.current = result
+      }
+
+      return result
+    },
+    refetchInterval: POLL_INTERVAL,
+    staleTime: 0,
+  })
 
   useEffect(() => {
-    sinceRef.current.clear()
-    accumulatedRef.current.clear()
-    setStats(new Map())
-    setSeriesData(new Map())
-    fetchAll()
-    const timer = setInterval(fetchAll, POLL_INTERVAL)
-    return () => clearInterval(timer)
-  }, [fetchAll])
+    if (error) logger.error('useLiveStats: batch fetch failed', error)
+  }, [error])
 
-  return { stats, seriesData }
+  return {
+    stats: data?.stats ?? new Map<string, LiveSectionStats>(),
+    seriesData: data?.seriesData ?? new Map<string, SectionDataPoint[]>(),
+  }
 }
 
 /** Derive current stats from the most recent data points. */

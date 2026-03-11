@@ -1027,7 +1027,7 @@ class SpectralDataView(APIView):
         try:
             data = load_spectral_data()
         except Exception as e:
-            logger.error(f"Failed to load spectral data: {e}")
+            logger.error("Failed to load spectral data: %s", e)
             return Response(
                 {"detail": "Failed to load spectral data", "code": "shm_load_error"}, status=500
             )
@@ -1085,7 +1085,7 @@ class SpectralPeaksView(APIView):
 
     Query parameters:
     - infrastructureId: Infrastructure ID (optional, for production real-time data)
-    - maxSamples: Maximum number of time samples to return (default 1000)
+    - maxSamples: Maximum number of time samples to return (optional, cap 10000)
     - startTime: ISO timestamp for start of time range (optional)
     - endTime: ISO timestamp for end of time range (optional)
 
@@ -1110,11 +1110,15 @@ class SpectralPeaksView(APIView):
         tags=["shm"],
     )
     def get(self, request):
-        from datetime import datetime
+        from datetime import datetime, timedelta
 
         import numpy as np
 
-        from apps.monitoring.hdf5_reader import load_spectral_data, sample_file_exists
+        from apps.monitoring.hdf5_reader import (
+            load_peak_frequencies,
+            load_spectral_data,
+            sample_file_exists,
+        )
 
         # Org-scoping: validate infrastructure access if specified
         error_resp = _verify_infrastructure_access(
@@ -1133,21 +1137,38 @@ class SpectralPeaksView(APIView):
 
         try:
             data = load_spectral_data()
+            # Use cached peak frequencies instead of recomputing find_peaks
+            all_peak_freqs, all_peak_powers = load_peak_frequencies()
         except Exception as e:
-            logger.error(f"Failed to load spectral data: {e}")
+            logger.error("Failed to load spectral data: %s", e)
             return Response(
                 {"detail": "Failed to load spectral data", "code": "shm_load_error"}, status=500
             )
 
-        # Apply time filtering if startTime/endTime provided
+        # Defensive copies: cached arrays are process-global and must not be
+        # mutated in-place (numpy slices return views, not copies).
+        dt = data.dt.copy()
+        peak_freqs = all_peak_freqs.copy()
+        peak_powers = all_peak_powers.copy()
+        t0 = data.t0
+
+        # Apply time filtering. When no startTime/endTime and no maxSamples
+        # are provided, default to the current day so the endpoint never
+        # returns the full unfiltered dataset by accident.
         start_time_str = request.query_params.get("startTime")
         end_time_str = request.query_params.get("endTime")
+        max_samples_param = request.query_params.get("maxSamples")
+
+        if not start_time_str and not end_time_str and max_samples_param is None:
+            today = datetime.now(tz=data.t0.tzinfo).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            start_time_str = today.isoformat()
+            end_time_str = (today + timedelta(days=1)).isoformat()
 
         if start_time_str or end_time_str:
-            # Calculate absolute timestamps for all samples
-            timestamps = np.array([data.t0.timestamp() + offset for offset in data.dt])
+            timestamps = np.array([t0.timestamp() + offset for offset in dt])
 
-            # Parse filter times
             start_ts = (
                 datetime.fromisoformat(start_time_str.replace("Z", "+00:00")).timestamp()
                 if start_time_str
@@ -1159,27 +1180,39 @@ class SpectralPeaksView(APIView):
                 else float("inf")
             )
 
-            # Find indices within the time range
             mask = (timestamps >= start_ts) & (timestamps <= end_ts)
-            indices = np.where(mask)[0]
+            idx = np.where(mask)[0]
 
-            if len(indices) > 0:
-                start_idx = int(indices[0])
-                end_idx = int(indices[-1]) + 1
-                data = data.slice_time(start_idx, end_idx)
+            if len(idx) > 0:
+                si, ei = int(idx[0]), int(idx[-1]) + 1
+                start_offset = float(dt[si])
+                dt = dt[si:ei] - dt[si]
+                peak_freqs = peak_freqs[si:ei]
+                peak_powers = peak_powers[si:ei]
+                t0 = t0 + timedelta(seconds=start_offset)
 
-        try:
-            max_samples = min(int(request.query_params.get("maxSamples", 1000)), 5000)
-        except (ValueError, TypeError):
-            max_samples = 1000
-        data = data.downsample_time(max_samples)
+        # Downsample by selecting evenly-spaced indices.
+        # When the caller passes an explicit maxSamples we honour it (capped at 10 000).
+        # Otherwise we skip downsampling — the time filter already bounds the result.
+        if max_samples_param is not None:
+            try:
+                max_samples = min(int(max_samples_param), 10000)
+            except (ValueError, TypeError):
+                max_samples = 1000
+        else:
+            max_samples = 0
 
-        peak_freqs, peak_powers = data.get_peak_frequencies()
+        n = len(dt)
+        if max_samples > 0 and max_samples < n:
+            sel = np.linspace(0, n - 1, max_samples, dtype=int)
+            dt = dt[sel]
+            peak_freqs = peak_freqs[sel]
+            peak_powers = peak_powers[sel]
 
         return Response(
             {
-                "t0": data.t0.isoformat(),
-                "dt": data.dt.tolist(),
+                "t0": t0.isoformat(),
+                "dt": dt.tolist(),
                 "peakFrequencies": peak_freqs.tolist(),
                 "peakPowers": peak_powers.tolist(),
                 "freqRange": list(data.freq_range),
@@ -1209,7 +1242,7 @@ class SpectralSummaryView(APIView):
         try:
             summary = get_spectral_summary()
         except Exception as e:
-            logger.error(f"Failed to get spectral summary: {e}")
+            logger.error("Failed to get spectral summary: %s", e)
             return Response(
                 {"detail": "Failed to load spectral data", "code": "shm_load_error"}, status=500
             )

@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import type {
   Infrastructure,
   SpectralTimeSeries,
@@ -14,132 +15,108 @@ import {
   fetchSpectralSummary,
 } from '@/api/infrastructure'
 
-export function useStructures(selectedId: string | null) {
-  const [structures, setStructures] = useState<Infrastructure[]>([])
-  const [loading, setLoading] = useState(true)
+async function fetchAllStatuses(structures: Infrastructure[]): Promise<Map<string, SHMStatus>> {
+  const results = await Promise.allSettled(
+    structures.map(s => fetchSHMStatus(s.id).then(status => [s.id, status] as const)),
+  )
+  const map = new Map<string, SHMStatus>()
+  for (const r of results) {
+    if (r.status === 'fulfilled') map.set(r.value[0], r.value[1])
+  }
+  return map
+}
 
-  const [allStatuses, setAllStatuses] = useState<Map<string, SHMStatus>>(new Map())
-  const [shmStatus, setShmStatus] = useState<SHMStatus | null>(null)
-  const [spectralData, setSpectralData] = useState<SpectralTimeSeries | null>(null)
-  const [spectralLoading, setSpectralLoading] = useState(false)
-  const [peakData, setPeakData] = useState<PeakFrequencyData | null>(null)
-  const [peakLoading, setPeakLoading] = useState(false)
-  const [dataSummary, setDataSummary] = useState<SpectralSummary | null>(null)
+export function useStructures(selectedId: string | null) {
   const [selectedDay, setSelectedDay] = useState<Date | null>(null)
 
-  const abortRef = useRef<AbortController | null>(null)
-
-  // Fetch infrastructure list on mount, then batch-fetch all statuses
+  // Reset selectedDay when structure selection changes
   useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    fetchInfrastructure()
-      .then(data => {
-        if (cancelled) return
-        setStructures(data)
-        // Batch-fetch SHM status for each structure
-        Promise.allSettled(data.map(s => fetchSHMStatus(s.id).then(status => [s.id, status] as const))).then(
-          results => {
-            if (cancelled) return
-            const map = new Map<string, SHMStatus>()
-            for (const r of results) {
-              if (r.status === 'fulfilled') {
-                map.set(r.value[0], r.value[1])
-              }
-            }
-            setAllStatuses(map)
-          },
-        )
-      })
-      .catch(() => {
-        /* API may not be available */
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
-  // Fetch detail data when selectedId changes
-  useEffect(() => {
-    // Cancel previous requests
-    abortRef.current?.abort()
-    abortRef.current = new AbortController()
-
-    if (!selectedId) {
-      setShmStatus(null)
-      setSpectralData(null)
-      setPeakData(null)
-      setDataSummary(null)
-      setSelectedDay(null)
-      return
-    }
-
-    let cancelled = false
-
-    // SHM status
-    fetchSHMStatus(selectedId)
-      .then(data => {
-        if (!cancelled) setShmStatus(data)
-      })
-      .catch(() => {
-        if (!cancelled) setShmStatus(null)
-      })
-
-    // Spectral data (demo mode — no infrastructureId, the backend serves sample HDF5 data)
-    setSpectralLoading(true)
-    fetchSpectralData()
-      .then(data => {
-        if (!cancelled) setSpectralData(data)
-      })
-      .catch(() => {
-        if (!cancelled) setSpectralData(null)
-      })
-      .finally(() => {
-        if (!cancelled) setSpectralLoading(false)
-      })
-
-    // Peak frequencies (demo mode)
-    setPeakLoading(true)
-    fetchPeakFrequencies()
-      .then(data => {
-        if (!cancelled) setPeakData(data)
-      })
-      .catch(() => {
-        if (!cancelled) setPeakData(null)
-      })
-      .finally(() => {
-        if (!cancelled) setPeakLoading(false)
-      })
-
-    // Summary
-    fetchSpectralSummary()
-      .then(data => {
-        if (!cancelled) setDataSummary(data)
-      })
-      .catch(() => {
-        if (!cancelled) setDataSummary(null)
-      })
-
-    return () => {
-      cancelled = true
-      abortRef.current?.abort()
-    }
+    setSelectedDay(null)
   }, [selectedId])
 
-  return {
-    structures,
-    loading,
-    allStatuses,
-    shmStatus,
-    spectralData,
-    spectralLoading,
-    peakData,
-    peakLoading,
-    dataSummary,
-    selectedDay,
-    setSelectedDay,
-  }
+  // Infrastructure list
+  const { data: structures = [], isLoading: loading } = useQuery({
+    queryKey: ['infrastructure'],
+    queryFn: fetchInfrastructure,
+    staleTime: 60_000,
+  })
+
+  // Stable query key for batch statuses (same pattern as useLiveStats)
+  const structureIds = useMemo(
+    () =>
+      structures
+        .map(s => s.id)
+        .sort()
+        .join(','),
+    [structures],
+  )
+
+  // Batch-fetch all statuses once structures are loaded
+  const { data: allStatuses = new Map<string, SHMStatus>() } = useQuery({
+    queryKey: ['shm-statuses', structureIds],
+    queryFn: () => fetchAllStatuses(structures),
+    enabled: structures.length > 0,
+    staleTime: 60_000,
+  })
+
+  // Derive per-structure status from batch result instead of a separate fetch
+  const shmStatus: SHMStatus | null = (selectedId ? allStatuses.get(selectedId) : undefined) ?? null
+
+  // Spectral data (heavy — cached aggressively, static HDF5)
+  const spectraQuery = useQuery({
+    queryKey: ['shm-spectra'],
+    queryFn: () => fetchSpectralData({ maxTimeSamples: 500, maxFreqBins: 200 }),
+    enabled: !!selectedId,
+    staleTime: Infinity,
+  })
+  const spectralData: SpectralTimeSeries | null = spectraQuery.data ?? null
+  const spectralLoading = spectraQuery.isLoading
+
+  // Peak frequencies (heavy — cached aggressively, static HDF5)
+  const peaksQuery = useQuery({
+    queryKey: ['shm-peaks'],
+    queryFn: () => fetchPeakFrequencies(),
+    enabled: !!selectedId,
+    staleTime: Infinity,
+  })
+  const peakData: PeakFrequencyData | null = peaksQuery.data ?? null
+  const peakLoading = peaksQuery.isLoading
+
+  // Summary (lightweight metadata)
+  const summaryQuery = useQuery({
+    queryKey: ['shm-summary'],
+    queryFn: () => fetchSpectralSummary(),
+    enabled: !!selectedId,
+    staleTime: Infinity,
+  })
+  const dataSummary: SpectralSummary | null = summaryQuery.data ?? null
+
+  // Memoize return object to keep the same reference when values haven't changed
+  return useMemo(
+    () => ({
+      structures,
+      loading,
+      allStatuses,
+      shmStatus,
+      spectralData,
+      spectralLoading,
+      peakData,
+      peakLoading,
+      dataSummary,
+      selectedDay,
+      setSelectedDay,
+    }),
+    [
+      structures,
+      loading,
+      allStatuses,
+      shmStatus,
+      spectralData,
+      spectralLoading,
+      peakData,
+      peakLoading,
+      dataSummary,
+      selectedDay,
+    ],
+  )
 }

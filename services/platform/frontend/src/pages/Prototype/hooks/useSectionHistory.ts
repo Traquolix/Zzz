@@ -1,6 +1,8 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useRef, useState, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { fetchSectionHistory } from '@/api/sections'
 import { useRealtime } from '@/hooks/useRealtime'
+import { logger } from '@/lib/logger'
 import type { SectionDataPoint } from '../types'
 import { mapHistoryPoints } from './mapHistoryPoints'
 
@@ -20,32 +22,47 @@ const TIME_RANGE_MINUTES: Record<string, number> = {
  * - 1m/5m → backend serves per-second buffer (1s resolution)
  * - 15m/1h → backend serves per-minute buffer (1min resolution)
  *
- * Resets and re-fetches when time range or flow changes.
+ * React Query's refetchInterval auto-pauses when the tab is hidden.
  * Returns `stale: true` while awaiting the first fetch after a range/flow change,
- * so the UI can show a visual cue (e.g. reduced opacity) over the old data.
+ * NOT during regular 2s background polls.
  */
 export function useSectionHistory(sectionId: string, timeRange: string) {
   const { flow } = useRealtime()
-  const [series, setSeries] = useState<SectionDataPoint[]>([])
-  const [stale, setStale] = useState(false)
+  const minutes = TIME_RANGE_MINUTES[timeRange] ?? 5
+
   const sinceRef = useRef<number | undefined>(undefined)
   const accumulatedRef = useRef<SectionDataPoint[]>([])
 
-  const minutes = TIME_RANGE_MINUTES[timeRange] ?? 5
+  // Generation counter: incremented on every key change. The queryFn captures
+  // the current generation before awaiting; if it differs after the await,
+  // the response is stale and ref writes are skipped.
+  const generationRef = useRef(0)
 
-  // Abort flag — not passed to fetch (apiRequest has its own timeout controller),
-  // but used to discard stale responses when the time range changes mid-flight.
-  const abortRef = useRef<AbortController | null>(null)
+  // Stale flag: true only during key transitions (range/flow/section change),
+  // NOT during regular background polls (which would cause 2s flicker).
+  // Uses useState (not useRef) so changes trigger a re-render — a ref mutation
+  // after the useEffect would be invisible until the next unrelated render.
+  const [keyChanged, setKeyChanged] = useState(true)
 
-  const fetchData = useCallback(async () => {
-    abortRef.current?.abort()
-    const controller = new AbortController()
-    abortRef.current = controller
+  // Reset cursors outside queryFn so concurrent retries don't double-append.
+  useEffect(() => {
+    generationRef.current += 1
+    sinceRef.current = undefined
+    accumulatedRef.current = []
+    setKeyChanged(true)
+  }, [sectionId, minutes, flow])
 
-    try {
+  const { data, isFetching, error } = useQuery({
+    queryKey: ['section-history', sectionId, minutes, flow],
+    queryFn: async () => {
+      const gen = generationRef.current
       const since = sinceRef.current
       const res = await fetchSectionHistory(sectionId, minutes, flow, since)
-      if (controller.signal.aborted) return
+
+      // Stale response from a previous key — discard ref writes.
+      // The return value goes to the old key's cache entry (not the current UI),
+      // so an empty array is safe here.
+      if (gen !== generationRef.current) return []
 
       const newPoints = mapHistoryPoints(res.points)
 
@@ -62,29 +79,27 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
       if (firstValid > 0) accumulated.splice(0, firstValid)
 
       accumulatedRef.current = accumulated
-      setSeries([...accumulated])
-      setStale(false)
 
       if (res.points.length > 0) {
         sinceRef.current = res.points[res.points.length - 1].time
       }
-    } catch {
-      // Keep previous data on error (includes aborted requests)
-    }
-  }, [sectionId, minutes, flow])
 
-  // Reset on time range or flow change — keep previous data visible until new data arrives
+      // Clear the key-changed flag after first successful fetch for new key
+      setKeyChanged(false)
+
+      return [...accumulated]
+    },
+    refetchInterval: POLL_INTERVAL,
+    staleTime: 0,
+  })
+
   useEffect(() => {
-    sinceRef.current = undefined
-    accumulatedRef.current = []
-    setStale(true)
-    fetchData()
-    const timer = setInterval(fetchData, POLL_INTERVAL)
-    return () => {
-      clearInterval(timer)
-      abortRef.current?.abort()
-    }
-  }, [fetchData])
+    if (error) logger.error('useSectionHistory: fetch failed', error)
+  }, [error])
 
-  return { series, stale }
+  return {
+    series: data ?? [],
+    // Only report stale during key transitions, not regular 2s polls
+    stale: isFetching && keyChanged,
+  }
 }
