@@ -1,4 +1,5 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useRef } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { fetchSectionHistory } from '@/api/sections'
 import { useRealtime } from '@/hooks/useRealtime'
 import type { SectionDataPoint } from '../types'
@@ -20,33 +21,33 @@ const TIME_RANGE_MINUTES: Record<string, number> = {
  * - 1m/5m → backend serves per-second buffer (1s resolution)
  * - 15m/1h → backend serves per-minute buffer (1min resolution)
  *
- * Resets and re-fetches when time range or flow changes.
- * Returns `stale: true` while awaiting the first fetch after a range/flow change,
- * so the UI can show a visual cue (e.g. reduced opacity) over the old data.
+ * React Query's refetchInterval auto-pauses when the tab is hidden.
+ * Returns `stale: true` while awaiting the first fetch after a range/flow change.
  */
 export function useSectionHistory(sectionId: string, timeRange: string) {
   const { flow } = useRealtime()
-  const [series, setSeries] = useState<SectionDataPoint[]>([])
-  const [stale, setStale] = useState(false)
+  const minutes = TIME_RANGE_MINUTES[timeRange] ?? 5
+
   const sinceRef = useRef<number | undefined>(undefined)
   const accumulatedRef = useRef<SectionDataPoint[]>([])
 
-  const minutes = TIME_RANGE_MINUTES[timeRange] ?? 5
+  // Track previous query key to reset cursors on change
+  const prevKeyRef = useRef(`${sectionId}:${minutes}:${flow}`)
 
-  // Abort flag — not passed to fetch (apiRequest has its own timeout controller),
-  // but used to discard stale responses when the time range changes mid-flight.
-  const abortRef = useRef<AbortController | null>(null)
+  const { data, isLoading } = useQuery({
+    queryKey: ['section-history', sectionId, minutes, flow],
+    queryFn: async () => {
+      const currentKey = `${sectionId}:${minutes}:${flow}`
 
-  const fetchData = useCallback(async () => {
-    abortRef.current?.abort()
-    const controller = new AbortController()
-    abortRef.current = controller
+      // Reset cursors if query key changed (section, time range, or flow)
+      if (prevKeyRef.current !== currentKey) {
+        sinceRef.current = undefined
+        accumulatedRef.current = []
+        prevKeyRef.current = currentKey
+      }
 
-    try {
       const since = sinceRef.current
       const res = await fetchSectionHistory(sectionId, minutes, flow, since)
-      if (controller.signal.aborted) return
-
       const newPoints = mapHistoryPoints(res.points)
 
       let accumulated = accumulatedRef.current
@@ -62,29 +63,19 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
       if (firstValid > 0) accumulated.splice(0, firstValid)
 
       accumulatedRef.current = accumulated
-      setSeries([...accumulated])
-      setStale(false)
 
       if (res.points.length > 0) {
         sinceRef.current = res.points[res.points.length - 1].time
       }
-    } catch {
-      // Keep previous data on error (includes aborted requests)
-    }
-  }, [sectionId, minutes, flow])
 
-  // Reset on time range or flow change — keep previous data visible until new data arrives
-  useEffect(() => {
-    sinceRef.current = undefined
-    accumulatedRef.current = []
-    setStale(true)
-    fetchData()
-    const timer = setInterval(fetchData, POLL_INTERVAL)
-    return () => {
-      clearInterval(timer)
-      abortRef.current?.abort()
-    }
-  }, [fetchData])
+      return [...accumulated]
+    },
+    refetchInterval: POLL_INTERVAL,
+    staleTime: 0,
+  })
 
-  return { series, stale }
+  return {
+    series: data ?? [],
+    stale: isLoading,
+  }
 }

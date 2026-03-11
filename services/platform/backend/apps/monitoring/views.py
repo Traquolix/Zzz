@@ -1114,7 +1114,11 @@ class SpectralPeaksView(APIView):
 
         import numpy as np
 
-        from apps.monitoring.hdf5_reader import load_spectral_data, sample_file_exists
+        from apps.monitoring.hdf5_reader import (
+            load_peak_frequencies,
+            load_spectral_data,
+            sample_file_exists,
+        )
 
         # Org-scoping: validate infrastructure access if specified
         error_resp = _verify_infrastructure_access(
@@ -1133,21 +1137,27 @@ class SpectralPeaksView(APIView):
 
         try:
             data = load_spectral_data()
+            # Use cached peak frequencies instead of recomputing find_peaks
+            all_peak_freqs, all_peak_powers = load_peak_frequencies()
         except Exception as e:
             logger.error(f"Failed to load spectral data: {e}")
             return Response(
                 {"detail": "Failed to load spectral data", "code": "shm_load_error"}, status=500
             )
 
+        # Start with full-dataset indices
+        dt = data.dt
+        peak_freqs = all_peak_freqs
+        peak_powers = all_peak_powers
+        t0 = data.t0
+
         # Apply time filtering if startTime/endTime provided
         start_time_str = request.query_params.get("startTime")
         end_time_str = request.query_params.get("endTime")
 
         if start_time_str or end_time_str:
-            # Calculate absolute timestamps for all samples
-            timestamps = np.array([data.t0.timestamp() + offset for offset in data.dt])
+            timestamps = np.array([t0.timestamp() + offset for offset in dt])
 
-            # Parse filter times
             start_ts = (
                 datetime.fromisoformat(start_time_str.replace("Z", "+00:00")).timestamp()
                 if start_time_str
@@ -1159,27 +1169,35 @@ class SpectralPeaksView(APIView):
                 else float("inf")
             )
 
-            # Find indices within the time range
             mask = (timestamps >= start_ts) & (timestamps <= end_ts)
-            indices = np.where(mask)[0]
+            idx = np.where(mask)[0]
 
-            if len(indices) > 0:
-                start_idx = int(indices[0])
-                end_idx = int(indices[-1]) + 1
-                data = data.slice_time(start_idx, end_idx)
+            if len(idx) > 0:
+                si, ei = int(idx[0]), int(idx[-1]) + 1
+                dt = dt[si:ei] - dt[si]
+                peak_freqs = peak_freqs[si:ei]
+                peak_powers = peak_powers[si:ei]
+                from datetime import timedelta
 
+                t0 = t0 + timedelta(seconds=float(data.dt[si]))
+
+        # Downsample by selecting evenly-spaced indices
         try:
             max_samples = min(int(request.query_params.get("maxSamples", 1000)), 5000)
         except (ValueError, TypeError):
             max_samples = 1000
-        data = data.downsample_time(max_samples)
 
-        peak_freqs, peak_powers = data.get_peak_frequencies()
+        n = len(dt)
+        if max_samples < n:
+            sel = np.linspace(0, n - 1, max_samples, dtype=int)
+            dt = dt[sel]
+            peak_freqs = peak_freqs[sel]
+            peak_powers = peak_powers[sel]
 
         return Response(
             {
-                "t0": data.t0.isoformat(),
-                "dt": data.dt.tolist(),
+                "t0": t0.isoformat(),
+                "dt": dt.tolist(),
                 "peakFrequencies": peak_freqs.tolist(),
                 "peakPowers": peak_powers.tolist(),
                 "freqRange": list(data.freq_range),

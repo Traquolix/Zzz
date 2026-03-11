@@ -1,4 +1,5 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useRef, useMemo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { fetchBatchSectionHistory } from '@/api/sections'
 import { useRealtime } from '@/hooks/useRealtime'
 import type { Section, SectionDataPoint, LiveSectionStats } from '../types'
@@ -15,11 +16,11 @@ const MAX_POINTS = 60 // 1 minute at 1s resolution
  * occupancy, and short sparklines. Uses a single batch endpoint instead of
  * N parallel requests. The section detail view uses useSectionHistory for
  * time-range-aware chart data.
+ *
+ * React Query's refetchInterval auto-pauses when the tab is hidden.
  */
 export function useLiveStats(sections: Section[]) {
   const { flow } = useRealtime()
-  const [stats, setStats] = useState<Map<string, LiveSectionStats>>(() => new Map())
-  const [seriesData, setSeriesData] = useState<Map<string, SectionDataPoint[]>>(() => new Map())
   const sectionsRef = useRef(sections)
   sectionsRef.current = sections
 
@@ -29,11 +30,34 @@ export function useLiveStats(sections: Section[]) {
   // Store accumulated points per section
   const accumulatedRef = useRef<Map<string, SectionDataPoint[]>>(new Map())
 
-  const fetchAll = useCallback(async () => {
-    const secs = sectionsRef.current
-    if (secs.length === 0) return
+  // Track flow to reset cursors when it changes
+  const prevFlowRef = useRef(flow)
 
-    try {
+  const sectionIds = useMemo(
+    () =>
+      sections
+        .map(s => s.id)
+        .sort()
+        .join(','),
+    [sections],
+  )
+
+  const { data } = useQuery({
+    queryKey: ['live-stats', sectionIds, flow],
+    queryFn: async () => {
+      const secs = sectionsRef.current
+
+      // Reset cursors if flow changed
+      if (prevFlowRef.current !== flow) {
+        sinceRef.current.clear()
+        accumulatedRef.current.clear()
+        prevFlowRef.current = flow
+      }
+
+      if (secs.length === 0) {
+        return { stats: new Map<string, LiveSectionStats>(), seriesData: new Map<string, SectionDataPoint[]>() }
+      }
+
       // Build per-section since map — backend applies each cursor individually
       const sinceMap: Record<string, number> = {}
       for (const sec of secs) {
@@ -91,26 +115,16 @@ export function useLiveStats(sections: Section[]) {
         }
       }
 
-      if (nextSeries.size > 0) {
-        setSeriesData(nextSeries)
-        setStats(nextStats)
-      }
-    } catch (e) {
-      if (import.meta.env.DEV) console.error('useLiveStats: batch fetch failed', e)
-    }
-  }, [flow])
+      return { stats: nextStats, seriesData: nextSeries }
+    },
+    refetchInterval: POLL_INTERVAL,
+    staleTime: 0,
+  })
 
-  useEffect(() => {
-    sinceRef.current.clear()
-    accumulatedRef.current.clear()
-    setStats(new Map())
-    setSeriesData(new Map())
-    fetchAll()
-    const timer = setInterval(fetchAll, POLL_INTERVAL)
-    return () => clearInterval(timer)
-  }, [fetchAll])
-
-  return { stats, seriesData }
+  return {
+    stats: data?.stats ?? new Map<string, LiveSectionStats>(),
+    seriesData: data?.seriesData ?? new Map<string, SectionDataPoint[]>(),
+  }
 }
 
 /** Derive current stats from the most recent data points. */

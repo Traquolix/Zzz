@@ -1,11 +1,22 @@
 import { RouterProvider } from 'react-router-dom'
 import { Toaster } from 'sonner'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { router } from './router/Router'
 import { AuthProvider } from '@/context/AuthProvider'
 import { RealtimeProvider } from '@/context/RealtimeProvider'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { WS_URL } from '@/constants/api'
 import { logger } from '@/lib/logger'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      retry: 1,
+      refetchOnWindowFocus: true,
+    },
+  },
+})
 
 /**
  * Top-level error fallback shown when the entire app crashes.
@@ -43,12 +54,14 @@ function App() {
         logger.error('App crashed:', error, errorInfo)
       }}
     >
-      <AuthProvider>
-        <RealtimeProvider url={WS_URL}>
-          <RouterProvider router={router} />
-          <Toaster position="bottom-right" richColors closeButton />
-        </RealtimeProvider>
-      </AuthProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <RealtimeProvider url={WS_URL}>
+            <RouterProvider router={router} />
+            <Toaster position="bottom-right" richColors closeButton />
+          </RealtimeProvider>
+        </AuthProvider>
+      </QueryClientProvider>
     </ErrorBoundary>
   )
 }

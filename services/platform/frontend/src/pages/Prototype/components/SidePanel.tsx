@@ -34,7 +34,6 @@ import type {
   SpectralSummary,
 } from '@/types/infrastructure'
 import { MAX_SECTIONS_PER_ORG } from '@/api/sections'
-import { fetchPeakFrequencies } from '@/api/infrastructure'
 import { useRealtime } from '@/hooks/useRealtime'
 import { useAuth } from '@/hooks/useAuth'
 import { parseDetections } from '@/lib/parseMessage'
@@ -2542,7 +2541,7 @@ function StructureDetail({
 
         {/* Comparison overlay */}
         <div className="border-t border-[var(--proto-border)] pt-3">
-          <ComparisonSection dataSummary={dataSummary} onStats={handleComparisonStats} />
+          <ComparisonSection dataSummary={dataSummary} peakData={peakData} onStats={handleComparisonStats} />
         </div>
       </div>
     </div>
@@ -3394,6 +3393,30 @@ function ComparisonOverlay({
   )
 }
 
+/** Filter peak data to a time range, returning null if no points match. */
+function filterPeakDataByRange(data: PeakFrequencyData | null, from: Date, to: Date): PeakFrequencyData | null {
+  if (!data) return null
+
+  const t0Ms = new Date(data.t0).getTime()
+  const fromS = (from.getTime() - t0Ms) / 1000
+  const toS = (to.getTime() - t0Ms) / 1000
+
+  const indices: number[] = []
+  for (let i = 0; i < data.dt.length; i++) {
+    if (data.dt[i] >= fromS && data.dt[i] <= toS) indices.push(i)
+  }
+  if (indices.length === 0) return null
+
+  const baseOffset = data.dt[indices[0]]
+  return {
+    t0: new Date(t0Ms + baseOffset * 1000).toISOString(),
+    dt: indices.map(i => data.dt[i] - baseOffset),
+    peakFrequencies: indices.map(i => data.peakFrequencies[i]),
+    peakPowers: indices.map(i => data.peakPowers[i]),
+    freqRange: data.freqRange,
+  }
+}
+
 type ComparisonStats = {
   a: { mean: number; std: number; count: number }
   b: { mean: number; std: number; count: number }
@@ -3403,9 +3426,11 @@ type ComparisonStats = {
 
 function ComparisonSection({
   dataSummary,
+  peakData,
   onStats,
 }: {
   dataSummary: SpectralSummary | null
+  peakData: PeakFrequencyData | null
   onStats?: (stats: ComparisonStats | null) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -3413,14 +3438,6 @@ function ComparisonSection({
   const chartWidth = Math.max(160, rawChartWidth)
   const [mode, setMode] = useState<ComparisonMode>('day')
   const [focus, setFocus] = useState<FocusMode>('equal')
-  const [windowA, setWindowA] = useState<{ data: PeakFrequencyData | null; loading: boolean }>({
-    data: null,
-    loading: false,
-  })
-  const [windowB, setWindowB] = useState<{ data: PeakFrequencyData | null; loading: boolean }>({
-    data: null,
-    loading: false,
-  })
 
   // Compute comparison date ranges
   const referenceDate = useMemo(() => {
@@ -3467,43 +3484,10 @@ function ComparisonSection({
     }
   }, [mode, referenceDate])
 
-  // Fetch comparison data
-  const rangeAFromMs = rangeA.from.getTime()
-  const rangeAToMs = rangeA.to.getTime()
-  const rangeBFromMs = rangeB.from.getTime()
-  const rangeBToMs = rangeB.to.getTime()
-
-  useEffect(() => {
-    let cancelled = false
-    setWindowA({ data: null, loading: true })
-    fetchPeakFrequencies({ maxSamples: 5000, startTime: rangeA.from, endTime: rangeA.to })
-      .then(data => {
-        if (!cancelled) setWindowA({ data, loading: false })
-      })
-      .catch(() => {
-        if (!cancelled) setWindowA({ data: null, loading: false })
-      })
-    return () => {
-      cancelled = true
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- rangeA.from/to are Date objects; use ms timestamps for stable comparison
-  }, [rangeAFromMs, rangeAToMs])
-
-  useEffect(() => {
-    let cancelled = false
-    setWindowB({ data: null, loading: true })
-    fetchPeakFrequencies({ maxSamples: 5000, startTime: rangeB.from, endTime: rangeB.to })
-      .then(data => {
-        if (!cancelled) setWindowB({ data, loading: false })
-      })
-      .catch(() => {
-        if (!cancelled) setWindowB({ data: null, loading: false })
-      })
-    return () => {
-      cancelled = true
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- rangeB.from/to are Date objects; use ms timestamps for stable comparison
-  }, [rangeBFromMs, rangeBToMs])
+  // Derive comparison windows client-side from existing peak data
+  // instead of making 2 extra API calls per mode change.
+  const windowA = useMemo(() => filterPeakDataByRange(peakData, rangeA.from, rangeA.to), [peakData, rangeA])
+  const windowB = useMemo(() => filterPeakDataByRange(peakData, rangeB.from, rangeB.to), [peakData, rangeB])
 
   // Stats
   const stats = useMemo(() => {
@@ -3515,14 +3499,14 @@ function ComparisonSection({
       const variance = valid.reduce((s, f) => s + (f - mean) ** 2, 0) / valid.length
       return { mean, std: Math.sqrt(variance), count: valid.length }
     }
-    const a = calc(windowA.data),
-      b = calc(windowB.data)
+    const a = calc(windowA),
+      b = calc(windowB)
     if (!a || !b) return null
     const diff = a.mean - b.mean
     return { a, b, diff, diffPercent: (diff / b.mean) * 100 }
-  }, [windowA.data, windowB.data])
+  }, [windowA, windowB])
 
-  const isLoading = windowA.loading || windowB.loading
+  const isLoading = !peakData
 
   // Expose stats to parent
   useEffect(() => {
@@ -3597,7 +3581,7 @@ function ComparisonSection({
             )}
           </div>
         ) : (
-          <ComparisonOverlay dataA={windowA.data} dataB={windowB.data} focus={focus} width={chartWidth} />
+          <ComparisonOverlay dataA={windowA} dataB={windowB} focus={focus} width={chartWidth} />
         )}
       </div>
 
