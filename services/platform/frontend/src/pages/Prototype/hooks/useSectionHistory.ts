@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchSectionHistory } from '@/api/sections'
 import { useRealtime } from '@/hooks/useRealtime'
@@ -40,14 +40,16 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
 
   // Stale flag: true only during key transitions (range/flow/section change),
   // NOT during regular background polls (which would cause 2s flicker).
-  const keyChangedRef = useRef(true)
+  // Uses useState (not useRef) so changes trigger a re-render — a ref mutation
+  // after the useEffect would be invisible until the next unrelated render.
+  const [keyChanged, setKeyChanged] = useState(true)
 
   // Reset cursors outside queryFn so concurrent retries don't double-append.
   useEffect(() => {
     generationRef.current += 1
     sinceRef.current = undefined
     accumulatedRef.current = []
-    keyChangedRef.current = true
+    setKeyChanged(true)
   }, [sectionId, minutes, flow])
 
   const { data, isFetching, error } = useQuery({
@@ -57,8 +59,10 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
       const since = sinceRef.current
       const res = await fetchSectionHistory(sectionId, minutes, flow, since)
 
-      // Stale response from a previous key — discard ref writes
-      if (gen !== generationRef.current) return [...accumulatedRef.current]
+      // Stale response from a previous key — discard ref writes.
+      // The return value goes to the old key's cache entry (not the current UI),
+      // so an empty array is safe here.
+      if (gen !== generationRef.current) return []
 
       const newPoints = mapHistoryPoints(res.points)
 
@@ -81,7 +85,7 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
       }
 
       // Clear the key-changed flag after first successful fetch for new key
-      keyChangedRef.current = false
+      setKeyChanged(false)
 
       return [...accumulated]
     },
@@ -96,6 +100,6 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
   return {
     series: data ?? [],
     // Only report stale during key transitions, not regular 2s polls
-    stale: isFetching && keyChangedRef.current,
+    stale: isFetching && keyChanged,
   }
 }

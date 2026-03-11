@@ -1085,7 +1085,7 @@ class SpectralPeaksView(APIView):
 
     Query parameters:
     - infrastructureId: Infrastructure ID (optional, for production real-time data)
-    - maxSamples: Maximum number of time samples to return (default 1000; skipped when startTime/endTime are set)
+    - maxSamples: Maximum number of time samples to return (optional, cap 10000)
     - startTime: ISO timestamp for start of time range (optional)
     - endTime: ISO timestamp for end of time range (optional)
 
@@ -1152,9 +1152,19 @@ class SpectralPeaksView(APIView):
         peak_powers = all_peak_powers.copy()
         t0 = data.t0
 
-        # Apply time filtering if startTime/endTime provided
+        # Apply time filtering. When no startTime/endTime and no maxSamples
+        # are provided, default to the current day so the endpoint never
+        # returns the full unfiltered dataset by accident.
         start_time_str = request.query_params.get("startTime")
         end_time_str = request.query_params.get("endTime")
+        max_samples_param = request.query_params.get("maxSamples")
+
+        if not start_time_str and not end_time_str and max_samples_param is None:
+            today = datetime.now(tz=data.t0.tzinfo).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            start_time_str = today.isoformat()
+            end_time_str = (today + timedelta(days=1)).isoformat()
 
         if start_time_str or end_time_str:
             timestamps = np.array([t0.timestamp() + offset for offset in dt])
@@ -1182,17 +1192,15 @@ class SpectralPeaksView(APIView):
                 t0 = t0 + timedelta(seconds=start_offset)
 
         # Downsample by selecting evenly-spaced indices.
-        # When startTime/endTime are provided the result set is already small
-        # (one day ≈ 1000 pts), so we skip downsampling to preserve resolution.
-        # The general scatter-plot endpoint (no time filter) defaults to 1000.
-        has_time_filter = start_time_str or end_time_str
-        try:
-            max_samples = int(
-                request.query_params.get("maxSamples", 0 if has_time_filter else 1000)
-            )
-            max_samples = min(max_samples, 10000) if max_samples > 0 else 0
-        except (ValueError, TypeError):
-            max_samples = 0 if has_time_filter else 1000
+        # When the caller passes an explicit maxSamples we honour it (capped at 10 000).
+        # Otherwise we skip downsampling — the time filter already bounds the result.
+        if max_samples_param is not None:
+            try:
+                max_samples = min(int(max_samples_param), 10000)
+            except (ValueError, TypeError):
+                max_samples = 1000
+        else:
+            max_samples = 0
 
         n = len(dt)
         if max_samples > 0 and max_samples < n:
