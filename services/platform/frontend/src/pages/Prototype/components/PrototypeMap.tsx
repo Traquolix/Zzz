@@ -277,10 +277,15 @@ export const PrototypeMap = memo(
         clearHighlightImpl()
         // Data-driven: highlighted fiber gets full width/opacity, others dimmed
         map.setPaintProperty('fiber-lines', 'line-width', [
-          'case',
-          ['==', ['get', 'id'], fiberId],
-          5,
-          ['interpolate', ['linear'], ['zoom'], 10, 1.5, 12, 2, 14, 2.5],
+          'interpolate',
+          ['linear'],
+          ['zoom'],
+          10,
+          ['case', ['==', ['get', 'id'], fiberId], 5, 1.5],
+          12,
+          ['case', ['==', ['get', 'id'], fiberId], 5, 2],
+          14,
+          ['case', ['==', ['get', 'id'], fiberId], 5, 2.5],
         ])
         map.setPaintProperty('fiber-lines', 'line-opacity', ['case', ['==', ['get', 'id'], fiberId], 1, 0.15])
         let tick = 0
