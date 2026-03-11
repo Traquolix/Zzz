@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, type RefObject } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Sparkline } from './Sparkline'
 
 interface StatusBarProps {
@@ -13,28 +14,34 @@ const PING_INTERVAL_MS = 2000
 
 export function StatusBar({ connected, sectionCount, incidentCount, lastDetectionTsRef }: StatusBarProps) {
   const [showTooltip, setShowTooltip] = useState(false)
+  const pingHistoryRef = useRef<number[]>([])
   const [pingHistory, setPingHistory] = useState<number[]>([])
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  useEffect(() => {
-    const measurePing = () => {
+  // React Query handles refetch interval and automatic pause on hidden tabs
+  const { data: lastPingResult, dataUpdatedAt } = useQuery({
+    queryKey: ['ping'],
+    queryFn: async () => {
       const start = performance.now()
-      fetch('/api/health', { method: 'HEAD', cache: 'no-store' })
-        .then(() => {
-          const ms = Math.round(performance.now() - start)
-          setPingHistory(prev => [...prev.slice(-(PING_HISTORY_LENGTH - 1)), ms])
-        })
-        .catch(() => {
-          setPingHistory(prev => [...prev.slice(-(PING_HISTORY_LENGTH - 1)), -1])
-        })
-    }
+      try {
+        await fetch('/api/health', { method: 'HEAD', cache: 'no-store' })
+        return Math.round(performance.now() - start)
+      } catch {
+        return -1
+      }
+    },
+    refetchInterval: PING_INTERVAL_MS,
+    staleTime: 0,
+  })
 
-    measurePing()
-    intervalRef.current = setInterval(measurePing, PING_INTERVAL_MS)
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
-    }
-  }, [])
+  // Accumulate ping history outside of queryFn.
+  // dataUpdatedAt changes on every successful fetch (even if the value is the same),
+  // so this correctly appends repeated values like consecutive -1s.
+  useEffect(() => {
+    if (lastPingResult == null) return
+    const next = [...pingHistoryRef.current.slice(-(PING_HISTORY_LENGTH - 1)), lastPingResult]
+    pingHistoryRef.current = next
+    setPingHistory(next)
+  }, [lastPingResult, dataUpdatedAt])
 
   const lastPing = pingHistory.length > 0 ? pingHistory[pingHistory.length - 1] : null
   const avgPing =

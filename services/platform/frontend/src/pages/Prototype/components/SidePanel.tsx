@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback, type RefObject } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -3413,14 +3414,6 @@ function ComparisonSection({
   const chartWidth = Math.max(160, rawChartWidth)
   const [mode, setMode] = useState<ComparisonMode>('day')
   const [focus, setFocus] = useState<FocusMode>('equal')
-  const [windowA, setWindowA] = useState<{ data: PeakFrequencyData | null; loading: boolean }>({
-    data: null,
-    loading: false,
-  })
-  const [windowB, setWindowB] = useState<{ data: PeakFrequencyData | null; loading: boolean }>({
-    data: null,
-    loading: false,
-  })
 
   // Compute comparison date ranges
   const referenceDate = useMemo(() => {
@@ -3467,43 +3460,21 @@ function ComparisonSection({
     }
   }, [mode, referenceDate])
 
-  // Fetch comparison data
-  const rangeAFromMs = rangeA.from.getTime()
-  const rangeAToMs = rangeA.to.getTime()
-  const rangeBFromMs = rangeB.from.getTime()
-  const rangeBToMs = rangeB.to.getTime()
-
-  useEffect(() => {
-    let cancelled = false
-    setWindowA({ data: null, loading: true })
-    fetchPeakFrequencies({ maxSamples: 5000, startTime: rangeA.from, endTime: rangeA.to })
-      .then(data => {
-        if (!cancelled) setWindowA({ data, loading: false })
-      })
-      .catch(() => {
-        if (!cancelled) setWindowA({ data: null, loading: false })
-      })
-    return () => {
-      cancelled = true
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- rangeA.from/to are Date objects; use ms timestamps for stable comparison
-  }, [rangeAFromMs, rangeAToMs])
-
-  useEffect(() => {
-    let cancelled = false
-    setWindowB({ data: null, loading: true })
-    fetchPeakFrequencies({ maxSamples: 5000, startTime: rangeB.from, endTime: rangeB.to })
-      .then(data => {
-        if (!cancelled) setWindowB({ data, loading: false })
-      })
-      .catch(() => {
-        if (!cancelled) setWindowB({ data: null, loading: false })
-      })
-    return () => {
-      cancelled = true
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- rangeB.from/to are Date objects; use ms timestamps for stable comparison
-  }, [rangeBFromMs, rangeBToMs])
+  // Fetch comparison windows server-side filtered by time range.
+  // The backend caches peak data in process memory, so these are cheap
+  // (just array slicing, no recomputation). Full resolution per window.
+  const queryA = useQuery({
+    queryKey: ['shm-peaks-comparison', rangeA.from.getTime(), rangeA.to.getTime()],
+    queryFn: () => fetchPeakFrequencies({ startTime: rangeA.from, endTime: rangeA.to }),
+    staleTime: Infinity,
+  })
+  const queryB = useQuery({
+    queryKey: ['shm-peaks-comparison', rangeB.from.getTime(), rangeB.to.getTime()],
+    queryFn: () => fetchPeakFrequencies({ startTime: rangeB.from, endTime: rangeB.to }),
+    staleTime: Infinity,
+  })
+  const windowA = queryA.data ?? null
+  const windowB = queryB.data ?? null
 
   // Stats
   const stats = useMemo(() => {
@@ -3515,14 +3486,14 @@ function ComparisonSection({
       const variance = valid.reduce((s, f) => s + (f - mean) ** 2, 0) / valid.length
       return { mean, std: Math.sqrt(variance), count: valid.length }
     }
-    const a = calc(windowA.data),
-      b = calc(windowB.data)
+    const a = calc(windowA),
+      b = calc(windowB)
     if (!a || !b) return null
     const diff = a.mean - b.mean
     return { a, b, diff, diffPercent: (diff / b.mean) * 100 }
-  }, [windowA.data, windowB.data])
+  }, [windowA, windowB])
 
-  const isLoading = windowA.loading || windowB.loading
+  const isLoading = queryA.isLoading || queryB.isLoading
 
   // Expose stats to parent
   useEffect(() => {
@@ -3597,7 +3568,7 @@ function ComparisonSection({
             )}
           </div>
         ) : (
-          <ComparisonOverlay dataA={windowA.data} dataB={windowB.data} focus={focus} width={chartWidth} />
+          <ComparisonOverlay dataA={windowA} dataB={windowB} focus={focus} width={chartWidth} />
         )}
       </div>
 

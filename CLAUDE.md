@@ -64,7 +64,7 @@ Work is tracked through GitHub issues. Before starting any task:
 
 ### Task Pattern
 
-1. **Create a branch** from main: `feat/N-description`, `fix/N-description`, or `refactor/N-description` (where N is the issue number)
+1. **Create a branch** from main: `feat/N-description`, `fix/N-description`, `refactor/N-description`, or `perf/N-description` (where N is the issue number)
 2. **Write tests first** when adding features or fixing bugs
 3. **Implement** the change
 4. **Validate**: run `make lint && make typecheck`
@@ -149,7 +149,7 @@ backend venv on first run, but `make lint` and `make typecheck` expect venvs to 
 
 ### TypeScript (frontend)
 - Strict TypeScript with ESLint.
-- State management: Zustand stores.
+- State management: Zustand stores for client state; React Query (`@tanstack/react-query`) for server state (data fetching, caching, background refetch).
 - Styling: Tailwind CSS v4.
 - Components: shadcn/ui base components.
 - i18n: all user-visible strings in `src/i18n/en.json` and `src/i18n/fr.json`.
