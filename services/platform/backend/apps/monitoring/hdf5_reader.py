@@ -5,13 +5,13 @@ Reads spectral data from HDF5 files in the format:
 - spectra: 2D array (Nt x Nfreqs) of power values
 - freqs: 1D array of frequency bin centers (Hz)
 - t0: start timestamp (ISO format)
-- t: 1D array of time offsets in nanosecond-scale units (multiply by 1e9 to get seconds)
+- t: 1D array of time offsets in sub-second units (raw value * 1e9 = seconds)
 """
 
 import logging
 import threading
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -219,6 +219,8 @@ def load_spectral_data(filepath: Optional[Path] = None) -> SpectralData:
         filepath = DEFAULT_SAMPLE_FILE
 
     cache_key = str(filepath)
+    # Fast-path: unlocked read. Safe on CPython where dict.get() is atomic
+    # under the GIL. The locked double-check below handles the write race.
     cached = _spectral_cache.get(cache_key)
     if cached is not None:
         return cached
@@ -232,12 +234,14 @@ def load_spectral_data(filepath: Optional[Path] = None) -> SpectralData:
         t0_str = f.attrs["t0"]
         dt = f["t"][...]
 
-    # Parse t0 timestamp
+    # Parse t0 timestamp — assume UTC if the HDF5 attribute has no timezone
     if isinstance(t0_str, bytes):
         t0_str = t0_str.decode("utf-8")
     t0 = datetime.fromisoformat(t0_str)
+    if t0.tzinfo is None:
+        t0 = t0.replace(tzinfo=timezone.utc)
 
-    # dt values need to be multiplied by 1e9 to get actual seconds
+    # Raw HDF5 't' values are in units of ~1e-9 seconds; scale to seconds
     dt_seconds = dt * 1e9
 
     result = SpectralData(spectra=spectra, freqs=freqs, t0=t0, dt=dt_seconds)
@@ -271,6 +275,8 @@ def load_peak_frequencies(filepath: Optional[Path] = None) -> tuple[np.ndarray, 
         filepath = DEFAULT_SAMPLE_FILE
 
     cache_key = str(filepath)
+    # Fast-path: unlocked read. Safe on CPython where dict.get() is atomic
+    # under the GIL. The locked double-check below handles the write race.
     cached = _peak_cache.get(cache_key)
     if cached is not None:
         return cached
