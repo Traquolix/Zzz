@@ -229,6 +229,11 @@ def load_spectral_data(filepath: Optional[Path] = None) -> SpectralData:
     result = SpectralData(spectra=spectra, freqs=freqs, t0=t0, dt=dt_seconds)
 
     with _cache_lock:
+        # Double-checked locking: another thread may have populated the cache
+        # while we were loading from disk.
+        existing = _spectral_cache.get(cache_key)
+        if existing is not None:
+            return existing
         _spectral_cache[cache_key] = result
         logger.info(
             "Cached HDF5 spectral data: %s (%d samples)", filepath.name, result.num_time_samples
@@ -260,6 +265,11 @@ def load_peak_frequencies(filepath: Optional[Path] = None) -> tuple[np.ndarray, 
     peak_freqs, peak_powers = data.get_peak_frequencies()
 
     with _cache_lock:
+        # Double-checked locking: another thread may have populated the cache
+        # while we were computing find_peaks.
+        existing = _peak_cache.get(cache_key)
+        if existing is not None:
+            return existing
         _peak_cache[cache_key] = (peak_freqs, peak_powers)
         logger.info("Cached peak frequencies: %s (%d peaks)", filepath.name, len(peak_freqs))
 

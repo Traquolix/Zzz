@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchSectionHistory } from '@/api/sections'
 import { useRealtime } from '@/hooks/useRealtime'
+import { logger } from '@/lib/logger'
 import type { SectionDataPoint } from '../types'
 import { mapHistoryPoints } from './mapHistoryPoints'
 
@@ -22,7 +23,7 @@ const TIME_RANGE_MINUTES: Record<string, number> = {
  * - 15m/1h → backend serves per-minute buffer (1min resolution)
  *
  * React Query's refetchInterval auto-pauses when the tab is hidden.
- * Returns `stale: true` while awaiting the first fetch after a range/flow change.
+ * Returns `stale: true` while a fetch is in flight (initial load or background refetch).
  */
 export function useSectionHistory(sectionId: string, timeRange: string) {
   const { flow } = useRealtime()
@@ -34,7 +35,7 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
   // Track previous query key to reset cursors on change
   const prevKeyRef = useRef(`${sectionId}:${minutes}:${flow}`)
 
-  const { data, isLoading } = useQuery({
+  const { data, isFetching, error } = useQuery({
     queryKey: ['section-history', sectionId, minutes, flow],
     queryFn: async () => {
       const currentKey = `${sectionId}:${minutes}:${flow}`
@@ -74,8 +75,12 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
     staleTime: 0,
   })
 
+  if (error) {
+    logger.error('useSectionHistory: fetch failed', error)
+  }
+
   return {
     series: data ?? [],
-    stale: isLoading,
+    stale: isFetching,
   }
 }

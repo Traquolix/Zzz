@@ -1027,7 +1027,7 @@ class SpectralDataView(APIView):
         try:
             data = load_spectral_data()
         except Exception as e:
-            logger.error(f"Failed to load spectral data: {e}")
+            logger.error("Failed to load spectral data: %s", e)
             return Response(
                 {"detail": "Failed to load spectral data", "code": "shm_load_error"}, status=500
             )
@@ -1110,7 +1110,7 @@ class SpectralPeaksView(APIView):
         tags=["shm"],
     )
     def get(self, request):
-        from datetime import datetime
+        from datetime import datetime, timedelta
 
         import numpy as np
 
@@ -1140,15 +1140,16 @@ class SpectralPeaksView(APIView):
             # Use cached peak frequencies instead of recomputing find_peaks
             all_peak_freqs, all_peak_powers = load_peak_frequencies()
         except Exception as e:
-            logger.error(f"Failed to load spectral data: {e}")
+            logger.error("Failed to load spectral data: %s", e)
             return Response(
                 {"detail": "Failed to load spectral data", "code": "shm_load_error"}, status=500
             )
 
-        # Start with full-dataset indices
-        dt = data.dt
-        peak_freqs = all_peak_freqs
-        peak_powers = all_peak_powers
+        # Defensive copies: cached arrays are process-global and must not be
+        # mutated in-place (numpy slices return views, not copies).
+        dt = data.dt.copy()
+        peak_freqs = all_peak_freqs.copy()
+        peak_powers = all_peak_powers.copy()
         t0 = data.t0
 
         # Apply time filtering if startTime/endTime provided
@@ -1177,8 +1178,6 @@ class SpectralPeaksView(APIView):
                 dt = dt[si:ei] - dt[si]
                 peak_freqs = peak_freqs[si:ei]
                 peak_powers = peak_powers[si:ei]
-                from datetime import timedelta
-
                 t0 = t0 + timedelta(seconds=float(data.dt[si]))
 
         # Downsample by selecting evenly-spaced indices
@@ -1227,7 +1226,7 @@ class SpectralSummaryView(APIView):
         try:
             summary = get_spectral_summary()
         except Exception as e:
-            logger.error(f"Failed to get spectral summary: {e}")
+            logger.error("Failed to get spectral summary: %s", e)
             return Response(
                 {"detail": "Failed to load spectral data", "code": "shm_load_error"}, status=500
             )

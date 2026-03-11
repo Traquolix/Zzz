@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type {
   Infrastructure,
@@ -29,6 +29,11 @@ async function fetchAllStatuses(structures: Infrastructure[]): Promise<Map<strin
 export function useStructures(selectedId: string | null) {
   const [selectedDay, setSelectedDay] = useState<Date | null>(null)
 
+  // Reset selectedDay when structure selection changes
+  useEffect(() => {
+    setSelectedDay(null)
+  }, [selectedId])
+
   // Infrastructure list
   const { data: structures = [], isLoading: loading } = useQuery({
     queryKey: ['infrastructure'],
@@ -36,22 +41,26 @@ export function useStructures(selectedId: string | null) {
     staleTime: 60_000,
   })
 
+  // Stable query key for batch statuses (same pattern as useLiveStats)
+  const structureIds = useMemo(
+    () =>
+      structures
+        .map(s => s.id)
+        .sort()
+        .join(','),
+    [structures],
+  )
+
   // Batch-fetch all statuses once structures are loaded
   const { data: allStatuses = new Map<string, SHMStatus>() } = useQuery({
-    queryKey: ['shm-statuses', structures.map(s => s.id)],
+    queryKey: ['shm-statuses', structureIds],
     queryFn: () => fetchAllStatuses(structures),
     enabled: structures.length > 0,
     staleTime: 60_000,
   })
 
-  // Per-structure SHM status
-  const shmStatusQuery = useQuery({
-    queryKey: ['shm-status', selectedId],
-    queryFn: () => fetchSHMStatus(selectedId!),
-    enabled: !!selectedId,
-    staleTime: 30_000,
-  })
-  const shmStatus: SHMStatus | null = shmStatusQuery.data ?? null
+  // Derive per-structure status from batch result instead of a separate fetch
+  const shmStatus: SHMStatus | null = (selectedId ? allStatuses.get(selectedId) : undefined) ?? null
 
   // Spectral data (heavy — cached aggressively, static HDF5)
   const spectraQuery = useQuery({

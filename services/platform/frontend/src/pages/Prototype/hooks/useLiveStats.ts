@@ -2,6 +2,7 @@ import { useRef, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchBatchSectionHistory } from '@/api/sections'
 import { useRealtime } from '@/hooks/useRealtime'
+import { logger } from '@/lib/logger'
 import type { Section, SectionDataPoint, LiveSectionStats } from '../types'
 import { mapHistoryPoints } from './mapHistoryPoints'
 
@@ -32,6 +33,11 @@ export function useLiveStats(sections: Section[]) {
 
   // Track flow to reset cursors when it changes
   const prevFlowRef = useRef(flow)
+  // Last non-empty result — preserved when a poll cycle returns no new points
+  const lastResultRef = useRef<{
+    stats: Map<string, LiveSectionStats>
+    seriesData: Map<string, SectionDataPoint[]>
+  } | null>(null)
 
   const sectionIds = useMemo(
     () =>
@@ -42,7 +48,7 @@ export function useLiveStats(sections: Section[]) {
     [sections],
   )
 
-  const { data } = useQuery({
+  const { data, error } = useQuery({
     queryKey: ['live-stats', sectionIds, flow],
     queryFn: async () => {
       const secs = sectionsRef.current
@@ -115,11 +121,27 @@ export function useLiveStats(sections: Section[]) {
         }
       }
 
-      return { stats: nextStats, seriesData: nextSeries }
+      const result = { stats: nextStats, seriesData: nextSeries }
+
+      // Preserve previous data when all sections return empty (e.g. no new
+      // points in this poll cycle) to avoid briefly clearing sparklines.
+      if (nextSeries.size === 0 && secs.length > 0 && lastResultRef.current) {
+        return lastResultRef.current
+      }
+
+      if (nextSeries.size > 0) {
+        lastResultRef.current = result
+      }
+
+      return result
     },
     refetchInterval: POLL_INTERVAL,
     staleTime: 0,
   })
+
+  if (error) {
+    logger.error('useLiveStats: batch fetch failed', error)
+  }
 
   return {
     stats: data?.stats ?? new Map<string, LiveSectionStats>(),

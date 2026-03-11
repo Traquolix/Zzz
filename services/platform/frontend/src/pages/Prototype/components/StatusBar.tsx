@@ -1,4 +1,4 @@
-import { useState, useRef, type RefObject } from 'react'
+import { useState, type RefObject } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Sparkline } from './Sparkline'
 
@@ -15,8 +15,6 @@ const PING_INTERVAL_MS = 2000
 export function StatusBar({ connected, sectionCount, incidentCount, lastDetectionTsRef }: StatusBarProps) {
   const [showTooltip, setShowTooltip] = useState(false)
   const [pingHistory, setPingHistory] = useState<number[]>([])
-  const historyRef = useRef(pingHistory)
-  historyRef.current = pingHistory
 
   // React Query handles refetch interval and automatic pause on hidden tabs
   useQuery({
