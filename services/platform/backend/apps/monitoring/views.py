@@ -1085,7 +1085,7 @@ class SpectralPeaksView(APIView):
 
     Query parameters:
     - infrastructureId: Infrastructure ID (optional, for production real-time data)
-    - maxSamples: Maximum number of time samples to return (optional, no limit if omitted)
+    - maxSamples: Maximum number of time samples to return (default 1000; skipped when startTime/endTime are set)
     - startTime: ISO timestamp for start of time range (optional)
     - endTime: ISO timestamp for end of time range (optional)
 
@@ -1181,17 +1181,21 @@ class SpectralPeaksView(APIView):
                 peak_powers = peak_powers[si:ei]
                 t0 = t0 + timedelta(seconds=start_offset)
 
-        # Downsample by selecting evenly-spaced indices (only when explicitly requested)
-        max_samples_param = request.query_params.get("maxSamples")
-        max_samples: int | None = None
-        if max_samples_param is not None:
-            try:
-                max_samples = min(int(max_samples_param), 10000)
-            except (ValueError, TypeError):
-                max_samples = None
+        # Downsample by selecting evenly-spaced indices.
+        # When startTime/endTime are provided the result set is already small
+        # (one day ≈ 1000 pts), so we skip downsampling to preserve resolution.
+        # The general scatter-plot endpoint (no time filter) defaults to 1000.
+        has_time_filter = start_time_str or end_time_str
+        try:
+            max_samples = int(
+                request.query_params.get("maxSamples", 0 if has_time_filter else 1000)
+            )
+            max_samples = min(max_samples, 10000) if max_samples > 0 else 0
+        except (ValueError, TypeError):
+            max_samples = 0 if has_time_filter else 1000
 
         n = len(dt)
-        if max_samples is not None and max_samples < n:
+        if max_samples > 0 and max_samples < n:
             sel = np.linspace(0, n - 1, max_samples, dtype=int)
             dt = dt[sel]
             peak_freqs = peak_freqs[sel]

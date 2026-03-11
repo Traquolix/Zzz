@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback, type RefObject } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -34,6 +35,7 @@ import type {
   SpectralSummary,
 } from '@/types/infrastructure'
 import { MAX_SECTIONS_PER_ORG } from '@/api/sections'
+import { fetchPeakFrequencies } from '@/api/infrastructure'
 import { useRealtime } from '@/hooks/useRealtime'
 import { useAuth } from '@/hooks/useAuth'
 import { parseDetections } from '@/lib/parseMessage'
@@ -2541,12 +2543,7 @@ function StructureDetail({
 
         {/* Comparison overlay */}
         <div className="border-t border-[var(--proto-border)] pt-3">
-          <ComparisonSection
-            dataSummary={dataSummary}
-            peakData={peakData}
-            peakLoading={peakLoading}
-            onStats={handleComparisonStats}
-          />
+          <ComparisonSection dataSummary={dataSummary} onStats={handleComparisonStats} />
         </div>
       </div>
     </div>
@@ -3398,30 +3395,6 @@ function ComparisonOverlay({
   )
 }
 
-/** Filter peak data to a time range, returning null if no points match. */
-function filterPeakDataByRange(data: PeakFrequencyData | null, from: Date, to: Date): PeakFrequencyData | null {
-  if (!data) return null
-
-  const t0Ms = new Date(data.t0).getTime()
-  const fromS = (from.getTime() - t0Ms) / 1000
-  const toS = (to.getTime() - t0Ms) / 1000
-
-  const indices: number[] = []
-  for (let i = 0; i < data.dt.length; i++) {
-    if (data.dt[i] >= fromS && data.dt[i] <= toS) indices.push(i)
-  }
-  if (indices.length === 0) return null
-
-  const baseOffset = data.dt[indices[0]]
-  return {
-    t0: new Date(t0Ms + baseOffset * 1000).toISOString(),
-    dt: indices.map(i => data.dt[i] - baseOffset),
-    peakFrequencies: indices.map(i => data.peakFrequencies[i]),
-    peakPowers: indices.map(i => data.peakPowers[i]),
-    freqRange: data.freqRange,
-  }
-}
-
 type ComparisonStats = {
   a: { mean: number; std: number; count: number }
   b: { mean: number; std: number; count: number }
@@ -3431,13 +3404,9 @@ type ComparisonStats = {
 
 function ComparisonSection({
   dataSummary,
-  peakData,
-  peakLoading,
   onStats,
 }: {
   dataSummary: SpectralSummary | null
-  peakData: PeakFrequencyData | null
-  peakLoading: boolean
   onStats?: (stats: ComparisonStats | null) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -3491,10 +3460,21 @@ function ComparisonSection({
     }
   }, [mode, referenceDate])
 
-  // Derive comparison windows client-side from existing peak data
-  // instead of making 2 extra API calls per mode change.
-  const windowA = useMemo(() => filterPeakDataByRange(peakData, rangeA.from, rangeA.to), [peakData, rangeA])
-  const windowB = useMemo(() => filterPeakDataByRange(peakData, rangeB.from, rangeB.to), [peakData, rangeB])
+  // Fetch comparison windows server-side filtered by time range.
+  // The backend caches peak data in process memory, so these are cheap
+  // (just array slicing, no recomputation). Full resolution per window.
+  const queryA = useQuery({
+    queryKey: ['shm-peaks-comparison', rangeA.from.getTime(), rangeA.to.getTime()],
+    queryFn: () => fetchPeakFrequencies({ startTime: rangeA.from, endTime: rangeA.to }),
+    staleTime: Infinity,
+  })
+  const queryB = useQuery({
+    queryKey: ['shm-peaks-comparison', rangeB.from.getTime(), rangeB.to.getTime()],
+    queryFn: () => fetchPeakFrequencies({ startTime: rangeB.from, endTime: rangeB.to }),
+    staleTime: Infinity,
+  })
+  const windowA = queryA.data ?? null
+  const windowB = queryB.data ?? null
 
   // Stats
   const stats = useMemo(() => {
@@ -3513,7 +3493,7 @@ function ComparisonSection({
     return { a, b, diff, diffPercent: (diff / b.mean) * 100 }
   }, [windowA, windowB])
 
-  const isLoading = peakLoading
+  const isLoading = queryA.isLoading || queryB.isLoading
 
   // Expose stats to parent
   useEffect(() => {
