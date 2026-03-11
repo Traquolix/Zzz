@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type RefObject } from 'react'
+import { useState, useEffect, useRef, useMemo, type RefObject } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Sparkline } from './Sparkline'
 
@@ -44,10 +44,9 @@ export function StatusBar({ connected, sectionCount, incidentCount, lastDetectio
   }, [lastPingResult, dataUpdatedAt])
 
   const lastPing = pingHistory.length > 0 ? pingHistory[pingHistory.length - 1] : null
+  const positivePings = useMemo(() => pingHistory.filter(p => p > 0), [pingHistory])
   const avgPing =
-    pingHistory.filter(p => p > 0).length > 0
-      ? Math.round(pingHistory.filter(p => p > 0).reduce((a, b) => a + b, 0) / pingHistory.filter(p => p > 0).length)
-      : null
+    positivePings.length > 0 ? Math.round(positivePings.reduce((a, b) => a + b, 0) / positivePings.length) : null
 
   const pingColor =
     lastPing === null
@@ -86,10 +85,10 @@ export function StatusBar({ connected, sectionCount, incidentCount, lastDetectio
                     {connected ? 'Connected' : 'Disconnected'}
                   </span>
                 </div>
-                {pingHistory.filter(p => p > 0).length > 0 && (
+                {positivePings.length > 0 && (
                   <div className="flex items-center gap-2">
                     <div className="flex-1 overflow-hidden">
-                      <Sparkline data={pingHistory.filter(p => p > 0)} color={pingColor} width={120} height={20} />
+                      <Sparkline data={positivePings} color={pingColor} width={120} height={20} />
                     </div>
                     <span className="text-[var(--proto-text-muted)] shrink-0 tabular-nums">
                       {lastPing != null && lastPing > 0 ? `${lastPing}ms` : '—'}

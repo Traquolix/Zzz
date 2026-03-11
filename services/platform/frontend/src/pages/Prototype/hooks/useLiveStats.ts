@@ -1,4 +1,4 @@
-import { useRef, useMemo, useEffect } from 'react'
+import { useRef, useMemo, useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchBatchSectionHistory } from '@/api/sections'
 import { useRealtime } from '@/hooks/useRealtime'
@@ -31,16 +31,11 @@ export function useLiveStats(sections: Section[]) {
   // Store accumulated points per section
   const accumulatedRef = useRef<Map<string, SectionDataPoint[]>>(new Map())
 
-  // Last non-empty result — preserved when a poll cycle returns no new points
-  const lastResultRef = useRef<{
+  // Derived state — updated in useEffect after each fetch
+  const [result, setResult] = useState<{
     stats: Map<string, LiveSectionStats>
     seriesData: Map<string, SectionDataPoint[]>
-  } | null>(null)
-
-  // Generation counter: incremented on every key change. The queryFn captures
-  // the current generation before awaiting; if it differs after the await,
-  // the response is stale and ref writes are skipped.
-  const generationRef = useRef(0)
+  }>({ stats: new Map(), seriesData: new Map() })
 
   const sectionIds = useMemo(
     () =>
@@ -51,23 +46,25 @@ export function useLiveStats(sections: Section[]) {
     [sections],
   )
 
-  // Reset cursors outside queryFn so concurrent retries don't corrupt state.
+  // Reset cursors on key change.
   useEffect(() => {
-    generationRef.current += 1
     sinceRef.current.clear()
     accumulatedRef.current.clear()
-    lastResultRef.current = null
+    setResult({ stats: new Map(), seriesData: new Map() })
   }, [sectionIds, flow])
 
-  const { data, error } = useQuery({
+  // queryFn fetches and eagerly advances per-section since cursors so the next
+  // poll (which may fire before the useEffect runs) never resends stale cursors.
+  // Ref writes are safe here — they don't trigger renders or affect React state.
+  const {
+    data: rawResponse,
+    dataUpdatedAt,
+    error,
+  } = useQuery({
     queryKey: ['live-stats', sectionIds, flow],
     queryFn: async () => {
-      const gen = generationRef.current
       const secs = sectionsRef.current
-
-      if (secs.length === 0) {
-        return { stats: new Map<string, LiveSectionStats>(), seriesData: new Map<string, SectionDataPoint[]>() }
-      }
+      if (secs.length === 0) return null
 
       // Build per-section since map — backend applies each cursor individually
       const sinceMap: Record<string, number> = {}
@@ -76,76 +73,19 @@ export function useLiveStats(sections: Section[]) {
         if (since != null) sinceMap[sec.id] = since
       }
 
-      const batchResult = await fetchBatchSectionHistory(
+      const result = await fetchBatchSectionHistory(
         secs.map(s => s.id),
         HISTORY_MINUTES,
         flow,
         Object.keys(sinceMap).length > 0 ? sinceMap : undefined,
       )
 
-      // Stale response from a previous key — discard ref writes
-      if (gen !== generationRef.current) {
-        return (
-          lastResultRef.current ?? {
-            stats: new Map<string, LiveSectionStats>(),
-            seriesData: new Map<string, SectionDataPoint[]>(),
-          }
-        )
-      }
-
-      const nextStats = new Map<string, LiveSectionStats>()
-      const nextSeries = new Map<string, SectionDataPoint[]>()
-
+      // Eagerly advance cursors so next poll has fresh values
       for (const sec of secs) {
-        const rawPoints = batchResult[sec.id]
-        if (!rawPoints) {
-          // Section not in response (e.g. filtered out by org scoping) — keep existing
-          const existing = accumulatedRef.current.get(sec.id)
-          if (existing && existing.length > 0) {
-            nextSeries.set(sec.id, existing)
-            nextStats.set(sec.id, deriveStats(existing, sec))
-          }
-          continue
-        }
-
-        const newPoints = mapHistoryPoints(rawPoints)
-
-        // Merge with existing accumulated data
-        let accumulated = accumulatedRef.current.get(sec.id) ?? []
-        if (!sinceRef.current.has(sec.id)) {
-          accumulated = newPoints
-        } else if (newPoints.length > 0) {
-          accumulated.push(...newPoints)
-        }
-
-        // Trim to window
-        const cutoff = Date.now() - HISTORY_MINUTES * 60 * 1000
-        const firstValid = accumulated.findIndex(p => p.timestamp >= cutoff)
-        if (firstValid > 0) accumulated.splice(0, firstValid)
-
-        if (accumulated.length > MAX_POINTS) {
-          accumulated.splice(0, accumulated.length - MAX_POINTS)
-        }
-
-        accumulatedRef.current.set(sec.id, accumulated)
-        nextSeries.set(sec.id, accumulated)
-        nextStats.set(sec.id, deriveStats(accumulated, sec))
-
-        if (rawPoints.length > 0) {
+        const rawPoints = result[sec.id]
+        if (rawPoints && rawPoints.length > 0) {
           sinceRef.current.set(sec.id, rawPoints[rawPoints.length - 1].time)
         }
-      }
-
-      const result = { stats: nextStats, seriesData: nextSeries }
-
-      // Preserve previous data when all sections return empty (e.g. no new
-      // points in this poll cycle) to avoid briefly clearing sparklines.
-      if (nextSeries.size === 0 && secs.length > 0 && lastResultRef.current) {
-        return lastResultRef.current
-      }
-
-      if (nextSeries.size > 0) {
-        lastResultRef.current = result
       }
 
       return result
@@ -154,13 +94,65 @@ export function useLiveStats(sections: Section[]) {
     staleTime: 0,
   })
 
+  // Accumulate, trim, derive stats, and update cursors outside queryFn.
+  // dataUpdatedAt changes on every successful fetch, so this fires reliably.
+  useEffect(() => {
+    if (!rawResponse) return
+
+    const secs = sectionsRef.current
+    const nextStats = new Map<string, LiveSectionStats>()
+    const nextSeries = new Map<string, SectionDataPoint[]>()
+
+    for (const sec of secs) {
+      const rawPoints = rawResponse[sec.id]
+      if (!rawPoints) {
+        // Section not in response (e.g. filtered out by org scoping) — keep existing
+        const existing = accumulatedRef.current.get(sec.id)
+        if (existing && existing.length > 0) {
+          nextSeries.set(sec.id, existing)
+          nextStats.set(sec.id, deriveStats(existing, sec))
+        }
+        continue
+      }
+
+      const newPoints = mapHistoryPoints(rawPoints)
+
+      // Merge with existing accumulated data
+      let accumulated = accumulatedRef.current.get(sec.id) ?? []
+      if (!sinceRef.current.has(sec.id)) {
+        accumulated = newPoints
+      } else if (newPoints.length > 0) {
+        accumulated = [...accumulated, ...newPoints]
+      }
+
+      // Trim to window
+      const cutoff = Date.now() - HISTORY_MINUTES * 60 * 1000
+      const firstValid = accumulated.findIndex(p => p.timestamp >= cutoff)
+      if (firstValid > 0) accumulated = accumulated.slice(firstValid)
+
+      if (accumulated.length > MAX_POINTS) {
+        accumulated = accumulated.slice(accumulated.length - MAX_POINTS)
+      }
+
+      accumulatedRef.current.set(sec.id, accumulated)
+      nextSeries.set(sec.id, accumulated)
+      nextStats.set(sec.id, deriveStats(accumulated, sec))
+    }
+
+    // Preserve previous data when all sections return empty (e.g. no new
+    // points in this poll cycle) to avoid briefly clearing sparklines.
+    if (nextSeries.size > 0 || secs.length === 0) {
+      setResult({ stats: nextStats, seriesData: nextSeries })
+    }
+  }, [dataUpdatedAt]) // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (error) logger.error('useLiveStats: batch fetch failed', error)
   }, [error])
 
   return {
-    stats: data?.stats ?? new Map<string, LiveSectionStats>(),
-    seriesData: data?.seriesData ?? new Map<string, SectionDataPoint[]>(),
+    stats: result.stats,
+    seriesData: result.seriesData,
   }
 }
 
