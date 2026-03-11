@@ -1,0 +1,105 @@
+-- Migration 003: 3-tier detection architecture
+-- Extracted from init/02_sampling_tables.sql for deploy-time idempotent migrations.
+--
+-- TIERS:
+--   1. detection_hires  - High-resolution (48h TTL)
+--   2. detection_1m     - 1-minute aggregation (90 days TTL)
+--   3. detection_1h     - 1-hour aggregation (forever)
+
+-- Tier 1: High-resolution detection data
+CREATE TABLE IF NOT EXISTS sequoia.detection_hires
+(
+    fiber_id LowCardinality(String) CODEC(ZSTD(1)),
+    ts DateTime64(1) CODEC(DoubleDelta),
+    ch UInt16 CODEC(LZ4),
+    direction UInt8 DEFAULT 0 CODEC(LZ4),
+    speed Float32 CODEC(Gorilla),
+    vehicle_count Float32 DEFAULT 1 CODEC(Gorilla),
+    n_cars Float32 DEFAULT 0 CODEC(Gorilla),
+    n_trucks Float32 DEFAULT 0 CODEC(Gorilla),
+    lng Nullable(Float64) CODEC(Gorilla),
+    lat Nullable(Float64) CODEC(Gorilla)
+)
+ENGINE = ReplacingMergeTree()
+PARTITION BY (fiber_id, toYYYYMMDD(ts))
+ORDER BY (fiber_id, ts, ch, direction)
+TTL toDateTime(ts) + INTERVAL 48 HOUR
+SETTINGS index_granularity = 4096
+COMMENT 'High-resolution detection data (interval detections). TTL: 48 hours';
+
+ALTER TABLE sequoia.detection_hires ADD INDEX IF NOT EXISTS idx_speed (speed) TYPE minmax GRANULARITY 4;
+
+-- Tier 2: 1-minute aggregated detection data
+CREATE TABLE IF NOT EXISTS sequoia.detection_1m
+(
+    fiber_id LowCardinality(String) CODEC(ZSTD(1)),
+    ts DateTime CODEC(DoubleDelta),
+    ch UInt16 CODEC(LZ4),
+    direction UInt8 DEFAULT 0 CODEC(LZ4),
+    speed_max_state AggregateFunction(max, Float32),
+    speed_avg_state AggregateFunction(avg, Float32),
+    speed_min_state AggregateFunction(min, Float32),
+    count_sum_state AggregateFunction(sum, Float32),
+    cars_sum_state AggregateFunction(sum, Float32),
+    trucks_sum_state AggregateFunction(sum, Float32),
+    samples_state AggregateFunction(sum, UInt64)
+)
+ENGINE = AggregatingMergeTree()
+PARTITION BY toYYYYMM(ts)
+ORDER BY (fiber_id, ts, ch, direction)
+TTL ts + INTERVAL 90 DAY
+COMMENT '1-minute aggregated detection data (AggregatingMergeTree). TTL: 90 days';
+
+-- Tier 3: 1-hour aggregated detection data (forever)
+CREATE TABLE IF NOT EXISTS sequoia.detection_1h
+(
+    fiber_id LowCardinality(String) CODEC(ZSTD(1)),
+    ts DateTime CODEC(DoubleDelta),
+    ch UInt16 CODEC(LZ4),
+    direction UInt8 DEFAULT 0 CODEC(LZ4),
+    speed_max_state AggregateFunction(max, Float32),
+    speed_avg_state AggregateFunction(avg, Float32),
+    speed_min_state AggregateFunction(min, Float32),
+    count_sum_state AggregateFunction(sum, Float32),
+    cars_sum_state AggregateFunction(sum, Float32),
+    trucks_sum_state AggregateFunction(sum, Float32),
+    samples_state AggregateFunction(sum, UInt64)
+)
+ENGINE = AggregatingMergeTree()
+PARTITION BY toYYYYMM(ts)
+ORDER BY (fiber_id, ts, ch, direction)
+COMMENT '1-hour aggregated detection data (AggregatingMergeTree). Permanent storage';
+
+-- MV: detection_hires -> detection_1m
+CREATE MATERIALIZED VIEW IF NOT EXISTS sequoia.detection_1m_mv TO sequoia.detection_1m AS
+SELECT
+    src.fiber_id AS fiber_id,
+    toStartOfMinute(src.ts) AS ts,
+    src.ch AS ch,
+    src.direction AS direction,
+    maxState(src.speed) AS speed_max_state,
+    avgState(src.speed) AS speed_avg_state,
+    minState(src.speed) AS speed_min_state,
+    sumState(src.vehicle_count) AS count_sum_state,
+    sumState(src.n_cars) AS cars_sum_state,
+    sumState(src.n_trucks) AS trucks_sum_state,
+    sumState(toUInt64(1)) AS samples_state
+FROM sequoia.detection_hires AS src
+GROUP BY src.fiber_id, toStartOfMinute(src.ts), src.ch, src.direction;
+
+-- MV: detection_1m -> detection_1h
+CREATE MATERIALIZED VIEW IF NOT EXISTS sequoia.detection_1h_mv TO sequoia.detection_1h AS
+SELECT
+    src.fiber_id AS fiber_id,
+    toStartOfHour(src.ts) AS ts,
+    src.ch AS ch,
+    src.direction AS direction,
+    maxMergeState(src.speed_max_state) AS speed_max_state,
+    avgMergeState(src.speed_avg_state) AS speed_avg_state,
+    minMergeState(src.speed_min_state) AS speed_min_state,
+    sumMergeState(src.count_sum_state) AS count_sum_state,
+    sumMergeState(src.cars_sum_state) AS cars_sum_state,
+    sumMergeState(src.trucks_sum_state) AS trucks_sum_state,
+    sumMergeState(src.samples_state) AS samples_state
+FROM sequoia.detection_1m AS src
+GROUP BY src.fiber_id, toStartOfHour(src.ts), src.ch, src.direction;
