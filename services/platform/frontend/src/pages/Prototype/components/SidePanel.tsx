@@ -2541,7 +2541,12 @@ function StructureDetail({
 
         {/* Comparison overlay */}
         <div className="border-t border-[var(--proto-border)] pt-3">
-          <ComparisonSection dataSummary={dataSummary} peakData={peakData} onStats={handleComparisonStats} />
+          <ComparisonSection
+            dataSummary={dataSummary}
+            peakData={peakData}
+            peakLoading={peakLoading}
+            onStats={handleComparisonStats}
+          />
         </div>
       </div>
     </div>
@@ -3427,10 +3432,12 @@ type ComparisonStats = {
 function ComparisonSection({
   dataSummary,
   peakData,
+  peakLoading,
   onStats,
 }: {
   dataSummary: SpectralSummary | null
   peakData: PeakFrequencyData | null
+  peakLoading: boolean
   onStats?: (stats: ComparisonStats | null) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -3506,7 +3513,7 @@ function ComparisonSection({
     return { a, b, diff, diffPercent: (diff / b.mean) * 100 }
   }, [windowA, windowB])
 
-  const isLoading = !peakData
+  const isLoading = peakLoading
 
   // Expose stats to parent
   useEffect(() => {

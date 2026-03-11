@@ -109,7 +109,12 @@ class SpectralData:
             New SpectralData with downsampled time axis.
         """
         if target_samples >= self.num_time_samples:
-            return self
+            return SpectralData(
+                spectra=self.spectra.copy(),
+                freqs=self.freqs.copy(),
+                t0=self.t0,
+                dt=self.dt.copy(),
+            )
 
         # Use linear interpolation indices
         indices = np.linspace(0, self.num_time_samples - 1, target_samples, dtype=int)
@@ -131,7 +136,12 @@ class SpectralData:
             New SpectralData with downsampled frequency axis.
         """
         if target_bins >= self.num_freq_bins:
-            return self
+            return SpectralData(
+                spectra=self.spectra.copy(),
+                freqs=self.freqs.copy(),
+                t0=self.t0,
+                dt=self.dt.copy(),
+            )
 
         indices = np.linspace(0, self.num_freq_bins - 1, target_bins, dtype=int)
         return SpectralData(

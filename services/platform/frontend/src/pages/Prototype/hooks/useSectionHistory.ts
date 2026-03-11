@@ -35,7 +35,7 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
 
   // Stale flag: true only during key transitions (range/flow/section change),
   // NOT during regular background polls (which would cause 2s flicker).
-  const keyChangedRef = useRef(false)
+  const keyChangedRef = useRef(true)
 
   // Reset cursors outside queryFn so concurrent retries don't double-append.
   useEffect(() => {
