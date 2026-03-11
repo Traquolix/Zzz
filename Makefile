@@ -9,7 +9,7 @@
         typecheck typecheck-pipeline typecheck-backend typecheck-frontend \
         security security-pipeline security-backend security-frontend \
         ci up down logs rebuild shell clean dev dev-deps dev-stop dev-backend dev-frontend \
-        backup restore _check-python
+        ch-migrate backup restore _check-python
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
@@ -236,6 +236,9 @@ dev-frontend: ## Build and preview frontend locally (auto-setup on first run)
 # ---------------------------------------------------------------------------
 # Backup & Restore (run on the backend server)
 # ---------------------------------------------------------------------------
+ch-migrate: ## Apply ClickHouse migrations + load cable data
+	cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python manage.py apply_clickhouse_migrations
+
 backup: ## Run a manual backup (PostgreSQL + ClickHouse)
 	./scripts/backup.sh
 

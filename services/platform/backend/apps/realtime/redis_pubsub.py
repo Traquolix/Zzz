@@ -12,6 +12,7 @@ Channel naming: ``sequoia:{flow}:{channel}:org:{org_id}``
   e.g. ``sequoia:sim:detections:org:__all__``
 """
 
+import asyncio
 import json
 import logging
 
@@ -22,7 +23,10 @@ from apps.realtime.broadcast import group_by_org
 
 logger = logging.getLogger("sequoia.pubsub")
 
-_publish_client: aioredis.Redis | None = None
+# One Redis publish client per event loop, keyed by loop id.
+# Avoids "Future attached to a different loop" when multiple
+# threads each run their own asyncio event loop.
+_publish_clients: dict[int, aioredis.Redis] = {}
 
 
 def pubsub_channel_name(flow: str, channel: str, org_id: str) -> str:
@@ -31,21 +35,29 @@ def pubsub_channel_name(flow: str, channel: str, org_id: str) -> str:
 
 
 async def get_publish_client() -> aioredis.Redis:
-    """Return the singleton async Redis client for publishing."""
-    global _publish_client
-    if _publish_client is None:
+    """Return a per-event-loop async Redis client for publishing.
+
+    Each event loop gets its own client to avoid the
+    'Future attached to a different loop' error that occurs when
+    a client created in one loop is reused in another.
+    """
+    loop = asyncio.get_running_loop()
+    loop_id = id(loop)
+    client = _publish_clients.get(loop_id)
+    if client is None:
         url: str = getattr(settings, "REDIS_PUBSUB_URL", "redis://localhost:6379/0")
-        client: aioredis.Redis = aioredis.Redis.from_url(url, decode_responses=True)  # type: ignore[assignment]
-        _publish_client = client
-    return _publish_client
+        client = aioredis.Redis.from_url(url, decode_responses=True)  # type: ignore[assignment]
+        _publish_clients[loop_id] = client
+    return client
 
 
 async def close_publish_client() -> None:
-    """Close the singleton publish client. Call on graceful shutdown."""
-    global _publish_client
-    if _publish_client is not None:
-        await _publish_client.aclose()
-        _publish_client = None
+    """Close the publish client for the current event loop."""
+    loop = asyncio.get_running_loop()
+    loop_id = id(loop)
+    client = _publish_clients.pop(loop_id, None)
+    if client is not None:
+        await client.aclose()
 
 
 def create_subscriber() -> aioredis.Redis:
