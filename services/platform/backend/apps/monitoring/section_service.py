@@ -160,7 +160,7 @@ def _query_section_history_hires(
         """
         SELECT
             toUnixTimestamp(toStartOfSecond(ts)) * 1000 AS time_ms,
-            avg(speed) AS speed,
+            avg(speed) AS speed_avg,
             max(speed) AS speed_max,
             count() / {n_ch:UInt32} AS samples
         FROM sequoia.detection_hires
@@ -203,7 +203,7 @@ def _query_section_history_1m(
         """
         SELECT
             toUnixTimestamp(ts) * 1000 AS time_ms,
-            avgMerge(speed_avg_state) AS speed,
+            avgMerge(speed_avg_state) AS speed_avg,
             maxMerge(speed_max_state) AS speed_max,
             sumMerge(samples_state) / {n_ch:UInt32} AS samples
         FROM sequoia.detection_1m
@@ -264,7 +264,7 @@ def _transform_history_rows(rows: list[dict], bucket_seconds: int = 60) -> list[
 
 
 def _transform_history_point(r: dict, bucket_seconds: int) -> dict:
-    speed = round(float(r["speed"]), 1) if r["speed"] is not None else 0.0
+    speed = round(float(r["speed_avg"]), 1) if r["speed_avg"] is not None else 0.0
     samples = int(r["samples"]) if r["samples"] is not None else 0
 
     # Flow = vehicles per hour (standard traffic engineering unit)
@@ -331,7 +331,7 @@ def _query_batch_hires(
             SELECT
                 {i} AS section_idx,
                 toUnixTimestamp(toStartOfSecond(ts)) * 1000 AS time_ms,
-                avg(speed) AS speed,
+                avg(speed) AS speed_avg,
                 max(speed) AS speed_max,
                 count() / {{nch{s}:UInt32}} AS samples
             FROM sequoia.detection_hires
@@ -369,7 +369,7 @@ def _query_batch_1m(
             SELECT
                 {i} AS section_idx,
                 toUnixTimestamp(ts) * 1000 AS time_ms,
-                avgMerge(speed_avg_state) AS speed,
+                avgMerge(speed_avg_state) AS speed_avg,
                 maxMerge(speed_max_state) AS speed_max,
                 sumMerge(samples_state) / {{nch{s}:UInt32}} AS samples
             FROM sequoia.detection_1m
