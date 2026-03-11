@@ -5,7 +5,7 @@ Reads spectral data from HDF5 files in the format:
 - spectra: 2D array (Nt x Nfreqs) of power values
 - freqs: 1D array of frequency bin centers (Hz)
 - t0: start timestamp (ISO format)
-- t: 1D array of time offsets in seconds since t0
+- t: 1D array of time offsets in nanosecond-scale units (multiply by 1e9 to get seconds)
 """
 
 import logging
@@ -38,7 +38,7 @@ class SpectralData:
     spectra: np.ndarray  # Shape: (Nt, Nfreqs)
     freqs: np.ndarray  # Shape: (Nfreqs,)
     t0: datetime  # Start timestamp
-    dt: np.ndarray  # Time offsets in seconds, shape: (Nt,)
+    dt: np.ndarray  # Time offsets in seconds since t0, shape: (Nt,)
 
     @property
     def num_time_samples(self) -> int:
