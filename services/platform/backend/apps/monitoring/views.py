@@ -1175,10 +1175,11 @@ class SpectralPeaksView(APIView):
 
             if len(idx) > 0:
                 si, ei = int(idx[0]), int(idx[-1]) + 1
+                start_offset = float(dt[si])
                 dt = dt[si:ei] - dt[si]
                 peak_freqs = peak_freqs[si:ei]
                 peak_powers = peak_powers[si:ei]
-                t0 = t0 + timedelta(seconds=float(data.dt[si]))
+                t0 = t0 + timedelta(seconds=start_offset)
 
         # Downsample by selecting evenly-spaced indices
         try:

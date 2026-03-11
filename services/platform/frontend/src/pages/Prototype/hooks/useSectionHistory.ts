@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchSectionHistory } from '@/api/sections'
 import { useRealtime } from '@/hooks/useRealtime'
@@ -23,7 +23,8 @@ const TIME_RANGE_MINUTES: Record<string, number> = {
  * - 15m/1h → backend serves per-minute buffer (1min resolution)
  *
  * React Query's refetchInterval auto-pauses when the tab is hidden.
- * Returns `stale: true` while a fetch is in flight (initial load or background refetch).
+ * Returns `stale: true` while awaiting the first fetch after a range/flow change,
+ * NOT during regular 2s background polls.
  */
 export function useSectionHistory(sectionId: string, timeRange: string) {
   const { flow } = useRealtime()
@@ -32,21 +33,20 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
   const sinceRef = useRef<number | undefined>(undefined)
   const accumulatedRef = useRef<SectionDataPoint[]>([])
 
-  // Track previous query key to reset cursors on change
-  const prevKeyRef = useRef(`${sectionId}:${minutes}:${flow}`)
+  // Stale flag: true only during key transitions (range/flow/section change),
+  // NOT during regular background polls (which would cause 2s flicker).
+  const keyChangedRef = useRef(false)
+
+  // Reset cursors outside queryFn so concurrent retries don't double-append.
+  useEffect(() => {
+    sinceRef.current = undefined
+    accumulatedRef.current = []
+    keyChangedRef.current = true
+  }, [sectionId, minutes, flow])
 
   const { data, isFetching, error } = useQuery({
     queryKey: ['section-history', sectionId, minutes, flow],
     queryFn: async () => {
-      const currentKey = `${sectionId}:${minutes}:${flow}`
-
-      // Reset cursors if query key changed (section, time range, or flow)
-      if (prevKeyRef.current !== currentKey) {
-        sinceRef.current = undefined
-        accumulatedRef.current = []
-        prevKeyRef.current = currentKey
-      }
-
       const since = sinceRef.current
       const res = await fetchSectionHistory(sectionId, minutes, flow, since)
       const newPoints = mapHistoryPoints(res.points)
@@ -69,6 +69,9 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
         sinceRef.current = res.points[res.points.length - 1].time
       }
 
+      // Clear the key-changed flag after first successful fetch for new key
+      keyChangedRef.current = false
+
       return [...accumulated]
     },
     refetchInterval: POLL_INTERVAL,
@@ -81,6 +84,7 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
 
   return {
     series: data ?? [],
-    stale: isFetching,
+    // Only report stale during key transitions, not regular 2s polls
+    stale: isFetching && keyChangedRef.current,
   }
 }

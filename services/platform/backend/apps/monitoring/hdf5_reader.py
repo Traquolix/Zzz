@@ -142,19 +142,23 @@ class SpectralData:
         )
 
     def slice_time(self, start_idx: int, end_idx: int) -> "SpectralData":
-        """Get a time slice of the data, adjusting t0 to the new start."""
+        """Get a time slice of the data, adjusting t0 to the new start.
+
+        Returns a new SpectralData with copied arrays (not views) so callers
+        cannot accidentally mutate the source data (which may be cached).
+        """
         from datetime import timedelta
 
         # Get the time offset at the start index
         new_start_offset = self.dt[start_idx]
         # Create new t0 at the slice start
         new_t0 = self.t0 + timedelta(seconds=float(new_start_offset))
-        # Adjust dt values to be relative to new t0
+        # Adjust dt values to be relative to new t0 (subtraction creates a copy)
         new_dt = self.dt[start_idx:end_idx] - new_start_offset
 
         return SpectralData(
-            spectra=self.spectra[start_idx:end_idx],
-            freqs=self.freqs,
+            spectra=self.spectra[start_idx:end_idx].copy(),
+            freqs=self.freqs.copy(),
             t0=new_t0,
             dt=new_dt,
         )
@@ -278,7 +282,10 @@ def load_peak_frequencies(filepath: Optional[Path] = None) -> tuple[np.ndarray, 
 
 def get_spectral_summary(filepath: Optional[Path] = None) -> dict:
     """
-    Get summary statistics without loading full data.
+    Get summary statistics by reusing the cached SpectralData.
+
+    Delegates to load_spectral_data() so the 131 MB HDF5 file is only ever
+    read once across all endpoints.
 
     Args:
         filepath: Path to HDF5 file.
@@ -286,37 +293,19 @@ def get_spectral_summary(filepath: Optional[Path] = None) -> dict:
     Returns:
         Dictionary with summary information.
     """
-    if filepath is None:
-        filepath = DEFAULT_SAMPLE_FILE
-
-    if not filepath.exists():
-        raise FileNotFoundError(f"HDF5 file not found: {filepath}")
-
-    with h5py.File(filepath, "r") as f:
-        spectra_shape = f["spectra"].shape
-        freqs = f["freqs"][...]
-        t0_str = f.attrs["t0"]
-        dt = f["t"][...]
-
-    if isinstance(t0_str, bytes):
-        t0_str = t0_str.decode("utf-8")
-
-    # dt values need to be multiplied by 1e9 to get actual seconds
-    dt_seconds = dt * 1e9
-
-    # Parse t0 to calculate end time
-    t0_dt = datetime.fromisoformat(t0_str)
     from datetime import timedelta
 
-    end_dt = t0_dt + timedelta(seconds=float(dt_seconds[-1]))
+    data = load_spectral_data(filepath)
+
+    end_dt = data.t0 + timedelta(seconds=float(data.dt[-1]))
 
     return {
-        "numTimeSamples": spectra_shape[0],
-        "numFreqBins": spectra_shape[1],
-        "freqRange": [float(freqs[0]), float(freqs[-1])],
-        "t0": t0_str,
+        "numTimeSamples": data.num_time_samples,
+        "numFreqBins": data.num_freq_bins,
+        "freqRange": list(data.freq_range),
+        "t0": data.t0.isoformat(),
         "endTime": end_dt.isoformat(),
-        "durationSeconds": float(dt_seconds[-1] - dt_seconds[0]),
+        "durationSeconds": data.duration_seconds,
     }
 
 

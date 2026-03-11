@@ -1,4 +1,4 @@
-import { useRef, useMemo } from 'react'
+import { useRef, useMemo, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchBatchSectionHistory } from '@/api/sections'
 import { useRealtime } from '@/hooks/useRealtime'
@@ -31,8 +31,6 @@ export function useLiveStats(sections: Section[]) {
   // Store accumulated points per section
   const accumulatedRef = useRef<Map<string, SectionDataPoint[]>>(new Map())
 
-  // Track flow to reset cursors when it changes
-  const prevFlowRef = useRef(flow)
   // Last non-empty result — preserved when a poll cycle returns no new points
   const lastResultRef = useRef<{
     stats: Map<string, LiveSectionStats>
@@ -48,17 +46,17 @@ export function useLiveStats(sections: Section[]) {
     [sections],
   )
 
+  // Reset cursors outside queryFn so concurrent retries don't corrupt state.
+  useEffect(() => {
+    sinceRef.current.clear()
+    accumulatedRef.current.clear()
+    lastResultRef.current = null
+  }, [sectionIds, flow])
+
   const { data, error } = useQuery({
     queryKey: ['live-stats', sectionIds, flow],
     queryFn: async () => {
       const secs = sectionsRef.current
-
-      // Reset cursors if flow changed
-      if (prevFlowRef.current !== flow) {
-        sinceRef.current.clear()
-        accumulatedRef.current.clear()
-        prevFlowRef.current = flow
-      }
 
       if (secs.length === 0) {
         return { stats: new Map<string, LiveSectionStats>(), seriesData: new Map<string, SectionDataPoint[]>() }
