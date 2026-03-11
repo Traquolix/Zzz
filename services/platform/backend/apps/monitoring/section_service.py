@@ -162,7 +162,7 @@ def _query_section_history_hires(
             toUnixTimestamp(toStartOfSecond(ts)) * 1000 AS time_ms,
             avg(speed) AS speed_avg,
             max(speed) AS speed_max,
-            count() / {n_ch:UInt32} AS samples
+            count() / {n_ch:Float64} AS samples
         FROM sequoia.detection_hires
         WHERE fiber_id = {fid:String}
           AND direction = {dir:UInt8}
@@ -205,7 +205,7 @@ def _query_section_history_1m(
             toUnixTimestamp(ts) * 1000 AS time_ms,
             avgMerge(speed_avg_state) AS speed_avg,
             maxMerge(speed_max_state) AS speed_max,
-            sumMerge(samples_state) / {n_ch:UInt32} AS samples
+            sumMerge(samples_state) / {n_ch:Float64} AS samples
         FROM sequoia.detection_1m
         WHERE fiber_id = {fid:String}
           AND direction = {dir:UInt8}
@@ -265,7 +265,7 @@ def _transform_history_rows(rows: list[dict], bucket_seconds: int = 60) -> list[
 
 def _transform_history_point(r: dict, bucket_seconds: int) -> dict:
     speed = round(float(r["speed_avg"]), 1) if r["speed_avg"] is not None else 0.0
-    samples = int(r["samples"]) if r["samples"] is not None else 0
+    samples = float(r["samples"]) if r["samples"] is not None else 0.0
 
     # Flow = vehicles per hour (standard traffic engineering unit)
     flow = round(samples * (3600 / bucket_seconds))
@@ -275,7 +275,7 @@ def _transform_history_point(r: dict, bucket_seconds: int) -> dict:
         "time": int(r["time_ms"]),
         "speed": speed,
         "speedMax": round(float(r["speed_max"]), 1) if r["speed_max"] is not None else 0,
-        "samples": samples,
+        "samples": round(samples, 4),
         "flow": flow,
         "occupancy": occupancy,
     }
@@ -333,7 +333,7 @@ def _query_batch_hires(
                 toUnixTimestamp(toStartOfSecond(ts)) * 1000 AS time_ms,
                 avg(speed) AS speed_avg,
                 max(speed) AS speed_max,
-                count() / {{nch{s}:UInt32}} AS samples
+                count() / {{nch{s}:Float64}} AS samples
             FROM sequoia.detection_hires
             WHERE fiber_id = {{fid{s}:String}}
               AND direction = {{dir{s}:UInt8}}
@@ -371,7 +371,7 @@ def _query_batch_1m(
                 toUnixTimestamp(ts) * 1000 AS time_ms,
                 avgMerge(speed_avg_state) AS speed_avg,
                 maxMerge(speed_max_state) AS speed_max,
-                sumMerge(samples_state) / {{nch{s}:UInt32}} AS samples
+                sumMerge(samples_state) / {{nch{s}:Float64}} AS samples
             FROM sequoia.detection_1m
             WHERE fiber_id = {{fid{s}:String}}
               AND direction = {{dir{s}:UInt8}}
