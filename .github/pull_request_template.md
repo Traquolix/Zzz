@@ -12,13 +12,7 @@ Closes #
 
 ## Services Affected
 
-- [ ] Pipeline — Processor
-- [ ] Pipeline — AI Engine
-- [ ] Pipeline — Shared library
-- [ ] Platform — Backend
-- [ ] Platform — Frontend
-- [ ] Infrastructure (Docker, ClickHouse, Grafana)
-- [ ] CI/CD or tooling
+<!-- List the affected services, e.g.: Pipeline — AI Engine, Platform — Backend -->
 
 ## Testing Done
 
