@@ -20,6 +20,9 @@ if [ "${ENVIRONMENT}" = "production" ]; then
     fi
 fi
 
+echo "Collecting static files..."
+python manage.py collectstatic --noinput 2>/dev/null || true
+
 echo "Running database migrations..."
 python manage.py migrate --noinput
 

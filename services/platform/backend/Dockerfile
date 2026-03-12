@@ -21,9 +21,6 @@ COPY . .
 # Make entrypoint executable
 RUN chmod +x /app/entrypoint.sh
 
-# Collect static files
-RUN python manage.py collectstatic --noinput 2>/dev/null || true
-
 # Create non-root user
 RUN addgroup --system --gid 1001 appgroup && \
     adduser --system --uid 1001 --ingroup appgroup appuser && \
