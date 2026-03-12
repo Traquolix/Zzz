@@ -4,6 +4,10 @@
 
 ## Related Issue
 
+<!-- REQUIRED: Link the issue this PR resolves. Use "Closes #N" so GitHub
+     auto-closes it on merge. If it doesn't fully resolve the issue,
+     use "Relates to #N" instead. Do NOT leave this blank. -->
+
 Closes #
 
 ## Services Affected
