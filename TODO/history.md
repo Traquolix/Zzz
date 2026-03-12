@@ -61,3 +61,105 @@ Completed tasks with dates and commit references.
 
 - **IncidentActionView not flow-aware** [#35] — added `FlowAwareMixin` with `initial()` override to reject sim flow with 400. Uses `ParseError` for consistent `{"detail": "..."}` response shape.
   - Closed by PR #48
+
+- **Extract `group_by_org` helper** [#45] — deduplicated "group items by org" logic across kafka_bridge.py and simulation.py.
+  - Closed by PR #51
+
+- **Route SHM broadcasts via `fiber_org_map`** [#46] — eliminated redundant `infra_org_map`, route SHM through `fiber_org_map`.
+  - Closed by PR #52
+
+- **SectionHistoryView not flow-aware** [#40] — flow-aware section history with resolution tiers and sim buffers.
+  - Closed by PR #55
+
+- **Make direction a first-class field everywhere** [#58] — stopped encoding direction in fiber_id strings.
+  - Closed by PR #59
+
+- **Consolidate dual Incident type definitions** [#42] — merged Prototype vs canonical Incident types.
+  - Closed by PR #65
+
+- **Replace `fiberLineId()` composite keys** [#62] — switched to structured keys.
+  - Closed by PR #65
+
+## 2026-03-09
+
+- **Sim/live data flow switching** [#43] — full sim/live toggle across all endpoints and WebSocket channels.
+  - Closed by PR #2
+
+- **Frontend: poll section history** [#54] — replaced client-side accumulation with API polling.
+  - Closed by PR #69
+
+- **Optimistic flow switch rollback** [#15] — defer flow switch until server confirms, rollback on failure.
+  - Closed by PR #71
+
+- **Move CRUD config tables to PostgreSQL** [#33] — sections, danger zones, actors out of ClickHouse into Django models.
+  - Closed by PR #73
+
+- **Batch section history endpoint** [#70] — parameterized UNION ALL, validated sectionIds.
+  - Closed by PR #75
+
+- **Fix section creation overlay** [#38] — corrected channel number offset in click handler.
+  - Closed by PR #76
+
+- **Expand side panel** [#72] — wider default, more readable charts and data tables.
+  - Closed by PR #78
+
+- **3D vehicle popups** [#81] — clickable popups with speed-colored info.
+  - Closed by PR #82, #83
+
+- **Vehicle popup consolidation** — legend gap fix, smooth open/close tracking, expanded panel close animation.
+  - Closed by PR #83
+
+- **Realistic simulation engine** [#10] — physically coherent traffic, location-aware speeds, emergent incidents.
+  - Closed by PR #84
+
+- **Replace SQLite with PostgreSQL + Redis** [#67] — zero-to-working `make dev`.
+  - Closed by PR #68
+
+- **Drop unused ClickHouse tables and columns** [#64] — removed 24 unused columns from fiber_incidents, 2 from fiber_cables.
+  - Closed by PR #96
+
+- **Reject export on simulation flow** [#49]
+  - Closed by PR #95
+
+- **Spectral heatmap initial mount race** — resolved RAF/ResizeObserver race in useDebouncedResize.
+  - Closed by PR #94
+
+- **ClickHouse migrations on deploy** — hardened migration command and command() helper.
+  - Closed by PR #92
+
+- **Incident detection tuning** — tuned for 30x time acceleration.
+  - Closed by PR #91
+
+- **Deploy fixes** — seed infrastructure on deploy, NO_PROXY for Docker service names, only restart app services, kafka-setup DNS race, Dockerfile stale schema copy, pyproject.toml in Docker build context.
+  - Closed by PRs #85, #86, #87, #88, #89, #90
+
+## 2026-03-10 – 2026-03-11
+
+- **SHM caching** [#93] — client-side caching, React Query, eliminated redundant API calls.
+  - Closed by PR #97
+
+- **SHM caching follow-up** — timezone handling, peaks default day, numpy vectorization.
+  - Closed by PR #105
+
+- **Consolidate ClickHouse migrations, fix Redis pub/sub event loop** — migration consolidation and async event loop fix.
+  - Closed by PR #106
+
+- **ClickHouse ILLEGAL_AGGREGATION on batch-history** [#107] — renamed speed alias to speed_avg.
+  - Closed by PR #107
+
+- **Bump GitHub Actions to v6** — Node.js 24 compatibility.
+  - Closed by PR #108
+
+- **Remove DEFAULT on Kafka engine column** [#109] — was breaking ClickHouse init.
+  - Closed by PR #109
+
+- **Flow and occupancy always zero in live mode** — use float for samples to prevent truncation.
+  - Closed by PR #110
+
+- **Warm SHM cache at startup, fix Mapbox zoom expression** [#104 partial] — cache warmup on AppConfig.ready(), fixed zoom expression.
+  - Closed by PR #111
+
+## 2026-03-12
+
+- **Install self-hosted GitHub Actions runners** [#5] — prerequisite for automated deploys.
+  - Closed manually

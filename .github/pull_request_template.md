@@ -4,17 +4,15 @@
 
 ## Related Issue
 
+<!-- REQUIRED: Link the issue this PR resolves. Use "Closes #N" so GitHub
+     auto-closes it on merge. If it doesn't fully resolve the issue,
+     use "Relates to #N" instead. Do NOT leave this blank. -->
+
 Closes #
 
 ## Services Affected
 
-- [ ] Pipeline — Processor
-- [ ] Pipeline — AI Engine
-- [ ] Pipeline — Shared library
-- [ ] Platform — Backend
-- [ ] Platform — Frontend
-- [ ] Infrastructure (Docker, ClickHouse, Grafana)
-- [ ] CI/CD or tooling
+<!-- List the affected services, e.g.: Pipeline — AI Engine, Platform — Backend -->
 
 ## Testing Done
 
