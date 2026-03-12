@@ -76,7 +76,14 @@ export async function fetchPeakFrequencies(options?: {
 
 /**
  * Fetch spectral data summary (lightweight metadata).
+ *
+ * In production mode, data is fetched for the specified infrastructureId.
+ * In demo mode (no infrastructureId), sample data is returned.
  */
-export async function fetchSpectralSummary(): Promise<SpectralSummary> {
-  return apiRequest<SpectralSummary>('/api/shm/summary')
+export async function fetchSpectralSummary(options?: { infrastructureId?: string }): Promise<SpectralSummary> {
+  const params = new URLSearchParams()
+  if (options?.infrastructureId) params.set('infrastructureId', options.infrastructureId)
+
+  const query = params.toString()
+  return apiRequest<SpectralSummary>(`/api/shm/summary${query ? `?${query}` : ''}`)
 }

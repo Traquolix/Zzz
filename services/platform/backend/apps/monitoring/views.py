@@ -1235,14 +1235,34 @@ class SpectralSummaryView(APIView):
     """
     GET /api/shm/summary — returns summary info about available spectral data.
 
+    Query parameters:
+    - infrastructureId: Infrastructure ID (optional, for production real-time data)
+
     Lightweight endpoint to check data availability without loading full dataset.
     """
 
     permission_classes = [IsActiveUser]
 
-    @extend_schema(tags=["shm"])
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="infrastructureId",
+                type=str,
+                description="Infrastructure ID for real-time data",
+            ),
+        ],
+        tags=["shm"],
+    )
     def get(self, request):
         from apps.monitoring.hdf5_reader import get_spectral_summary, sample_file_exists
+
+        # Org-scoping: validate infrastructure access if specified
+        error_resp = _verify_infrastructure_access(
+            request.user,
+            request.query_params.get("infrastructureId"),
+        )
+        if error_resp:
+            return error_resp
 
         if not sample_file_exists():
             return Response(
