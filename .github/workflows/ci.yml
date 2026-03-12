@@ -15,7 +15,10 @@ env:
 jobs:
   # ---------- LINT + TYPECHECK ----------
   lint:
-    if: github.event_name != 'schedule'
+    # Run on push, schedule, and PRs from this repo only (block fork PRs to protect self-hosted runners)
+    if: >
+      github.event_name != 'schedule' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -50,8 +53,8 @@ jobs:
 
   # ---------- SECURITY (weekly only) ----------
   security:
-    runs-on: ubuntu-latest
     if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 

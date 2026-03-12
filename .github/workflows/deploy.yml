@@ -24,7 +24,9 @@ jobs:
   # Backend: runs on the backend server (self-hosted runner labeled "backend")
   # -------------------------------------------------------------------------
   deploy-backend:
+    # Only run from this repo (never from forks) to protect self-hosted runners
     if: >
+      github.repository == 'Traquolix/Zzz' &&
       (github.event.inputs.skip_backend != 'true') &&
       (github.event_name == 'workflow_dispatch' ||
        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'))
@@ -128,7 +130,9 @@ jobs:
   # Builds locally and copies to nginx document root.
   # -------------------------------------------------------------------------
   deploy-frontend:
+    # Only run from this repo (never from forks) to protect self-hosted runners
     if: >
+      github.repository == 'Traquolix/Zzz' &&
       (github.event.inputs.skip_frontend != 'true') &&
       (github.event_name == 'workflow_dispatch' ||
        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'))
