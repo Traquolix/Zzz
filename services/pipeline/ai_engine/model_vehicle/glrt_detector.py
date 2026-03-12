@@ -88,7 +88,7 @@ class GLRTDetector:
         Args:
             glrt_summed: (sections, trimmed_time) summed GLRT
             aligned_speed_pairs: (sections, Nch-1, trimmed_time) per-pair speeds
-            direction: 1 for forward, 2 for reverse
+            direction: 0 for forward, 1 for reverse
             timestamps_ns: nanosecond timestamps for trimmed window, or None
             min_vehicle_duration_s: minimum detection duration in seconds
             classify_threshold_factor: peaks above detect_thr * this factor are trucks

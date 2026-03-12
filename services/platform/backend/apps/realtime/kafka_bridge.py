@@ -88,10 +88,7 @@ def transform_detection_message(data: dict) -> list[dict]:
     Frontend Detection:
         { fiberId, direction, channel, speed, count, nCars, nTrucks, timestamp }
 
-    Direction convention:
-        AI engine sends direction 1 (forward) / 2 (reverse).
-        Frontend expects direction 0 / 1.
-        Mapping: 1 -> 0, 2 -> 1, 0 -> 0 (unknown treated as forward).
+    Direction convention: 0 = forward, 1 = reverse (unified across pipeline and platform).
     """
     fiber_id = data.get("fiber_id", "")
     det_list = data.get("detections", [])
@@ -110,8 +107,7 @@ def transform_detection_message(data: dict) -> list[dict]:
         n_trucks = det.get("n_trucks", 0.0)
         timestamp_ms = timestamp_ns // 1_000_000
 
-        raw_direction = det.get("direction", 0)
-        direction = max(0, raw_direction - 1)  # 1->0, 2->1, 0->0
+        direction = det.get("direction", 0)
 
         results.append(
             {

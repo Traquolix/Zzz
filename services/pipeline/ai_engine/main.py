@@ -880,8 +880,8 @@ class AIEngineService(RollingBufferedTransformer):
                 for d in all_detections:
                     if d.get("_t_mid_sample") is not None:
                         d["_t_mid_sample"] += edge_trim
-                fwd_dets = [d for d in all_detections if d["direction"] == 1]
-                rev_dets = [d for d in all_detections if d["direction"] == 2]
+                fwd_dets = [d for d in all_detections if d["direction"] == 0]
+                rev_dets = [d for d in all_detections if d["direction"] == 1]
                 speed_processor.visualizer.generate_notebook_waterfall(
                     raw_data=data,
                     fwd_detections=fwd_dets,

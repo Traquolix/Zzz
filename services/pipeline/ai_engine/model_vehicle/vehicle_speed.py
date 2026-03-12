@@ -37,7 +37,7 @@ class DirectionResult(NamedTuple):
     aligned_data: np.ndarray         # (sections, Nch, trimmed_time) aligned sensor data
     timestamps: np.ndarray           # (trimmed_time,) datetime timestamps
     timestamps_ns: Optional[np.ndarray]  # (trimmed_time,) nanosecond timestamps, or None
-    direction_mask: np.ndarray       # (sections, trimmed_time) direction value (1=fwd, 2=rev)
+    direction_mask: np.ndarray       # (sections, trimmed_time) direction value (0=fwd, 1=rev)
     aligned_speed_per_pair: np.ndarray  # (sections, Nch-1, trimmed_time) per-pair speeds
     intervals: list = []             # Per-section [(starts, ends), ...] for counting
 
@@ -338,7 +338,7 @@ class VehicleSpeedEstimator:
                 fwd_glrt_summed = self.calibration_data.apply_coupling_correction(fwd_glrt_summed)
 
             for dr in self._trim_and_yield(fwd_glrt_summed, fwd_filtered, fwd_aligned,
-                                           date_window, date_window_ns, direction_value=1):
+                                           date_window, date_window_ns, direction_value=0):
                 all_results[section_idx].append(dr)
 
             if self.bidirectional_detection and rev_results_list is not None:
@@ -346,7 +346,7 @@ class VehicleSpeedEstimator:
                 rev_glrt_summed = rev_glrt_summed[::-1, :].copy()
                 rev_filtered = rev_filtered[::-1, :, :].copy()
                 for dr in self._trim_and_yield(rev_glrt_summed, rev_filtered, rev_aligned,
-                                               date_window, date_window_ns, direction_value=2):
+                                               date_window, date_window_ns, direction_value=1):
                     all_results[section_idx].append(dr)
 
         return all_results
@@ -423,7 +423,7 @@ class VehicleSpeedEstimator:
 
         yield from self._trim_and_yield(
             fwd_summed, fwd_filtered, fwd_aligned,
-            date_window, date_window_ns, direction_value=1,
+            date_window, date_window_ns, direction_value=0,
         )
 
         # --- Reverse pass (if bidirectional) ---
@@ -437,5 +437,5 @@ class VehicleSpeedEstimator:
 
             yield from self._trim_and_yield(
                 rev_summed, rev_filtered, rev_aligned,
-                date_window, date_window_ns, direction_value=2,
+                date_window, date_window_ns, direction_value=1,
             )
