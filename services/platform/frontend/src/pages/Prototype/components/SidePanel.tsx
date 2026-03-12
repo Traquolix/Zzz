@@ -2847,7 +2847,7 @@ function SpectralHeatmapCanvas({ data }: { data: SpectralTimeSeries }) {
       const { spectra, freqs } = data
       if (!spectra.length || !freqs.length) return
 
-      const margin = { top: 4, right: 8, bottom: 24, left: 36 }
+      const margin = { top: 4, right: 8, bottom: 28, left: 42 }
       const plotW = width - margin.left - margin.right
       const plotH = height - margin.top - margin.bottom
       if (plotW <= 0 || plotH <= 0) return
@@ -2886,32 +2886,35 @@ function SpectralHeatmapCanvas({ data }: { data: SpectralTimeSeries }) {
       }
 
       // Axes
-      ctx.fillStyle = '#64748b'
-      ctx.font = '10px sans-serif'
+      ctx.fillStyle = '#cbd5e1'
+      ctx.font = '11px sans-serif'
 
       // X axis (time) — hour-aligned ticks
       ctx.textAlign = 'center'
+      ctx.textBaseline = 'top'
       const t0 = new Date(data.t0)
       const tMin = t0.getTime()
       const tMax = tMin + (data.dt[data.dt.length - 1] || 0) * 1000
       for (const tick of computeHourTicks(tMin, tMax)) {
         const x = margin.left + tick.frac * plotW
-        ctx.fillText(tick.label, x, height - 4)
+        ctx.fillText(tick.label, x, height - margin.bottom + 4)
       }
 
       // Y axis (frequency) — integer Hz ticks
       ctx.textAlign = 'right'
+      ctx.textBaseline = 'middle'
       const freqLo = Math.ceil(freqs[0])
       const freqHi = Math.floor(freqs[freqs.length - 1])
       for (let hz = freqLo; hz <= freqHi; hz++) {
         const frac = (hz - freqs[0]) / (freqs[freqs.length - 1] - freqs[0])
-        const y = margin.top + (1 - frac) * plotH + 3
-        ctx.fillText(`${hz}`, margin.left - 4, y)
+        const y = margin.top + (1 - frac) * plotH
+        ctx.fillText(`${hz}`, margin.left - 6, y)
       }
 
       // Rotated vertical label: "Freq (Hz)"
       ctx.save()
-      ctx.font = '9px sans-serif'
+      ctx.fillStyle = '#cbd5e1'
+      ctx.font = '10px sans-serif'
       ctx.textAlign = 'center'
       const labelX = 12
       const labelY = margin.top + plotH / 2
