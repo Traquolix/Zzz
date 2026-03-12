@@ -167,8 +167,8 @@ def create_detection_messages(
     ]
 
     if log_fn:
-        n_fwd = sum(1 for d in detections if d["direction"] == 1)
-        n_rev = sum(1 for d in detections if d["direction"] == 2)
+        n_fwd = sum(1 for d in detections if d["direction"] == 0)
+        n_rev = sum(1 for d in detections if d["direction"] == 1)
         total_count = sum(d.get("vehicle_count", 1) for d in detections)
         log_fn(
             f"Detections: {len(det_records)} intervals ({n_fwd} fwd, {n_rev} rev), "

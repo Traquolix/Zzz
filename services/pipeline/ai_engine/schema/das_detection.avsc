@@ -42,7 +42,7 @@
               "name": "direction",
               "type": "int",
               "default": 0,
-              "doc": "Travel direction (1=forward, 2=reverse, 0=unknown)"
+              "doc": "Travel direction (0=forward, 1=reverse)"
             },
             {
               "name": "vehicle_count",
