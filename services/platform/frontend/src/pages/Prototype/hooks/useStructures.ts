@@ -70,8 +70,13 @@ export function useStructures(selectedId: string | null) {
 
   // Spectral data (heavy — cached aggressively, static HDF5)
   const spectraQuery = useQuery({
-    queryKey: ['shm-spectra'],
-    queryFn: () => fetchSpectralData({ maxTimeSamples: 500, maxFreqBins: 200 }),
+    queryKey: ['shm-spectra', selectedId],
+    queryFn: () =>
+      fetchSpectralData({
+        infrastructureId: selectedId!,
+        maxTimeSamples: 500,
+        maxFreqBins: 200,
+      }),
     enabled: !!selectedId,
     staleTime: Infinity,
   })
@@ -80,8 +85,8 @@ export function useStructures(selectedId: string | null) {
 
   // Summary (lightweight metadata) — loaded first so peaks can use its date range
   const summaryQuery = useQuery({
-    queryKey: ['shm-summary'],
-    queryFn: () => fetchSpectralSummary(),
+    queryKey: ['shm-summary', selectedId],
+    queryFn: () => fetchSpectralSummary({ infrastructureId: selectedId! }),
     enabled: !!selectedId,
     staleTime: Infinity,
   })
@@ -91,9 +96,10 @@ export function useStructures(selectedId: string | null) {
   // Pass the full data range from the summary so the backend doesn't
   // apply its "default to today" guard (which returns empty for past data).
   const peaksQuery = useQuery({
-    queryKey: ['shm-peaks'],
+    queryKey: ['shm-peaks', selectedId],
     queryFn: () =>
       fetchPeakFrequencies({
+        infrastructureId: selectedId!,
         startTime: new Date(dataSummary!.t0),
         endTime: new Date(dataSummary!.endTime),
       }),
