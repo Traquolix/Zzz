@@ -277,7 +277,10 @@ export function Prototype() {
   // Real incidents from API + WebSocket
   const { incidents: apiIncidents, loading: incidentsLoading } = useIncidents()
   const protoIncidents = useMemo(() => apiIncidents.map(toProtoIncident), [apiIncidents])
-  const { unseenIds, hasUnseen, markSeen, toasts, dismissToast } = useUnseenIncidents(protoIncidents, incidentsLoading)
+  const { unseenIds, hasUnseen, markSeen, markAllSeen, toasts, dismissToast } = useUnseenIncidents(
+    protoIncidents,
+    incidentsLoading,
+  )
 
   useEffect(() => {
     dispatch({ type: 'SET_INCIDENTS', incidents: protoIncidents })
@@ -534,6 +537,7 @@ export function Prototype() {
             unseenIds={unseenIds}
             hasUnseen={hasUnseen}
             onMarkSeen={markSeen}
+            onMarkAllSeen={markAllSeen}
           />
         </div>
 

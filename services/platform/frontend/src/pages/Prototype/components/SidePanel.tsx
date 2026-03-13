@@ -76,6 +76,7 @@ interface SidePanelProps {
   unseenIds?: Set<string>
   hasUnseen?: boolean
   onMarkSeen?: (id: string) => void
+  onMarkAllSeen?: () => void
 }
 
 const severityOrder: Severity[] = ['critical', 'high', 'medium', 'low']
@@ -96,6 +97,7 @@ export function SidePanel({
   unseenIds,
   hasUnseen,
   onMarkSeen,
+  onMarkAllSeen,
 }: SidePanelProps) {
   const {
     activeTab,
@@ -365,6 +367,27 @@ export function SidePanel({
                     )}
                   </svg>
                 </button>
+                {hasUnseen && (
+                  <button
+                    onClick={onMarkAllSeen}
+                    className="flex items-center justify-center w-6 h-6 rounded text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors cursor-pointer"
+                    title="Mark all read"
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M18 6L7 17l-5-5" />
+                      <path d="M22 10l-7.5 7.5L13 16" />
+                    </svg>
+                  </button>
+                )}
               </>
             )}
             {activeTab === 'shm' && (

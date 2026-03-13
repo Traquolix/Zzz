@@ -72,12 +72,12 @@ export function useUnseenIncidents(incidents: ProtoIncident[], loading: boolean)
     prevIdsRef.current = currentIds
   }, [incidents, loading])
 
-  // Auto-dismiss toasts after 60s
+  // Auto-dismiss toasts after 10s
   const hasToasts = toasts.length > 0
   useEffect(() => {
     if (!hasToasts) return
     const timer = setInterval(() => {
-      const cutoff = Date.now() - 60_000
+      const cutoff = Date.now() - 10_000
       setToasts(prev => {
         const next = prev.filter(t => t.createdAt > cutoff)
         return next.length === prev.length ? prev : next
@@ -99,7 +99,12 @@ export function useUnseenIncidents(incidents: ProtoIncident[], loading: boolean)
     setToasts(prev => prev.filter(t => t.id !== toastId))
   }, [])
 
+  const markAllSeen = useCallback(() => {
+    setUnseenIds(new Set())
+    setToasts([])
+  }, [])
+
   const hasUnseen = unseenIds.size > 0
 
-  return { unseenIds, hasUnseen, markSeen, toasts, dismissToast }
+  return { unseenIds, hasUnseen, markSeen, markAllSeen, toasts, dismissToast }
 }

@@ -7,7 +7,7 @@ interface Props {
   onDismiss: (id: string) => void
 }
 
-const TOAST_LIFETIME = 60_000
+const TOAST_LIFETIME = 10_000
 
 export function IncidentToastStack({ toasts, onDismiss }: Props) {
   const [now, setNow] = useState(Date.now())
