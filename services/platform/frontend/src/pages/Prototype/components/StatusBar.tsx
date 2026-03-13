@@ -158,10 +158,8 @@ export function StatusBar({ connected, sectionCount, incidentCount, lastDetectio
               {/* Latency sparkline */}
               {positivePings.length > 0 && (
                 <div className="flex items-center gap-2.5 mb-2.5">
-                  <div className="flex-1 overflow-hidden rounded" style={{ background: 'rgba(0,0,0,0.2)' }}>
-                    <div className="px-1.5 py-1">
-                      <Sparkline data={positivePings} color={pingColor} width={expanded ? 200 : 186} height={24} />
-                    </div>
+                  <div className="flex-1 overflow-hidden">
+                    <Sparkline data={positivePings} color={pingColor} width={expanded ? 210 : 196} height={24} />
                   </div>
                   {avgPing != null && (
                     <span className="text-[10px] text-[var(--proto-text-muted)] tabular-nums font-mono shrink-0">
