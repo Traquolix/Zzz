@@ -55,6 +55,65 @@ export const fiberOffsetCache = new Map<string, [number, number][]>(
   fibers.map(f => [f.id, getFiberOffsetCoords({ ...f, coordinates: f.coordinates as [number, number][] })]),
 )
 
+// ── Simplified fiber coords for Mapbox line rendering ───────────────────
+// Full-res coords (fiberOffsetCache) are kept for channel lookups, vehicle
+// positioning, and section coords. Only the visual line layer uses simplified
+// geometry so Mapbox redraws fewer vertices on every frame.
+
+/**
+ * Douglas-Peucker polyline simplification.
+ * Removes points that deviate less than `tolerance` from the straight-line
+ * segment between their neighbors. Preserves first and last points.
+ */
+function simplifyCoords(coords: [number, number][], tolerance: number): [number, number][] {
+  if (coords.length <= 2) return coords
+
+  let maxDist = 0
+  let maxIdx = 0
+  const [ax, ay] = coords[0]
+  const [bx, by] = coords[coords.length - 1]
+  const dx = bx - ax
+  const dy = by - ay
+  const lenSq = dx * dx + dy * dy
+
+  for (let i = 1; i < coords.length - 1; i++) {
+    const [px, py] = coords[i]
+    let dist: number
+    if (lenSq === 0) {
+      dist = Math.sqrt((px - ax) ** 2 + (py - ay) ** 2)
+    } else {
+      const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq))
+      const projX = ax + t * dx
+      const projY = ay + t * dy
+      dist = Math.sqrt((px - projX) ** 2 + (py - projY) ** 2)
+    }
+    if (dist > maxDist) {
+      maxDist = dist
+      maxIdx = i
+    }
+  }
+
+  if (maxDist <= tolerance) {
+    return [coords[0], coords[coords.length - 1]]
+  }
+
+  const left = simplifyCoords(coords.slice(0, maxIdx + 1), tolerance)
+  const right = simplifyCoords(coords.slice(maxIdx), tolerance)
+  return [...left.slice(0, -1), ...right]
+}
+
+// ~0.5m tolerance in degrees — invisible even at zoom 17 (1px ≈ 1m), well within
+// the line's rendered width, but eliminates collinear points on straight stretches.
+const SIMPLIFY_TOLERANCE = 0.000005
+
+/** Simplified fiber coords for Mapbox line rendering only. */
+export const fiberRenderCache = new Map<string, [number, number][]>(
+  fibers.map(f => {
+    const full = fiberOffsetCache.get(f.id)!
+    return [f.id, simplifyCoords(full, SIMPLIFY_TOLERANCE)]
+  }),
+)
+
 // ── Helpers ─────────────────────────────────────────────────────────────
 
 export const defaultSpeedThresholds: SpeedThresholds = { green: 80, yellow: 60, orange: 30 }

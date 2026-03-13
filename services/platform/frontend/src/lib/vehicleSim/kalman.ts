@@ -12,6 +12,7 @@ export type KalmanState = {
   velocity: number // Estimated velocity in channels/ms
   positionVariance: number // Uncertainty in position (σ²)
   velocityVariance: number // Uncertainty in velocity (σ²)
+  positionStdDev: number // Cached √positionVariance (updated on predict/update)
 }
 
 export type KalmanConfig = {
@@ -32,6 +33,7 @@ export function createKalmanState(position: number, velocityChannelsPerMs: numbe
     velocity: velocityChannelsPerMs,
     positionVariance: config.initialPositionVariance,
     velocityVariance: config.initialVelocityVariance,
+    positionStdDev: Math.sqrt(config.initialPositionVariance),
   }
 }
 
@@ -56,6 +58,7 @@ export function kalmanPredict(state: KalmanState, deltaMs: number, config: Kalma
     velocity: predictedVelocity,
     positionVariance: predictedPositionVariance,
     velocityVariance: predictedVelocityVariance,
+    positionStdDev: Math.sqrt(predictedPositionVariance),
   }
 }
 
@@ -88,6 +91,7 @@ export function kalmanUpdate(
     velocity: updatedVelocity,
     positionVariance: updatedPositionVariance,
     velocityVariance: updatedVelocityVariance,
+    positionStdDev: Math.sqrt(updatedPositionVariance),
   }
 }
 
@@ -110,8 +114,8 @@ export function mahalanobisDistance(
   }
 
   const innovation = Math.abs(detectionChannel - state.position)
-  const standardDeviation = Math.sqrt(state.positionVariance)
 
   // Normalized distance: how many standard deviations away
-  return innovation / Math.max(standardDeviation, 1) // Prevent division by tiny numbers
+  // Uses cached positionStdDev (updated on predict/update) to avoid sqrt per call
+  return innovation / Math.max(state.positionStdDev, 1) // Prevent division by tiny numbers
 }

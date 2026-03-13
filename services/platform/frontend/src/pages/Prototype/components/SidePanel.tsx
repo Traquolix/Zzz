@@ -1017,8 +1017,17 @@ function ChannelDetail({
     let rafId: number
     const WINDOW_MS = 60_000 // 60s rolling window
     const STATS_WINDOW_MS = 60_000 // 60s for stats
+    const FRAME_INTERVAL = 1000 / 30 // 30fps cap
+    let lastFrameTime = 0
 
-    function render() {
+    function render(time: number) {
+      // Throttle to 30fps
+      if (time - lastFrameTime < FRAME_INTERVAL) {
+        rafId = requestAnimationFrame(render)
+        return
+      }
+      lastFrameTime = time
+
       const canvas = canvasRef.current
       if (!canvas) {
         rafId = requestAnimationFrame(render)
@@ -1034,10 +1043,11 @@ function ChannelDetail({
       const cutoff = now - WINDOW_MS
       const statsCutoff = now - STATS_WINDOW_MS
 
-      // Prune old dots
-      while (dotsRef.current.length > 0 && dotsRef.current[0].time < cutoff) {
-        dotsRef.current.shift()
-      }
+      // Prune old dots — find cutoff index and splice once (O(n) vs O(n²) shift loop)
+      const dots = dotsRef.current
+      let pruneIdx = 0
+      while (pruneIdx < dots.length && dots[pruneIdx].time < cutoff) pruneIdx++
+      if (pruneIdx > 0) dots.splice(0, pruneIdx)
 
       // Compute stats (last 60s)
       let count = 0
