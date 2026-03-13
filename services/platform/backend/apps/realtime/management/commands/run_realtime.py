@@ -89,6 +89,11 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        # Signal to MonitoringConfig.ready() that this is the master process
+        # (before gunicorn fork or uvicorn start). Cleared before launching
+        # the server so workers run the SHM warmup.
+        os.environ["_SEQUOIA_SKIP_WARMUP"] = "1"
+
         source = options.get("source") or getattr(settings, "REALTIME_SOURCE", "auto")
         host = options["host"]
         port = options["port"]
@@ -194,6 +199,10 @@ class Command(BaseCommand):
 
     def _run_server(self, host: str, port: int, reload: bool = False, workers: int = 1):
         """Start ASGI server — uvicorn directly for dev/reload, gunicorn for production."""
+        # Clear skip flag so server processes (gunicorn workers / uvicorn)
+        # run the SHM cache warmup in MonitoringConfig.ready().
+        os.environ.pop("_SEQUOIA_SKIP_WARMUP", None)
+
         if reload:
             import uvicorn
 

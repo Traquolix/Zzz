@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 import threading
 
@@ -13,7 +14,6 @@ _SKIP_WARMUP_COMMANDS = {
     "makemigrations",
     "check",
     "shell",
-    "run_realtime",  # gunicorn forks after this — threads in master crash on macOS
 }
 
 
@@ -29,19 +29,25 @@ class MonitoringConfig(AppConfig):
         calls takes 5-15 seconds. Doing this at startup means the first
         user request hits a warm cache instead of timing out.
 
-        Skipped during management commands (collectstatic, migrate, etc.)
-        where no server is running.
+        Skipped when:
+        - Running management commands that don't serve requests
+        - In the run_realtime master process (before gunicorn fork) —
+          signaled via _SEQUOIA_SKIP_WARMUP env var, which is set by
+          run_realtime and cleared before launching gunicorn/uvicorn
         """
-        if self._is_management_command():
+        if self._should_skip_warmup():
             return
 
         thread = threading.Thread(target=self._warm_shm_cache, daemon=True)
         thread.start()
 
     @staticmethod
-    def _is_management_command() -> bool:
-        """Return True if Django is being invoked via a management command that
-        doesn't need the cache (collectstatic, migrate, etc.)."""
+    def _should_skip_warmup() -> bool:
+        """Return True if warmup should be skipped in this process."""
+        # Explicit skip flag set by run_realtime master process
+        if os.environ.get("_SEQUOIA_SKIP_WARMUP") == "1":
+            return True
+        # Management commands that don't serve requests
         return len(sys.argv) > 1 and sys.argv[1] in _SKIP_WARMUP_COMMANDS
 
     @staticmethod

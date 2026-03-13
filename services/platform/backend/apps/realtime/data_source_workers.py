@@ -20,6 +20,10 @@ def _init_django(settings_module: str) -> None:
     import django
 
     os.environ["DJANGO_SETTINGS_MODULE"] = settings_module
+    # Clear the master's warmup-skip flag — data source subprocesses don't
+    # serve HTTP so they don't need SHM warmup either, but the flag should
+    # not leak into their environment.
+    os.environ.pop("_SEQUOIA_SKIP_WARMUP", None)
     django.setup()
 
     # Close DB connections inherited from the parent process (Linux fork).
