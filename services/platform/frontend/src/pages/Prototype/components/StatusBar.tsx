@@ -46,7 +46,6 @@ export function StatusBar({ connected, sectionCount, incidentCount, lastDetectio
   const pingHistoryRef = useRef<number[]>([])
   const [pingHistory, setPingHistory] = useState<number[]>([])
 
-  // Track shift key for expanded tooltip
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => setShiftHeld(e.shiftKey)
     window.addEventListener('keydown', onKey)
@@ -57,7 +56,6 @@ export function StatusBar({ connected, sectionCount, incidentCount, lastDetectio
     }
   }, [])
 
-  // React Query handles refetch interval and automatic pause on hidden tabs
   const { data: lastPingResult, dataUpdatedAt } = useQuery({
     queryKey: ['ping'],
     queryFn: async () => {
@@ -107,10 +105,9 @@ export function StatusBar({ connected, sectionCount, incidentCount, lastDetectio
             ? 'var(--proto-amber)'
             : 'var(--proto-red)'
 
-  // Overall health: green if connected + ready, amber if degraded, red if disconnected
   const infraReady = !readiness || readiness.status === 'ready'
   const overallColor = !connected ? 'var(--proto-red)' : infraReady ? 'var(--proto-green)' : 'var(--proto-amber)'
-  const overallLabel = !connected ? 'Disconnected' : infraReady ? 'All systems operational' : 'Degraded'
+  const overallLabel = !connected ? 'Disconnected' : infraReady ? 'Operational' : 'Degraded'
 
   const detectionAge =
     lastDetectionTsRef?.current != null ? Math.round((Date.now() - lastDetectionTsRef.current) / 1000) : null
@@ -129,72 +126,133 @@ export function StatusBar({ connected, sectionCount, incidentCount, lastDetectio
           beta
         </span>
         {showTooltip && (
-          <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-56 px-3 py-2.5 rounded-lg bg-[var(--proto-surface)] border border-[var(--proto-border)] shadow-lg text-xs z-50">
-            <div className="flex flex-col gap-2">
-              {/* Overall status */}
-              <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: overallColor }} />
-                <span className="text-[var(--proto-text)] font-medium">{overallLabel}</span>
+          <div
+            className="absolute top-full mt-2 rounded-lg bg-[var(--proto-surface)] border border-[var(--proto-border)] shadow-xl z-50"
+            style={{
+              left: 0,
+              width: expanded ? 280 : 264,
+              backdropFilter: 'blur(12px)',
+              background: 'linear-gradient(135deg, var(--proto-surface) 0%, rgba(43,45,49,0.95) 100%)',
+            }}
+          >
+            {/* Header bar */}
+            <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--proto-border)]">
+              <div className="flex items-center gap-2">
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{
+                    backgroundColor: overallColor,
+                    boxShadow: `0 0 6px ${overallColor}`,
+                  }}
+                />
+                <span className="text-[11px] font-semibold text-[var(--proto-text)] tracking-wide uppercase">
+                  {overallLabel}
+                </span>
               </div>
+              {lastPing != null && lastPing > 0 && (
+                <span className="text-[10px] text-[var(--proto-text-muted)] tabular-nums font-mono">{lastPing}ms</span>
+              )}
+            </div>
 
-              {/* Ping sparkline */}
+            <div className="px-3 py-2.5">
+              {/* Latency sparkline */}
               {positivePings.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 overflow-hidden">
-                    <Sparkline data={positivePings} color={pingColor} width={120} height={20} />
+                <div className="flex items-center gap-2.5 mb-2.5">
+                  <div className="flex-1 overflow-hidden rounded" style={{ background: 'rgba(0,0,0,0.2)' }}>
+                    <div className="px-1.5 py-1">
+                      <Sparkline data={positivePings} color={pingColor} width={expanded ? 200 : 186} height={24} />
+                    </div>
                   </div>
-                  <span className="text-[var(--proto-text-muted)] shrink-0 tabular-nums">
-                    {lastPing != null && lastPing > 0 ? `${lastPing}ms` : '—'}
-                  </span>
+                  {avgPing != null && (
+                    <span className="text-[10px] text-[var(--proto-text-muted)] tabular-nums font-mono shrink-0">
+                      avg {avgPing}ms
+                    </span>
+                  )}
                 </div>
               )}
 
-              {/* Stats line */}
-              <div className="text-[var(--proto-text-muted)]">
-                {sectionCount} section{sectionCount !== 1 ? 's' : ''} · {incidentCount} incident
-                {incidentCount !== 1 ? 's' : ''}
-                {detectionAge != null && <span className="opacity-60"> · last data ~{detectionAge}s ago</span>}
+              {/* Stats grid */}
+              <div
+                className="grid grid-cols-3 gap-px rounded overflow-hidden"
+                style={{ background: 'var(--proto-border)' }}
+              >
+                <div className="flex flex-col items-center py-1.5 px-1" style={{ background: 'var(--proto-surface)' }}>
+                  <span className="text-[13px] font-semibold text-[var(--proto-text)] tabular-nums leading-none">
+                    {sectionCount}
+                  </span>
+                  <span className="text-[9px] text-[var(--proto-text-muted)] uppercase tracking-wider mt-0.5">
+                    Sections
+                  </span>
+                </div>
+                <div className="flex flex-col items-center py-1.5 px-1" style={{ background: 'var(--proto-surface)' }}>
+                  <span className="text-[13px] font-semibold text-[var(--proto-text)] tabular-nums leading-none">
+                    {incidentCount}
+                  </span>
+                  <span className="text-[9px] text-[var(--proto-text-muted)] uppercase tracking-wider mt-0.5">
+                    Incidents
+                  </span>
+                </div>
+                <div className="flex flex-col items-center py-1.5 px-1" style={{ background: 'var(--proto-surface)' }}>
+                  <span className="text-[13px] font-semibold text-[var(--proto-text)] tabular-nums leading-none">
+                    {detectionAge != null ? `${detectionAge}s` : '—'}
+                  </span>
+                  <span className="text-[9px] text-[var(--proto-text-muted)] uppercase tracking-wider mt-0.5">
+                    Data age
+                  </span>
+                </div>
               </div>
 
-              {/* Expanded: per-service breakdown (shift+hover) */}
+              {/* Expanded: service breakdown */}
               {expanded && (
-                <>
-                  <div className="w-full h-px bg-[var(--proto-border)]" />
-
-                  <div className="flex flex-col gap-1">
+                <div className="mt-2.5 pt-2.5 border-t border-[var(--proto-border)]">
+                  <div className="text-[9px] text-[var(--proto-text-muted)] uppercase tracking-widest mb-1.5">
+                    Services
+                  </div>
+                  <div className="flex flex-col gap-[3px]">
                     {/* Backend */}
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-2 py-[2px]">
                       <span
-                        className="w-1.5 h-1.5 rounded-full shrink-0"
+                        className="w-[5px] h-[5px] rounded-full shrink-0"
                         style={{ backgroundColor: connected ? 'var(--proto-green)' : 'var(--proto-red)' }}
                       />
-                      <span className="text-[var(--proto-text-muted)]">Backend</span>
-                      <span className="text-[var(--proto-text-muted)]/60 ml-auto">
-                        {connected ? 'ok' : 'disconnected'}
+                      <span className="text-[11px] text-[var(--proto-text-secondary)]">Backend</span>
+                      <span className="text-[10px] text-[var(--proto-text-muted)] ml-auto font-mono">
+                        {connected ? 'ok' : 'down'}
                       </span>
                     </div>
 
-                    {/* Infrastructure services */}
                     {readiness &&
                       Object.entries(readiness.checks).map(([key, status]) => (
-                        <div key={key} className="flex items-center gap-1.5">
+                        <div key={key} className="flex items-center gap-2 py-[2px]">
                           <span
-                            className="w-1.5 h-1.5 rounded-full shrink-0"
+                            className="w-[5px] h-[5px] rounded-full shrink-0"
                             style={{ backgroundColor: statusColor(status) }}
                           />
-                          <span className="text-[var(--proto-text-muted)]">{SERVICE_LABELS[key] ?? key}</span>
-                          <span className="text-[var(--proto-text-muted)]/60 ml-auto">{statusLabel(status)}</span>
+                          <span className="text-[11px] text-[var(--proto-text-secondary)]">
+                            {SERVICE_LABELS[key] ?? key}
+                          </span>
+                          <span className="text-[10px] text-[var(--proto-text-muted)] ml-auto font-mono">
+                            {statusLabel(status)}
+                          </span>
                         </div>
                       ))}
                   </div>
-
-                  {avgPing != null && <div className="text-[var(--proto-text-muted)]/60">avg latency {avgPing}ms</div>}
-                </>
+                </div>
               )}
-
-              {/* Hint */}
-              {!expanded && <div className="text-[var(--proto-text-muted)]/40 text-[10px]">Hold Shift for details</div>}
             </div>
+
+            {/* Footer hint */}
+            {!expanded && (
+              <div className="px-3 py-1.5 border-t border-[var(--proto-border)]">
+                <span className="text-[9px] text-[var(--proto-text-muted)]/50 tracking-wide">
+                  Hold{' '}
+                  <kbd className="px-1 py-px rounded bg-[var(--proto-base)] text-[var(--proto-text-muted)] text-[8px] font-mono">
+                    Shift
+                  </kbd>{' '}
+                  for details
+                </span>
+              </div>
+            )}
           </div>
         )}
       </div>
