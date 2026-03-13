@@ -6,7 +6,7 @@ import { logger } from '@/lib/logger'
 import type { Section, SectionDataPoint, LiveSectionStats } from '../types'
 import { mapHistoryPoints } from './mapHistoryPoints'
 
-const POLL_INTERVAL = 2000 // 2 seconds
+const POLL_INTERVAL = 1000
 const HISTORY_MINUTES = 1 // minimal window — just enough for current stats + sparklines
 const MAX_POINTS = 60 // 1 minute at 1s resolution
 
