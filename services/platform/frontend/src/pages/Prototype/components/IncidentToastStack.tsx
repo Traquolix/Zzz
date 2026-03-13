@@ -4,12 +4,12 @@ import type { IncidentToast } from '../hooks/useUnseenIncidents'
 
 interface Props {
   toasts: IncidentToast[]
-  onDismiss: (id: string) => void
+  onClickToast: (incidentId: string, toastId: string) => void
 }
 
 const TOAST_LIFETIME = 10_000
 
-export function IncidentToastStack({ toasts, onDismiss }: Props) {
+export function IncidentToastStack({ toasts, onClickToast }: Props) {
   const [now, setNow] = useState(Date.now())
 
   // Tick every second to drive progress bar
@@ -52,7 +52,7 @@ export function IncidentToastStack({ toasts, onDismiss }: Props) {
               }}
             >
               <button
-                onClick={() => onDismiss(toast.id)}
+                onClick={() => onClickToast(toast.incidentId, toast.id)}
                 className="w-full flex flex-col rounded-lg bg-[var(--proto-surface)] border border-[var(--proto-border)] shadow-lg cursor-pointer hover:bg-[var(--proto-surface-raised)] transition-colors text-left overflow-hidden"
               >
                 <div className="flex items-start gap-2.5 px-3.5 py-2.5">

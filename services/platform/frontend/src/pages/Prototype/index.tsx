@@ -519,7 +519,14 @@ export function Prototype() {
         />
 
         {/* Toast notifications for new incidents */}
-        <IncidentToastStack toasts={toasts} onDismiss={dismissToast} />
+        <IncidentToastStack
+          toasts={toasts}
+          onClickToast={(incidentId, toastId) => {
+            dispatch({ type: 'SELECT_INCIDENT', id: incidentId })
+            markSeen(incidentId)
+            dismissToast(toastId)
+          }}
+        />
 
         {/* Sidebar — overlays the map from the right */}
         <div className="absolute top-0 right-0 h-full z-20 pointer-events-none">
