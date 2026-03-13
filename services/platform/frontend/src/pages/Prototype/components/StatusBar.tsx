@@ -11,6 +11,27 @@ interface StatusBarProps {
 
 const PING_HISTORY_LENGTH = 30
 const PING_INTERVAL_MS = 2000
+const READINESS_INTERVAL_MS = 10_000
+
+interface ReadinessResponse {
+  status: 'ready' | 'degraded'
+  checks: Record<string, string>
+}
+
+const SERVICE_LABELS: Record<string, string> = {
+  database: 'PostgreSQL',
+  clickhouse: 'ClickHouse',
+  cache: 'Redis',
+  kafka: 'Kafka',
+  simulation: 'Simulation',
+}
+
+function statusColor(status: string): string {
+  if (status === 'ok' || status === 'running') return 'var(--proto-green)'
+  if (status === 'idle' || status === 'not_configured') return 'var(--proto-text-muted)'
+  if (status === 'unknown') return 'var(--proto-amber)'
+  return 'var(--proto-red)'
+}
 
 export function StatusBar({ connected, sectionCount, incidentCount, lastDetectionTsRef }: StatusBarProps) {
   const [showTooltip, setShowTooltip] = useState(false)
@@ -47,6 +68,16 @@ export function StatusBar({ connected, sectionCount, incidentCount, lastDetectio
   const positivePings = useMemo(() => pingHistory.filter(p => p > 0), [pingHistory])
   const avgPing =
     positivePings.length > 0 ? Math.round(positivePings.reduce((a, b) => a + b, 0) / positivePings.length) : null
+
+  const { data: readiness } = useQuery<ReadinessResponse>({
+    queryKey: ['readiness'],
+    queryFn: async () => {
+      const res = await fetch('/api/health/ready', { cache: 'no-store' })
+      return res.json()
+    },
+    refetchInterval: READINESS_INTERVAL_MS,
+    staleTime: 0,
+  })
 
   const pingColor =
     lastPing === null
@@ -99,6 +130,37 @@ export function StatusBar({ connected, sectionCount, incidentCount, lastDetectio
               </div>
 
               <div className="w-full h-px bg-[var(--proto-border)]" />
+
+              {/* Infrastructure */}
+              {readiness && (
+                <>
+                  <div>
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <span
+                        className="w-1.5 h-1.5 rounded-full"
+                        style={{
+                          backgroundColor: readiness.status === 'ready' ? 'var(--proto-green)' : 'var(--proto-amber)',
+                        }}
+                      />
+                      <span className="text-[var(--proto-text)] font-medium">Infrastructure</span>
+                      <span className="text-[var(--proto-text-muted)] ml-auto capitalize">{readiness.status}</span>
+                    </div>
+                    <div className="flex flex-col gap-0.5 ml-3">
+                      {Object.entries(readiness.checks).map(([key, status]) => (
+                        <div key={key} className="flex items-center gap-1.5">
+                          <span
+                            className="w-1 h-1 rounded-full shrink-0"
+                            style={{ backgroundColor: statusColor(status) }}
+                          />
+                          <span className="text-[var(--proto-text-muted)]">{SERVICE_LABELS[key] ?? key}</span>
+                          <span className="text-[var(--proto-text-muted)]/60 ml-auto capitalize">{status}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="w-full h-px bg-[var(--proto-border)]" />
+                </>
+              )}
 
               {/* Frontend */}
               <div>
