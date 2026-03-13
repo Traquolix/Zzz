@@ -31,11 +31,13 @@ Auto-detect logic:
     - If not set -> simulation
 """
 
+import atexit
 import json
 import multiprocessing
 import os
 import signal
 import sys
+import types
 from pathlib import Path
 
 from django.conf import settings
@@ -152,20 +154,33 @@ class Command(BaseCommand):
                 )
             )
 
+        # Close DB connections opened by _load_fibers/_load_infrastructure
+        # before forking, so children don't inherit stale file descriptors.
+        from django.db import connections
+
+        connections.close_all()
+
         for child in children:
             child.start()
 
-        # Forward SIGTERM/SIGINT to children for clean shutdown
-        def _terminate_children(signum, frame):
+        # Graceful shutdown: terminate children when the parent exits.
+        # We use both atexit (survives gunicorn overwriting signal handlers)
+        # and signal handlers (works for --reload/--no-server paths).
+        def _terminate_children_cleanup() -> None:
             for child in children:
                 if child.is_alive():
                     child.terminate()
-            # Re-raise to let gunicorn/uvicorn handle its own shutdown
+                    child.join(timeout=5)
+
+        atexit.register(_terminate_children_cleanup)
+
+        def _terminate_children_signal(signum: int, frame: types.FrameType | None) -> None:
+            _terminate_children_cleanup()
             signal.signal(signum, signal.SIG_DFL)
             os.kill(os.getpid(), signum)
 
-        signal.signal(signal.SIGTERM, _terminate_children)
-        signal.signal(signal.SIGINT, _terminate_children)
+        signal.signal(signal.SIGTERM, _terminate_children_signal)
+        signal.signal(signal.SIGINT, _terminate_children_signal)
 
         if not no_server:
             self._run_server(host, port, reload, workers)

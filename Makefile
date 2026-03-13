@@ -220,7 +220,7 @@ dev-backend: ## Start backend dev server (auto-setup on first run)
 	@echo "==> Clearing throttle cache..."
 	@cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python -c "from django.core.cache import cache; cache.clear()" 2>/dev/null || true
 	@echo "==> Starting backend on http://localhost:8001"
-	cd $(BACKEND_DIR) && OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python manage.py run_realtime --host 127.0.0.1 --port 8001 --source sim
+	cd $(BACKEND_DIR) && OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python manage.py run_realtime --host 127.0.0.1 --port 8001 --source sim --reload
 
 dev-frontend: ## Build and preview frontend locally (auto-setup on first run)
 	@pkill -f "vite preview" 2>/dev/null || true

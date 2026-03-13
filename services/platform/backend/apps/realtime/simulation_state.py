@@ -25,7 +25,7 @@ _PREFIX = "sim:"
 _INCIDENTS_TTL = 30
 _SNAPSHOTS_TTL = 30
 _STATS_TTL = 30
-_HISTORY_TTL = 600  # 10 min (section history has its own internal eviction)
+_HISTORY_TTL = 600  # 10 min — simulation overwrites every 1s, TTL is the only eviction
 _STATUS_TTL = 15
 
 
@@ -53,13 +53,34 @@ def store_section_history(
     per_second: dict[str, list[dict]],
     per_minute: dict[str, list[dict]],
 ) -> None:
-    """Store section history buffers.
+    """Store section history buffers, sharded by fiber+direction.
 
-    Keys are serialized as "fiber_id:direction:channel" strings
-    (tuple keys can't survive JSON serialization).
+    Input keys are "fiber_id:direction:channel" strings.  We group by
+    fiber+direction and store each shard in its own Redis key so that
+    reads only deserialize the channels they need.
     """
-    cache.set(f"{_PREFIX}history:sec", per_second, _HISTORY_TTL)
-    cache.set(f"{_PREFIX}history:min", per_minute, _HISTORY_TTL)
+    _store_history_shards(f"{_PREFIX}history:sec", per_second)
+    _store_history_shards(f"{_PREFIX}history:min", per_minute)
+
+
+def _store_history_shards(prefix: str, buf: dict[str, list[dict]]) -> None:
+    """Group channel entries by fiber+direction and store each shard."""
+    shards: dict[str, dict[str, list[dict]]] = {}
+    shard_keys: set[str] = set()
+
+    for key_str, entries in buf.items():
+        fid, d_str, ch_str = key_str.split(":", maxsplit=2)
+        shard_key = f"{prefix}:{fid}:{d_str}"
+        shard_keys.add(shard_key)
+        if shard_key not in shards:
+            shards[shard_key] = {}
+        shards[shard_key][ch_str] = entries
+
+    for shard_key, data in shards.items():
+        cache.set(shard_key, data, _HISTORY_TTL)
+
+    # Store index of active shard keys so readers know what exists
+    cache.set(f"{prefix}:_index", list(shard_keys), _HISTORY_TTL)
 
 
 def store_status(running: bool) -> None:
@@ -96,20 +117,31 @@ def get_section_history(
     minutes: int,
     since_ms: int | None = None,
 ) -> list[dict]:
-    """Query section history from Redis-cached buffers.
+    """Query section history from Redis-cached simulation buffers.
 
-    Same logic as the old in-memory version, but reads from Redis.
+    Uses sharded Redis keys (one per fiber+direction) so only the
+    relevant channels are deserialized.
+
+    Resolution:
+        - <=5 min -> per-second buffer (1s buckets)
+        - >5 min  -> per-minute buffer (60s buckets)
+
+    Returns ``[{time, speed, speedMax, samples, flow, occupancy}, ...]``.
     """
     from apps.monitoring.section_service import compute_occupancy
 
     if minutes <= 5:
-        buf = cache.get(f"{_PREFIX}history:sec") or {}
+        prefix = f"{_PREFIX}history:sec"
         bucket_seconds = 1
     else:
-        buf = cache.get(f"{_PREFIX}history:min") or {}
+        prefix = f"{_PREFIX}history:min"
         bucket_seconds = 60
 
-    if not buf:
+    # Read only the shard for this fiber+direction
+    shard_key = f"{prefix}:{fiber_id}:{direction}"
+    shard: dict[str, list[dict]] = cache.get(shard_key) or {}
+
+    if not shard:
         return []
 
     now_ms = int(time.time() * 1000)
@@ -118,12 +150,8 @@ def get_section_history(
         cutoff_ms = max(cutoff_ms, since_ms)
 
     points: list[dict] = []
-    for key_str, entries in buf.items():
-        fid, d_str, ch_str = key_str.split(":")
-        d = int(d_str)
+    for ch_str, entries in shard.items():
         ch = int(ch_str)
-        if fid != fiber_id or d != direction:
-            continue
         if ch < channel_start or ch > channel_end:
             continue
         for entry in entries:
