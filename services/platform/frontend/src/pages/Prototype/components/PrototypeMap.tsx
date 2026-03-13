@@ -8,6 +8,7 @@ import { MAPBOX_TOKEN } from '@/config/mapbox'
 import {
   fibers,
   fiberOffsetCache,
+  fiberRenderCache,
   offsetIndexToChannel,
   severityColor,
   MAP_CENTER,
@@ -294,11 +295,11 @@ export const PrototypeMap = memo(
           map.setPaintProperty('fiber-lines', 'line-opacity', [
             'case',
             ['==', ['get', 'id'], fiberId],
-            0.5 + 0.5 * Math.abs(Math.sin(tick * 0.15)),
+            0.5 + 0.5 * Math.abs(Math.sin(tick * 0.6)),
             0.15,
           ])
           tick++
-        }, 50)
+        }, 200)
       },
       highlightSection: (sectionId: string) => {
         const map = mapRef.current
@@ -326,10 +327,10 @@ export const PrototypeMap = memo(
         let tick = 0
         highlightTimerRef.current = window.setInterval(() => {
           if (map.getLayer('hover-highlight-glow')) {
-            map.setPaintProperty('hover-highlight-glow', 'line-opacity', 0.2 + 0.3 * Math.abs(Math.sin(tick * 0.15)))
+            map.setPaintProperty('hover-highlight-glow', 'line-opacity', 0.2 + 0.3 * Math.abs(Math.sin(tick * 0.6)))
           }
           tick++
-        }, 50)
+        }, 200)
       },
       highlightIncident: (incidentId: string) => {
         clearHighlightImpl()
@@ -364,10 +365,10 @@ export const PrototypeMap = memo(
         let tick = 0
         highlightTimerRef.current = window.setInterval(() => {
           if (map.getLayer('hover-highlight-glow')) {
-            map.setPaintProperty('hover-highlight-glow', 'line-opacity', 0.2 + 0.3 * Math.abs(Math.sin(tick * 0.15)))
+            map.setPaintProperty('hover-highlight-glow', 'line-opacity', 0.2 + 0.3 * Math.abs(Math.sin(tick * 0.6)))
           }
           tick++
-        }, 50)
+        }, 200)
       },
       highlightChannel: (lng: number, lat: number) => {
         const map = mapRef.current
@@ -406,11 +407,11 @@ export const PrototypeMap = memo(
       mapRef.current = map
 
       map.on('load', () => {
-        // ── Fiber route layers (single merged source) ────────────
+        // ── Fiber route layers (single merged source, simplified geometry) ──
         const fiberFeatures = fibers.map(fiber => ({
           type: 'Feature' as const,
           properties: { id: fiber.id, name: fiber.name, color: fiber.color },
-          geometry: { type: 'LineString' as const, coordinates: fiberOffsetCache.get(fiber.id)! },
+          geometry: { type: 'LineString' as const, coordinates: fiberRenderCache.get(fiber.id)! },
         }))
         map.addSource('fibers', {
           type: 'geojson',
@@ -474,6 +475,7 @@ export const PrototypeMap = memo(
           id: 'section-highlight-layer',
           type: 'line',
           source: 'section-highlights',
+          minzoom: 12.5,
           layout: { visibility: 'none' },
           paint: {
             'line-color': ['get', 'color'],
@@ -516,6 +518,7 @@ export const PrototypeMap = memo(
           id: 'vehicle-dots',
           type: 'circle',
           source: 'vehicles',
+          minzoom: 12.5,
           paint: {
             'circle-radius': 4,
             'circle-color': ['get', 'color'],
@@ -668,8 +671,16 @@ export const PrototypeMap = memo(
           handlersRef.current.onOverviewChange?.(shouldOverview)
         })
 
-        // ── Vehicle popup ──
+        // ── Vehicle color accessor (stable reference for deck.gl diffing) ──
         let selectedVehicleId: string | null = null
+        const getVehicleColor = (d: VehiclePosition): [number, number, number, number] => {
+          if (d.id === selectedVehicleId) return [255, 255, 255, 220]
+          const lookup = thresholdLookupRef.current
+          const thresholds = lookup?.(d.fiberId, d.direction, d.channel)
+          return getSpeedColorRGBA(d.detectionSpeed, d.opacity, thresholds)
+        }
+
+        // ── Vehicle popup ──
         const vehiclePopup = new mapboxgl.Popup({
           closeButton: false,
           closeOnClick: false,
@@ -846,12 +857,13 @@ export const PrototypeMap = memo(
           const secs = sectionsRef.current ?? []
           const stats = liveStatsRef.current
           // Build a lightweight key to detect actual data changes
-          let key = ''
+          const keyParts: string[] = []
           for (const sec of secs) {
             const live = stats?.get(sec.id)
             const speed = live?.avgSpeed != null ? live.avgSpeed : sec.avgSpeed
-            key += `${sec.id}:${speed ?? ''}|`
+            keyParts.push(sec.id, ':', String(speed ?? ''), '|')
           }
+          const key = keyParts.join('')
           if (key === lastSpeedSectionsKey) return // no change, skip allocation
           lastSpeedSectionsKey = key
 
@@ -874,7 +886,6 @@ export const PrototypeMap = memo(
           lastSpeedSectionsData = { type: 'FeatureCollection', features: features as GeoJSON.Feature[] }
           const source = map.getSource('speed-sections') as mapboxgl.GeoJSONSource | undefined
           source?.setData(lastSpeedSectionsData)
-          map.triggerRepaint()
         }
 
         function renderTick() {
@@ -921,7 +932,6 @@ export const PrototypeMap = memo(
                 }
                 const source = map.getSource('vehicles') as mapboxgl.GeoJSONSource | undefined
                 source?.setData(geojson)
-                map.triggerRepaint()
               }
             }
             // Remove deck.gl overlay entirely in dots mode to stop repaints
@@ -942,30 +952,30 @@ export const PrototypeMap = memo(
             if (tick && cubeRef.current) {
               const positions = tick(now, deltaMs)
               updateVehiclePopup(positions)
-              const layer = new SimpleMeshLayer({
-                id: 'proto-vehicle-3d',
-                data: positions,
-                mesh: cubeRef.current,
-                getPosition,
-                getColor: (d: VehiclePosition) => {
-                  if (d.id === selectedVehicleId) return [255, 255, 255, 220] as [number, number, number, number]
-                  const lookup = thresholdLookupRef.current
-                  const thresholds = lookup?.(d.fiberId, d.direction, d.channel)
-                  return getSpeedColorRGBA(d.detectionSpeed, d.opacity, thresholds)
-                },
-                getOrientation,
-                getScale,
-                sizeScale: 1,
-                pickable: true,
-                autoHighlight: false,
-              })
-              ensureDeckOverlay()
-              try {
-                deckOverlay!.setProps({ layers: [layer] })
-              } catch {
-                /* not ready */
+              // Skip deck.gl update when there are no vehicles and we already cleared
+              if (positions.length === 0 && !deckHasLayers) {
+                // Nothing to render — avoid triggering a Mapbox repaint
+              } else {
+                const layer = new SimpleMeshLayer({
+                  id: 'proto-vehicle-3d',
+                  data: positions,
+                  mesh: cubeRef.current,
+                  getPosition,
+                  getColor: getVehicleColor,
+                  getOrientation,
+                  getScale,
+                  sizeScale: 1,
+                  pickable: true,
+                  autoHighlight: false,
+                })
+                ensureDeckOverlay()
+                try {
+                  deckOverlay!.setProps({ layers: [layer] })
+                } catch {
+                  /* not ready */
+                }
+                deckHasLayers = positions.length > 0
               }
-              deckHasLayers = true
             }
           }
         }
@@ -1141,7 +1151,7 @@ export const PrototypeMap = memo(
       const features = fibers.map(fiber => ({
         type: 'Feature' as const,
         properties: { id: fiber.id, name: fiber.name, color: getFiberColor(fiber, fiberColors) },
-        geometry: { type: 'LineString' as const, coordinates: fiberOffsetCache.get(fiber.id)! },
+        geometry: { type: 'LineString' as const, coordinates: fiberRenderCache.get(fiber.id)! },
       }))
       src.setData({ type: 'FeatureCollection', features })
     }, [fiberColors])

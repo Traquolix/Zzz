@@ -133,10 +133,12 @@ export class VehicleSimEngine {
 
       // Check if within gate and better than previous best
       if (distance < this.config.gateThreshold && distance < bestDistance) {
-        // Also check minimum gate (floor)
+        // Also check minimum gate (floor) — use cached stddev to avoid sqrt per track
         const positionDiff = Math.abs(event.channel - track.kalman.position)
-        const uncertainty = Math.sqrt(track.kalman.positionVariance)
-        const effectiveGate = Math.max(uncertainty * this.config.gateThreshold, this.config.minGateChannels)
+        const effectiveGate = Math.max(
+          track.kalman.positionStdDev * this.config.gateThreshold,
+          this.config.minGateChannels,
+        )
 
         if (positionDiff < effectiveGate) {
           bestDistance = distance
@@ -292,16 +294,18 @@ export class VehicleSimEngine {
       track.opacity = Math.max(0, track.opacity - deltaMs / this.config.fadeDurationMs)
     }
 
-    // Car opacities
-    for (const car of track.cars) {
+    // Car opacities — update in-place and splice dead cars to avoid array allocation
+    for (let i = track.cars.length - 1; i >= 0; i--) {
+      const car = track.cars[i]
       if (car.state === 'active' && car.opacity < 1) {
         car.opacity = Math.min(1, car.opacity + deltaMs / 400)
-      }
-      if (car.state === 'fading-out') {
+      } else if (car.state === 'fading-out') {
         car.opacity = Math.max(0, car.opacity - deltaMs / 400)
+        if (car.opacity <= 0) {
+          track.cars.splice(i, 1)
+        }
       }
     }
-    track.cars = track.cars.filter(c => c.opacity > 0 || c.state === 'active')
   }
 
   private checkBounds(track: Track): void {
