@@ -2,7 +2,7 @@
 Unified management command: starts the ASGI server + real-time data source.
 
 One command to run everything needed for the backend:
-  - Daphne ASGI server (HTTP + WebSocket)
+  - Uvicorn ASGI server (HTTP + WebSocket)
   - Data source: simulation (offline demo) or Kafka bridge (production)
 
 Usage:
@@ -10,7 +10,8 @@ Usage:
     python manage.py run_realtime --source sim   # force simulation
     python manage.py run_realtime --source kafka # force Kafka bridge
     python manage.py run_realtime --port 9000    # custom port
-    python manage.py run_realtime --no-server    # data source only (no Daphne)
+    python manage.py run_realtime --reload       # dev mode (auto-reload on code changes)
+    python manage.py run_realtime --no-server    # data source only (no server)
 
 Auto-detect logic:
     - If KAFKA_BOOTSTRAP_SERVERS is set -> try Kafka, fallback to simulation
@@ -56,28 +57,35 @@ class Command(BaseCommand):
             default=False,
             help="Run only the data source, skip starting the ASGI server.",
         )
+        parser.add_argument(
+            "--reload",
+            action="store_true",
+            default=False,
+            help="Enable auto-reload on code changes (development only).",
+        )
 
     def handle(self, *args, **options):
         source = options.get("source") or getattr(settings, "REALTIME_SOURCE", "auto")
         host = options["host"]
         port = options["port"]
         no_server = options["no_server"]
+        reload = options["reload"]
 
         if source == "auto":
             source = self._auto_detect()
 
         self.stdout.write(f"Data source: {source}")
 
-        # Check if using InMemoryChannelLayer - if so, simulation must run inside Daphne
+        # Check if using InMemoryChannelLayer - if so, simulation must run inside the server
         channel_backend = settings.CHANNEL_LAYERS.get("default", {}).get("BACKEND", "")
         use_in_memory = "InMemoryChannelLayer" in channel_backend
 
         if use_in_memory and source == "sim":
-            # Enable auto-start so simulation runs inside Daphne's event loop
+            # Enable auto-start so simulation runs inside the server's event loop
             settings.REALTIME_AUTO_START_SIMULATION = True
-            self.stdout.write("Using InMemoryChannelLayer: simulation will start inside Daphne")
+            self.stdout.write("Using InMemoryChannelLayer: simulation will start inside server")
             if not no_server:
-                self._run_daphne(host, port)
+                self._run_uvicorn(host, port, reload)
             else:
                 self.stderr.write(
                     self.style.ERROR(
@@ -113,9 +121,9 @@ class Command(BaseCommand):
                 )
                 data_thread.start()
 
-            # Run Daphne in the main thread (it handles signals properly)
+            # Run uvicorn in the main thread (it handles signals properly)
             if not no_server:
-                self._run_daphne(host, port)
+                self._run_uvicorn(host, port, reload)
             else:
                 # Just wait for data threads if no server
                 try:
@@ -126,21 +134,23 @@ class Command(BaseCommand):
                 except KeyboardInterrupt:
                     self.stdout.write(self.style.WARNING("Stopped."))
 
-    def _run_daphne(self, host: str, port: int):
-        """Start Daphne ASGI server in the main thread."""
-        from daphne.endpoints import build_endpoint_description_strings
-        from daphne.server import Server
-
-        from sequoia.asgi import application
+    def _run_uvicorn(self, host: str, port: int, reload: bool = False):
+        """Start uvicorn ASGI server in the main thread."""
+        import uvicorn
 
         self.stdout.write(self.style.SUCCESS(f"ASGI server starting on {host}:{port}"))
 
-        endpoints = build_endpoint_description_strings(host=host, port=port)
-        server = Server(
-            application=application,
-            endpoints=endpoints,
+        uvicorn.run(
+            "sequoia.asgi:application",
+            host=host,
+            port=port,
+            reload=reload,
+            reload_dirs=[str(Path(__file__).resolve().parent.parent.parent.parent)]
+            if reload
+            else None,
+            log_level="info",
+            lifespan="off",
         )
-        server.run()
 
     def _auto_detect(self) -> str:
         """Detect whether Kafka is available, fallback to simulation."""
