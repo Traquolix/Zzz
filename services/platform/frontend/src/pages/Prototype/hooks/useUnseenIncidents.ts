@@ -18,11 +18,24 @@ export function useUnseenIncidents(incidents: ProtoIncident[], loading: boolean)
   const readyRef = useRef(false)
 
   useEffect(() => {
+    // When loading restarts (e.g. flow switch), clear stale toasts/unseen
+    // and re-arm the loading guard so the new flow's initial incidents
+    // aren't treated as "new".
+    if (loading) {
+      if (readyRef.current) {
+        setUnseenIds(new Set())
+        setToasts([])
+        prevIdsRef.current = new Set()
+        readyRef.current = false
+      }
+      return
+    }
+
     const currentIds = new Set(incidents.map(i => i.id))
 
     if (!readyRef.current) {
-      // Still loading or just finished — snapshot current IDs and wait
-      if (!loading) readyRef.current = true
+      // Just finished loading — snapshot current IDs and wait
+      readyRef.current = true
       prevIdsRef.current = currentIds
       return
     }
