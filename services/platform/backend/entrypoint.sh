@@ -41,5 +41,6 @@ fi
 
 # run_realtime handles: ASGI server + Kafka bridge (or simulation fallback)
 # Auto-detects data source based on REALTIME_SOURCE env var or Kafka availability
+# WEB_WORKERS controls gunicorn worker count (default: 1, increase for more throughput)
 echo "Starting SequoIA backend (ASGI + realtime data)..."
-exec python manage.py run_realtime --host 0.0.0.0 --port 8001
+exec python manage.py run_realtime --host 0.0.0.0 --port 8001 --workers "${WEB_WORKERS:-1}"

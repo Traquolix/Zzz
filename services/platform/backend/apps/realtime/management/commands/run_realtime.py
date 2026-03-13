@@ -2,7 +2,7 @@
 Unified management command: starts the ASGI server + real-time data source.
 
 One command to run everything needed for the backend:
-  - Uvicorn ASGI server (HTTP + WebSocket)
+  - Gunicorn with uvicorn workers (HTTP + WebSocket)
   - Data source: simulation (offline demo) or Kafka bridge (production)
 
 Usage:
@@ -10,7 +10,8 @@ Usage:
     python manage.py run_realtime --source sim   # force simulation
     python manage.py run_realtime --source kafka # force Kafka bridge
     python manage.py run_realtime --port 9000    # custom port
-    python manage.py run_realtime --reload       # dev mode (auto-reload on code changes)
+    python manage.py run_realtime --workers 4     # 4 gunicorn workers
+    python manage.py run_realtime --reload       # dev mode (uvicorn with auto-reload)
     python manage.py run_realtime --no-server    # data source only (no server)
 
 Auto-detect logic:
@@ -63,6 +64,13 @@ class Command(BaseCommand):
             default=False,
             help="Enable auto-reload on code changes (development only).",
         )
+        parser.add_argument(
+            "--workers",
+            type=int,
+            default=1,
+            help="Number of gunicorn worker processes (default: 1). "
+            "Ignored when --reload is set (uses uvicorn directly).",
+        )
 
     def handle(self, *args, **options):
         source = options.get("source") or getattr(settings, "REALTIME_SOURCE", "auto")
@@ -70,6 +78,7 @@ class Command(BaseCommand):
         port = options["port"]
         no_server = options["no_server"]
         reload = options["reload"]
+        workers = options["workers"]
 
         if source == "auto":
             source = self._auto_detect()
@@ -85,7 +94,7 @@ class Command(BaseCommand):
             settings.REALTIME_AUTO_START_SIMULATION = True
             self.stdout.write("Using InMemoryChannelLayer: simulation will start inside server")
             if not no_server:
-                self._run_uvicorn(host, port, reload)
+                self._run_server(host, port, reload, workers=1)
             else:
                 self.stderr.write(
                     self.style.ERROR(
@@ -121,9 +130,8 @@ class Command(BaseCommand):
                 )
                 data_thread.start()
 
-            # Run uvicorn in the main thread (it handles signals properly)
             if not no_server:
-                self._run_uvicorn(host, port, reload)
+                self._run_server(host, port, reload, workers)
             else:
                 # Just wait for data threads if no server
                 try:
@@ -134,23 +142,45 @@ class Command(BaseCommand):
                 except KeyboardInterrupt:
                     self.stdout.write(self.style.WARNING("Stopped."))
 
-    def _run_uvicorn(self, host: str, port: int, reload: bool = False):
-        """Start uvicorn ASGI server in the main thread."""
-        import uvicorn
+    def _run_server(self, host: str, port: int, reload: bool = False, workers: int = 1):
+        """Start ASGI server — uvicorn directly for dev/reload, gunicorn for production."""
+        if reload:
+            import uvicorn
 
-        self.stdout.write(self.style.SUCCESS(f"ASGI server starting on {host}:{port}"))
+            self.stdout.write(self.style.SUCCESS(f"ASGI server starting on {host}:{port} (reload)"))
+            uvicorn.run(
+                "sequoia.asgi:application",
+                host=host,
+                port=port,
+                reload=True,
+                reload_dirs=[str(Path(__file__).resolve().parent.parent.parent.parent)],
+                log_level="info",
+                lifespan="off",
+            )
+        else:
+            import sys
 
-        uvicorn.run(
-            "sequoia.asgi:application",
-            host=host,
-            port=port,
-            reload=reload,
-            reload_dirs=[str(Path(__file__).resolve().parent.parent.parent.parent)]
-            if reload
-            else None,
-            log_level="info",
-            lifespan="off",
-        )
+            from gunicorn.app.wsgiapp import WSGIApplication
+
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"ASGI server starting on {host}:{port} "
+                    f"({workers} worker{'s' if workers > 1 else ''})"
+                )
+            )
+            sys.argv = [
+                "gunicorn",
+                "sequoia.asgi:application",
+                "--bind",
+                f"{host}:{port}",
+                "--workers",
+                str(workers),
+                "--worker-class",
+                "uvicorn.workers.UvicornWorker",
+                "--log-level",
+                "info",
+            ]
+            WSGIApplication().run()
 
     def _auto_detect(self) -> str:
         """Detect whether Kafka is available, fallback to simulation."""
