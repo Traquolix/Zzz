@@ -187,7 +187,7 @@ dev-stop: ## Stop all local dev services (Docker deps + stale processes)
 	@echo "==> Stopping Docker dependencies..."
 	@docker compose stop postgres clickhouse redis 2>/dev/null || true
 	@echo "==> Killing stale dev processes..."
-	@pkill -f "uvicorn.*sequoia.asgi" 2>/dev/null || true
+	@pkill -f "gunicorn.*sequoia.asgi" 2>/dev/null || true
 	@pkill -f "vite preview" 2>/dev/null || true
 	@echo "==> Dev environment stopped."
 
@@ -198,7 +198,7 @@ dev-deps: ## Start Docker dependencies for local dev (PostgreSQL + ClickHouse + 
 	@until docker compose exec -T postgres pg_isready -U $${POSTGRES_USER:-sequoia} -d $${POSTGRES_DB:-sequoia} > /dev/null 2>&1; do sleep 1; done
 
 dev-backend: ## Start backend dev server (auto-setup on first run)
-	@pkill -f "uvicorn.*sequoia.asgi" 2>/dev/null || true
+	@pkill -f "gunicorn.*sequoia.asgi" 2>/dev/null || true
 	@if [ ! -d "$(BACKEND_DIR)/.venv" ]; then \
 		if echo "$(SYSTEM_PYTHON)" | grep -q NOT_FOUND; then \
 			echo "ERROR: Python $(REQUIRED_PYTHON) not found. Install it: brew install python@$(REQUIRED_PYTHON)"; \
@@ -220,7 +220,7 @@ dev-backend: ## Start backend dev server (auto-setup on first run)
 	@echo "==> Clearing throttle cache..."
 	@cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python -c "from django.core.cache import cache; cache.clear()" 2>/dev/null || true
 	@echo "==> Starting backend on http://localhost:8001"
-	cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/uvicorn sequoia.asgi:application --host 127.0.0.1 --port 8001 --reload
+	cd $(BACKEND_DIR) && OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python manage.py run_realtime --host 127.0.0.1 --port 8001 --source sim
 
 dev-frontend: ## Build and preview frontend locally (auto-setup on first run)
 	@pkill -f "vite preview" 2>/dev/null || true

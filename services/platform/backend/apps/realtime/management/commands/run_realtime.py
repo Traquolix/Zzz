@@ -2,15 +2,27 @@
 Unified management command: starts the ASGI server + real-time data source.
 
 One command to run everything needed for the backend:
-  - Uvicorn ASGI server (HTTP + WebSocket)
+  - Gunicorn with uvicorn workers (HTTP + WebSocket)
   - Data source: simulation (offline demo) or Kafka bridge (production)
+
+Architecture:
+  Data sources (simulation, Kafka bridge) run as separate subprocesses,
+  fully decoupled from the ASGI server. Communication happens via Redis
+  pub/sub — no threads, no fork() hazards.
+
+  ┌─────────────┐  ┌─────────────┐  ┌────────────────┐
+  │ Simulation   │  │ Kafka bridge │  │ Gunicorn       │
+  │ subprocess   │  │ subprocess   │  │  ├─ Worker 1   │
+  │   ↓          │  │   ↓          │  │  └─ Worker N   │
+  │ Redis pubsub │  │ Redis pubsub │  │  Redis pubsub  │
+  └──────────────┘  └──────────────┘  └────────────────┘
 
 Usage:
     python manage.py run_realtime                # auto-detect source, serve on 0.0.0.0:8001
     python manage.py run_realtime --source sim   # force simulation
     python manage.py run_realtime --source kafka # force Kafka bridge
     python manage.py run_realtime --port 9000    # custom port
-    python manage.py run_realtime --reload       # dev mode (auto-reload on code changes)
+    python manage.py run_realtime --workers 4     # 4 gunicorn workers
     python manage.py run_realtime --no-server    # data source only (no server)
 
 Auto-detect logic:
@@ -18,15 +30,19 @@ Auto-detect logic:
     - If not set -> simulation
 """
 
-import asyncio
+import atexit
 import json
-import threading
+import multiprocessing
+import os
+import signal
+import sys
+import types
 from pathlib import Path
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from apps.realtime.simulation import FiberConfig, run_simulation_loop
+from apps.realtime.data_source_workers import kafka_worker, simulation_worker
 
 
 class Command(BaseCommand):
@@ -58,10 +74,10 @@ class Command(BaseCommand):
             help="Run only the data source, skip starting the ASGI server.",
         )
         parser.add_argument(
-            "--reload",
-            action="store_true",
-            default=False,
-            help="Enable auto-reload on code changes (development only).",
+            "--workers",
+            type=int,
+            default=1,
+            help="Number of gunicorn worker processes (default: 1).",
         )
 
     def handle(self, *args, **options):
@@ -69,88 +85,137 @@ class Command(BaseCommand):
         host = options["host"]
         port = options["port"]
         no_server = options["no_server"]
-        reload = options["reload"]
+        workers = options["workers"]
 
         if source == "auto":
             source = self._auto_detect()
 
         self.stdout.write(f"Data source: {source}")
 
-        # Check if using InMemoryChannelLayer - if so, simulation must run inside the server
-        channel_backend = settings.CHANNEL_LAYERS.get("default", {}).get("BACKEND", "")
-        use_in_memory = "InMemoryChannelLayer" in channel_backend
+        # Warm SHM cache once in the master process.  On Linux (gunicorn),
+        # forked workers inherit the populated _spectral_cache / _peak_cache
+        # dicts via copy-on-write — zero cost per worker.
+        if not no_server:
+            self._warm_shm_cache()
 
-        if use_in_memory and source == "sim":
-            # Enable auto-start so simulation runs inside the server's event loop
-            settings.REALTIME_AUTO_START_SIMULATION = True
-            self.stdout.write("Using InMemoryChannelLayer: simulation will start inside server")
-            if not no_server:
-                self._run_uvicorn(host, port, reload)
-            else:
-                self.stderr.write(
-                    self.style.ERROR(
-                        "Cannot run simulation without server when using InMemoryChannelLayer"
-                    )
+        # Start data source subprocesses
+        children: list[multiprocessing.Process] = []
+        settings_module = os.environ.get("DJANGO_SETTINGS_MODULE", "sequoia.settings.prod")
+
+        if source in ("sim", "both"):
+            fibers = self._load_fibers()
+            infrastructure = self._load_infrastructure()
+            # Serialize FiberConfig to dicts for cross-process pickling
+            fiber_dicts = [
+                {
+                    "id": f.id,
+                    "name": f.name,
+                    "color": f.color,
+                    "coordinates": f.coordinates,
+                    "channel_count": f.channel_count,
+                    "lanes": f.lanes,
+                    "speed_limit": f.speed_limit,
+                    "traffic_density": f.traffic_density,
+                    "typical_speed_range": f.typical_speed_range,
+                    "max_channel_dir0": f.max_channel_dir0,
+                    "max_channel_dir1": f.max_channel_dir1,
+                }
+                for f in fibers
+            ]
+            sim_proc = multiprocessing.Process(
+                target=simulation_worker,
+                args=(settings_module, fiber_dicts, infrastructure),
+                daemon=True,
+                name="sequoia-simulation",
+            )
+            children.append(sim_proc)
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Starting simulation subprocess ({len(fibers)} fibers, "
+                    f"{len(infrastructure)} infrastructure)"
                 )
+            )
+
+        if source in ("kafka", "both"):
+            infrastructure = self._load_infrastructure() if source == "kafka" else infrastructure
+            kafka_proc = multiprocessing.Process(
+                target=kafka_worker,
+                args=(settings_module, infrastructure),
+                daemon=True,
+                name="sequoia-kafka-bridge",
+            )
+            children.append(kafka_proc)
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Starting Kafka bridge subprocess ({len(infrastructure)} infrastructure)"
+                )
+            )
+
+        # Close DB connections opened by _load_fibers/_load_infrastructure
+        # before forking, so children don't inherit stale file descriptors.
+        from django.db import connections
+
+        connections.close_all()
+
+        for child in children:
+            child.start()
+
+        # Graceful shutdown: terminate children when the parent exits.
+        # We use both atexit (survives gunicorn overwriting signal handlers)
+        # and signal handlers (works for --no-server path).
+        def _terminate_children_cleanup() -> None:
+            for child in children:
+                if child.is_alive():
+                    child.terminate()
+                    child.join(timeout=5)
+
+        atexit.register(_terminate_children_cleanup)
+
+        def _terminate_children_signal(signum: int, frame: types.FrameType | None) -> None:
+            _terminate_children_cleanup()
+            signal.signal(signum, signal.SIG_DFL)
+            os.kill(os.getpid(), signum)
+
+        signal.signal(signal.SIGTERM, _terminate_children_signal)
+        signal.signal(signal.SIGINT, _terminate_children_signal)
+
+        if not no_server:
+            self._run_server(host, port, workers)
         else:
-            # Redis or other channel layer - can run in separate thread
-            settings.REALTIME_AUTO_START_SIMULATION = False
+            # Wait for data source subprocesses
+            try:
+                for child in children:
+                    child.join()
+            except KeyboardInterrupt:
+                self.stdout.write(self.style.WARNING("Stopped."))
 
-            if source == "both":
-                # Start both simulation and Kafka bridge in separate threads
-                sim_thread = threading.Thread(
-                    target=self._run_simulation,
-                    daemon=True,
-                )
-                kafka_thread = threading.Thread(
-                    target=self._run_kafka,
-                    daemon=True,
-                )
-                sim_thread.start()
-                kafka_thread.start()
-            elif source == "kafka":
-                data_thread = threading.Thread(
-                    target=self._run_kafka,
-                    daemon=True,
-                )
-                data_thread.start()
-            else:
-                data_thread = threading.Thread(
-                    target=self._run_simulation,
-                    daemon=True,
-                )
-                data_thread.start()
+    def _run_server(self, host: str, port: int, workers: int = 1):
+        """Start gunicorn ASGI server with uvicorn workers."""
+        from gunicorn.app.wsgiapp import WSGIApplication
 
-            # Run uvicorn in the main thread (it handles signals properly)
-            if not no_server:
-                self._run_uvicorn(host, port, reload)
-            else:
-                # Just wait for data threads if no server
-                try:
-                    if source == "both":
-                        sim_thread.join()
-                    else:
-                        data_thread.join()
-                except KeyboardInterrupt:
-                    self.stdout.write(self.style.WARNING("Stopped."))
-
-    def _run_uvicorn(self, host: str, port: int, reload: bool = False):
-        """Start uvicorn ASGI server in the main thread."""
-        import uvicorn
-
-        self.stdout.write(self.style.SUCCESS(f"ASGI server starting on {host}:{port}"))
-
-        uvicorn.run(
-            "sequoia.asgi:application",
-            host=host,
-            port=port,
-            reload=reload,
-            reload_dirs=[str(Path(__file__).resolve().parent.parent.parent.parent)]
-            if reload
-            else None,
-            log_level="info",
-            lifespan="off",
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"ASGI server starting on {host}:{port} "
+                f"({workers} worker{'s' if workers > 1 else ''})"
+            )
         )
+        sys.argv = [
+            "gunicorn",
+            "sequoia.asgi:application",
+            "--bind",
+            f"{host}:{port}",
+            "--workers",
+            str(workers),
+            "--worker-class",
+            "uvicorn.workers.UvicornWorker",
+            "--timeout",
+            "0",
+            "--graceful-timeout",
+            "10",
+            "--log-level",
+            "info",
+        ]
+        WSGIApplication().run()
 
     def _auto_detect(self) -> str:
         """Detect whether Kafka is available, fallback to simulation."""
@@ -185,56 +250,34 @@ class Command(BaseCommand):
             self.stdout.write(f"Kafka unreachable ({e}) -> simulation mode")
             return "sim"
 
-    def _run_kafka(self):
-        """Run the Kafka bridge in a background thread with auto-restart."""
-        import time as _time
+    def _warm_shm_cache(self) -> None:
+        """Warm SHM spectral + peak caches in the master process.
 
-        from apps.realtime.kafka_bridge import run_kafka_bridge_loop
+        Forked gunicorn workers inherit the populated module-level dicts
+        via copy-on-write — the 131 MB HDF5 data and ~10k scipy
+        find_peaks results are computed once, shared across all workers
+        at zero per-worker cost.
+        """
+        from apps.monitoring.hdf5_reader import load_peak_frequencies, sample_file_exists
 
-        infrastructure = self._load_infrastructure()
-
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Starting Kafka bridge with {len(infrastructure)} infrastructure items."
-            )
-        )
-
-        while True:
-            try:
-                asyncio.run(run_kafka_bridge_loop(infrastructure))
-                break  # Clean exit
-            except KeyboardInterrupt:
-                break
-            except Exception as exc:
-                self.stderr.write(
-                    self.style.ERROR(f"Kafka bridge crashed: {exc}. Restarting in 5s...")
-                )
-                _time.sleep(5)
-
-    def _run_simulation(self):
-        """Run the simulation engine in a background thread."""
-        fibers = self._load_fibers()
-        infrastructure = self._load_infrastructure()
-
-        self.stdout.write(
-            self.style.SUCCESS(
-                f"Starting simulation with {len(fibers)} fibers "
-                f"and {len(infrastructure)} infrastructure items."
-            )
-        )
+        if not sample_file_exists():
+            return
 
         try:
-            asyncio.run(run_simulation_loop(fibers, infrastructure))
-        except KeyboardInterrupt:
-            pass
+            self.stdout.write("Warming SHM cache (once, shared across workers)...")
+            load_peak_frequencies()
+            self.stdout.write(self.style.SUCCESS("SHM cache warm"))
+        except Exception as exc:
+            self.stderr.write(f"SHM cache warm-up failed: {exc}")
 
     def _get_data_dir(self) -> Path:
         """Get path to fiber cable data (infrastructure/clickhouse/cables/)."""
         return Path(settings.DATA_DIR) / "clickhouse" / "cables"
 
-    def _load_fibers(self) -> list[FiberConfig]:
+    def _load_fibers(self) -> list:
         """Load fiber configs from JSON data files with per-road calibration."""
         from apps.realtime.fiber_calibration import FIBER_CONFIGS
+        from apps.realtime.simulation import FiberConfig
 
         data_dir = self._get_data_dir()
 

@@ -42,47 +42,38 @@ from apps.shared.constants import MAP_REFRESH_INTERVAL
 
 logger = logging.getLogger("sequoia.simulation")
 
-# Global cache for simulation incidents (used by REST API fallback).
-# Written by the async simulation loop, read by sync REST views.
-# Uses atomic reference swap (GIL-safe) instead of locks to avoid
-# blocking the event loop on contention.
-_simulation_incidents_cache: list = []
-
-# Global cache for incident snapshots — recorded detections near each incident.
-# Each entry: {"points": [...], "complete": bool}
-_simulation_snapshots: dict[str, dict] = {}
-
-# Global cache for simulation-wide stats (fiber/channel/vehicle counts).
-_simulation_stats: dict[str, int] = {}
-
-# Section history buffers — keyed by (fiber_id, direction, channel).
-# Per-second: 5 min retention, aggregated once per second.
-# Per-minute: 60 min retention, aggregated from per-second every 60s.
-# Each entry: {time: epoch_ms, speed: float, speedMax: float, samples: int}
+# In-process section history buffers — used by the simulation loop for
+# accumulation and rollup.  Synced to Redis periodically so gunicorn
+# workers can read them via simulation_state.
 _simulation_per_second_buffer: dict[tuple[str, int, int], list[dict]] = {}
 _simulation_per_minute_buffer: dict[tuple[str, int, int], list[dict]] = {}
 
 
+# ---------------------------------------------------------------------------
+# Public read API — delegates to Redis-backed simulation_state module.
+# Importers (views, consumers) call these; they work cross-process.
+# ---------------------------------------------------------------------------
+
+
 def get_simulation_incidents() -> list:
-    """Get current simulation incidents for REST API fallback."""
-    return list(_simulation_incidents_cache)
+    """Get current simulation incidents."""
+    from apps.realtime.simulation_state import get_incidents
+
+    return get_incidents()
 
 
 def get_simulation_snapshot(incident_id: str) -> dict | None:
-    """Get recorded snapshot for a simulated incident, or None.
+    """Get recorded snapshot for a simulated incident, or None."""
+    from apps.realtime.simulation_state import get_snapshot
 
-    Returns {"points": [...], "complete": bool} or None.
-    Each point: {"time": epoch_ms, "speed": float|null, "flow": int|null, "occupancy": float|null}
-    """
-    entry = _simulation_snapshots.get(incident_id)
-    if entry is not None:
-        return {"points": list(entry["points"]), "complete": entry["complete"]}
-    return None
+    return get_snapshot(incident_id)
 
 
 def get_simulation_stats() -> dict[str, int]:
     """Get simulation-wide stats (fiber count, channel count, active vehicles)."""
-    return dict(_simulation_stats)
+    from apps.realtime.simulation_state import get_stats
+
+    return get_stats()
 
 
 def get_simulation_section_history(
@@ -93,91 +84,18 @@ def get_simulation_section_history(
     minutes: int,
     since_ms: int | None = None,
 ) -> list[dict]:
-    """Query in-memory simulation buffers for section history.
+    """Query section history from Redis-cached simulation buffers."""
+    from apps.realtime.simulation_state import get_section_history
 
-    - ≤5 min → per-second buffer (1s resolution)
-    - >5 min → per-minute buffer (1min resolution)
-
-    Args:
-        since_ms: If provided, only return points after this timestamp (ms epoch).
-
-    Returns ``[{time, speed, speedMax, samples, flow, occupancy}, ...]``.
-    """
-    if minutes <= 5:
-        buf = _simulation_per_second_buffer
-        bucket_seconds = 1
-    else:
-        buf = _simulation_per_minute_buffer
-        bucket_seconds = 60
-
-    if not buf:
-        return []
-
-    now_ms = int(time.time() * 1000)
-    cutoff_ms = now_ms - minutes * 60 * 1000
-    if since_ms is not None:
-        cutoff_ms = max(cutoff_ms, since_ms)
-    points: list[dict] = []
-
-    for (fid, d, ch), entries in buf.items():
-        if fid != fiber_id or d != direction:
-            continue
-        if ch < channel_start or ch > channel_end:
-            continue
-        for entry in entries:
-            if entry["time"] <= cutoff_ms:
-                continue
-            points.append(entry)
-
-    # Aggregate by time bucket (multiple channels contribute to the same second/minute)
-    # Divide total vehicle detections by total section channels to get the average
-    # flow at a single point — this avoids inflating flow by the section length.
-    total_channels = max(1, channel_end - channel_start + 1)
-
-    buckets: dict[int, dict] = {}
-    for p in points:
-        t = p["time"]
-        if t not in buckets:
-            buckets[t] = {
-                "speed_sum": 0.0,
-                "speed_max": 0.0,
-                "n_channels": 0,
-                "vehicle_count": 0,
-            }
-        b = buckets[t]
-        b["speed_sum"] += p["speed"]
-        b["speed_max"] = max(b["speed_max"], p["speedMax"])
-        b["n_channels"] += 1
-        b["vehicle_count"] += p["vehicle_count"]
-
-    result = []
-    for t in sorted(buckets):
-        b = buckets[t]
-        avg_speed = b["speed_sum"] / b["n_channels"] if b["n_channels"] > 0 else 0
-        # Flow (veh/h) = total detections / total channels * (3600 / bucket_seconds)
-        avg_per_channel = b["vehicle_count"] / total_channels
-        flow = round(avg_per_channel * (3600 / bucket_seconds))
-        occupancy = compute_occupancy(avg_speed, flow)
-
-        result.append(
-            {
-                "time": t,
-                "speed": round(avg_speed, 1),
-                "speedMax": round(b["speed_max"], 1),
-                "samples": b["vehicle_count"],
-                "flow": flow,
-                "occupancy": occupancy,
-            }
-        )
-    return result
+    return get_section_history(fiber_id, direction, channel_start, channel_end, minutes, since_ms)
 
 
 def _update_simulation_incidents_cache(incidents: list):
-    """Update the global incidents cache from simulation engine."""
+    """Update the simulation incidents cache in Redis."""
     from apps.monitoring.incident_service import transform_simulation_incident
+    from apps.realtime.simulation_state import store_incidents
 
-    global _simulation_incidents_cache
-    _simulation_incidents_cache = [transform_simulation_incident(i) for i in incidents]
+    store_incidents([transform_simulation_incident(i) for i in incidents])
 
 
 def _buckets_to_points(snap: dict, now_ms: float) -> list[dict]:
@@ -207,18 +125,22 @@ def _buckets_to_points(snap: dict, now_ms: float) -> list[dict]:
 
 
 def _update_simulation_stats(engine: "SimulationEngine"):
-    """Update the global stats cache from the simulation engine."""
-    global _simulation_stats
-    _simulation_stats = {
-        "fiber_count": len(engine.fibers),
-        "total_channels": sum(f.channel_count for f in engine.fibers),
-        "active_vehicles": len(engine.vehicles),
-    }
+    """Update the simulation stats cache in Redis."""
+    from apps.realtime.simulation_state import store_stats
+
+    store_stats(
+        {
+            "fiber_count": len(engine.fibers),
+            "total_channels": sum(f.channel_count for f in engine.fibers),
+            "active_vehicles": len(engine.vehicles),
+        }
+    )
 
 
 def _update_simulation_snapshots(snapshots: dict[str, dict]):
-    """Replace the global snapshots cache with the engine's aggregated points."""
-    global _simulation_snapshots
+    """Update the simulation snapshots cache in Redis."""
+    from apps.realtime.simulation_state import store_snapshots
+
     now_ms = time.time() * 1000
     converted = {}
     for iid, snap in snapshots.items():
@@ -226,7 +148,7 @@ def _update_simulation_snapshots(snapshots: dict[str, dict]):
             "points": _buckets_to_points(snap, now_ms),
             "complete": snap["complete"],
         }
-    _simulation_snapshots = converted
+    store_snapshots(converted)
 
 
 # ============================================================================
@@ -1480,10 +1402,12 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
     )
 
     from apps.monitoring.incident_service import transform_simulation_incident
+    from apps.realtime.simulation_state import store_section_history, store_status
 
     # No initial incidents — they spawn after the warmup period so
     # snapshot data has time to accumulate from the vehicle simulation
     _update_simulation_incidents_cache(engine.incidents)
+    store_status(running=True)
 
     # Clear stale history buffers from any previous simulation run
     global _simulation_per_second_buffer, _simulation_per_minute_buffer
@@ -1564,17 +1488,22 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
                 ]
                 await pubsub_broadcast_shm(shm_dicts, fiber_org_map, flow="sim")
 
-        # Sync snapshot cache every 20 ticks (1s) so frontend polling gets fresh data
+        # Sync caches to Redis every 20 ticks (1s) so REST polling gets fresh data
         if snapshot_counter >= 20:
             snapshot_counter = 0
             _update_simulation_snapshots(engine.incident_snapshots)
+            # Section history buffers (serialized tuple keys for Redis)
+            sec_buf = {f"{k[0]}:{k[1]}:{k[2]}": v for k, v in _simulation_per_second_buffer.items()}
+            min_buf = {f"{k[0]}:{k[1]}:{k[2]}": v for k, v in _simulation_per_minute_buffer.items()}
+            store_section_history(sec_buf, min_buf)
 
         # Broadcast incidents every 100 ticks (5 seconds) — per-org
         if incident_counter >= 100:
             incident_counter = 0
-            # Update caches for REST API fallback
             _update_simulation_incidents_cache(engine.incidents)
             _update_simulation_stats(engine)
+            store_status(running=True)
+
             for inc in pending_new_incidents + pending_resolved_incidents:
                 inc_data = transform_simulation_incident(inc)
                 await broadcast_to_orgs(

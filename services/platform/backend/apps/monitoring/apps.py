@@ -7,7 +7,16 @@ from django.apps import AppConfig
 logger = logging.getLogger(__name__)
 
 # Management commands where cache warm-up is pointless (no server running).
-_SKIP_WARMUP_COMMANDS = {"collectstatic", "migrate", "makemigrations", "check", "shell"}
+# run_realtime handles its own warmup explicitly (once in the master, before
+# gunicorn fork, so workers inherit the cache via copy-on-write).
+_SKIP_WARMUP_COMMANDS = {
+    "collectstatic",
+    "migrate",
+    "makemigrations",
+    "check",
+    "shell",
+    "run_realtime",
+}
 
 
 class MonitoringConfig(AppConfig):
@@ -22,8 +31,9 @@ class MonitoringConfig(AppConfig):
         calls takes 5-15 seconds. Doing this at startup means the first
         user request hits a warm cache instead of timing out.
 
-        Skipped during management commands (collectstatic, migrate, etc.)
-        where no server is running.
+        Skipped during management commands that don't serve requests.
+        For run_realtime, warmup is handled explicitly by the command
+        itself (once in the master process, inherited by workers via COW).
         """
         if self._is_management_command():
             return
