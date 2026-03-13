@@ -23,7 +23,6 @@ Usage:
     python manage.py run_realtime --source kafka # force Kafka bridge
     python manage.py run_realtime --port 9000    # custom port
     python manage.py run_realtime --workers 4     # 4 gunicorn workers
-    python manage.py run_realtime --reload       # dev mode (uvicorn with auto-reload)
     python manage.py run_realtime --no-server    # data source only (no server)
 
 Auto-detect logic:
@@ -75,17 +74,10 @@ class Command(BaseCommand):
             help="Run only the data source, skip starting the ASGI server.",
         )
         parser.add_argument(
-            "--reload",
-            action="store_true",
-            default=False,
-            help="Enable auto-reload on code changes (development only).",
-        )
-        parser.add_argument(
             "--workers",
             type=int,
             default=1,
-            help="Number of gunicorn worker processes (default: 1). "
-            "Ignored when --reload is set (uses uvicorn directly).",
+            help="Number of gunicorn worker processes (default: 1).",
         )
 
     def handle(self, *args, **options):
@@ -93,7 +85,6 @@ class Command(BaseCommand):
         host = options["host"]
         port = options["port"]
         no_server = options["no_server"]
-        reload = options["reload"]
         workers = options["workers"]
 
         if source == "auto":
@@ -103,8 +94,7 @@ class Command(BaseCommand):
 
         # Warm SHM cache once in the master process.  On Linux (gunicorn),
         # forked workers inherit the populated _spectral_cache / _peak_cache
-        # dicts via copy-on-write — zero cost per worker.  On macOS with
-        # --reload (uvicorn direct, single process), this is the only process.
+        # dicts via copy-on-write — zero cost per worker.
         if not no_server:
             self._warm_shm_cache()
 
@@ -172,7 +162,7 @@ class Command(BaseCommand):
 
         # Graceful shutdown: terminate children when the parent exits.
         # We use both atexit (survives gunicorn overwriting signal handlers)
-        # and signal handlers (works for --reload/--no-server paths).
+        # and signal handlers (works for --no-server path).
         def _terminate_children_cleanup() -> None:
             for child in children:
                 if child.is_alive():
@@ -190,7 +180,7 @@ class Command(BaseCommand):
         signal.signal(signal.SIGINT, _terminate_children_signal)
 
         if not no_server:
-            self._run_server(host, port, reload, workers)
+            self._run_server(host, port, workers)
         else:
             # Wait for data source subprocesses
             try:
@@ -199,47 +189,33 @@ class Command(BaseCommand):
             except KeyboardInterrupt:
                 self.stdout.write(self.style.WARNING("Stopped."))
 
-    def _run_server(self, host: str, port: int, reload: bool = False, workers: int = 1):
-        """Start ASGI server — uvicorn directly for dev/reload, gunicorn for production."""
-        if reload:
-            import uvicorn
+    def _run_server(self, host: str, port: int, workers: int = 1):
+        """Start gunicorn ASGI server with uvicorn workers."""
+        from gunicorn.app.wsgiapp import WSGIApplication
 
-            self.stdout.write(self.style.SUCCESS(f"ASGI server starting on {host}:{port} (reload)"))
-            uvicorn.run(
-                "sequoia.asgi:application",
-                host=host,
-                port=port,
-                reload=True,
-                reload_dirs=[str(Path(__file__).resolve().parent.parent.parent.parent)],
-                log_level="info",
-                lifespan="off",
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"ASGI server starting on {host}:{port} "
+                f"({workers} worker{'s' if workers > 1 else ''})"
             )
-        else:
-            from gunicorn.app.wsgiapp import WSGIApplication
-
-            self.stdout.write(
-                self.style.SUCCESS(
-                    f"ASGI server starting on {host}:{port} "
-                    f"({workers} worker{'s' if workers > 1 else ''})"
-                )
-            )
-            sys.argv = [
-                "gunicorn",
-                "sequoia.asgi:application",
-                "--bind",
-                f"{host}:{port}",
-                "--workers",
-                str(workers),
-                "--worker-class",
-                "uvicorn.workers.UvicornWorker",
-                "--timeout",
-                "0",
-                "--graceful-timeout",
-                "10",
-                "--log-level",
-                "info",
-            ]
-            WSGIApplication().run()
+        )
+        sys.argv = [
+            "gunicorn",
+            "sequoia.asgi:application",
+            "--bind",
+            f"{host}:{port}",
+            "--workers",
+            str(workers),
+            "--worker-class",
+            "uvicorn.workers.UvicornWorker",
+            "--timeout",
+            "0",
+            "--graceful-timeout",
+            "10",
+            "--log-level",
+            "info",
+        ]
+        WSGIApplication().run()
 
     def _auto_detect(self) -> str:
         """Detect whether Kafka is available, fallback to simulation."""
@@ -277,13 +253,10 @@ class Command(BaseCommand):
     def _warm_shm_cache(self) -> None:
         """Warm SHM spectral + peak caches in the master process.
 
-        On Linux (gunicorn), forked workers inherit the populated
-        module-level dicts via copy-on-write — the 131 MB HDF5 data
-        and ~10k scipy find_peaks results are computed once, shared
-        across all workers at zero per-worker cost.
-
-        On macOS with --reload (single uvicorn process), this is the
-        only chance to warm the cache before requests arrive.
+        Forked gunicorn workers inherit the populated module-level dicts
+        via copy-on-write — the 131 MB HDF5 data and ~10k scipy
+        find_peaks results are computed once, shared across all workers
+        at zero per-worker cost.
         """
         from apps.monitoring.hdf5_reader import load_peak_frequencies, sample_file_exists
 
