@@ -7,7 +7,14 @@ from django.apps import AppConfig
 logger = logging.getLogger(__name__)
 
 # Management commands where cache warm-up is pointless (no server running).
-_SKIP_WARMUP_COMMANDS = {"collectstatic", "migrate", "makemigrations", "check", "shell"}
+_SKIP_WARMUP_COMMANDS = {
+    "collectstatic",
+    "migrate",
+    "makemigrations",
+    "check",
+    "shell",
+    "run_realtime",  # gunicorn forks after this — threads in master crash on macOS
+}
 
 
 class MonitoringConfig(AppConfig):
