@@ -164,7 +164,18 @@ function reducer(state: ProtoState, action: ProtoAction): ProtoState {
     case 'TOGGLE_SIDEBAR':
       // Keep sidebarExpanded during close so the 400ms CSS transition applies;
       // SidePanel resets it via RESET_SIDEBAR_EXPANDED after the slide finishes.
-      return { ...state, sidebarOpen: !state.sidebarOpen }
+      // Clear selections when closing so the map deselects and polling stops.
+      if (state.sidebarOpen) {
+        return {
+          ...state,
+          sidebarOpen: false,
+          selectedSectionId: null,
+          selectedIncidentId: null,
+          selectedStructureId: null,
+          selectedChannel: null,
+        }
+      }
+      return { ...state, sidebarOpen: true }
     case 'RESET_SIDEBAR_EXPANDED':
       return { ...state, sidebarExpanded: false }
     case 'OPEN_SIDEBAR':

@@ -196,6 +196,11 @@ KAFKA_BOOTSTRAP_SERVERS = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "")
 # auto: tries Kafka if KAFKA_BOOTSTRAP_SERVERS is set, falls back to simulation
 REALTIME_SOURCE = os.environ.get("REALTIME_SOURCE", "auto")
 
+# Auto-start simulation on first ASGI scope (first HTTP/WebSocket request).
+# Enabled by default so demo deployments have vehicles on first visit.
+# Disable per deployment with AUTO_START_SIMULATION=false.
+REALTIME_AUTO_START_SIMULATION = os.environ.get("AUTO_START_SIMULATION", "true").lower() == "true"
+
 # Redis / Channels
 _REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
 _REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD", "")
