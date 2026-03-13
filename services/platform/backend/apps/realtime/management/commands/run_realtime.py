@@ -89,11 +89,6 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        # Signal to MonitoringConfig.ready() that this is the master process
-        # (before gunicorn fork or uvicorn start). Cleared before launching
-        # the server so workers run the SHM warmup.
-        os.environ["_SEQUOIA_SKIP_WARMUP"] = "1"
-
         source = options.get("source") or getattr(settings, "REALTIME_SOURCE", "auto")
         host = options["host"]
         port = options["port"]
@@ -105,6 +100,13 @@ class Command(BaseCommand):
             source = self._auto_detect()
 
         self.stdout.write(f"Data source: {source}")
+
+        # Warm SHM cache once in the master process.  On Linux (gunicorn),
+        # forked workers inherit the populated _spectral_cache / _peak_cache
+        # dicts via copy-on-write — zero cost per worker.  On macOS with
+        # --reload (uvicorn direct, single process), this is the only process.
+        if not no_server:
+            self._warm_shm_cache()
 
         # Start data source subprocesses
         children: list[multiprocessing.Process] = []
@@ -199,10 +201,6 @@ class Command(BaseCommand):
 
     def _run_server(self, host: str, port: int, reload: bool = False, workers: int = 1):
         """Start ASGI server — uvicorn directly for dev/reload, gunicorn for production."""
-        # Clear skip flag so server processes (gunicorn workers / uvicorn)
-        # run the SHM cache warmup in MonitoringConfig.ready().
-        os.environ.pop("_SEQUOIA_SKIP_WARMUP", None)
-
         if reload:
             import uvicorn
 
@@ -275,6 +273,29 @@ class Command(BaseCommand):
         except Exception as e:
             self.stdout.write(f"Kafka unreachable ({e}) -> simulation mode")
             return "sim"
+
+    def _warm_shm_cache(self) -> None:
+        """Warm SHM spectral + peak caches in the master process.
+
+        On Linux (gunicorn), forked workers inherit the populated
+        module-level dicts via copy-on-write — the 131 MB HDF5 data
+        and ~10k scipy find_peaks results are computed once, shared
+        across all workers at zero per-worker cost.
+
+        On macOS with --reload (single uvicorn process), this is the
+        only chance to warm the cache before requests arrive.
+        """
+        from apps.monitoring.hdf5_reader import load_peak_frequencies, sample_file_exists
+
+        if not sample_file_exists():
+            return
+
+        try:
+            self.stdout.write("Warming SHM cache (once, shared across workers)...")
+            load_peak_frequencies()
+            self.stdout.write(self.style.SUCCESS("SHM cache warm"))
+        except Exception as exc:
+            self.stderr.write(f"SHM cache warm-up failed: {exc}")
 
     def _get_data_dir(self) -> Path:
         """Get path to fiber cable data (infrastructure/clickhouse/cables/)."""
