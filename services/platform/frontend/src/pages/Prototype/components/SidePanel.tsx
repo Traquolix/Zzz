@@ -2034,12 +2034,13 @@ function SectionDetail({
 
   const [timeRange, setTimeRange] = useState<TimeRange>('1m')
 
-  // Chart data fetched at the resolution matching the selected time range
-  const { series: historySeries, stale: historyStale } = useSectionHistory(section.id, timeRange)
-
   // KPIs use the always-on page-level stats (stable regardless of chart time range)
   const live = liveStats.get(section.id)
   const liveSeries = liveSeriesData.get(section.id)
+
+  // Chart data: at 1m reuses batch data from useLiveStats (no extra request),
+  // at longer ranges fetches independently.
+  const { series: historySeries, stale: historyStale } = useSectionHistory(section.id, timeRange, liveSeries)
   const displaySpeed = live?.avgSpeed != null ? Math.round(live.avgSpeed) : section.avgSpeed
   const displayFlow = live?.flow ?? section.flow
   const displayTravelTime = live?.travelTime ?? section.travelTime

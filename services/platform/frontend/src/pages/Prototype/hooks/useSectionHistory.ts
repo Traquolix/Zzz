@@ -6,7 +6,7 @@ import { logger } from '@/lib/logger'
 import type { SectionDataPoint } from '../types'
 import { mapHistoryPoints } from './mapHistoryPoints'
 
-const POLL_INTERVAL = 2000
+const POLL_INTERVAL = 1000
 
 /** Map time range labels to API minutes parameter. */
 const TIME_RANGE_MINUTES: Record<string, number> = {
@@ -19,23 +19,30 @@ const TIME_RANGE_MINUTES: Record<string, number> = {
 /**
  * Polls section history for a single section with the correct time range.
  *
- * - 1m/5m → backend serves per-second buffer (1s resolution)
- * - 15m/1h → backend serves per-minute buffer (1min resolution)
+ * At the default 1m range, reuses data from the page-level batch poll
+ * (useLiveStats) to avoid a redundant HTTP request and keep stats cards
+ * and the chart perfectly synchronized.
+ *
+ * At longer ranges (5m/15m/1h), fetches independently since the batch
+ * poll only covers 1 minute.
  *
  * React Query's refetchInterval auto-pauses when the tab is hidden.
  * Returns `stale: true` while awaiting the first fetch after a range/flow change,
- * NOT during regular 2s background polls.
+ * NOT during regular background polls.
  */
-export function useSectionHistory(sectionId: string, timeRange: string) {
+export function useSectionHistory(sectionId: string, timeRange: string, liveSeries?: SectionDataPoint[]) {
   const { flow } = useRealtime()
   const minutes = TIME_RANGE_MINUTES[timeRange] ?? 5
+
+  // At 1m, reuse the batch data from useLiveStats — no own fetch needed.
+  const usesBatchData = minutes === 1 && liveSeries != null
 
   const sinceRef = useRef<number | undefined>(undefined)
   const accumulatedRef = useRef<SectionDataPoint[]>([])
   const [series, setSeries] = useState<SectionDataPoint[]>([])
 
   // Stale flag: true only during key transitions (range/flow/section change),
-  // NOT during regular background polls (which would cause 2s flicker).
+  // NOT during regular background polls (which would cause flicker).
   // Uses useState (not useRef) so changes trigger a re-render.
   // Initialized to true so the spinner shows on first mount.
   const [keyChanged, setKeyChanged] = useState(true)
@@ -47,6 +54,13 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
     setSeries([])
     setKeyChanged(true)
   }, [sectionId, minutes, flow])
+
+  // When using batch data, sync series directly from liveSeries.
+  useEffect(() => {
+    if (!usesBatchData || !liveSeries) return
+    setSeries(liveSeries)
+    setKeyChanged(false)
+  }, [usesBatchData, liveSeries])
 
   // queryFn fetches and eagerly advances the since cursor so the next poll
   // (which may fire before the useEffect runs) never resends stale cursors.
@@ -67,11 +81,13 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
     },
     refetchInterval: POLL_INTERVAL,
     staleTime: 0,
+    enabled: !usesBatchData,
   })
 
   // Accumulate, trim, and update cursors outside queryFn.
   // dataUpdatedAt changes on every successful fetch, so this fires reliably.
   useEffect(() => {
+    if (usesBatchData) return
     if (!rawResponse) return
 
     const newPoints = mapHistoryPoints(rawResponse.points)
@@ -100,7 +116,7 @@ export function useSectionHistory(sectionId: string, timeRange: string) {
 
   return {
     series,
-    // Only report stale during key transitions, not regular 2s polls
-    stale: isFetching && keyChanged,
+    // Only report stale during key transitions, not regular polls
+    stale: usesBatchData ? false : isFetching && keyChanged,
   }
 }
