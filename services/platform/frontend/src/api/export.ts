@@ -76,11 +76,11 @@ export async function downloadExport(params: ExportParams): Promise<void> {
   })
 
   if (resp.status === 429) {
-    throw new Error('Rate limit exceeded. Please wait before downloading again.')
+    throw new Error('export.rateLimitError')
   }
   if (!resp.ok) {
     const body = await resp.json().catch(() => null)
-    throw new Error(body?.detail ?? `Export failed (${resp.status})`)
+    throw new Error(body?.detail ?? 'export.failed')
   }
 
   const blob = await resp.blob()
@@ -94,5 +94,5 @@ export async function downloadExport(params: ExportParams): Promise<void> {
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+  setTimeout(() => URL.revokeObjectURL(url), 100)
 }

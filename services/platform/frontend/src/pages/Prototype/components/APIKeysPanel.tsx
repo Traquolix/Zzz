@@ -252,7 +252,7 @@ function KeyRow({
 
       {/* Stats — visible on hover, always visible when sidebar is wide */}
       <span className="datahub-key-stats hidden group-hover/row:inline text-[length:var(--text-xxs)] text-[var(--proto-text-muted)]/50 tabular-nums shrink-0">
-        {lastUsed ? formatRelative(lastUsed) : t('apiKeys.neverUsed')}
+        {lastUsed ? formatRelative(lastUsed, t) : t('apiKeys.neverUsed')}
       </span>
       <span className="datahub-key-stats hidden group-hover/row:inline text-[length:var(--text-xxs)] text-[var(--proto-text-muted)]/50 tabular-nums shrink-0">
         {t('apiKeys.requestCount', { count: requestCount })}
@@ -281,15 +281,15 @@ function KeyRow({
   )
 }
 
-function formatRelative(iso: string): string {
+function formatRelative(iso: string, t: (key: string, opts?: Record<string, unknown>) => string): string {
   const diff = Date.now() - new Date(iso).getTime()
   const mins = Math.floor(diff / 60_000)
-  if (mins < 1) return 'now'
-  if (mins < 60) return `${mins}m`
+  if (mins < 1) return t('apiKeys.timeNow')
+  if (mins < 60) return t('apiKeys.timeMinutes', { count: mins })
   const hrs = Math.floor(mins / 60)
-  if (hrs < 24) return `${hrs}h`
+  if (hrs < 24) return t('apiKeys.timeHours', { count: hrs })
   const days = Math.floor(hrs / 24)
-  return `${days}d`
+  return t('apiKeys.timeDays', { count: days })
 }
 
 // ── Icons ──────────────────────────────────────────────────────────

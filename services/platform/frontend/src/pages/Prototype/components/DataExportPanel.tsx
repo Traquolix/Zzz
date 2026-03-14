@@ -10,7 +10,7 @@ type DataType = 'detections' | 'incidents'
 type Direction = 'both' | '0' | '1'
 type Format = 'csv' | 'json'
 
-// TTL thresholds (must match backend detection_utils.py)
+// TTL thresholds (must match backend export_views.py)
 const HIRES_HOURS = 48
 const MEDIUM_DAYS = 90
 
@@ -108,7 +108,7 @@ export function DataExportPanel() {
   const downloadMutation = useMutation({
     mutationFn: (params: ExportParams) => downloadExport(params),
     onSuccess: () => toast.success(t('export.downloadStarted')),
-    onError: (err: Error) => toast.error(err.message),
+    onError: (err: Error) => toast.error(t(err.message)),
   })
 
   const handleDownload = () => {

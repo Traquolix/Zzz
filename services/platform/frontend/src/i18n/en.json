@@ -595,7 +595,10 @@
     "settings": "Settings",
     "dataHub": "Data Hub",
     "apiDocs": "API Documentation",
-    "logout": "Log out"
+    "logout": "Log out",
+    "roleSuper": "Super",
+    "roleAdmin": "Admin",
+    "roleViewer": "Viewer"
   },
   "export": {
     "sectionTitle": "Export",
@@ -619,7 +622,9 @@
     "tierInfo": "Resolution: {{tier}} aggregation",
     "download": "Download",
     "downloadStarted": "Download started",
-    "rateLimit": "Limited to 10 downloads per hour"
+    "rateLimit": "Limited to 10 downloads per hour",
+    "rateLimitError": "Rate limit exceeded. Please wait before downloading again.",
+    "failed": "Export failed"
   },
   "apiKeys": {
     "sectionTitle": "API Keys",
@@ -656,6 +661,10 @@
     "adminOnly": "Only admins can manage API keys.",
     "requestCount": "{{count}} requests",
     "copyCurl": "Copy curl",
-    "curlCopied": "curl command copied"
+    "curlCopied": "curl command copied",
+    "timeNow": "now",
+    "timeMinutes": "{{count}}m",
+    "timeHours": "{{count}}h",
+    "timeDays": "{{count}}d"
   }
 }

@@ -595,7 +595,10 @@
     "settings": "Paramètres",
     "dataHub": "Hub de données",
     "apiDocs": "Documentation API",
-    "logout": "Déconnexion"
+    "logout": "Déconnexion",
+    "roleSuper": "Super",
+    "roleAdmin": "Admin",
+    "roleViewer": "Lecteur"
   },
   "export": {
     "sectionTitle": "Export",
@@ -619,7 +622,9 @@
     "tierInfo": "Résolution : agrégation {{tier}}",
     "download": "Télécharger",
     "downloadStarted": "Téléchargement lancé",
-    "rateLimit": "Limité à 10 téléchargements par heure"
+    "rateLimit": "Limité à 10 téléchargements par heure",
+    "rateLimitError": "Limite de téléchargement atteinte. Veuillez patienter.",
+    "failed": "Échec de l'export"
   },
   "apiKeys": {
     "sectionTitle": "Clés API",
@@ -656,6 +661,10 @@
     "adminOnly": "Seuls les administrateurs peuvent gérer les clés API.",
     "requestCount": "{{count}} requêtes",
     "copyCurl": "Copier curl",
-    "curlCopied": "Commande curl copiée"
+    "curlCopied": "Commande curl copiée",
+    "timeNow": "maintenant",
+    "timeMinutes": "{{count}}min",
+    "timeHours": "{{count}}h",
+    "timeDays": "{{count}}j"
   }
 }

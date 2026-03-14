@@ -52,7 +52,13 @@ export function UserMenu({ dispatch }: UserMenuProps) {
         .join('')
     : '?'
 
-  const roleBadge = isSuperuser ? 'Super' : role === 'admin' ? 'Admin' : role === 'viewer' ? 'Viewer' : role
+  const roleBadge = isSuperuser
+    ? t('userMenu.roleSuper')
+    : role === 'admin'
+      ? t('userMenu.roleAdmin')
+      : role === 'viewer'
+        ? t('userMenu.roleViewer')
+        : role
 
   return (
     <div ref={menuRef} className="relative">
@@ -96,7 +102,7 @@ export function UserMenu({ dispatch }: UserMenuProps) {
                   onClick={() => openPanel('dataHub')}
                   className="flex-1 flex items-center gap-2.5 px-3 py-2 text-xs text-[var(--proto-text-secondary)] hover:bg-[var(--proto-surface-raised)] hover:text-[var(--proto-text)] transition-colors cursor-pointer"
                 >
-                  <DataHubIcon />
+                  <DataHubMenuIcon />
                   <span>{t('userMenu.dataHub')}</span>
                 </button>
                 <a
@@ -168,7 +174,7 @@ const SettingsIcon = () => (
   </svg>
 )
 
-const DataHubIcon = () => (
+const DataHubMenuIcon = () => (
   <svg
     width="14"
     height="14"
