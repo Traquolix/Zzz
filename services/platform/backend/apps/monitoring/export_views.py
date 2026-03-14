@@ -31,6 +31,10 @@ class ExportThrottle(UserRateThrottle):
     scope = "export"
 
 
+class ExportEstimateThrottle(UserRateThrottle):
+    scope = "export_estimate"
+
+
 def _parse_params(request):
     """Parse and validate common export parameters. Returns (fiber_id, start, end, format) or raises."""
     fiber_id = request.GET.get("fiber_id")
@@ -291,7 +295,7 @@ class ExportEstimateView(APIView):
     """GET /api/export/estimate — estimate row count before downloading."""
 
     permission_classes = [IsActiveUser]
-    throttle_classes = [ExportThrottle]
+    throttle_classes = [ExportEstimateThrottle]
 
     @clickhouse_fallback()
     def get(self, request):
