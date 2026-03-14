@@ -1,7 +1,7 @@
 import type { Severity, IncidentType, ProtoIncident } from '@/types/incident'
 
 export type { Severity, IncidentType, ProtoIncident }
-export type SidebarTab = 'incidents' | 'sections' | 'settings' | 'shm' | 'channel' | 'waterfall'
+export type SidebarTab = 'incidents' | 'sections' | 'settings' | 'shm' | 'channel' | 'waterfall' | 'dataHub'
 
 /**
  * A directional fiber — one direction on a physical cable.
@@ -156,3 +156,4 @@ export type ProtoAction =
   | { type: 'TOGGLE_CHANNEL_HELPER' }
   | { type: 'TOGGLE_SIDEBAR_EXPANDED' }
   | { type: 'RESET_SIDEBAR_EXPANDED' }
+  | { type: 'OPEN_PANEL'; tab: SidebarTab }

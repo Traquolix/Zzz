@@ -225,6 +225,23 @@ export const ChannelIcon = () => (
   </svg>
 )
 
+export const DataHubIcon = () => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <ellipse cx="8" cy="4" rx="6" ry="2" />
+    <path d="M2 4v4c0 1.1 2.7 2 6 2s6-.9 6-2V4" />
+    <path d="M2 8v4c0 1.1 2.7 2 6 2s6-.9 6-2V8" />
+  </svg>
+)
+
 /* export const WaterfallIcon = () => (
     <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <rect x="2" y="2" width="12" height="12" rx="1" />

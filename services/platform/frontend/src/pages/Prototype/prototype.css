@@ -1,5 +1,5 @@
 .prototype {
-  --proto-base: #1a1a2e;
+  --proto-base: #1a1c20;
   --proto-surface: #2b2d31;
   --proto-surface-raised: #313338;
   --proto-border: rgba(255, 255, 255, 0.08);
@@ -90,6 +90,19 @@
   transition:
     transform 400ms ease-in-out,
     width 400ms ease-in-out;
+}
+
+/* Data Hub: single-column, density increases with width */
+.datahub-layout {
+  display: flex;
+  flex-direction: column;
+}
+
+/* When sidebar is wide: show API key row stats always */
+@container (min-width: 520px) {
+  .datahub-key-stats {
+    display: inline !important;
+  }
 }
 
 /* Mapbox overrides for dark theme */
