@@ -11,10 +11,8 @@ import type {
   SpectralSummary,
 } from '@/types/infrastructure'
 import { MAX_SECTIONS_PER_ORG } from '@/api/sections'
-import { API_URL } from '@/constants/api'
 import { useRealtime } from '@/hooks/useRealtime'
 import { WaterfallPanel } from './WaterfallPanel'
-import { DataHubPanel, DataHubIcon } from './DataHubPanel'
 import { ChannelDetail } from './ChannelDetail'
 import { SectionList, SectionDetail } from './SectionPanels'
 import { SettingsPanel } from './SettingsPanel'
@@ -216,14 +214,6 @@ export function SidePanel({
                 onClick={() => dispatch({ type: 'SET_TAB', tab: 'settings' })}
               />
             )}
-            {activeTab === 'dataHub' && (
-              <TabButton
-                label="Data Hub"
-                icon={<DataHubIcon />}
-                active
-                onClick={() => dispatch({ type: 'SET_TAB', tab: 'dataHub' })}
-              />
-            )}
           </div>
         </div>
 
@@ -231,7 +221,7 @@ export function SidePanel({
         <div className="flex items-center justify-between px-4 h-[52px] shrink-0 border-b border-[var(--proto-border)]">
           <div className="flex items-center gap-2.5">
             <span className="text-[length:var(--text-sm)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
-              {activeTab === 'dataHub' ? 'Data Hub' : activeTab === 'shm' ? 'SHM' : activeTab}
+              {activeTab === 'shm' ? 'SHM' : activeTab}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -528,29 +518,6 @@ export function SidePanel({
                 </button>
               </>
             )}
-            {activeTab === 'dataHub' && (
-              <a
-                href={`${API_URL}/api/v1/docs/`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center w-6 h-6 rounded text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)] transition-colors cursor-pointer"
-                title={t('userMenu.apiDocs')}
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M4 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" />
-                  <path d="M5 5h6M5 8h6M5 11h3" />
-                </svg>
-              </a>
-            )}
             <button
               onClick={() => dispatch({ type: 'TOGGLE_SIDEBAR' })}
               className="flex items-center justify-center w-6 h-6 rounded text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-all cursor-pointer"
@@ -665,7 +632,6 @@ export function SidePanel({
               />
             ))}
           {activeTab === 'waterfall' && <WaterfallPanel />}
-          {activeTab === 'dataHub' && <DataHubPanel expanded={!!sidebarExpanded} />}
         </div>
       </div>
     </div>
