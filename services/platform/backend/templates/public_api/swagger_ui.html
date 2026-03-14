@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <title>{{ title|default:"SequoIA API" }}</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {% if favicon_href %}<link rel="icon" href="{{ favicon_href }}">{% endif %}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ swagger_ui_css }}">
+    <style>
+      /* ── SequoIA dark theme for Swagger UI ─────────────────────────── */
+
+      :root {
+        --sq-base: #1e1f22;
+        --sq-surface: #2b2d31;
+        --sq-surface-raised: #313338;
+        --sq-border: rgba(255, 255, 255, 0.08);
+        --sq-border-strong: rgba(255, 255, 255, 0.14);
+        --sq-text: #e2e8f0;
+        --sq-text-secondary: #94a3b8;
+        --sq-text-muted: #64748b;
+        --sq-accent: #3b82f6;
+        --sq-accent-hover: #2563eb;
+        --sq-green: #22c55e;
+        --sq-green-bg: rgba(34, 197, 94, 0.08);
+        --sq-green-border: rgba(34, 197, 94, 0.25);
+        --sq-amber: #f59e0b;
+        --sq-red: #ef4444;
+      }
+
+      html {
+        box-sizing: border-box;
+        overflow-y: scroll;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      *, *:after, *:before { box-sizing: inherit; }
+
+      body {
+        background: var(--sq-base);
+        margin: 0;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        color: var(--sq-text);
+      }
+
+      /* ── Top bar ──────────────────────────────────────────────── */
+
+      .swagger-ui .topbar { display: none; }
+
+      /* Custom header injected below */
+      .sq-header {
+        background: var(--sq-surface);
+        border-bottom: 1px solid var(--sq-border);
+        padding: 20px 40px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .sq-header-logo {
+        width: 32px;
+        height: 32px;
+        background: var(--sq-accent);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 16px;
+        color: white;
+        flex-shrink: 0;
+      }
+      .sq-header-text {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .sq-header-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--sq-text);
+        letter-spacing: -0.01em;
+      }
+      .sq-header-subtitle {
+        font-size: 12px;
+        color: var(--sq-text-muted);
+      }
+
+      /* ── Wrapper ──────────────────────────────────────────────── */
+
+      .swagger-ui .wrapper {
+        max-width: 1100px;
+        padding: 0 40px;
+      }
+
+      /* ── Info section ─────────────────────────────────────────── */
+
+      .swagger-ui .info {
+        margin: 32px 0 24px;
+      }
+      .swagger-ui .info .title {
+        font-family: 'Inter', system-ui, sans-serif;
+        font-size: 28px;
+        font-weight: 600;
+        color: var(--sq-text);
+        letter-spacing: -0.02em;
+      }
+      .swagger-ui .info .title small {
+        background: var(--sq-accent);
+        color: white;
+        padding: 2px 8px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 500;
+        vertical-align: middle;
+        margin-left: 8px;
+      }
+      .swagger-ui .info .description,
+      .swagger-ui .info .description p,
+      .swagger-ui .info .description li {
+        font-family: 'Inter', system-ui, sans-serif;
+        font-size: 14px;
+        line-height: 1.7;
+        color: var(--sq-text-secondary);
+      }
+      .swagger-ui .info .description h2 {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--sq-text);
+        margin-top: 24px;
+        margin-bottom: 8px;
+        letter-spacing: -0.01em;
+      }
+      .swagger-ui .info .description code {
+        font-family: 'JetBrains Mono', 'Fira Code', monospace;
+        font-size: 13px;
+        background: var(--sq-surface-raised);
+        border: 1px solid var(--sq-border);
+        padding: 1px 6px;
+        border-radius: 4px;
+        color: var(--sq-accent);
+      }
+      .swagger-ui .info .description pre {
+        background: var(--sq-surface-raised);
+        border: 1px solid var(--sq-border);
+        border-radius: 8px;
+        padding: 12px 16px;
+        overflow-x: auto;
+      }
+      .swagger-ui .info .description pre code {
+        background: none;
+        border: none;
+        padding: 0;
+        color: var(--sq-green);
+        font-size: 13px;
+      }
+      .swagger-ui .info .description strong {
+        color: var(--sq-text);
+        font-weight: 600;
+      }
+
+      /* Markdown tables in description */
+      .swagger-ui .info .description table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 12px 0;
+        font-size: 13px;
+      }
+      .swagger-ui .info .description table th {
+        background: var(--sq-surface-raised);
+        color: var(--sq-text);
+        font-weight: 600;
+        padding: 8px 12px;
+        text-align: left;
+        border: 1px solid var(--sq-border-strong);
+      }
+      .swagger-ui .info .description table td {
+        padding: 8px 12px;
+        border: 1px solid var(--sq-border);
+        color: var(--sq-text-secondary);
+      }
+      .swagger-ui .info .description table td code {
+        font-size: 12px;
+      }
+
+      /* ── Tag groups ───────────────────────────────────────────── */
+
+      .swagger-ui .opblock-tag-section {
+        margin-bottom: 8px;
+      }
+      .swagger-ui .opblock-tag {
+        font-family: 'Inter', system-ui, sans-serif;
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--sq-text) !important;
+        border-bottom: 1px solid var(--sq-border);
+        padding: 16px 0;
+        letter-spacing: -0.01em;
+      }
+      .swagger-ui .opblock-tag a,
+      .swagger-ui .opblock-tag span,
+      .swagger-ui .opblock-tag h3,
+      .swagger-ui .opblock-tag h3 a,
+      .swagger-ui .opblock-tag h3 span {
+        color: var(--sq-text) !important;
+      }
+      .swagger-ui .opblock-tag:hover {
+        background: transparent;
+      }
+      .swagger-ui .opblock-tag small,
+      .swagger-ui .opblock-tag small a {
+        font-size: 13px;
+        font-weight: 400;
+        color: var(--sq-text-muted) !important;
+        padding: 0;
+      }
+      .swagger-ui .opblock-tag svg { fill: var(--sq-text-muted); }
+
+      /* ── Operation blocks ─────────────────────────────────────── */
+
+      .swagger-ui .opblock {
+        border-radius: 10px;
+        border: 1px solid var(--sq-border);
+        margin-bottom: 8px;
+        background: var(--sq-surface);
+        box-shadow: none;
+      }
+      .swagger-ui .opblock:hover {
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      }
+
+      .swagger-ui .opblock .opblock-summary {
+        border: none;
+        padding: 12px 16px;
+      }
+      .swagger-ui .opblock .opblock-summary-method {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 4px 10px;
+        border-radius: 6px;
+        min-width: 56px;
+        text-align: center;
+      }
+      .swagger-ui .opblock .opblock-summary-path {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 13px;
+        color: var(--sq-text);
+      }
+      .swagger-ui .opblock .opblock-summary-path__deprecated {
+        color: var(--sq-text-muted);
+      }
+      .swagger-ui .opblock .opblock-summary-description {
+        font-family: 'Inter', system-ui, sans-serif;
+        font-size: 13px;
+        color: var(--sq-text-muted);
+      }
+
+      /* GET */
+      .swagger-ui .opblock.opblock-get {
+        background: var(--sq-surface);
+        border-color: var(--sq-green-border);
+      }
+      .swagger-ui .opblock.opblock-get .opblock-summary-method {
+        background: var(--sq-green);
+      }
+      .swagger-ui .opblock.opblock-get .opblock-summary {
+        border-color: transparent;
+      }
+
+      /* POST */
+      .swagger-ui .opblock.opblock-post {
+        background: var(--sq-surface);
+        border-color: rgba(59, 130, 246, 0.25);
+      }
+      .swagger-ui .opblock.opblock-post .opblock-summary-method {
+        background: var(--sq-accent);
+      }
+
+      /* ── Operation body (expanded) ────────────────────────────── */
+
+      .swagger-ui .opblock-body {
+        background: var(--sq-surface);
+      }
+      .swagger-ui .opblock-body pre,
+      .swagger-ui .opblock-body pre.microlight {
+        background: var(--sq-surface-raised) !important;
+        border: 1px solid var(--sq-border);
+        border-radius: 8px;
+        padding: 12px 16px;
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        color: var(--sq-text);
+        hyphens: none;
+        word-break: break-all;
+        white-space: pre-wrap;
+      }
+
+      .swagger-ui .opblock-description-wrapper,
+      .swagger-ui .opblock-external-docs-wrapper {
+        padding: 12px 20px;
+      }
+      .swagger-ui .opblock-description-wrapper p,
+      .swagger-ui .opblock-description-wrapper h4 {
+        color: var(--sq-text-secondary);
+        font-family: 'Inter', system-ui, sans-serif;
+        font-size: 13px;
+      }
+
+      /* ── Parameters ───────────────────────────────────────────── */
+
+      .swagger-ui .parameters-col_name {
+        color: var(--sq-text);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 13px;
+      }
+      .swagger-ui .parameters-col_description {
+        color: var(--sq-text-secondary);
+        font-size: 13px;
+      }
+      .swagger-ui .parameters-col_description input,
+      .swagger-ui .parameters-col_description select,
+      .swagger-ui .parameters-col_description textarea {
+        background: var(--sq-surface-raised);
+        border: 1px solid var(--sq-border-strong);
+        border-radius: 6px;
+        color: var(--sq-text);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 12px;
+        padding: 6px 10px;
+      }
+      .swagger-ui .parameters-col_description input:focus,
+      .swagger-ui .parameters-col_description select:focus,
+      .swagger-ui .parameters-col_description textarea:focus {
+        border-color: var(--sq-accent);
+        outline: none;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+      }
+      .swagger-ui .parameter__name.required::after {
+        color: var(--sq-red);
+      }
+      .swagger-ui .parameter__name.required span {
+        color: var(--sq-red);
+      }
+
+      .swagger-ui table thead tr th,
+      .swagger-ui table thead tr td {
+        color: var(--sq-text-muted);
+        border-bottom: 1px solid var(--sq-border);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 10px 0;
+      }
+      .swagger-ui table tbody tr td {
+        color: var(--sq-text-secondary);
+        border-bottom: 1px solid var(--sq-border);
+        padding: 10px 0;
+      }
+
+      /* ── Responses ────────────────────────────────────────────── */
+
+      .swagger-ui .responses-inner h4,
+      .swagger-ui .responses-inner h5,
+      .swagger-ui .response-col_status {
+        color: var(--sq-text);
+        font-size: 13px;
+      }
+      .swagger-ui .response-col_description {
+        color: var(--sq-text-secondary);
+        font-size: 13px;
+      }
+      .swagger-ui .response-col_links {
+        color: var(--sq-text-muted);
+      }
+
+      .swagger-ui .responses-table .response-col_status {
+        font-family: 'JetBrains Mono', monospace;
+        color: var(--sq-green);
+      }
+
+      /* ── Section headers (Parameters / Responses) ────────────── */
+
+      .swagger-ui .opblock-section-header {
+        background: var(--sq-surface-raised);
+        border-bottom: 1px solid var(--sq-border);
+        box-shadow: none;
+      }
+      .swagger-ui .opblock-section-header h4,
+      .swagger-ui .opblock-section-header label {
+        color: var(--sq-text);
+        font-family: 'Inter', system-ui, sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+      }
+      .swagger-ui .opblock-section-header .tab-header .tab-item.active h4 span {
+        color: var(--sq-text);
+      }
+      .swagger-ui .opblock-section-header .tab-header .tab-item h4 span {
+        color: var(--sq-text-muted);
+      }
+      .swagger-ui .try-out__btn {
+        color: var(--sq-text-secondary);
+        border-color: var(--sq-border-strong);
+      }
+      .swagger-ui .try-out__btn:hover {
+        color: var(--sq-text);
+        border-color: var(--sq-accent);
+      }
+
+      /* ── Models / Schemas ─────────────────────────────────────── */
+
+      .swagger-ui section.models {
+        border: 1px solid var(--sq-border);
+        border-radius: 10px;
+        background: var(--sq-surface);
+      }
+      .swagger-ui section.models h4 {
+        color: var(--sq-text);
+        font-size: 16px;
+        font-weight: 600;
+      }
+      .swagger-ui section.models .model-container {
+        background: var(--sq-surface);
+        border-radius: 0;
+      }
+      .swagger-ui .model-title {
+        font-family: 'JetBrains Mono', monospace;
+        color: var(--sq-text);
+        font-size: 13px;
+      }
+      .swagger-ui .model {
+        color: var(--sq-text-secondary);
+        font-size: 13px;
+      }
+      .swagger-ui .model .property {
+        color: var(--sq-text);
+      }
+      .swagger-ui .model .property.primitive {
+        color: var(--sq-accent);
+      }
+      .swagger-ui span.model-toggle::after {
+        filter: invert(0.7);
+      }
+
+      /* ── Buttons ──────────────────────────────────────────────── */
+
+      .swagger-ui .btn {
+        font-family: 'Inter', system-ui, sans-serif;
+        font-size: 13px;
+        font-weight: 500;
+        border-radius: 6px;
+        box-shadow: none;
+      }
+      .swagger-ui .btn.execute {
+        background: var(--sq-accent);
+        border-color: var(--sq-accent);
+        color: white;
+      }
+      .swagger-ui .btn.execute:hover {
+        background: var(--sq-accent-hover);
+      }
+      .swagger-ui .btn.cancel {
+        font-size: 13px;
+        border-color: var(--sq-border-strong);
+        color: var(--sq-text-secondary);
+        background: transparent;
+      }
+      .swagger-ui .btn.authorize {
+        border-color: var(--sq-green);
+        color: var(--sq-green);
+      }
+      .swagger-ui .btn.authorize svg { fill: var(--sq-green); }
+
+      /* ── Auth dialog ──────────────────────────────────────────── */
+
+      .swagger-ui .dialog-ux .modal-ux {
+        background: var(--sq-surface);
+        border: 1px solid var(--sq-border-strong);
+        border-radius: 12px;
+        box-shadow: 0 16px 48px rgba(0,0,0,0.5);
+      }
+      .swagger-ui .dialog-ux .modal-ux-header {
+        border-bottom: 1px solid var(--sq-border);
+      }
+      .swagger-ui .dialog-ux .modal-ux-header h3 {
+        color: var(--sq-text);
+        font-family: 'Inter', system-ui, sans-serif;
+      }
+      .swagger-ui .dialog-ux .modal-ux-content p,
+      .swagger-ui .dialog-ux .modal-ux-content label {
+        color: var(--sq-text-secondary);
+      }
+      .swagger-ui .dialog-ux .modal-ux-content input {
+        background: var(--sq-surface-raised);
+        border: 1px solid var(--sq-border-strong);
+        border-radius: 6px;
+        color: var(--sq-text);
+        padding: 8px 12px;
+      }
+      .swagger-ui .dialog-ux .modal-ux-content input:focus {
+        border-color: var(--sq-accent);
+        outline: none;
+      }
+      .swagger-ui .dialog-ux .backdrop-ux {
+        background: rgba(0,0,0,0.6);
+      }
+
+      /* ── Global text color overrides ──────────────────────────── */
+
+      .swagger-ui,
+      .swagger-ui .markdown p,
+      .swagger-ui .markdown li,
+      .swagger-ui .renderedMarkdown p {
+        color: var(--sq-text-secondary);
+      }
+
+      .swagger-ui a.nostyle { color: var(--sq-text); }
+      .swagger-ui a.nostyle:hover { color: var(--sq-accent); }
+
+      .swagger-ui .opblock-tag a { color: inherit; }
+      .swagger-ui .opblock-tag a:hover { color: var(--sq-accent); }
+
+      /* Lock icon */
+      .swagger-ui .authorization__btn svg { fill: var(--sq-text-muted); }
+      .swagger-ui .authorization__btn.locked svg { fill: var(--sq-green); }
+
+      /* Try-it-out select */
+      .swagger-ui select {
+        background: var(--sq-surface-raised);
+        border: 1px solid var(--sq-border-strong);
+        border-radius: 6px;
+        color: var(--sq-text);
+        font-size: 13px;
+      }
+
+      /* Response content type bar */
+      .swagger-ui .response-controls,
+      .swagger-ui .responses-header {
+        border-bottom: 1px solid var(--sq-border);
+      }
+
+      /* Loading */
+      .swagger-ui .loading-container .loading::after {
+        color: var(--sq-text-muted);
+      }
+
+      /* Tabs inside responses */
+      .swagger-ui .tab li {
+        color: var(--sq-text-muted);
+        font-size: 12px;
+      }
+      .swagger-ui .tab li.active {
+        color: var(--sq-text);
+      }
+      .swagger-ui .tab li button.tablinks {
+        color: inherit;
+        background: none;
+      }
+
+      /* Expand/collapse arrow */
+      .swagger-ui .expand-operation svg {
+        fill: var(--sq-text-muted);
+      }
+
+      /* Scrollbar */
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.12);
+        border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.2);
+      }
+
+      /* Hide the Swagger "Schemas" label when collapsed and the footer */
+      .swagger-ui .info hgroup.main a { color: var(--sq-accent); }
+
+      /* Scheme container (http/https selector) */
+      .swagger-ui .scheme-container {
+        background: var(--sq-surface);
+        border-bottom: 1px solid var(--sq-border);
+        box-shadow: none;
+        padding: 12px 0;
+      }
+
+      /* Server URL display */
+      .swagger-ui .servers > label {
+        color: var(--sq-text-secondary);
+        font-size: 13px;
+      }
+      .swagger-ui .servers > label select {
+        margin: 0 8px;
+      }
+
+      /* ── Nuclear dark-mode overrides ─────────────────────────── */
+      /* Swagger UI's default CSS bakes in white/light backgrounds
+         on many elements. Override them all in one sweep. */
+
+      .swagger-ui .opblock-tag-section,
+      .swagger-ui .opblock-tag-section h3,
+      .swagger-ui .information-container,
+      .swagger-ui .scheme-container,
+      .swagger-ui .opblock-body,
+      .swagger-ui .opblock-section-header,
+      .swagger-ui .responses-wrapper,
+      .swagger-ui .response-col_description__inner,
+      .swagger-ui .model-box,
+      .swagger-ui section.models,
+      .swagger-ui section.models .model-container,
+      .swagger-ui .microlight,
+      .swagger-ui .highlight-code {
+        background: transparent !important;
+      }
+
+      /* Force surface color on elements that need a solid bg */
+      .swagger-ui .opblock-section-header {
+        background: var(--sq-surface-raised) !important;
+      }
+      .swagger-ui .opblock .opblock-section-header {
+        background: var(--sq-surface-raised) !important;
+      }
+
+      .swagger-ui section.models {
+        background: var(--sq-surface) !important;
+      }
+      .swagger-ui section.models .model-container {
+        background: var(--sq-surface) !important;
+      }
+
+      .swagger-ui .opblock-body pre.microlight,
+      .swagger-ui .opblock-body pre {
+        background: var(--sq-surface-raised) !important;
+      }
+
+      .swagger-ui .scheme-container {
+        background: var(--sq-surface) !important;
+      }
+
+      /* Category/tag rows — Swagger adds inline white bg on hover */
+      .swagger-ui .opblock-tag {
+        background: transparent !important;
+        border-bottom: 1px solid var(--sq-border) !important;
+      }
+
+      /* Example value / schema tab bar */
+      .swagger-ui .tab li {
+        background: transparent !important;
+      }
+      .swagger-ui .tab li:first-of-type::after {
+        background: var(--sq-border) !important;
+      }
+
+      /* Response row backgrounds */
+      .swagger-ui .responses-table tbody tr td {
+        background: transparent !important;
+      }
+
+      /* The Swagger-generated markdown wrapper */
+      .swagger-ui .renderedMarkdown p,
+      .swagger-ui .renderedMarkdown {
+        color: var(--sq-text-secondary);
+      }
+
+      /* Description "No description" text */
+      .swagger-ui .response-col_description .renderedMarkdown p {
+        color: var(--sq-text-muted);
+      }
+
+    </style>
+  </head>
+  <body>
+    <div class="sq-header">
+      <div class="sq-header-logo">S</div>
+      <div class="sq-header-text">
+        <div class="sq-header-title">SequoIA API</div>
+        <div class="sq-header-subtitle">DAS Traffic Detection Platform</div>
+      </div>
+    </div>
+
+    <!-- Getting Started guide — collapsible, persisted via localStorage -->
+    <div id="sq-guide" style="max-width: 1100px; margin: 0 auto; padding: 24px 40px 0;">
+      <div style="border: 1px solid var(--sq-border-strong); border-radius: 12px; background: var(--sq-surface); overflow: hidden;">
+        <button id="sq-guide-toggle" onclick="toggleGuide()" style="width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; background: none; border: none; cursor: pointer; color: var(--sq-text);">
+          <span style="font-size: 16px; font-weight: 600; letter-spacing: -0.01em;">Getting Started</span>
+          <svg id="sq-guide-chevron" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="transition: transform 0.2s;">
+            <path d="M4 6l4 4 4-4"/>
+          </svg>
+        </button>
+        <div id="sq-guide-body" style="padding: 0 20px 20px; display: block;">
+          <!-- Three-step cards -->
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px;">
+            <div style="background: var(--sq-surface-raised); border: 1px solid var(--sq-border); border-radius: 8px; padding: 16px;">
+              <div style="font-size: 24px; margin-bottom: 8px;">1</div>
+              <div style="font-size: 13px; font-weight: 600; color: var(--sq-text); margin-bottom: 4px;">Get an API Key</div>
+              <div style="font-size: 12px; color: var(--sq-text-muted); line-height: 1.5;">Open the SequoIA app, click your avatar in the top-right, then <strong style="color: var(--sq-text-secondary);">API Keys</strong>.</div>
+            </div>
+            <div style="background: var(--sq-surface-raised); border: 1px solid var(--sq-border); border-radius: 8px; padding: 16px;">
+              <div style="font-size: 24px; margin-bottom: 8px;">2</div>
+              <div style="font-size: 13px; font-weight: 600; color: var(--sq-text); margin-bottom: 4px;">Make a Request</div>
+              <div style="font-size: 12px; color: var(--sq-text-muted); line-height: 1.5;">Pass your key in the <code style="font-family: 'JetBrains Mono', monospace; font-size: 11px; background: var(--sq-base); padding: 1px 4px; border-radius: 3px; color: var(--sq-accent);">X-API-Key</code> header.</div>
+            </div>
+            <div style="background: var(--sq-surface-raised); border: 1px solid var(--sq-border); border-radius: 8px; padding: 16px;">
+              <div style="font-size: 24px; margin-bottom: 8px;">3</div>
+              <div style="font-size: 13px; font-weight: 600; color: var(--sq-text); margin-bottom: 4px;">Paginate Results</div>
+              <div style="font-size: 12px; color: var(--sq-text-muted); line-height: 1.5;">Pass <code style="font-family: 'JetBrains Mono', monospace; font-size: 11px; background: var(--sq-base); padding: 1px 4px; border-radius: 3px; color: var(--sq-accent);">next_cursor</code> from each response until <code style="font-family: 'JetBrains Mono', monospace; font-size: 11px; background: var(--sq-base); padding: 1px 4px; border-radius: 3px; color: var(--sq-accent);">has_more</code> is false.</div>
+            </div>
+          </div>
+
+          <!-- Code examples with tabs -->
+          <div style="margin-bottom: 16px;">
+            <div style="font-size: 13px; font-weight: 600; color: var(--sq-text); margin-bottom: 8px;">Example Request</div>
+            <div style="display: flex; gap: 0; border-bottom: 1px solid var(--sq-border); margin-bottom: 0;">
+              <button class="sq-tab sq-tab-active" onclick="switchTab(this, 'curl')" style="padding: 6px 14px; font-size: 12px; font-weight: 500; background: none; border: none; border-bottom: 2px solid var(--sq-accent); color: var(--sq-text); cursor: pointer;">curl</button>
+              <button class="sq-tab" onclick="switchTab(this, 'python')" style="padding: 6px 14px; font-size: 12px; font-weight: 500; background: none; border: none; border-bottom: 2px solid transparent; color: var(--sq-text-muted); cursor: pointer;">Python</button>
+              <button class="sq-tab" onclick="switchTab(this, 'javascript')" style="padding: 6px 14px; font-size: 12px; font-weight: 500; background: none; border: none; border-bottom: 2px solid transparent; color: var(--sq-text-muted); cursor: pointer;">JavaScript</button>
+            </div>
+            <pre id="sq-code-curl" style="background: var(--sq-surface-raised); border: 1px solid var(--sq-border); border-top: none; border-radius: 0 0 8px 8px; padding: 12px 16px; margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--sq-green); overflow-x: auto; white-space: pre;">curl -H "X-API-Key: sqk_YOUR_SECRET" \
+  "https://your-instance/api/v1/fibers"</pre>
+            <pre id="sq-code-python" style="background: var(--sq-surface-raised); border: 1px solid var(--sq-border); border-top: none; border-radius: 0 0 8px 8px; padding: 12px 16px; margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--sq-green); overflow-x: auto; white-space: pre; display: none;">import requests
+
+headers = {"X-API-Key": "sqk_YOUR_SECRET"}
+resp = requests.get(
+    "https://your-instance/api/v1/fibers",
+    headers=headers,
+)
+fibers = resp.json()["data"]</pre>
+            <pre id="sq-code-javascript" style="background: var(--sq-surface-raised); border: 1px solid var(--sq-border); border-top: none; border-radius: 0 0 8px 8px; padding: 12px 16px; margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--sq-green); overflow-x: auto; white-space: pre; display: none;">const resp = await fetch("/api/v1/fibers", {
+  headers: { "X-API-Key": "sqk_YOUR_SECRET" },
+});
+const { data } = await resp.json();</pre>
+          </div>
+
+          <!-- Data tiers visual -->
+          <div>
+            <div style="font-size: 13px; font-weight: 600; color: var(--sq-text); margin-bottom: 8px;">Data Retention Tiers</div>
+            <div style="display: flex; gap: 8px; align-items: stretch;">
+              <div style="flex: 1; background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.25); border-radius: 6px; padding: 10px; text-align: center;">
+                <div style="font-size: 12px; font-weight: 600; color: var(--sq-green);">Raw</div>
+                <div style="font-size: 11px; color: var(--sq-text-muted);">48h retention</div>
+              </div>
+              <div style="flex: 2; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 6px; padding: 10px; text-align: center;">
+                <div style="font-size: 12px; font-weight: 600; color: var(--sq-accent);">1-minute</div>
+                <div style="font-size: 11px; color: var(--sq-text-muted);">90 days</div>
+              </div>
+              <div style="flex: 3; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 6px; padding: 10px; text-align: center;">
+                <div style="font-size: 12px; font-weight: 600; color: var(--sq-amber);">1-hour</div>
+                <div style="font-size: 11px; color: var(--sq-text-muted);">Forever</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      function toggleGuide() {
+        var body = document.getElementById('sq-guide-body');
+        var chevron = document.getElementById('sq-guide-chevron');
+        var hidden = body.style.display === 'none';
+        body.style.display = hidden ? 'block' : 'none';
+        chevron.style.transform = hidden ? '' : 'rotate(-90deg)';
+        try { localStorage.setItem('sq-guide-visible', hidden ? '1' : '0'); } catch(e) {}
+      }
+      function switchTab(btn, lang) {
+        document.querySelectorAll('.sq-tab').forEach(function(t) {
+          t.style.borderBottomColor = 'transparent';
+          t.style.color = 'var(--sq-text-muted)';
+        });
+        btn.style.borderBottomColor = 'var(--sq-accent)';
+        btn.style.color = 'var(--sq-text)';
+        ['curl','python','javascript'].forEach(function(l) {
+          var el = document.getElementById('sq-code-' + l);
+          if (el) el.style.display = l === lang ? 'block' : 'none';
+        });
+      }
+      // Restore collapsed state
+      try {
+        if (localStorage.getItem('sq-guide-visible') === '0') {
+          document.getElementById('sq-guide-body').style.display = 'none';
+          document.getElementById('sq-guide-chevron').style.transform = 'rotate(-90deg)';
+        }
+      } catch(e) {}
+    </script>
+
+    <div id="swagger-ui"></div>
+    <script src="{{ swagger_ui_bundle }}"></script>
+    <script src="{{ swagger_ui_standalone }}"></script>
+    <script>
+    {% include template_name_js %}
+    </script>
+  </body>
+</html>

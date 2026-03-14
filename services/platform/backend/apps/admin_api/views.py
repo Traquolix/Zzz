@@ -885,6 +885,7 @@ class APIKeyListView(APIView):
                 "prefix": k.key_prefix,
                 "scopes": k.scopes,
                 "createdAt": k.created_at.isoformat(),
+                "requestCount": k.request_count,
                 "lastUsedAt": k.last_used_at.isoformat() if k.last_used_at else None,
                 "expiresAt": k.expires_at.isoformat() if k.expires_at else None,
             }

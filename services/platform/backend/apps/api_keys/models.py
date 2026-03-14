@@ -32,6 +32,7 @@ class APIKey(models.Model):
         related_name="created_api_keys",
     )
     expires_at = models.DateTimeField(null=True, blank=True)
+    request_count = models.PositiveIntegerField(default=0)
     last_used_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
