@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 import { fibers, defaultSpeedThresholds, getFiberColor } from '../data'
 import type { Fiber, ProtoAction, SpeedThresholds } from '../types'
 import { FlowToggle } from './FlowToggle'
-import { ThresholdEditor } from './SectionPanels'
+import { ThresholdEditor } from './ThresholdEditor'
 import type { DataFlow } from '@/context/RealtimeContext'
 
 // ── Settings panel ──────────────────────────────────────────────────────
