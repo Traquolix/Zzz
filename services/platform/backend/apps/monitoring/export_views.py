@@ -11,7 +11,6 @@ Features:
 import csv
 import io
 import logging
-from datetime import timedelta
 
 from django.http import JsonResponse, StreamingHttpResponse
 from django.utils.dateparse import parse_datetime
@@ -20,21 +19,13 @@ from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
-from apps.fibers.utils import get_org_fiber_ids
+from apps.monitoring.detection_utils import check_fiber_access, select_tier
 from apps.monitoring.mixins import FlowAwareMixin
 from apps.shared.clickhouse import get_client
 from apps.shared.exceptions import ClickHouseUnavailableError
 from apps.shared.permissions import IsActiveUser
 
 logger = logging.getLogger("sequoia.export")
-
-# Maximum time ranges per tier
-MAX_HIRES_DAYS = 7
-MAX_AGGREGATE_DAYS = 365
-
-# Tier thresholds
-HIRES_THRESHOLD = timedelta(hours=48)
-MEDIUM_THRESHOLD = timedelta(days=90)
 
 
 class ExportThrottle(UserRateThrottle):
@@ -86,33 +77,18 @@ def _parse_params(request):
     return fiber_id, start, end, fmt, None
 
 
-def _check_fiber_access(user, fiber_id):
-    """Check if user has access to the specified fiber. Returns True/False."""
-    if user.is_superuser:
-        return True
-    fiber_ids = get_org_fiber_ids(user.organization)
-    return fiber_id in fiber_ids
-
-
-def _select_tier(start, end, explicit_tier=None):
-    """Select the appropriate data tier based on time range."""
-    duration = end - start
-
-    if explicit_tier == "hires":
-        if duration > timedelta(days=MAX_HIRES_DAYS):
-            return None, f"Hires tier limited to {MAX_HIRES_DAYS} days"
-        return "hires", None
-
-    if explicit_tier:
-        return explicit_tier, None
-
-    # Auto-select
-    if duration <= HIRES_THRESHOLD:
-        return "hires", None
-    elif duration <= MEDIUM_THRESHOLD:
-        return "1m", None
-    else:
-        return "1h", None
+def _build_direction_clause(request) -> tuple[str, dict]:
+    """Build optional direction filter for export queries."""
+    direction = request.GET.get("direction")
+    if direction is not None:
+        try:
+            direction = int(direction)
+            if direction not in (0, 1):
+                return "", {}
+            return "AND direction = {dir:UInt8}", {"dir": direction}
+        except ValueError:
+            return "", {}
+    return "", {}
 
 
 def _stream_csv(columns, rows):
@@ -151,7 +127,7 @@ class ExportIncidentsView(FlowAwareMixin, APIView):
         if errors:
             return Response({"detail": "; ".join(errors)}, status=400)
 
-        if not _check_fiber_access(request.user, fiber_id):
+        if not check_fiber_access(request.user, fiber_id):
             return Response({"detail": "Access denied for this fiber"}, status=403)
 
         try:
@@ -193,6 +169,7 @@ class ExportDetectionsView(FlowAwareMixin, APIView):
     GET /api/export/detections — export detection data with automatic tier selection.
 
     Live flow only — sim data is ephemeral and not meant for export.
+    Supports optional `direction` query parameter (0 or 1).
     """
 
     permission_classes = [IsActiveUser]
@@ -208,35 +185,38 @@ class ExportDetectionsView(FlowAwareMixin, APIView):
         if errors:
             return Response({"detail": "; ".join(errors)}, status=400)
 
-        if not _check_fiber_access(request.user, fiber_id):
+        if not check_fiber_access(request.user, fiber_id):
             return Response({"detail": "Access denied for this fiber"}, status=403)
 
         explicit_tier = request.GET.get("tier")
-        tier, tier_error = _select_tier(start, end, explicit_tier)
+        tier, tier_error = select_tier(start, end, explicit_tier)
         if tier_error:
             return Response({"detail": tier_error}, status=400)
+
+        dir_clause, dir_params = _build_direction_clause(request)
 
         try:
             client = get_client()
 
             if tier == "hires":
                 result = client.query(
-                    """
+                    f"""
                     SELECT toString(ts) as ts, fiber_id, ch as channel,
                            direction, speed, vehicle_count, n_cars, n_trucks,
                            lng, lat
                     FROM sequoia.detection_hires
-                    WHERE fiber_id = {fid:String}
-                      AND ts >= {start:DateTime64(3)}
-                      AND ts <= {end:DateTime64(3)}
+                    WHERE fiber_id = {{fid:String}}
+                      AND ts >= {{start:DateTime64(3)}}
+                      AND ts <= {{end:DateTime64(3)}}
+                      {dir_clause}
                     ORDER BY ts
                     LIMIT 500000
                     """,
-                    parameters={"fid": fiber_id, "start": start, "end": end},
+                    parameters={"fid": fiber_id, "start": start, "end": end, **dir_params},
                 )
             elif tier == "1m":
                 result = client.query(
-                    """
+                    f"""
                     SELECT toString(ts) as ts, fiber_id, ch as channel,
                            direction,
                            avgMerge(speed_avg_state) as speed_avg,
@@ -245,18 +225,19 @@ class ExportDetectionsView(FlowAwareMixin, APIView):
                            sumMerge(trucks_sum_state) as n_trucks,
                            sumMerge(samples_state) as sample_count
                     FROM sequoia.detection_1m
-                    WHERE fiber_id = {fid:String}
-                      AND ts >= {start:DateTime64(3)}
-                      AND ts <= {end:DateTime64(3)}
+                    WHERE fiber_id = {{fid:String}}
+                      AND ts >= {{start:DateTime64(3)}}
+                      AND ts <= {{end:DateTime64(3)}}
+                      {dir_clause}
                     GROUP BY ts, fiber_id, ch, direction
                     ORDER BY ts
                     LIMIT 500000
                     """,
-                    parameters={"fid": fiber_id, "start": start, "end": end},
+                    parameters={"fid": fiber_id, "start": start, "end": end, **dir_params},
                 )
             else:  # 1h
                 result = client.query(
-                    """
+                    f"""
                     SELECT toString(ts) as ts, fiber_id, ch as channel,
                            direction,
                            avgMerge(speed_avg_state) as speed_avg,
@@ -265,14 +246,15 @@ class ExportDetectionsView(FlowAwareMixin, APIView):
                            sumMerge(trucks_sum_state) as n_trucks,
                            sumMerge(samples_state) as sample_count
                     FROM sequoia.detection_1h
-                    WHERE fiber_id = {fid:String}
-                      AND ts >= {start:DateTime64(3)}
-                      AND ts <= {end:DateTime64(3)}
+                    WHERE fiber_id = {{fid:String}}
+                      AND ts >= {{start:DateTime64(3)}}
+                      AND ts <= {{end:DateTime64(3)}}
+                      {dir_clause}
                     GROUP BY ts, fiber_id, ch, direction
                     ORDER BY ts
                     LIMIT 500000
                     """,
-                    parameters={"fid": fiber_id, "start": start, "end": end},
+                    parameters={"fid": fiber_id, "start": start, "end": end, **dir_params},
                 )
         except ClickHouseUnavailableError:
             return Response({"detail": "Analytics service temporarily unavailable"}, status=503)
@@ -290,3 +272,78 @@ class ExportDetectionsView(FlowAwareMixin, APIView):
         )
         response["Content-Disposition"] = 'attachment; filename="detections.csv"'
         return response
+
+
+class ExportEstimateView(FlowAwareMixin, APIView):
+    """GET /api/export/estimate — estimate row count before downloading."""
+
+    permission_classes = [IsActiveUser]
+    throttle_classes: list[type] = []
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if self._is_sim(request):
+            raise ParseError("Export is not available for simulation data")
+
+    def get(self, request):
+        fiber_id, start, end, _, errors = _parse_params(request)
+        if errors:
+            return Response({"detail": "; ".join(errors)}, status=400)
+
+        if not check_fiber_access(request.user, fiber_id):
+            return Response({"detail": "Access denied for this fiber"}, status=403)
+
+        data_type = request.GET.get("type", "detections")
+        if data_type not in ("detections", "incidents"):
+            return Response({"detail": "type must be 'detections' or 'incidents'"}, status=400)
+
+        dir_clause, dir_params = _build_direction_clause(request)
+
+        try:
+            client = get_client()
+
+            if data_type == "incidents":
+                result = client.query(
+                    """
+                    SELECT count() as cnt
+                    FROM sequoia.fiber_incidents
+                    WHERE fiber_id = {fid:String}
+                      AND detected_at >= {start:DateTime64(3)}
+                      AND detected_at <= {end:DateTime64(3)}
+                    """,
+                    parameters={"fid": fiber_id, "start": start, "end": end},
+                )
+                tier = None
+            else:
+                explicit_tier = request.GET.get("tier")
+                tier, tier_error = select_tier(start, end, explicit_tier)
+                if tier_error:
+                    return Response({"detail": tier_error}, status=400)
+
+                if tier == "hires":
+                    table = "detection_hires"
+                else:
+                    table = f"detection_{tier}"
+
+                result = client.query(
+                    f"""
+                    SELECT count() as cnt
+                    FROM sequoia.{table}
+                    WHERE fiber_id = {{fid:String}}
+                      AND ts >= {{start:DateTime64(3)}}
+                      AND ts <= {{end:DateTime64(3)}}
+                      {dir_clause}
+                    """,
+                    parameters={
+                        "fid": fiber_id,
+                        "start": start,
+                        "end": end,
+                        **dir_params,
+                    },
+                )
+
+            count = result.result_rows[0][0] if result.result_rows else 0
+            return Response({"estimatedRows": count, "tier": tier})
+
+        except ClickHouseUnavailableError:
+            return Response({"detail": "Analytics service temporarily unavailable"}, status=503)
