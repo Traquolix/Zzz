@@ -8,9 +8,11 @@ Rate limit: 300 requests/hour per API key.
 import base64
 import json
 import logging
+import random
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+import numpy as np
 from django.utils.dateparse import parse_datetime
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.permissions import BasePermission
@@ -32,8 +34,9 @@ from apps.monitoring.detection_serializers import (
     SectionHistoryResponseSerializer,
     SectionListResponseSerializer,
 )
-from apps.monitoring.detection_utils import check_fiber_access, select_tier
+from apps.monitoring.detection_utils import TIER_TABLES, check_fiber_access, select_tier
 from apps.monitoring.models import Infrastructure, Section
+from apps.monitoring.shm_intelligence import compute_baseline, detect_frequency_shift
 from apps.shared.clickhouse import clickhouse_fallback, query, query_scalar
 
 logger = logging.getLogger(__name__)
@@ -362,7 +365,7 @@ class DetectionListView(APIView):
         if tier == "hires":
             sql, query_params = _build_hires_query(params)
         else:
-            table = f"detection_{tier}"
+            table = TIER_TABLES[tier]
             sql, query_params = _build_aggregate_query(params, table)
 
         rows = query(sql, parameters=query_params)
@@ -490,7 +493,7 @@ class DetectionSummaryView(APIView):
                   {dir_clause}
             """
         else:
-            table = f"detection_{tier}"
+            table = TIER_TABLES[tier]
             sql = f"""
                 SELECT
                     sum(vehicle_count) as total_vehicles,
@@ -953,7 +956,7 @@ class SectionHistoryAPIView(APIView):
                 ORDER BY toStartOfSecond(ts)
             """
         else:
-            table = f"detection_{tier}"
+            table = TIER_TABLES[tier]
             sql = f"""
                 SELECT
                     toString(ts) AS timestamp,
@@ -1128,12 +1131,6 @@ class InfrastructureStatusAPIView(APIView):
         ),
     )
     def get(self, request, infra_id):
-        import random
-
-        import numpy as np
-
-        from apps.monitoring.shm_intelligence import compute_baseline, detect_frequency_shift
-
         org = request.user.organization
         if not Infrastructure.objects.filter(id=infra_id, organization=org).exists():
             return Response({"detail": "Infrastructure not found"}, status=404)

@@ -17,6 +17,13 @@ MAX_AGGREGATE_DAYS = 365
 HIRES_THRESHOLD = timedelta(hours=48)
 MEDIUM_THRESHOLD = timedelta(days=90)
 
+# Tier → ClickHouse table name (whitelist prevents SQL injection via f-string)
+TIER_TABLES: dict[str, str] = {
+    "hires": "detection_hires",
+    "1m": "detection_1m",
+    "1h": "detection_1h",
+}
+
 
 def check_fiber_access(user, fiber_id: str) -> bool:
     """Check if user has access to the specified fiber. Returns True/False."""

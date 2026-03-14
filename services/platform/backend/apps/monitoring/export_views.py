@@ -19,13 +19,12 @@ from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
-from apps.monitoring.detection_utils import check_fiber_access, select_tier
+from apps.monitoring.detection_utils import TIER_TABLES, check_fiber_access, select_tier
 from apps.monitoring.mixins import FlowAwareMixin
-from apps.shared.clickhouse import get_client, query_scalar
-from apps.shared.exceptions import ClickHouseUnavailableError
+from apps.shared.clickhouse import clickhouse_fallback, query, query_scalar
 from apps.shared.permissions import IsActiveUser
 
-logger = logging.getLogger("sequoia.export")
+logger = logging.getLogger(__name__)
 
 
 class ExportThrottle(UserRateThrottle):
@@ -143,6 +142,7 @@ class ExportIncidentsView(FlowAwareMixin, APIView):
         if self._is_sim(request):
             raise ParseError("Export is not available for simulation data")
 
+    @clickhouse_fallback()
     def get(self, request):
         fiber_id, start, end, fmt, errors = _parse_params(request)
         if errors:
@@ -154,42 +154,37 @@ class ExportIncidentsView(FlowAwareMixin, APIView):
         dir_clause, dir_params = _build_direction_clause(request)
         ch_clause, ch_params = _build_channel_clause(request, column="channel_start")
 
-        try:
-            client = get_client()
-            result = client.query(
-                f"""
-                SELECT incident_id, fiber_id, type, severity, direction,
-                       toString(detected_at) as detected_at,
-                       channel_start, channel_end, speed_kmh, duration_s
-                FROM sequoia.fiber_incidents
-                WHERE fiber_id = {{fid:String}}
-                  AND detected_at >= {{start:DateTime64(3)}}
-                  AND detected_at <= {{end:DateTime64(3)}}
-                  {dir_clause}
-                  {ch_clause}
-                ORDER BY detected_at DESC
-                LIMIT 100000
-                """,
-                parameters={
-                    "fid": fiber_id,
-                    "start": start,
-                    "end": end,
-                    **dir_params,
-                    **ch_params,
-                },
-            )
-        except ClickHouseUnavailableError:
-            return Response({"detail": "Analytics service temporarily unavailable"}, status=503)
-
-        columns = result.column_names
-        rows = result.result_rows
+        rows = query(
+            f"""
+            SELECT incident_id, fiber_id, type, severity, direction,
+                   toString(detected_at) as detected_at,
+                   channel_start, channel_end, speed_kmh, duration_s
+            FROM sequoia.fiber_incidents
+            WHERE fiber_id = {{fid:String}}
+              AND detected_at >= {{start:DateTime64(3)}}
+              AND detected_at <= {{end:DateTime64(3)}}
+              {dir_clause}
+              {ch_clause}
+            ORDER BY detected_at DESC
+            LIMIT 100000
+            """,
+            parameters={
+                "fid": fiber_id,
+                "start": start,
+                "end": end,
+                **dir_params,
+                **ch_params,
+            },
+        )
 
         if fmt == "json":
-            data = [dict(zip(columns, row)) for row in rows]
-            return JsonResponse(data, safe=False)
+            return JsonResponse(rows, safe=False)
+
+        columns = list(rows[0].keys()) if rows else []
+        csv_rows = [list(row.values()) for row in rows]
 
         response = StreamingHttpResponse(
-            _stream_csv(columns, rows),
+            _stream_csv(columns, csv_rows),
             content_type="text/csv",
         )
         response["Content-Disposition"] = 'attachment; filename="incidents.csv"'
@@ -212,6 +207,7 @@ class ExportDetectionsView(FlowAwareMixin, APIView):
         if self._is_sim(request):
             raise ParseError("Export is not available for simulation data")
 
+    @clickhouse_fallback()
     def get(self, request):
         fiber_id, start, end, fmt, errors = _parse_params(request)
         if errors:
@@ -228,100 +224,63 @@ class ExportDetectionsView(FlowAwareMixin, APIView):
         dir_clause, dir_params = _build_direction_clause(request)
         ch_clause, ch_params = _build_channel_clause(request)
 
-        try:
-            client = get_client()
+        base_params = {
+            "fid": fiber_id,
+            "start": start,
+            "end": end,
+            **dir_params,
+            **ch_params,
+        }
 
-            if tier == "hires":
-                result = client.query(
-                    f"""
-                    SELECT toString(ts) as ts, fiber_id, ch as channel,
-                           direction, speed, vehicle_count, n_cars, n_trucks,
-                           lng, lat
-                    FROM sequoia.detection_hires
-                    WHERE fiber_id = {{fid:String}}
-                      AND ts >= {{start:DateTime64(3)}}
-                      AND ts <= {{end:DateTime64(3)}}
-                      {dir_clause}
-                      {ch_clause}
-                    ORDER BY ts
-                    LIMIT 500000
-                    """,
-                    parameters={
-                        "fid": fiber_id,
-                        "start": start,
-                        "end": end,
-                        **dir_params,
-                        **ch_params,
-                    },
-                )
-            elif tier == "1m":
-                result = client.query(
-                    f"""
-                    SELECT toString(ts) as ts, fiber_id, ch as channel,
-                           direction,
-                           avgMerge(speed_avg_state) as speed_avg,
-                           sumMerge(count_sum_state) as vehicle_count,
-                           sumMerge(cars_sum_state) as n_cars,
-                           sumMerge(trucks_sum_state) as n_trucks,
-                           sumMerge(samples_state) as sample_count
-                    FROM sequoia.detection_1m
-                    WHERE fiber_id = {{fid:String}}
-                      AND ts >= {{start:DateTime64(3)}}
-                      AND ts <= {{end:DateTime64(3)}}
-                      {dir_clause}
-                      {ch_clause}
-                    GROUP BY ts, fiber_id, ch, direction
-                    ORDER BY ts
-                    LIMIT 500000
-                    """,
-                    parameters={
-                        "fid": fiber_id,
-                        "start": start,
-                        "end": end,
-                        **dir_params,
-                        **ch_params,
-                    },
-                )
-            else:  # 1h
-                result = client.query(
-                    f"""
-                    SELECT toString(ts) as ts, fiber_id, ch as channel,
-                           direction,
-                           avgMerge(speed_avg_state) as speed_avg,
-                           sumMerge(count_sum_state) as vehicle_count,
-                           sumMerge(cars_sum_state) as n_cars,
-                           sumMerge(trucks_sum_state) as n_trucks,
-                           sumMerge(samples_state) as sample_count
-                    FROM sequoia.detection_1h
-                    WHERE fiber_id = {{fid:String}}
-                      AND ts >= {{start:DateTime64(3)}}
-                      AND ts <= {{end:DateTime64(3)}}
-                      {dir_clause}
-                      {ch_clause}
-                    GROUP BY ts, fiber_id, ch, direction
-                    ORDER BY ts
-                    LIMIT 500000
-                    """,
-                    parameters={
-                        "fid": fiber_id,
-                        "start": start,
-                        "end": end,
-                        **dir_params,
-                        **ch_params,
-                    },
-                )
-        except ClickHouseUnavailableError:
-            return Response({"detail": "Analytics service temporarily unavailable"}, status=503)
-
-        columns = result.column_names
-        rows = result.result_rows
+        if tier == "hires":
+            rows = query(
+                f"""
+                SELECT toString(ts) as ts, fiber_id, ch as channel,
+                       direction, speed, vehicle_count, n_cars, n_trucks,
+                       lng, lat
+                FROM sequoia.detection_hires
+                WHERE fiber_id = {{fid:String}}
+                  AND ts >= {{start:DateTime64(3)}}
+                  AND ts <= {{end:DateTime64(3)}}
+                  {dir_clause}
+                  {ch_clause}
+                ORDER BY ts
+                LIMIT 500000
+                """,
+                parameters=base_params,
+            )
+        else:
+            table = TIER_TABLES[tier]
+            rows = query(
+                f"""
+                SELECT toString(ts) as ts, fiber_id, ch as channel,
+                       direction,
+                       avgMerge(speed_avg_state) as speed_avg,
+                       sumMerge(count_sum_state) as vehicle_count,
+                       sumMerge(cars_sum_state) as n_cars,
+                       sumMerge(trucks_sum_state) as n_trucks,
+                       sumMerge(samples_state) as sample_count
+                FROM sequoia.{table}
+                WHERE fiber_id = {{fid:String}}
+                  AND ts >= {{start:DateTime64(3)}}
+                  AND ts <= {{end:DateTime64(3)}}
+                  {dir_clause}
+                  {ch_clause}
+                GROUP BY ts, fiber_id, ch, direction
+                ORDER BY ts
+                LIMIT 500000
+                """,
+                parameters=base_params,
+            )
 
         if fmt == "json":
-            data = [dict(zip(columns, row)) for row in rows]
-            return JsonResponse(data, safe=False)
+            return JsonResponse(rows, safe=False)
+
+        columns = list(rows[0].keys()) if rows else []
+        csv_rows = [list(row.values()) for row in rows]
 
         response = StreamingHttpResponse(
-            _stream_csv(columns, rows),
+            _stream_csv(columns, csv_rows),
             content_type="text/csv",
         )
         response["Content-Disposition"] = 'attachment; filename="detections.csv"'
@@ -334,6 +293,7 @@ class ExportEstimateView(APIView):
     permission_classes = [IsActiveUser]
     throttle_classes = [ExportThrottle]
 
+    @clickhouse_fallback()
     def get(self, request):
         fiber_id, start, end, _, errors = _parse_params(request)
         if errors:
@@ -349,62 +309,53 @@ class ExportEstimateView(APIView):
         dir_clause, dir_params = _build_direction_clause(request)
         ch_clause, ch_params = _build_channel_clause(request)
 
-        try:
-            if data_type == "incidents":
-                # Incidents use channel_start/channel_end columns, not ch
-                inc_ch_clause, inc_ch_params = _build_channel_clause(
-                    request, column="channel_start"
-                )
-                count = query_scalar(
-                    f"""
-                    SELECT count() as cnt
-                    FROM sequoia.fiber_incidents
-                    WHERE fiber_id = {{fid:String}}
-                      AND detected_at >= {{start:DateTime64(3)}}
-                      AND detected_at <= {{end:DateTime64(3)}}
-                      {dir_clause}
-                      {inc_ch_clause}
-                    """,
-                    parameters={
-                        "fid": fiber_id,
-                        "start": start,
-                        "end": end,
-                        **dir_params,
-                        **inc_ch_params,
-                    },
-                )
-                tier = None
-            else:
-                explicit_tier = request.GET.get("tier")
-                tier, tier_error = select_tier(start, end, explicit_tier)
-                if tier_error:
-                    return Response({"detail": tier_error}, status=400)
+        if data_type == "incidents":
+            # Incidents use channel_start/channel_end columns, not ch
+            inc_ch_clause, inc_ch_params = _build_channel_clause(request, column="channel_start")
+            count = query_scalar(
+                f"""
+                SELECT count() as cnt
+                FROM sequoia.fiber_incidents
+                WHERE fiber_id = {{fid:String}}
+                  AND detected_at >= {{start:DateTime64(3)}}
+                  AND detected_at <= {{end:DateTime64(3)}}
+                  {dir_clause}
+                  {inc_ch_clause}
+                """,
+                parameters={
+                    "fid": fiber_id,
+                    "start": start,
+                    "end": end,
+                    **dir_params,
+                    **inc_ch_params,
+                },
+            )
+            tier = None
+        else:
+            explicit_tier = request.GET.get("tier")
+            tier, tier_error = select_tier(start, end, explicit_tier)
+            if tier_error:
+                return Response({"detail": tier_error}, status=400)
 
-                if tier == "hires":
-                    table = "detection_hires"
-                else:
-                    table = f"detection_{tier}"
+            table = TIER_TABLES[tier]
 
-                count = query_scalar(
-                    f"""
-                    SELECT count() as cnt
-                    FROM sequoia.{table}
-                    WHERE fiber_id = {{fid:String}}
-                      AND ts >= {{start:DateTime64(3)}}
-                      AND ts <= {{end:DateTime64(3)}}
-                      {dir_clause}
-                      {ch_clause}
-                    """,
-                    parameters={
-                        "fid": fiber_id,
-                        "start": start,
-                        "end": end,
-                        **dir_params,
-                        **ch_params,
-                    },
-                )
+            count = query_scalar(
+                f"""
+                SELECT count() as cnt
+                FROM sequoia.{table}
+                WHERE fiber_id = {{fid:String}}
+                  AND ts >= {{start:DateTime64(3)}}
+                  AND ts <= {{end:DateTime64(3)}}
+                  {dir_clause}
+                  {ch_clause}
+                """,
+                parameters={
+                    "fid": fiber_id,
+                    "start": start,
+                    "end": end,
+                    **dir_params,
+                    **ch_params,
+                },
+            )
 
-            return Response({"estimatedRows": count or 0, "tier": tier})
-
-        except ClickHouseUnavailableError:
-            return Response({"detail": "Analytics service temporarily unavailable"}, status=503)
+        return Response({"estimatedRows": count or 0, "tier": tier})
