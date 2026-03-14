@@ -115,7 +115,7 @@ export function StatusBar({ connected, sectionCount, incidentCount, lastDetectio
   const expanded = showTooltip && shiftHeld
 
   return (
-    <div className="absolute top-4 left-4 z-10 flex items-center gap-2.5">
+    <div className="flex items-center gap-2.5">
       <span className="text-sm font-semibold text-[var(--proto-text)] tracking-tight">Sequoia Analytics</span>
       <div className="relative" onMouseEnter={() => setShowTooltip(true)} onMouseLeave={() => setShowTooltip(false)}>
         <span className="inline-flex items-center gap-1.5 text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-[var(--proto-accent)]/20 text-[var(--proto-accent)] uppercase tracking-wider cursor-default relative -top-px">

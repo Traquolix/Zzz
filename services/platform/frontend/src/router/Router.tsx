@@ -18,7 +18,7 @@ export const router = createBrowserRouter([
         path: '/',
         element: (
           <ErrorBoundary>
-            <Suspense fallback={<div className="w-screen h-screen bg-[#1a1a2e]" />}>
+            <Suspense fallback={<div className="w-screen h-screen bg-[#1a1c20]" />}>
               <Prototype />
             </Suspense>
           </ErrorBoundary>

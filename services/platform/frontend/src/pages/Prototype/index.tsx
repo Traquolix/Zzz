@@ -14,6 +14,7 @@ import { useSections } from './hooks/useSections'
 import { useIncidents } from '@/hooks/useIncidents'
 import { useUnseenIncidents } from './hooks/useUnseenIncidents'
 import { IncidentToastStack } from './components/IncidentToastStack'
+import { UserMenu } from './components/UserMenu'
 import { SidebarRefContext } from './hooks/useSidebarWidth'
 import type { Incident as ApiIncident } from '@/types/incident'
 import './prototype.css'
@@ -86,6 +87,7 @@ function reducer(state: ProtoState, action: ProtoAction): ProtoState {
         activeTab: 'incidents',
         selectedIncidentId: action.id,
         selectedSectionId: null,
+        selectedStructureId: null,
         selectedChannel: null,
         sectionCreationMode: false,
         pendingPoint: null,
@@ -97,6 +99,7 @@ function reducer(state: ProtoState, action: ProtoAction): ProtoState {
         activeTab: 'sections',
         selectedSectionId: action.id,
         selectedIncidentId: null,
+        selectedStructureId: null,
         selectedChannel: null,
       }
     case 'CLEAR_SELECTION':
@@ -259,6 +262,16 @@ function reducer(state: ProtoState, action: ProtoAction): ProtoState {
       return { ...state, showChannelHelper: !state.showChannelHelper }
     case 'TOGGLE_SIDEBAR_EXPANDED':
       return { ...state, sidebarExpanded: !state.sidebarExpanded }
+    case 'OPEN_PANEL':
+      return {
+        ...state,
+        activeTab: action.tab,
+        sidebarOpen: true,
+        selectedIncidentId: null,
+        selectedSectionId: null,
+        selectedStructureId: null,
+        selectedChannel: null,
+      }
     default:
       return state
   }
@@ -496,13 +509,16 @@ export function Prototype() {
             </div>
           )}
 
-          {/* Map overlays */}
-          <StatusBar
-            connected={connected}
-            sectionCount={state.sections.length}
-            incidentCount={state.incidents.filter(i => !i.resolved).length}
-            lastDetectionTsRef={lastDetectionTsRef}
-          />
+          {/* Map overlays — user button + status bar */}
+          <div className="absolute top-4 left-4 z-10 flex items-center gap-2.5">
+            <UserMenu dispatch={wrappedDispatch} />
+            <StatusBar
+              connected={connected}
+              sectionCount={state.sections.length}
+              incidentCount={state.incidents.filter(i => !i.resolved).length}
+              lastDetectionTsRef={lastDetectionTsRef}
+            />
+          </div>
         </div>
 
         {/* Legend — top-right, moves with sidebar */}
@@ -548,6 +564,7 @@ export function Prototype() {
           />
         </div>
 
+        {/* Bottom panel — detail views and user/platform features */}
         {/* Naming dialog overlay */}
         {state.showNamingDialog && state.pendingSection && (
           <NamingDialog

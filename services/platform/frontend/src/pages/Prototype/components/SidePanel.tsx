@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
 import { severityColor, chartColors } from '../data'
 import type { ProtoState, ProtoAction, Severity, MetricKey, LiveSectionStats, SectionDataPoint } from '../types'
@@ -11,8 +12,11 @@ import type {
   SpectralSummary,
 } from '@/types/infrastructure'
 import { MAX_SECTIONS_PER_ORG } from '@/api/sections'
+import { toast } from 'sonner'
+import { API_URL } from '@/constants/api'
 import { useRealtime } from '@/hooks/useRealtime'
 import { WaterfallPanel } from './WaterfallPanel'
+import { DataHubPanel, type DataHubSubTab } from './DataHubPanel'
 import { ChannelDetail } from './ChannelDetail'
 import { SectionList, SectionDetail } from './SectionPanels'
 import { SettingsPanel } from './SettingsPanel'
@@ -28,6 +32,7 @@ import {
   SettingsIcon,
   BridgeIcon,
   ChannelIcon,
+  DataHubIcon,
 } from './SidebarIcons'
 
 interface StructureDataProp {
@@ -99,9 +104,13 @@ export function SidePanel({
   } = state
   const realtimeCtx = useRealtime()
   const { t } = useTranslation()
+  const { isSuperuser, role } = useAuth()
+  const isAdmin = isSuperuser || role === 'admin'
   const [incidentSortBy, setIncidentSortBy] = useState<'newest' | 'oldest'>('newest')
   const [shmSearch, setShmSearch] = useState('')
   const [sectionSearch, setSectionSearch] = useState('')
+  const [dataHubSubTab, setDataHubSubTab] = useState<DataHubSubTab>('export')
+  const [showCreateKey, setShowCreateKey] = useState(false)
 
   const incident = selectedIncidentId ? incidents.find(i => i.id === selectedIncidentId) : null
   const section = selectedSectionId ? sections.find(s => s.id === selectedSectionId) : null
@@ -214,15 +223,47 @@ export function SidePanel({
                 onClick={() => dispatch({ type: 'SET_TAB', tab: 'settings' })}
               />
             )}
+            {activeTab === 'dataHub' && (
+              <TabButton
+                label="Data Hub"
+                icon={<DataHubIcon />}
+                active
+                onClick={() => dispatch({ type: 'SET_TAB', tab: 'dataHub' })}
+              />
+            )}
           </div>
         </div>
 
         {/* Panel header */}
         <div className="flex items-center justify-between px-4 h-[52px] shrink-0 border-b border-[var(--proto-border)]">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-3">
             <span className="text-[length:var(--text-sm)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
-              {activeTab === 'shm' ? 'SHM' : activeTab}
+              {activeTab === 'dataHub'
+                ? t('userMenu.dataHub')
+                : activeTab === 'shm'
+                  ? t('admin.widgetNames.shm')
+                  : activeTab}
             </span>
+            {activeTab === 'dataHub' && isAdmin && (
+              <div className="flex items-center gap-0.5">
+                {(['export', 'apiKeys'] as const).map(tab => (
+                  <button
+                    key={tab}
+                    onClick={() => {
+                      setDataHubSubTab(tab)
+                      if (tab !== 'apiKeys') setShowCreateKey(false)
+                    }}
+                    className={`relative px-2 py-1 text-[length:var(--text-xxs)] font-medium transition-colors cursor-pointer rounded ${
+                      dataHubSubTab === tab
+                        ? 'text-[var(--proto-text)] bg-[var(--proto-surface-raised)]'
+                        : 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)]'
+                    }`}
+                  >
+                    {t(tab === 'export' ? 'export.sectionTitle' : 'apiKeys.sectionTitle')}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2">
             {activeTab === 'incidents' && (
@@ -518,6 +559,77 @@ export function SidePanel({
                 </button>
               </>
             )}
+            {activeTab === 'dataHub' && dataHubSubTab === 'apiKeys' && isAdmin && (
+              <>
+                <button
+                  onClick={() => setShowCreateKey(v => !v)}
+                  className={`flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer ${
+                    showCreateKey
+                      ? 'text-[var(--proto-text)] bg-[var(--proto-surface-raised)]'
+                      : 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text)]'
+                  }`}
+                  title={t('apiKeys.createKey')}
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 14 14"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  >
+                    <line x1="7" y1="3" x2="7" y2="11" />
+                    <line x1="3" y1="7" x2="11" y2="7" />
+                  </svg>
+                </button>
+                <button
+                  onClick={() => {
+                    const curl = `curl -H "X-API-Key: YOUR_KEY" ${API_URL}/api/v1/fibers`
+                    navigator.clipboard.writeText(curl)
+                    toast.success(t('apiKeys.curlCopied'))
+                  }}
+                  className="flex items-center justify-center w-6 h-6 rounded text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)] transition-colors cursor-pointer"
+                  title={t('apiKeys.copyCurl')}
+                >
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M5 4L1 8l4 4M11 4l4 4-4 4" />
+                  </svg>
+                </button>
+              </>
+            )}
+            {activeTab === 'dataHub' && (
+              <a
+                href={`${API_URL}/api/v1/docs/`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center w-6 h-6 rounded text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)] transition-colors cursor-pointer"
+                title={t('userMenu.apiDocs')}
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M4 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" />
+                  <path d="M5 5h6M5 8h6M5 11h3" />
+                </svg>
+              </a>
+            )}
             <button
               onClick={() => dispatch({ type: 'TOGGLE_SIDEBAR' })}
               className="flex items-center justify-center w-6 h-6 rounded text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-all cursor-pointer"
@@ -632,6 +744,14 @@ export function SidePanel({
               />
             ))}
           {activeTab === 'waterfall' && <WaterfallPanel />}
+          {activeTab === 'dataHub' && (
+            <DataHubPanel
+              subTab={dataHubSubTab}
+              isAdmin={isAdmin}
+              showCreateKey={showCreateKey}
+              onCloseCreateKey={() => setShowCreateKey(false)}
+            />
+          )}
         </div>
       </div>
     </div>

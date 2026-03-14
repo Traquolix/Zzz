@@ -10,6 +10,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [username, setUsername] = useState<string | null>(null)
+  const [role, setRole] = useState<string | null>(null)
+  const [isSuperuser, setIsSuperuser] = useState(false)
+  const [organizationName, setOrganizationName] = useState<string | null>(null)
 
   // On mount: try to restore session via httpOnly refresh cookie
   useEffect(() => {
@@ -19,6 +22,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (result.valid && result.data) {
         setIsAuthenticated(true)
         setUsername(result.data.username)
+        setRole(result.data.role)
+        setIsSuperuser(result.data.isSuperuser)
+        setOrganizationName(result.data.organizationName)
       }
 
       setIsLoading(false)
@@ -40,6 +46,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
           authApi.clearAuthToken()
           setIsAuthenticated(false)
           setUsername(null)
+          setRole(null)
+          setIsSuperuser(false)
+          setOrganizationName(null)
         }
       },
       12 * 60 * 1000,
@@ -53,6 +62,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const data = await authApi.login(usernameInput, password)
       setIsAuthenticated(true)
       setUsername(data.username)
+      setRole(data.role)
+      setIsSuperuser(data.isSuperuser)
+      setOrganizationName(data.organizationName)
       return { success: true }
     } catch (e) {
       if (e instanceof Error) {
@@ -69,10 +81,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     await authApi.logout()
     setIsAuthenticated(false)
     setUsername(null)
+    setRole(null)
+    setIsSuperuser(false)
+    setOrganizationName(null)
   }, [])
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, isLoading, username, login, logout }}>
+    <AuthContext.Provider
+      value={{ isAuthenticated, isLoading, username, role, isSuperuser, organizationName, login, logout }}
+    >
       {children}
     </AuthContext.Provider>
   )
