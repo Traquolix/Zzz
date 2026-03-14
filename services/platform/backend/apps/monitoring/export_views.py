@@ -21,7 +21,7 @@ from rest_framework.views import APIView
 
 from apps.monitoring.detection_utils import check_fiber_access, select_tier
 from apps.monitoring.mixins import FlowAwareMixin
-from apps.shared.clickhouse import get_client
+from apps.shared.clickhouse import get_client, query_scalar
 from apps.shared.exceptions import ClickHouseUnavailableError
 from apps.shared.permissions import IsActiveUser
 
@@ -328,16 +328,11 @@ class ExportDetectionsView(FlowAwareMixin, APIView):
         return response
 
 
-class ExportEstimateView(FlowAwareMixin, APIView):
+class ExportEstimateView(APIView):
     """GET /api/export/estimate — estimate row count before downloading."""
 
     permission_classes = [IsActiveUser]
-    throttle_classes: list[type] = []
-
-    def initial(self, request, *args, **kwargs):
-        super().initial(request, *args, **kwargs)
-        if self._is_sim(request):
-            raise ParseError("Export is not available for simulation data")
+    throttle_classes = [ExportThrottle]
 
     def get(self, request):
         fiber_id, start, end, _, errors = _parse_params(request)
@@ -355,14 +350,12 @@ class ExportEstimateView(FlowAwareMixin, APIView):
         ch_clause, ch_params = _build_channel_clause(request)
 
         try:
-            client = get_client()
-
             if data_type == "incidents":
                 # Incidents use channel_start/channel_end columns, not ch
                 inc_ch_clause, inc_ch_params = _build_channel_clause(
                     request, column="channel_start"
                 )
-                result = client.query(
+                count = query_scalar(
                     f"""
                     SELECT count() as cnt
                     FROM sequoia.fiber_incidents
@@ -392,7 +385,7 @@ class ExportEstimateView(FlowAwareMixin, APIView):
                 else:
                     table = f"detection_{tier}"
 
-                result = client.query(
+                count = query_scalar(
                     f"""
                     SELECT count() as cnt
                     FROM sequoia.{table}
@@ -411,8 +404,7 @@ class ExportEstimateView(FlowAwareMixin, APIView):
                     },
                 )
 
-            count = result.result_rows[0][0] if result.result_rows else 0
-            return Response({"estimatedRows": count, "tier": tier})
+            return Response({"estimatedRows": count or 0, "tier": tier})
 
         except ClickHouseUnavailableError:
             return Response({"detail": "Analytics service temporarily unavailable"}, status=503)

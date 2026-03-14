@@ -5,6 +5,7 @@ API URL configuration — aggregates all app endpoints under /api/.
 from django.conf import settings
 from django.urls import path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+from rest_framework.permissions import AllowAny
 
 from apps.accounts import views as auth_views
 from apps.admin_api import views as admin_views
@@ -359,7 +360,7 @@ urlpatterns += [
         "v1/schema",
         SpectacularAPIView.as_view(
             authentication_classes=[],
-            permission_classes=[],
+            permission_classes=[AllowAny],
             custom_settings=_PUBLIC_SCHEMA_SETTINGS,
         ),
         name="public-schema",
@@ -370,7 +371,7 @@ urlpatterns += [
             url_name="public-schema",
             template_name="public_api/swagger_ui.html",
             authentication_classes=[],
-            permission_classes=[],
+            permission_classes=[AllowAny],
         ),
         name="public-swagger-ui",
     ),

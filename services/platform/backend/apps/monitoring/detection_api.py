@@ -34,9 +34,9 @@ from apps.monitoring.detection_serializers import (
 )
 from apps.monitoring.detection_utils import check_fiber_access, select_tier
 from apps.monitoring.models import Infrastructure, Section
-from apps.shared.clickhouse import clickhouse_fallback, get_client, query_scalar
+from apps.shared.clickhouse import clickhouse_fallback, query, query_scalar
 
-logger = logging.getLogger("sequoia.public_api")
+logger = logging.getLogger(__name__)
 
 MAX_LIMIT = 5000
 DEFAULT_LIMIT = 1000
@@ -188,7 +188,7 @@ def _decode_cursor(cursor_str: str) -> tuple[str, int, int] | None:
         ):
             return None
         return (ts, channel, direction)
-    except Exception:
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError, IndexError, KeyError):
         return None
 
 
@@ -359,17 +359,13 @@ class DetectionListView(APIView):
         if tier_error:
             return Response({"detail": tier_error}, status=400)
 
-        client = get_client()
-
         if tier == "hires":
             sql, query_params = _build_hires_query(params)
         else:
             table = f"detection_{tier}"
             sql, query_params = _build_aggregate_query(params, table)
 
-        result = client.query(sql, parameters=query_params)
-        columns = result.column_names
-        rows = [dict(zip(columns, row)) for row in result.result_rows]
+        rows = query(sql, parameters=query_params)
 
         # Check if there are more pages
         has_more = len(rows) > params.limit
@@ -466,11 +462,15 @@ class DetectionSummaryView(APIView):
         if tier_error:
             return Response({"detail": tier_error}, status=400)
 
-        dir_clause, dir_params = _build_direction_filter(
-            int(request.GET["direction"]) if "direction" in request.GET else None
-        )
-
-        client = get_client()
+        direction = None
+        if "direction" in request.GET:
+            try:
+                direction = int(request.GET["direction"])
+                if direction not in (0, 1):
+                    return Response({"detail": "direction must be 0 or 1"}, status=400)
+            except ValueError:
+                return Response({"detail": "direction must be 0 or 1"}, status=400)
+        dir_clause, dir_params = _build_direction_filter(direction)
 
         if tier == "hires":
             sql = f"""
@@ -523,9 +523,9 @@ class DetectionSummaryView(APIView):
             **dir_params,
         }
 
-        result = client.query(sql, parameters=query_params)
-        if result.result_rows:
-            row = dict(zip(result.column_names, result.result_rows[0]))
+        rows = query(sql, parameters=query_params)
+        if rows:
+            row = rows[0]
         else:
             row = {
                 "total_vehicles": 0,
@@ -579,10 +579,8 @@ class PublicFiberListView(APIView):
         if not fiber_ids:
             return Response({"data": []})
 
-        client = get_client()
-
         # Get fiber metadata from ClickHouse fiber_cables
-        cables_result = client.query(
+        cables_rows = query(
             """
             SELECT fiber_id, fiber_name, length(channel_coordinates) as channel_count
             FROM sequoia.fiber_cables
@@ -593,12 +591,14 @@ class PublicFiberListView(APIView):
         )
 
         cable_meta: dict[str, dict] = {}
-        for row in cables_result.result_rows:
-            fid, name, ch_count = row
-            cable_meta[fid] = {"name": name, "channel_count": ch_count}
+        for row in cables_rows:
+            cable_meta[row["fiber_id"]] = {
+                "name": row["fiber_name"],
+                "channel_count": row["channel_count"],
+            }
 
         # Get data availability from detection_1h (permanent storage)
-        avail_result = client.query(
+        avail_rows = query(
             """
             SELECT fiber_id,
                    min(ts) as earliest,
@@ -611,9 +611,11 @@ class PublicFiberListView(APIView):
         )
 
         availability: dict[str, dict] = {}
-        for row in avail_result.result_rows:
-            fid, earliest, latest = row
-            availability[fid] = {"earliest": earliest, "latest": latest}
+        for row in avail_rows:
+            availability[row["fiber_id"]] = {
+                "earliest": row["earliest"],
+                "latest": row["latest"],
+            }
 
         # Build response — include all assigned fibers, even without cable metadata
         data = []
@@ -732,7 +734,6 @@ class IncidentListAPIView(APIView):
         filter_sql = " ".join(extra_clauses)
         fetch_limit = limit + 1
 
-        client = get_client()
         sql = f"""
             SELECT incident_id, fiber_id, type, severity, status,
                    toString(detected_at) as detected_at,
@@ -747,7 +748,7 @@ class IncidentListAPIView(APIView):
             LIMIT {{lim:UInt32}}
         """
 
-        result = client.query(
+        rows = query(
             sql,
             parameters={
                 "fid": fiber_id,
@@ -757,9 +758,6 @@ class IncidentListAPIView(APIView):
                 **extra_params,
             },
         )
-
-        columns = result.column_names
-        rows = [dict(zip(columns, row)) for row in result.result_rows]
 
         has_more = len(rows) > limit
         if has_more:
@@ -817,8 +815,7 @@ class IncidentDetailAPIView(APIView):
         org = request.user.organization
         fiber_ids = get_org_fiber_ids(org)
 
-        client = get_client()
-        result = client.query(
+        rows = query(
             """
             SELECT incident_id, fiber_id, type, severity, status,
                    toString(detected_at) as detected_at,
@@ -831,10 +828,10 @@ class IncidentDetailAPIView(APIView):
             parameters={"iid": incident_id, "fids": fiber_ids},
         )
 
-        if not result.result_rows:
+        if not rows:
             return Response({"detail": "Incident not found"}, status=404)
 
-        row = dict(zip(result.column_names, result.result_rows[0]))
+        row = rows[0]
         return Response(
             {
                 "data": {
@@ -938,7 +935,6 @@ class SectionHistoryAPIView(APIView):
             return Response({"detail": tier_error}, status=400)
 
         total_channels = max(1, section.channel_end - section.channel_start + 1)
-        client = get_client()
 
         if tier == "hires":
             sql = """
@@ -970,11 +966,11 @@ class SectionHistoryAPIView(APIView):
                   AND ch BETWEEN {{cs:UInt32}} AND {{ce:UInt32}}
                   AND ts >= {{start:DateTime64(3)}}
                   AND ts <= {{end:DateTime64(3)}}
-                GROUP BY ts, fiber_id, ch, direction
+                GROUP BY ts
                 ORDER BY ts
             """
 
-        result = client.query(
+        data = query(
             sql,
             parameters={
                 "fid": section.fiber_id,
@@ -986,9 +982,6 @@ class SectionHistoryAPIView(APIView):
                 "n_ch": float(total_channels),
             },
         )
-
-        columns = result.column_names
-        data = [dict(zip(columns, row)) for row in result.result_rows]
 
         return Response(
             {
@@ -1126,8 +1119,13 @@ class InfrastructureStatusAPIView(APIView):
         responses={200: InfrastructureStatusSerializer},
         tags=["Infrastructure"],
         operation_id="getInfrastructureStatus",
-        summary="Infrastructure SHM status",
-        description="Get the current structural health monitoring status for an infrastructure item.",
+        summary="Infrastructure SHM status (demo)",
+        description=(
+            "Get the current structural health monitoring status for an infrastructure item.\n\n"
+            "**Note:** This endpoint currently returns deterministic demo data for "
+            "development and integration testing purposes. Real SHM data will be "
+            "connected in a future release."
+        ),
     )
     def get(self, request, infra_id):
         import random
@@ -1170,6 +1168,7 @@ class InfrastructureStatusAPIView(APIView):
                     "deviationSigma": round(shift.deviation_sigma, 2),
                     "direction": shift.direction,
                     "severity": shift.severity,
-                }
+                },
+                "demo": True,
             }
         )
