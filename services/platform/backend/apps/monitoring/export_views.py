@@ -91,6 +91,27 @@ def _build_direction_clause(request) -> tuple[str, dict]:
     return "", {}
 
 
+def _build_channel_clause(request, column: str = "ch") -> tuple[str, dict]:
+    """Build optional channel range filter for export queries."""
+    ch_start = request.GET.get("channel_start")
+    ch_end = request.GET.get("channel_end")
+    clause_parts: list[str] = []
+    params: dict = {}
+    if ch_start is not None:
+        try:
+            clause_parts.append(f"AND {column} >= {{ch_start:UInt32}}")
+            params["ch_start"] = int(ch_start)
+        except ValueError:
+            pass
+    if ch_end is not None:
+        try:
+            clause_parts.append(f"AND {column} <= {{ch_end:UInt32}}")
+            params["ch_end"] = int(ch_end)
+        except ValueError:
+            pass
+    return " ".join(clause_parts), params
+
+
 def _stream_csv(columns, rows):
     """Generator that yields CSV rows."""
     output = io.StringIO()
@@ -130,21 +151,32 @@ class ExportIncidentsView(FlowAwareMixin, APIView):
         if not check_fiber_access(request.user, fiber_id):
             return Response({"detail": "Access denied for this fiber"}, status=403)
 
+        dir_clause, dir_params = _build_direction_clause(request)
+        ch_clause, ch_params = _build_channel_clause(request, column="channel_start")
+
         try:
             client = get_client()
             result = client.query(
-                """
-                SELECT incident_id, fiber_id, type, severity,
+                f"""
+                SELECT incident_id, fiber_id, type, severity, direction,
                        toString(detected_at) as detected_at,
                        channel_start, channel_end, speed_kmh, duration_s
                 FROM sequoia.fiber_incidents
-                WHERE fiber_id = {fid:String}
-                  AND detected_at >= {start:DateTime64(3)}
-                  AND detected_at <= {end:DateTime64(3)}
+                WHERE fiber_id = {{fid:String}}
+                  AND detected_at >= {{start:DateTime64(3)}}
+                  AND detected_at <= {{end:DateTime64(3)}}
+                  {dir_clause}
+                  {ch_clause}
                 ORDER BY detected_at DESC
                 LIMIT 100000
                 """,
-                parameters={"fid": fiber_id, "start": start, "end": end},
+                parameters={
+                    "fid": fiber_id,
+                    "start": start,
+                    "end": end,
+                    **dir_params,
+                    **ch_params,
+                },
             )
         except ClickHouseUnavailableError:
             return Response({"detail": "Analytics service temporarily unavailable"}, status=503)
@@ -194,6 +226,7 @@ class ExportDetectionsView(FlowAwareMixin, APIView):
             return Response({"detail": tier_error}, status=400)
 
         dir_clause, dir_params = _build_direction_clause(request)
+        ch_clause, ch_params = _build_channel_clause(request)
 
         try:
             client = get_client()
@@ -209,10 +242,17 @@ class ExportDetectionsView(FlowAwareMixin, APIView):
                       AND ts >= {{start:DateTime64(3)}}
                       AND ts <= {{end:DateTime64(3)}}
                       {dir_clause}
+                      {ch_clause}
                     ORDER BY ts
                     LIMIT 500000
                     """,
-                    parameters={"fid": fiber_id, "start": start, "end": end, **dir_params},
+                    parameters={
+                        "fid": fiber_id,
+                        "start": start,
+                        "end": end,
+                        **dir_params,
+                        **ch_params,
+                    },
                 )
             elif tier == "1m":
                 result = client.query(
@@ -229,11 +269,18 @@ class ExportDetectionsView(FlowAwareMixin, APIView):
                       AND ts >= {{start:DateTime64(3)}}
                       AND ts <= {{end:DateTime64(3)}}
                       {dir_clause}
+                      {ch_clause}
                     GROUP BY ts, fiber_id, ch, direction
                     ORDER BY ts
                     LIMIT 500000
                     """,
-                    parameters={"fid": fiber_id, "start": start, "end": end, **dir_params},
+                    parameters={
+                        "fid": fiber_id,
+                        "start": start,
+                        "end": end,
+                        **dir_params,
+                        **ch_params,
+                    },
                 )
             else:  # 1h
                 result = client.query(
@@ -250,11 +297,18 @@ class ExportDetectionsView(FlowAwareMixin, APIView):
                       AND ts >= {{start:DateTime64(3)}}
                       AND ts <= {{end:DateTime64(3)}}
                       {dir_clause}
+                      {ch_clause}
                     GROUP BY ts, fiber_id, ch, direction
                     ORDER BY ts
                     LIMIT 500000
                     """,
-                    parameters={"fid": fiber_id, "start": start, "end": end, **dir_params},
+                    parameters={
+                        "fid": fiber_id,
+                        "start": start,
+                        "end": end,
+                        **dir_params,
+                        **ch_params,
+                    },
                 )
         except ClickHouseUnavailableError:
             return Response({"detail": "Analytics service temporarily unavailable"}, status=503)
@@ -298,20 +352,33 @@ class ExportEstimateView(FlowAwareMixin, APIView):
             return Response({"detail": "type must be 'detections' or 'incidents'"}, status=400)
 
         dir_clause, dir_params = _build_direction_clause(request)
+        ch_clause, ch_params = _build_channel_clause(request)
 
         try:
             client = get_client()
 
             if data_type == "incidents":
+                # Incidents use channel_start/channel_end columns, not ch
+                inc_ch_clause, inc_ch_params = _build_channel_clause(
+                    request, column="channel_start"
+                )
                 result = client.query(
-                    """
+                    f"""
                     SELECT count() as cnt
                     FROM sequoia.fiber_incidents
-                    WHERE fiber_id = {fid:String}
-                      AND detected_at >= {start:DateTime64(3)}
-                      AND detected_at <= {end:DateTime64(3)}
+                    WHERE fiber_id = {{fid:String}}
+                      AND detected_at >= {{start:DateTime64(3)}}
+                      AND detected_at <= {{end:DateTime64(3)}}
+                      {dir_clause}
+                      {inc_ch_clause}
                     """,
-                    parameters={"fid": fiber_id, "start": start, "end": end},
+                    parameters={
+                        "fid": fiber_id,
+                        "start": start,
+                        "end": end,
+                        **dir_params,
+                        **inc_ch_params,
+                    },
                 )
                 tier = None
             else:
@@ -333,12 +400,14 @@ class ExportEstimateView(FlowAwareMixin, APIView):
                       AND ts >= {{start:DateTime64(3)}}
                       AND ts <= {{end:DateTime64(3)}}
                       {dir_clause}
+                      {ch_clause}
                     """,
                     parameters={
                         "fid": fiber_id,
                         "start": start,
                         "end": end,
                         **dir_params,
+                        **ch_params,
                     },
                 )
 

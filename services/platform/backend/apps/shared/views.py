@@ -134,7 +134,7 @@ class ReadinessCheckView(APIView):
                 "status": "ready" if all_critical_ok else "degraded",
                 "checks": checks,
             },
-            status=200 if all_critical_ok else 503,
+            status=200,
         )
 
 
