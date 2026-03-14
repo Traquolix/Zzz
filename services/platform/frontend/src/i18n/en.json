@@ -614,6 +614,7 @@
     "dirBoth": "Both",
     "format": "Format",
     "estimatedRows": "Estimated rows",
+    "estimatedRowsValue": "~{{count}} rows",
     "channelRange": "Channel Range",
     "tierInfo": "Resolution: {{tier}} aggregation",
     "download": "Download",

@@ -238,7 +238,11 @@ export function SidePanel({
         <div className="flex items-center justify-between px-4 h-[52px] shrink-0 border-b border-[var(--proto-border)]">
           <div className="flex items-center gap-3">
             <span className="text-[length:var(--text-sm)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
-              {activeTab === 'dataHub' ? 'Data Hub' : activeTab === 'shm' ? 'SHM' : activeTab}
+              {activeTab === 'dataHub'
+                ? t('userMenu.dataHub')
+                : activeTab === 'shm'
+                  ? t('admin.widgetNames.shm')
+                  : activeTab}
             </span>
             {activeTab === 'dataHub' && isAdmin && (
               <div className="flex items-center gap-0.5">

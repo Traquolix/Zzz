@@ -192,8 +192,8 @@ export function APIKeysPanel({ showCreate, onCloseCreate }: { showCreate: boolea
                 requestCount={key.requestCount}
                 onRotate={() => handleRotate(key.id)}
                 onRevoke={() => handleRevoke(key.id)}
-                rotating={rotateMutation.isPending}
-                revoking={revokeMutation.isPending}
+                rotating={rotateMutation.isPending && rotateMutation.variables === key.id}
+                revoking={revokeMutation.isPending && revokeMutation.variables === key.id}
                 t={t}
               />
             )

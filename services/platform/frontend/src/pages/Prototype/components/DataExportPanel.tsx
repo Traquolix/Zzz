@@ -29,10 +29,11 @@ function getTierInfo(dateRange: { start: string; end: string } | null): {
   label: string
 } | null {
   if (!dateRange) return null
-  const durationMs = new Date(dateRange.end).getTime() - new Date(dateRange.start).getTime()
-  const durationHours = durationMs / (1000 * 60 * 60)
-  if (durationHours <= HIRES_HOURS) return { tier: 'hires', label: 'Raw' }
-  if (durationHours <= MEDIUM_DAYS * 24) return { tier: '1m', label: '1 min' }
+  const now = Date.now()
+  const startAge = now - new Date(dateRange.start).getTime()
+  const startAgeHours = startAge / (1000 * 60 * 60)
+  if (startAgeHours <= HIRES_HOURS) return { tier: 'hires', label: 'Raw' }
+  if (startAgeHours <= MEDIUM_DAYS * 24) return { tier: '1m', label: '1 min' }
   return { tier: '1h', label: '1 hour' }
 }
 
@@ -128,7 +129,7 @@ export function DataExportPanel() {
   const estimateText = estimateQuery.isLoading
     ? '...'
     : estimateQuery.data
-      ? `~${estimateQuery.data.estimatedRows.toLocaleString()} rows`
+      ? t('export.estimatedRowsValue', { count: estimateQuery.data.estimatedRows })
       : null
 
   return (

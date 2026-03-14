@@ -614,6 +614,7 @@
     "dirBoth": "Les deux",
     "format": "Format",
     "estimatedRows": "Lignes estimées",
+    "estimatedRowsValue": "~{{count}} lignes",
     "channelRange": "Plage de canaux",
     "tierInfo": "Résolution : agrégation {{tier}}",
     "download": "Télécharger",

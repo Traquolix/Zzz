@@ -52,6 +52,7 @@ export async function downloadExport(params: ExportParams): Promise<void> {
     start: params.start,
     end: params.end,
     fmt: params.format ?? 'csv',
+    flow: 'live',
   })
   if (params.direction !== undefined) {
     query.set('direction', String(params.direction))
