@@ -56,24 +56,25 @@ export function StatusBar({ connected, sectionCount, incidentCount, lastDetectio
     }
   }, [])
 
-  const [backendVersion, setBackendVersion] = useState<string | null>(null)
+  const { data: backendVersion } = useQuery({
+    queryKey: ['backend-version'],
+    queryFn: async () => {
+      const res = await fetch(`${API_URL}/api/health`, { cache: 'no-store' })
+      if (!res.ok) return null
+      const body = await res.json()
+      return (body.version as string) ?? null
+    },
+    staleTime: Infinity,
+    retry: false,
+  })
 
   const { data: lastPingResult, dataUpdatedAt } = useQuery({
     queryKey: ['ping'],
     queryFn: async () => {
       const start = performance.now()
       try {
-        const res = await fetch(`${API_URL}/api/health`, { cache: 'no-store' })
-        const elapsed = Math.round(performance.now() - start)
-        if (res.ok && !backendVersion) {
-          try {
-            const body = await res.json()
-            if (body.version) setBackendVersion(body.version)
-          } catch {
-            // ignore parse errors — HEAD responses have no body
-          }
-        }
-        return elapsed
+        await fetch(`${API_URL}/api/health`, { method: 'HEAD', cache: 'no-store' })
+        return Math.round(performance.now() - start)
       } catch {
         return -1
       }

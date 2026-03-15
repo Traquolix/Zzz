@@ -2,6 +2,7 @@
 Shared views: health checks and Prometheus metrics.
 """
 
+import os
 from typing import Any
 
 from django.http import HttpResponse
@@ -32,8 +33,6 @@ class HealthCheckView(APIView):
         tags=["health"],
     )
     def get(self, request):
-        import os
-
         version = os.environ.get("GIT_SHA", "dev")
         return Response({"status": "ok", "version": version})
 
