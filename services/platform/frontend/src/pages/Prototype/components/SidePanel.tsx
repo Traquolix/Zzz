@@ -639,17 +639,6 @@ export function SidePanel({
           </div>
         </div>
 
-        {/* Connection status — only show after a connection was established and lost */}
-        {realtimeCtx.reconnecting && (
-          <div className="px-4 py-1.5 text-[length:var(--text-xs)] text-amber-300 bg-amber-500/10 border-b border-amber-500/20 flex items-center gap-2">
-            <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 16 16" fill="none">
-              <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" opacity="0.3" />
-              <path d="M14 8a6 6 0 0 0-6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-            Reconnecting...
-          </div>
-        )}
-
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           {activeTab === 'incidents' &&

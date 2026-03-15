@@ -81,6 +81,7 @@ export function useSectionHistory(sectionId: string, timeRange: string, liveSeri
     },
     refetchInterval: POLL_INTERVAL,
     staleTime: 0,
+    retry: false,
     enabled: !usesBatchData,
   })
 
