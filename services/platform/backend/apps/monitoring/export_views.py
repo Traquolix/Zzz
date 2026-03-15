@@ -239,7 +239,7 @@ class ExportDetectionsView(FlowAwareMixin, APIView):
         if tier == "hires":
             rows = query(
                 f"""
-                SELECT toString(ts) as ts, fiber_id, ch as channel,
+                SELECT toString(ts) as timestamp, fiber_id, ch as channel,
                        direction, speed, vehicle_count, n_cars, n_trucks,
                        lng, lat
                 FROM sequoia.detection_hires
@@ -257,7 +257,7 @@ class ExportDetectionsView(FlowAwareMixin, APIView):
             table = TIER_TABLES[tier]
             rows = query(
                 f"""
-                SELECT toString(ts) as ts, fiber_id, ch as channel,
+                SELECT toString(ts) as timestamp, fiber_id, ch as channel,
                        direction,
                        avgMerge(speed_avg_state) as speed_avg,
                        sumMerge(count_sum_state) as vehicle_count,
