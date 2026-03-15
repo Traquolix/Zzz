@@ -25,13 +25,17 @@ class HealthCheckView(APIView):
                 "HealthResponse",
                 fields={
                     "status": s.CharField(),
+                    "version": s.CharField(),
                 },
             )
         },
         tags=["health"],
     )
     def get(self, request):
-        return Response({"status": "ok"})
+        import os
+
+        version = os.environ.get("GIT_SHA", "dev")
+        return Response({"status": "ok", "version": version})
 
 
 class ReadinessCheckView(APIView):

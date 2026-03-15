@@ -425,6 +425,7 @@ services:
         HTTP_PROXY: ${HTTP_PROXY:-}
         HTTPS_PROXY: ${HTTPS_PROXY:-}
         NO_PROXY: ${NO_PROXY:-}
+        GIT_SHA: ${GIT_SHA:-dev}
     container_name: platform-backend
     restart: unless-stopped
     depends_on:
