@@ -64,6 +64,7 @@ ssh "${DEPLOY_BACKEND_HOST}" bash <<REMOTE
     git reset --hard origin/main
 
     echo "Rebuilding services..."
+    export GIT_SHA=\$(git rev-parse --short HEAD)
     docker compose build --parallel
     docker compose up -d
 
