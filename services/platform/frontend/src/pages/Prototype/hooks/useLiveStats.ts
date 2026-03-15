@@ -92,6 +92,7 @@ export function useLiveStats(sections: Section[]) {
     },
     refetchInterval: POLL_INTERVAL,
     staleTime: 0,
+    retry: false,
   })
 
   // Accumulate, trim, derive stats, and update cursors outside queryFn.
