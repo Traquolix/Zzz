@@ -606,6 +606,8 @@
     "description": "Download detection or incident data as CSV or JSON for offline analysis.",
     "selectFiber": "Fiber",
     "dateRange": "Date Range",
+    "preset_5m": "5 min",
+    "preset_1h": "1 hour",
     "preset_24h": "Last 24h",
     "preset_7d": "Last 7d",
     "preset_30d": "Last 30d",

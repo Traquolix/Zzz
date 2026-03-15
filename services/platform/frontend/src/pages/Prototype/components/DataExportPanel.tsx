@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { fibers } from '../data'
 import { fetchExportEstimate, downloadExport, type ExportParams } from '@/api/export'
 
-type DatePreset = '24h' | '7d' | '30d' | 'custom'
+type DatePreset = '5m' | '1h' | '24h' | '7d' | '30d' | 'custom'
 type DataType = 'detections' | 'incidents'
 type Direction = 'both' | '0' | '1'
 type Format = 'csv' | 'json'
@@ -18,7 +18,9 @@ function getPresetRange(preset: DatePreset): { start: string; end: string } | nu
   if (preset === 'custom') return null
   const end = new Date()
   const start = new Date()
-  if (preset === '24h') start.setHours(start.getHours() - 24)
+  if (preset === '5m') start.setMinutes(start.getMinutes() - 5)
+  else if (preset === '1h') start.setHours(start.getHours() - 1)
+  else if (preset === '24h') start.setHours(start.getHours() - 24)
   else if (preset === '7d') start.setDate(start.getDate() - 7)
   else if (preset === '30d') start.setDate(start.getDate() - 30)
   return { start: start.toISOString(), end: end.toISOString() }
@@ -152,10 +154,12 @@ export function DataExportPanel() {
       {/* Date range */}
       <FieldRow label={t('export.dateRange')}>
         <ToggleGroup
-          options={['24h', '7d', '30d', 'custom'] as DatePreset[]}
+          options={['5m', '1h', '24h', '7d', '30d', 'custom'] as DatePreset[]}
           value={preset}
           onChange={setPreset}
           labels={{
+            '5m': t('export.preset_5m'),
+            '1h': t('export.preset_1h'),
             '24h': t('export.preset_24h'),
             '7d': t('export.preset_7d'),
             '30d': t('export.preset_30d'),
