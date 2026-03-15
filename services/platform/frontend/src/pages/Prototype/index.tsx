@@ -15,6 +15,7 @@ import { useIncidents } from '@/hooks/useIncidents'
 import { useUnseenIncidents } from './hooks/useUnseenIncidents'
 import { IncidentToastStack } from './components/IncidentToastStack'
 import { UserMenu } from './components/UserMenu'
+import { ConnectionBanner } from './components/ConnectionBanner'
 import { SidebarRefContext } from './hooks/useSidebarWidth'
 import type { Incident as ApiIncident } from '@/types/incident'
 import './prototype.css'
@@ -508,6 +509,8 @@ export function Prototype() {
               </button>
             </div>
           )}
+
+          <ConnectionBanner />
 
           {/* Map overlays — user button + status bar */}
           <div className="absolute top-4 left-4 z-10 flex items-center gap-2.5">
