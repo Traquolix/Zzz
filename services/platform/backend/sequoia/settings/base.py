@@ -134,6 +134,7 @@ REST_FRAMEWORK = {
         "login": "5/minute",
         "api_key": "100/hour",
         "export": "10/hour",
+        "export_estimate": "60/hour",
         "public_api": "300/hour",
     },
     "DATETIME_FORMAT": "%Y-%m-%dT%H:%M:%SZ",
