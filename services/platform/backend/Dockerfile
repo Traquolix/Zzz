@@ -18,6 +18,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
+# Build-time version (passed via --build-arg GIT_SHA=...)
+ARG GIT_SHA=dev
+ENV GIT_SHA=${GIT_SHA}
+
 # Make entrypoint executable
 RUN chmod +x /app/entrypoint.sh
 

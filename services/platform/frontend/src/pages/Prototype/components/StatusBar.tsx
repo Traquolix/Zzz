@@ -56,13 +56,24 @@ export function StatusBar({ connected, sectionCount, incidentCount, lastDetectio
     }
   }, [])
 
+  const [backendVersion, setBackendVersion] = useState<string | null>(null)
+
   const { data: lastPingResult, dataUpdatedAt } = useQuery({
     queryKey: ['ping'],
     queryFn: async () => {
       const start = performance.now()
       try {
-        await fetch(`${API_URL}/api/health`, { method: 'HEAD', cache: 'no-store' })
-        return Math.round(performance.now() - start)
+        const res = await fetch(`${API_URL}/api/health`, { cache: 'no-store' })
+        const elapsed = Math.round(performance.now() - start)
+        if (res.ok && !backendVersion) {
+          try {
+            const body = await res.json()
+            if (body.version) setBackendVersion(body.version)
+          } catch {
+            // ignore parse errors — HEAD responses have no body
+          }
+        }
+        return elapsed
       } catch {
         return -1
       }
@@ -239,18 +250,20 @@ export function StatusBar({ connected, sectionCount, incidentCount, lastDetectio
               )}
             </div>
 
-            {/* Footer hint */}
-            {!expanded && (
-              <div className="px-3 py-1.5 border-t border-[var(--proto-border)]">
+            {/* Footer — version + hint */}
+            <div className="px-3 py-1.5 border-t border-[var(--proto-border)] flex items-center justify-between">
+              <span className="text-[9px] text-[var(--proto-text-muted)]/40 font-mono tabular-nums">
+                {__APP_VERSION__}
+                {backendVersion && backendVersion !== 'dev' ? ` / ${backendVersion}` : ''}
+              </span>
+              {!expanded && (
                 <span className="text-[9px] text-[var(--proto-text-muted)]/50 tracking-wide">
-                  Hold{' '}
                   <kbd className="px-1 py-px rounded bg-[var(--proto-base)] text-[var(--proto-text-muted)] text-[8px] font-mono">
                     Shift
-                  </kbd>{' '}
-                  for details
+                  </kbd>
                 </span>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
       </div>
