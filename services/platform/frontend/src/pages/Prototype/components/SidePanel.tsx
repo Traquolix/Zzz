@@ -139,6 +139,7 @@ export function SidePanel({
       {fullyClosed && !sidebarOpen && (
         <button
           onClick={() => dispatch({ type: 'TOGGLE_SIDEBAR' })}
+          aria-label={t('sidebar.toggleSidebar')}
           className="absolute top-3 right-3 z-30 flex items-center justify-center w-9 h-9 rounded-lg bg-[var(--proto-surface)] border border-[var(--proto-border)] text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] hover:border-[var(--proto-text-muted)]/30 transition-all cursor-pointer pointer-events-auto"
         >
           <SidebarIcon />
@@ -172,12 +173,13 @@ export function SidePanel({
               : `opacity ${sidebarExpanded ? '200ms' : '100ms'} ease-out`,
           }}
         >
-          <div className="flex flex-col gap-1.5 mt-8">
+          <div className="flex flex-col gap-1.5 mt-8" role="tablist" aria-label={t('sidebar.toggleSidebar')}>
             <TabButton
               label="Sections"
               icon={<SectionsIcon />}
               active={activeTab === 'sections'}
               onClick={() => dispatch({ type: 'SET_TAB', tab: 'sections' })}
+              panelId="panel-sections"
             />
             <TabButton
               label="Incidents"
@@ -185,12 +187,14 @@ export function SidePanel({
               active={activeTab === 'incidents'}
               onClick={() => dispatch({ type: 'SET_TAB', tab: 'incidents' })}
               showDot={hasUnseen}
+              panelId="panel-incidents"
             />
             <TabButton
               label="SHM"
               icon={<BridgeIcon />}
               active={activeTab === 'shm'}
               onClick={() => dispatch({ type: 'SET_TAB', tab: 'shm' })}
+              panelId="panel-shm"
             />
             {/* <TabButton
                             label="Waterfall"
@@ -202,6 +206,8 @@ export function SidePanel({
           <div className="flex flex-col gap-1.5">
             <button
               title={sidebarExpanded ? t('sidebar.collapsePanel') : t('sidebar.expandPanel')}
+              aria-label={sidebarExpanded ? t('sidebar.collapsePanel') : t('sidebar.expandPanel')}
+              aria-expanded={!!sidebarExpanded}
               onClick={() => dispatch({ type: 'TOGGLE_SIDEBAR_EXPANDED' })}
               className="group/exp flex items-center justify-center self-end w-[32px] hover:w-full h-7 rounded-l-lg border border-r-0 border-transparent bg-[var(--proto-surface)]/40 text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)] hover:bg-[var(--proto-surface)]/80 transition-all cursor-pointer"
             >
@@ -273,7 +279,8 @@ export function SidePanel({
                     onClick={() => dispatch({ type: 'SET_FILTER_SEVERITY', severity: null })}
                     className="w-3 h-3 rounded-full transition-all cursor-pointer opacity-50 hover:opacity-80"
                     style={{ backgroundColor: 'var(--proto-text-muted)' }}
-                    title="Clear filter"
+                    title={t('incidents.filters.clearFilter')}
+                    aria-label={t('incidents.filters.clearFilter')}
                   >
                     <svg
                       width="12"
@@ -301,7 +308,8 @@ export function SidePanel({
                         : 'opacity-50 hover:opacity-80',
                     )}
                     style={{ backgroundColor: severityColor[s] }}
-                    title={s.charAt(0).toUpperCase() + s.slice(1)}
+                    title={t(`incidents.severity.${s}`)}
+                    aria-label={t(`incidents.severity.${s}`)}
                   />
                 ))}
                 <button
@@ -312,7 +320,8 @@ export function SidePanel({
                       ? 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)]'
                       : 'text-[var(--proto-accent)]',
                   )}
-                  title={hideResolved ? 'Show resolved' : 'Hide resolved'}
+                  title={hideResolved ? t('incidents.filters.showResolved') : t('incidents.filters.hideResolved')}
+                  aria-label={hideResolved ? t('incidents.filters.showResolved') : t('incidents.filters.hideResolved')}
                 >
                   {hideResolved ? (
                     <svg
@@ -353,7 +362,8 @@ export function SidePanel({
                       ? 'text-[var(--proto-accent)]'
                       : 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)]',
                   )}
-                  title={showIncidentsOnMap ? 'Hide on map' : 'Show on map'}
+                  title={showIncidentsOnMap ? t('incidents.filters.hideOnMap') : t('incidents.filters.showOnMap')}
+                  aria-label={showIncidentsOnMap ? t('incidents.filters.hideOnMap') : t('incidents.filters.showOnMap')}
                 >
                   <svg
                     width="14"
@@ -372,7 +382,16 @@ export function SidePanel({
                 <button
                   onClick={() => setIncidentSortBy(s => (s === 'newest' ? 'oldest' : 'newest'))}
                   className="flex items-center justify-center w-6 h-6 rounded text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors cursor-pointer"
-                  title={incidentSortBy === 'newest' ? 'Newest first' : 'Oldest first'}
+                  title={
+                    incidentSortBy === 'newest'
+                      ? t('incidents.filters.newestFirst')
+                      : t('incidents.filters.oldestFirst')
+                  }
+                  aria-label={
+                    incidentSortBy === 'newest'
+                      ? t('incidents.filters.newestFirst')
+                      : t('incidents.filters.oldestFirst')
+                  }
                 >
                   <svg
                     width="12"
@@ -394,7 +413,8 @@ export function SidePanel({
                   <button
                     onClick={onMarkAllSeen}
                     className="flex items-center justify-center w-6 h-6 rounded text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors cursor-pointer"
-                    title="Mark all read"
+                    title={t('sidebar.markAllRead')}
+                    aria-label={t('sidebar.markAllRead')}
                   >
                     <svg
                       width="14"
@@ -446,7 +466,8 @@ export function SidePanel({
                       ? 'text-[var(--proto-accent)]'
                       : 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text)]',
                   )}
-                  title="Show on map"
+                  title={t('shm.showOnMap')}
+                  aria-label={t('shm.showOnMap')}
                 >
                   <svg
                     width="14"
@@ -474,7 +495,8 @@ export function SidePanel({
                       ? 'text-[var(--proto-accent)]'
                       : 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text)]',
                   )}
-                  title="Show labels"
+                  title={t('shm.showLabels')}
+                  aria-label={t('shm.showLabels')}
                 >
                   <svg
                     width="14"
@@ -632,6 +654,7 @@ export function SidePanel({
             )}
             <button
               onClick={() => dispatch({ type: 'TOGGLE_SIDEBAR' })}
+              aria-label={t('sidebar.toggleSidebar')}
               className="flex items-center justify-center w-6 h-6 rounded text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-all cursor-pointer"
             >
               <SidebarIcon />
@@ -640,7 +663,7 @@ export function SidePanel({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto" role="tabpanel" id={`panel-${activeTab}`}>
           {activeTab === 'incidents' &&
             (incident ? (
               <IncidentDetail

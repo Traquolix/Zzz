@@ -73,7 +73,14 @@
     "showDetails": "Show details",
     "filters": {
       "allTypes": "All types",
-      "allSeverities": "All severities"
+      "allSeverities": "All severities",
+      "clearFilter": "Clear severity filter",
+      "showResolved": "Show resolved incidents",
+      "hideResolved": "Hide resolved incidents",
+      "showOnMap": "Show incidents on map",
+      "hideOnMap": "Hide incidents from map",
+      "newestFirst": "Sort newest first",
+      "oldestFirst": "Sort oldest first"
     },
     "sort": {
       "severity": "Sort: Severity",
@@ -294,7 +301,9 @@
   },
   "sidebar": {
     "expandPanel": "Expand panel",
-    "collapsePanel": "Collapse panel"
+    "collapsePanel": "Collapse panel",
+    "toggleSidebar": "Toggle sidebar",
+    "markAllRead": "Mark all as read"
   },
   "channelDetail": {
     "detectionsWindow": "in 60s"
@@ -384,6 +393,8 @@
   },
   "shm": {
     "title": "Structural Health Monitoring",
+    "showOnMap": "Show structures on map",
+    "showLabels": "Show structure labels",
     "noInfrastructure": "No infrastructure configured",
     "noInfrastructureDesc": "Bridges and tunnels will appear here",
     "noData": "No data",

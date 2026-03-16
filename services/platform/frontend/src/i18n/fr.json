@@ -73,7 +73,14 @@
     "showDetails": "Afficher les details",
     "filters": {
       "allTypes": "Tous les types",
-      "allSeverities": "Toutes les severites"
+      "allSeverities": "Toutes les severites",
+      "clearFilter": "Effacer le filtre de severite",
+      "showResolved": "Afficher les incidents resolus",
+      "hideResolved": "Masquer les incidents resolus",
+      "showOnMap": "Afficher les incidents sur la carte",
+      "hideOnMap": "Masquer les incidents de la carte",
+      "newestFirst": "Trier du plus recent",
+      "oldestFirst": "Trier du plus ancien"
     },
     "sort": {
       "severity": "Tri : Severite",
@@ -294,7 +301,9 @@
   },
   "sidebar": {
     "expandPanel": "Agrandir le panneau",
-    "collapsePanel": "Réduire le panneau"
+    "collapsePanel": "Reduire le panneau",
+    "toggleSidebar": "Basculer le panneau lateral",
+    "markAllRead": "Tout marquer comme lu"
   },
   "channelDetail": {
     "detectionsWindow": "en 60s"
@@ -384,6 +393,8 @@
   },
   "shm": {
     "title": "Surveillance de la Sante Structurelle",
+    "showOnMap": "Afficher les structures sur la carte",
+    "showLabels": "Afficher les etiquettes",
     "noInfrastructure": "Aucune infrastructure configuree",
     "noInfrastructureDesc": "Les ponts et tunnels apparaitront ici",
     "noData": "Aucune donnee",

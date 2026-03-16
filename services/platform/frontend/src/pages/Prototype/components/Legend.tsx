@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useSidebarWidth } from '../hooks/useSidebarWidth'
 
 interface LegendProps {
@@ -22,6 +23,7 @@ export function Legend({
   hideFibersInOverview,
   onToggleHideFibers,
 }: LegendProps) {
+  const { t } = useTranslation()
   const sidebarWidth = useSidebarWidth()
   const right = sidebarOpen && sidebarWidth > 0 ? `${sidebarWidth + 12}px` : `${TAB_BAR_OFFSET}px`
 
@@ -56,7 +58,8 @@ export function Legend({
             onClick={onToggleHideFibers}
             className="cursor-pointer flex items-center justify-center transition-colors"
             style={{ color: hideFibersInOverview ? 'var(--proto-text-muted)' : 'var(--proto-text)' }}
-            title={hideFibersInOverview ? 'Show fibers' : 'Hide fibers'}
+            title={hideFibersInOverview ? t('legend.showFibers') : t('legend.hideFibers')}
+            aria-label={hideFibersInOverview ? t('legend.showFibers') : t('legend.hideFibers')}
           >
             {hideFibersInOverview ? <EyeOffIcon /> : <EyeIcon />}
           </button>
