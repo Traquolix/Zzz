@@ -7,6 +7,7 @@ from typing import Any
 
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers as s
+from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -106,7 +107,7 @@ class UserPreferencesView(APIView):
                     "detail": f"Payload too large ({payload_size} bytes, max {MAX_PREFERENCES_SIZE}).",
                     "code": "payload_too_large",
                 },
-                status=400,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         data = request.data
@@ -125,7 +126,7 @@ class UserPreferencesView(APIView):
                     "errors": validation_errors[:10],
                     "code": "validation_error",
                 },
-                status=400,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         prefs, _ = UserPreferences.objects.get_or_create(user=request.user)

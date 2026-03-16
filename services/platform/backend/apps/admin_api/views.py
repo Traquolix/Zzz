@@ -642,12 +642,13 @@ class AlertRuleListView(APIView):
                     org = Organization.objects.get(pk=org_id)
                 except Organization.DoesNotExist:
                     return Response(
-                        {"detail": "Organization not found", "code": "org_invalid"}, status=400
+                        {"detail": "Organization not found", "code": "org_invalid"},
+                        status=status.HTTP_400_BAD_REQUEST,
                     )
             else:
                 return Response(
                     {"detail": "organizationId required for superuser", "code": "org_required"},
-                    status=400,
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
 
         rule = AlertRule.objects.create(
@@ -908,9 +909,15 @@ class APIKeyListView(APIView):
                 try:
                     org = Organization.objects.get(pk=org_id)
                 except Organization.DoesNotExist:
-                    return Response({"detail": "Organization not found"}, status=400)
+                    return Response(
+                        {"detail": "Organization not found"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
             else:
-                return Response({"detail": "organizationId required for superuser"}, status=400)
+                return Response(
+                    {"detail": "organizationId required for superuser"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         from django.utils.dateparse import parse_datetime
 

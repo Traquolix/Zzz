@@ -10,6 +10,7 @@ from django.conf import settings
 from django.core.mail import send_mail
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
+from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -82,14 +83,14 @@ class ReportGenerateView(APIView):
             if not org_id:
                 return Response(
                     {"detail": "organizationId required for superusers", "code": "org_required"},
-                    status=400,
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
             try:
                 org = Organization.objects.get(pk=org_id)
             except Organization.DoesNotExist:
                 return Response(
                     {"detail": "Organization not found", "code": "org_invalid"},
-                    status=400,
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
             # Verify all requested fibers belong to the specified org
             allowed = set(get_org_fiber_ids(org))
@@ -100,7 +101,7 @@ class ReportGenerateView(APIView):
                         "detail": "Fibers not assigned to specified org",
                         "code": "fiber_access_denied",
                     },
-                    status=403,
+                    status=status.HTTP_403_FORBIDDEN,
                 )
         else:
             org = request.user.organization
@@ -112,7 +113,7 @@ class ReportGenerateView(APIView):
                         "detail": "One or more fiber IDs are not accessible.",
                         "code": "fiber_access_denied",
                     },
-                    status=403,
+                    status=status.HTTP_403_FORBIDDEN,
                 )
 
         report = Report.objects.create(
@@ -131,7 +132,7 @@ class ReportGenerateView(APIView):
         enqueue_report_generation(report.pk)
 
         out = ReportSerializer(report)
-        return Response(out.data, status=201)
+        return Response(out.data, status=status.HTTP_201_CREATED)
 
 
 class ReportDetailView(APIView):
@@ -149,7 +150,10 @@ class ReportDetailView(APIView):
                 Report.objects.select_related("created_by"), request.user
             ).get(pk=report_id)
         except Report.DoesNotExist:
-            return Response({"detail": "Report not found", "code": "report_not_found"}, status=404)
+            return Response(
+                {"detail": "Report not found", "code": "report_not_found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         data = ReportSerializer(report).data
         data["htmlContent"] = report.html_content
@@ -172,11 +176,15 @@ class ReportSendView(APIView):
                 Report.objects.select_related("created_by"), request.user
             ).get(pk=report_id)
         except Report.DoesNotExist:
-            return Response({"detail": "Report not found", "code": "report_not_found"}, status=404)
+            return Response(
+                {"detail": "Report not found", "code": "report_not_found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         if report.status != "completed":
             return Response(
-                {"detail": "Report is not ready to send.", "code": "report_not_ready"}, status=400
+                {"detail": "Report is not ready to send.", "code": "report_not_ready"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         serializer = SendReportSerializer(data=request.data)
@@ -185,7 +193,8 @@ class ReportSendView(APIView):
 
         if not recipients:
             return Response(
-                {"detail": "No recipients specified.", "code": "no_recipients"}, status=400
+                {"detail": "No recipients specified.", "code": "no_recipients"},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         from_email = getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@sequoia.local")
@@ -204,7 +213,10 @@ class ReportSendView(APIView):
             logger.info("Report %s sent to %s", report.id, recipients)
         except Exception as e:
             logger.error("Failed to send report %s: %s", report.id, e)
-            return Response({"detail": "Email sending failed", "code": "email_failed"}, status=500)
+            return Response(
+                {"detail": "Email sending failed", "code": "email_failed"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         return Response({"sent": True})
 
@@ -259,14 +271,14 @@ class ReportScheduleListView(APIView):
             if not org_id:
                 return Response(
                     {"detail": "organizationId required for superusers", "code": "org_required"},
-                    status=400,
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
             try:
                 org = Organization.objects.get(pk=org_id)
             except Organization.DoesNotExist:
                 return Response(
                     {"detail": "Organization not found", "code": "org_invalid"},
-                    status=400,
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
             # Verify all requested fibers belong to the specified org
             allowed = set(get_org_fiber_ids(org))
@@ -277,7 +289,7 @@ class ReportScheduleListView(APIView):
                         "detail": "Fibers not assigned to specified org",
                         "code": "fiber_access_denied",
                     },
-                    status=403,
+                    status=status.HTTP_403_FORBIDDEN,
                 )
         else:
             org = request.user.organization
@@ -289,7 +301,7 @@ class ReportScheduleListView(APIView):
                         "detail": "One or more fiber IDs are not accessible.",
                         "code": "fiber_access_denied",
                     },
-                    status=403,
+                    status=status.HTTP_403_FORBIDDEN,
                 )
 
         schedule = ReportSchedule.objects.create(
@@ -304,7 +316,7 @@ class ReportScheduleListView(APIView):
         )
 
         out = ReportScheduleSerializer(schedule)
-        return Response(out.data, status=201)
+        return Response(out.data, status=status.HTTP_201_CREATED)
 
 
 class ReportScheduleDetailView(APIView):
@@ -323,8 +335,9 @@ class ReportScheduleDetailView(APIView):
             ).get(pk=schedule_id)
         except ReportSchedule.DoesNotExist:
             return Response(
-                {"detail": "Schedule not found", "code": "schedule_not_found"}, status=404
+                {"detail": "Schedule not found", "code": "schedule_not_found"},
+                status=status.HTTP_404_NOT_FOUND,
             )
 
         schedule.delete()
-        return Response(status=204)
+        return Response(status=status.HTTP_204_NO_CONTENT)
