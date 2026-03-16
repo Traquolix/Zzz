@@ -380,7 +380,7 @@ export function SpectralHeatmapCanvas({ data }: { data: SpectralTimeSeries }) {
   }, [draw, debouncedWidth])
 
   return (
-    <div ref={containerRef} className="w-full" style={{ height: 200 }}>
+    <div ref={containerRef} className="w-full h-[200px]">
       {transitioning ? (
         <div className="w-full h-full rounded-lg bg-[var(--proto-surface-raised)] animate-pulse" />
       ) : (
