@@ -19,7 +19,7 @@ Work is tracked through GitHub issues. Before starting any task:
 2. **Write tests first** when adding features or fixing bugs
 3. **Implement** the change
 4. **Validate**: run `make lint && make typecheck`
-5. **Commit** with conventional message: `feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, `test:`. **Never add `Co-Authored-By` trailers** — commits should look like they come from the developer alone.
+5. **Commit** with conventional message: `feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, `test:`. **Never add `Co-Authored-By` trailers** — commits should look like they come from the developer alone. **Never add "Generated with Claude Code" footers** to PR descriptions.
 6. **Push**: `git push -u origin <branch>`
 7. **Open a PR**: `gh pr create --title "short title" --body "Closes #N\n\n## Summary\n- what changed\n- why"` — the `Closes #N` line is **mandatory** so GitHub auto-closes the issue on merge.
 8. **Never merge** — the human reviews and merges PRs
