@@ -42,7 +42,7 @@ export function Legend({
 
   return (
     <div
-      className="absolute top-3 z-30 h-9 w-[120px] flex items-center rounded-lg
+      className="absolute top-3 z-30 h-8 md:h-9 w-[100px] md:w-[120px] flex items-center rounded-lg
                         bg-[var(--proto-surface)]/90 border border-[var(--proto-border)]
                         backdrop-blur-sm pointer-events-auto overflow-hidden"
       style={{

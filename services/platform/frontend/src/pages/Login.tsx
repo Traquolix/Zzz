@@ -35,9 +35,9 @@ export function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm">
-        <div className="bg-white rounded-lg shadow-lg p-8">
+        <div className="bg-white rounded-lg shadow-lg p-6 sm:p-8">
           <div className="text-center mb-8">
             <h1 className="text-2xl font-bold text-slate-900">{t('common.appName')}</h1>
             <p className="text-sm text-slate-500 mt-1">{t('common.appTagline')}</p>

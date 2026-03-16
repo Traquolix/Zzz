@@ -194,3 +194,13 @@
     box-shadow: 0 0 0 12px rgba(59, 130, 246, 0);
   }
 }
+
+/* Mobile: sidebar takes full viewport width */
+@media (max-width: 768px) {
+  .proto-sidebar {
+    width: 100vw;
+  }
+  .proto-sidebar.expanded {
+    width: 100vw;
+  }
+}

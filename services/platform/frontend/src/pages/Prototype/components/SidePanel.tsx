@@ -235,7 +235,7 @@ export function SidePanel({
         </div>
 
         {/* Panel header */}
-        <div className="flex items-center justify-between px-4 h-[52px] shrink-0 border-b border-[var(--proto-border)]">
+        <div className="flex items-center justify-between px-3 md:px-4 h-[44px] md:h-[52px] shrink-0 border-b border-[var(--proto-border)]">
           <div className="flex items-center gap-3">
             <span className="text-[length:var(--text-sm)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
               {activeTab === 'dataHub'

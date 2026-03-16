@@ -21,14 +21,14 @@ export function TabButton({
     <button
       onClick={onClick}
       className={cn(
-        'relative flex flex-col items-center justify-center gap-1.5 w-[56px] py-3 rounded-l-lg border border-r-0 transition-colors cursor-pointer',
+        'relative flex flex-col items-center justify-center gap-1 md:gap-1.5 w-[44px] md:w-[56px] py-2 md:py-3 rounded-l-lg border border-r-0 transition-colors cursor-pointer',
         active
           ? 'bg-[var(--proto-surface)] text-[var(--proto-text)] border-[var(--proto-border)]'
           : 'bg-[var(--proto-surface)]/60 text-[var(--proto-text-muted)] border-transparent hover:text-[var(--proto-text-secondary)] hover:bg-[var(--proto-surface)]/80',
       )}
     >
       {icon}
-      <span className="text-[9px] font-medium leading-none">{label}</span>
+      <span className="hidden md:inline text-[9px] font-medium leading-none">{label}</span>
       {showDot && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[var(--proto-red)]" />}
     </button>
   )
