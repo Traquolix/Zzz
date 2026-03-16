@@ -15,6 +15,7 @@ import { MAX_SECTIONS_PER_ORG } from '@/api/sections'
 import { toast } from 'sonner'
 import { API_URL } from '@/constants/api'
 import { useRealtime } from '@/hooks/useRealtime'
+import { PanelErrorBoundary } from '@/components/ui/PanelErrorBoundary'
 import { WaterfallPanel } from './WaterfallPanel'
 import { DataHubPanel, type DataHubSubTab } from './DataHubPanel'
 import { ChannelDetail } from './ChannelDetail'
@@ -641,105 +642,123 @@ export function SidePanel({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
-          {activeTab === 'incidents' &&
-            (incident ? (
-              <IncidentDetail
-                incident={incident}
-                sections={sections}
-                dispatch={dispatch}
-                onBack={() => dispatch({ type: 'CLEAR_SELECTION' })}
-              />
-            ) : (
-              <IncidentList
-                incidents={incidents}
-                filterSeverity={filterSeverity}
-                hideResolved={hideResolved}
-                sortBy={incidentSortBy}
-                dispatch={dispatch}
-                onHighlightIncident={onHighlightIncident}
-                onClearHighlight={onClearHighlight}
-                unseenIds={unseenIds}
-                onMarkSeen={onMarkSeen}
-              />
-            ))}
-          {activeTab === 'sections' &&
-            (section ? (
-              <SectionDetail
-                section={section}
-                onBack={() => dispatch({ type: 'CLEAR_SELECTION' })}
-                liveStats={liveStats}
-                liveSeriesData={liveSeriesData}
-                dispatch={dispatch}
-                fiberColors={fiberColors}
-              />
-            ) : (
-              <SectionList
-                sections={sections}
-                dispatch={dispatch}
-                liveStats={liveStats}
-                liveSeriesData={liveSeriesData}
-                metric={sectionMetric}
-                fiberColors={fiberColors}
-                onHighlightSection={onHighlightSection}
-                onClearHighlight={onClearHighlight}
-                search={sectionSearch}
-              />
-            ))}
+          {activeTab === 'incidents' && (
+            <PanelErrorBoundary key="incidents">
+              {incident ? (
+                <IncidentDetail
+                  incident={incident}
+                  sections={sections}
+                  dispatch={dispatch}
+                  onBack={() => dispatch({ type: 'CLEAR_SELECTION' })}
+                />
+              ) : (
+                <IncidentList
+                  incidents={incidents}
+                  filterSeverity={filterSeverity}
+                  hideResolved={hideResolved}
+                  sortBy={incidentSortBy}
+                  dispatch={dispatch}
+                  onHighlightIncident={onHighlightIncident}
+                  onClearHighlight={onClearHighlight}
+                  unseenIds={unseenIds}
+                  onMarkSeen={onMarkSeen}
+                />
+              )}
+            </PanelErrorBoundary>
+          )}
+          {activeTab === 'sections' && (
+            <PanelErrorBoundary key="sections">
+              {section ? (
+                <SectionDetail
+                  section={section}
+                  onBack={() => dispatch({ type: 'CLEAR_SELECTION' })}
+                  liveStats={liveStats}
+                  liveSeriesData={liveSeriesData}
+                  dispatch={dispatch}
+                  fiberColors={fiberColors}
+                />
+              ) : (
+                <SectionList
+                  sections={sections}
+                  dispatch={dispatch}
+                  liveStats={liveStats}
+                  liveSeriesData={liveSeriesData}
+                  metric={sectionMetric}
+                  fiberColors={fiberColors}
+                  onHighlightSection={onHighlightSection}
+                  onClearHighlight={onClearHighlight}
+                  search={sectionSearch}
+                />
+              )}
+            </PanelErrorBoundary>
+          )}
           {activeTab === 'settings' && (
-            <SettingsPanel
-              fiberThresholds={state.fiberThresholds}
-              fiberColors={fiberColors}
-              dispatch={dispatch}
-              onHighlightFiber={onHighlightFiber}
-              onClearHighlight={onClearHighlight}
-              show3DBuildings={state.show3DBuildings}
-              showChannelHelper={state.showChannelHelper}
-              flow={realtimeCtx.flow}
-              switchingFlow={realtimeCtx.switchingFlow}
-              availableFlows={realtimeCtx.availableFlows}
-              onFlowToggle={realtimeCtx.setFlow}
-            />
+            <PanelErrorBoundary key="settings">
+              <SettingsPanel
+                fiberThresholds={state.fiberThresholds}
+                fiberColors={fiberColors}
+                dispatch={dispatch}
+                onHighlightFiber={onHighlightFiber}
+                onClearHighlight={onClearHighlight}
+                show3DBuildings={state.show3DBuildings}
+                showChannelHelper={state.showChannelHelper}
+                flow={realtimeCtx.flow}
+                switchingFlow={realtimeCtx.switchingFlow}
+                availableFlows={realtimeCtx.availableFlows}
+                onFlowToggle={realtimeCtx.setFlow}
+              />
+            </PanelErrorBoundary>
           )}
           {activeTab === 'channel' && selectedChannel && (
-            <ChannelDetail
-              channel={selectedChannel}
-              sections={sections}
-              dispatch={dispatch}
-              fiberColors={fiberColors}
-            />
-          )}
-          {activeTab === 'shm' &&
-            structureData &&
-            (selectedStructureId ? (
-              <StructureDetail
-                structure={structureData.structures.find(s => s.id === selectedStructureId) ?? null}
-                shmStatus={structureData.shmStatus}
-                spectralData={structureData.spectralData}
-                spectralLoading={structureData.spectralLoading}
-                peakData={structureData.peakData}
-                peakLoading={structureData.peakLoading}
-                dataSummary={structureData.dataSummary}
-                onBack={() => dispatch({ type: 'CLEAR_SELECTION' })}
-              />
-            ) : (
-              <StructureList
-                structures={structureData.structures}
-                loading={structureData.loading}
-                allStatuses={structureData.allStatuses}
-                search={shmSearch}
+            <PanelErrorBoundary key="channel">
+              <ChannelDetail
+                channel={selectedChannel}
+                sections={sections}
                 dispatch={dispatch}
-                onHighlightSection={onHighlightSection}
-                onClearHighlight={onClearHighlight}
+                fiberColors={fiberColors}
               />
-            ))}
-          {activeTab === 'waterfall' && <WaterfallPanel />}
+            </PanelErrorBoundary>
+          )}
+          {activeTab === 'shm' && structureData && (
+            <PanelErrorBoundary key="shm">
+              {selectedStructureId ? (
+                <StructureDetail
+                  structure={structureData.structures.find(s => s.id === selectedStructureId) ?? null}
+                  shmStatus={structureData.shmStatus}
+                  spectralData={structureData.spectralData}
+                  spectralLoading={structureData.spectralLoading}
+                  peakData={structureData.peakData}
+                  peakLoading={structureData.peakLoading}
+                  dataSummary={structureData.dataSummary}
+                  onBack={() => dispatch({ type: 'CLEAR_SELECTION' })}
+                />
+              ) : (
+                <StructureList
+                  structures={structureData.structures}
+                  loading={structureData.loading}
+                  allStatuses={structureData.allStatuses}
+                  search={shmSearch}
+                  dispatch={dispatch}
+                  onHighlightSection={onHighlightSection}
+                  onClearHighlight={onClearHighlight}
+                />
+              )}
+            </PanelErrorBoundary>
+          )}
+          {activeTab === 'waterfall' && (
+            <PanelErrorBoundary key="waterfall">
+              <WaterfallPanel />
+            </PanelErrorBoundary>
+          )}
           {activeTab === 'dataHub' && (
-            <DataHubPanel
-              subTab={dataHubSubTab}
-              isAdmin={isAdmin}
-              showCreateKey={showCreateKey}
-              onCloseCreateKey={() => setShowCreateKey(false)}
-            />
+            <PanelErrorBoundary key="dataHub">
+              <DataHubPanel
+                subTab={dataHubSubTab}
+                isAdmin={isAdmin}
+                showCreateKey={showCreateKey}
+                onCloseCreateKey={() => setShowCreateKey(false)}
+              />
+            </PanelErrorBoundary>
           )}
         </div>
       </div>
