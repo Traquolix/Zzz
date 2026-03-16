@@ -7,10 +7,13 @@ Permission model:
 """
 
 import logging
+from collections.abc import Callable
 from functools import wraps
+from typing import Any
 
 from django.db.models import Q
 from rest_framework import status
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -28,16 +31,16 @@ from apps.shared.utils import org_filter_queryset, paginate_queryset
 logger = logging.getLogger("sequoia.admin")
 
 
-def add_cache_control(max_age=300):
+def add_cache_control(max_age: int = 300) -> Callable[..., Any]:
     """Decorator to add Cache-Control headers to response.
 
     Admin endpoints serve private org-scoped data, so always use
     'private' to prevent CDN/proxy caching.
     """
 
-    def decorator(func):
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
-        def wrapper(self, request, *args, **kwargs):
+        def wrapper(self: Any, request: Request, *args: Any, **kwargs: Any) -> Response:
             response = func(self, request, *args, **kwargs)
             if max_age > 0:
                 response["Cache-Control"] = f"private, max-age={max_age}"
@@ -59,7 +62,7 @@ class OrganizationListView(APIView):
     permission_classes = [IsSuperuser]
 
     @add_cache_control()
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         search = request.GET.get("search", "").strip()
         orgs = Organization.objects.prefetch_related("settings", "fiber_assignments").all()
 
@@ -104,7 +107,7 @@ class OrganizationListView(APIView):
             }
         )
 
-    def post(self, request):
+    def post(self, request: Request) -> Response:
         name = request.data.get("name")
         if not name:
             return Response(
@@ -128,7 +131,7 @@ class OrganizationListView(APIView):
 class OrganizationDetailView(APIView):
     permission_classes = [IsSuperuser]
 
-    def patch(self, request, org_id):
+    def patch(self, request: Request, org_id: str) -> Response:
         try:
             org = Organization.objects.get(pk=org_id)
         except Organization.DoesNotExist:
@@ -154,7 +157,7 @@ class OrganizationDetailView(APIView):
 class OrgSettingsView(APIView):
     permission_classes = [IsAdminOrSuperuser]
 
-    def get(self, request, org_id):
+    def get(self, request: Request, org_id: str) -> Response:
         # Org admin can only GET their own org's settings
         # Superuser can GET any
         if not request.user.is_superuser and str(request.user.organization_id) != str(org_id):
@@ -176,7 +179,7 @@ class OrgSettingsView(APIView):
             }
         )
 
-    def patch(self, request, org_id):
+    def patch(self, request: Request, org_id: str) -> Response:
         if not request.user.is_superuser and str(request.user.organization_id) != str(org_id):
             return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
         try:
@@ -253,7 +256,7 @@ class UserListView(APIView):
     permission_classes = [IsAdminOrSuperuser]
 
     @add_cache_control()
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         search = request.GET.get("search", "").strip()
         users = org_filter_queryset(User.objects.select_related("organization"), request.user)
 
@@ -289,7 +292,7 @@ class UserListView(APIView):
             }
         )
 
-    def post(self, request):
+    def post(self, request: Request) -> Response:
         username = request.data.get("username")
         password = request.data.get("password")
         role = request.data.get("role", "viewer")
@@ -361,7 +364,7 @@ class UserListView(APIView):
 class UserDetailView(APIView):
     permission_classes = [IsAdminOrSuperuser]
 
-    def patch(self, request, user_id):
+    def patch(self, request: Request, user_id: str) -> Response:
         try:
             user = org_filter_queryset(User.objects.all(), request.user).get(pk=user_id)
         except User.DoesNotExist:
@@ -439,7 +442,7 @@ class InfrastructureAdminListView(APIView):
     permission_classes = [IsAdminOrSuperuser]
 
     @add_cache_control()
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         search = request.GET.get("search", "").strip()
         items = org_filter_queryset(Infrastructure.objects.all(), request.user)
 
@@ -474,7 +477,7 @@ class InfrastructureAdminListView(APIView):
             }
         )
 
-    def post(self, request):
+    def post(self, request: Request) -> Response:
         data = request.data
         required = ["id", "name", "type", "fiberId", "startChannel", "endChannel"]
         missing = [f for f in required if f not in data]
@@ -537,7 +540,7 @@ class InfrastructureAdminListView(APIView):
 class InfrastructureAdminDetailView(APIView):
     permission_classes = [IsAdminOrSuperuser]
 
-    def delete(self, request, infra_id):
+    def delete(self, request: Request, infra_id: str) -> Response:
         try:
             item = org_filter_queryset(Infrastructure.objects.all(), request.user).get(id=infra_id)
         except Infrastructure.DoesNotExist:
@@ -558,7 +561,7 @@ class AlertRuleListView(APIView):
     permission_classes = [IsAdminOrSuperuser]
 
     @add_cache_control()
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         search = request.GET.get("search", "").strip()
         rules = org_filter_queryset(AlertRule.objects.all(), request.user)
 
@@ -592,7 +595,7 @@ class AlertRuleListView(APIView):
             }
         )
 
-    def post(self, request):
+    def post(self, request: Request) -> Response:
         data = request.data
         name = data.get("name")
         rule_type = data.get("ruleType")
@@ -683,7 +686,7 @@ class AlertRuleListView(APIView):
 class AlertRuleDetailView(APIView):
     permission_classes = [IsAdminOrSuperuser]
 
-    def _get_rule(self, request, rule_id):
+    def _get_rule(self, request: Request, rule_id: str) -> tuple[AlertRule | None, Response | None]:
         try:
             return org_filter_queryset(AlertRule.objects.all(), request.user).get(pk=rule_id), None
         except AlertRule.DoesNotExist:
@@ -692,10 +695,11 @@ class AlertRuleDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-    def patch(self, request, rule_id):
+    def patch(self, request: Request, rule_id: str) -> Response:
         rule, error = self._get_rule(request, rule_id)
         if error:
             return error
+        assert rule is not None
 
         data = request.data
         if "name" in data:
@@ -754,10 +758,11 @@ class AlertRuleDetailView(APIView):
             }
         )
 
-    def delete(self, request, rule_id):
+    def delete(self, request: Request, rule_id: str) -> Response:
         rule, error = self._get_rule(request, rule_id)
         if error:
             return error
+        assert rule is not None
         rule.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -770,7 +775,7 @@ class AlertRuleDetailView(APIView):
 class FiberAssignmentListView(APIView):
     permission_classes = [IsSuperuser]
 
-    def get(self, request, org_id):
+    def get(self, request: Request, org_id: str) -> Response:
         assignments = FiberAssignment.objects.filter(organization_id=org_id)
         results = [
             {"id": str(a.pk), "fiberId": a.fiber_id, "assignedAt": a.assigned_at.isoformat()}
@@ -778,7 +783,7 @@ class FiberAssignmentListView(APIView):
         ]
         return Response({"results": results})
 
-    def post(self, request, org_id):
+    def post(self, request: Request, org_id: str) -> Response:
         fiber_id = request.data.get("fiberId")
         if not fiber_id:
             return Response({"detail": "fiberId is required"}, status=status.HTTP_400_BAD_REQUEST)
@@ -807,7 +812,7 @@ class FiberAssignmentListView(APIView):
 class FiberAssignmentDetailView(APIView):
     permission_classes = [IsSuperuser]
 
-    def delete(self, request, org_id, assignment_id):
+    def delete(self, request: Request, org_id: str, assignment_id: str) -> Response:
         try:
             assignment = FiberAssignment.objects.get(pk=assignment_id, organization_id=org_id)
         except FiberAssignment.DoesNotExist:
@@ -827,7 +832,7 @@ class AlertLogListView(APIView):
     permission_classes = [IsAdminOrSuperuser]
 
     @add_cache_control()
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         from apps.alerting.models import AlertLog
 
         search = request.GET.get("search", "").strip()
@@ -876,7 +881,7 @@ class AlertLogListView(APIView):
 class APIKeyListView(APIView):
     permission_classes = [IsAdminOrSuperuser]
 
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         keys = org_filter_queryset(APIKey.objects.filter(is_active=True), request.user)
         results = [
             {
@@ -893,7 +898,7 @@ class APIKeyListView(APIView):
         ]
         return Response({"results": results})
 
-    def post(self, request):
+    def post(self, request: Request) -> Response:
         name = request.data.get("name")
         if not name:
             return Response(
@@ -938,7 +943,7 @@ class APIKeyListView(APIView):
 class APIKeyDetailView(APIView):
     permission_classes = [IsAdminOrSuperuser]
 
-    def delete(self, request, key_id):
+    def delete(self, request: Request, key_id: str) -> Response:
         try:
             key_obj = org_filter_queryset(APIKey.objects.all(), request.user).get(pk=key_id)
         except APIKey.DoesNotExist:
@@ -951,7 +956,7 @@ class APIKeyDetailView(APIView):
 class APIKeyRotateView(APIView):
     permission_classes = [IsAdminOrSuperuser]
 
-    def post(self, request, key_id):
+    def post(self, request: Request, key_id: str) -> Response:
         try:
             old_key = org_filter_queryset(APIKey.objects.all(), request.user).get(pk=key_id)
         except APIKey.DoesNotExist:
@@ -984,7 +989,7 @@ class AlertRuleTestView(APIView):
 
     permission_classes = [IsAdminOrSuperuser]
 
-    def post(self, request, rule_id):
+    def post(self, request: Request, rule_id: str) -> Response:
         try:
             rule = org_filter_queryset(AlertRule.objects.all(), request.user).get(pk=rule_id)
         except AlertRule.DoesNotExist:

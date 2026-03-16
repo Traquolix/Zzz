@@ -7,6 +7,7 @@ from typing import Any
 
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers as s
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -77,7 +78,7 @@ class UserPreferencesView(APIView):
     permission_classes = [IsActiveUser]
 
     @extend_schema(responses={200: _PreferencesResponse}, tags=["preferences"])
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         prefs, _ = UserPreferences.objects.get_or_create(user=request.user)
         return Response(
             {
@@ -97,7 +98,7 @@ class UserPreferencesView(APIView):
         responses={200: _PreferencesResponse},
         tags=["preferences"],
     )
-    def put(self, request):
+    def put(self, request: Request) -> Response:
         # Validate payload size to prevent abuse
         payload_size = len(json.dumps(request.data).encode("utf-8"))
         if payload_size > MAX_PREFERENCES_SIZE:

@@ -7,11 +7,14 @@ only see data from fibers assigned to their organization.
 
 import logging
 import time
+from typing import Any
 
 from django.core.cache import cache as django_cache
 from django.db import IntegrityError
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.exceptions import NotFound, ParseError
+from rest_framework.permissions import BasePermission
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -65,14 +68,14 @@ STATS_CACHE_TTL = 5  # 5 seconds
 MAX_SECTIONS_PER_ORG = 50
 
 
-def _get_fiber_ids_or_none(user):
+def _get_fiber_ids_or_none(user: Any) -> list[str] | None:
     """Return fiber_ids list for org-scoped users, None for superusers."""
     if user.is_superuser:
         return None
     return get_org_fiber_ids(user.organization)
 
 
-def _verify_infrastructure_access(user, infrastructure_id):
+def _verify_infrastructure_access(user: Any, infrastructure_id: str | None) -> Response | None:
     """Verify the user's org owns the infrastructure. Returns error Response or None."""
     if not infrastructure_id or user.is_superuser:
         return None
@@ -104,7 +107,7 @@ class IncidentListView(FlowAwareMixin, APIView):
         responses={200: IncidentSerializer(many=True)},
         tags=["incidents"],
     )
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         try:
             limit = min(int(request.query_params.get("limit", 100)), 500)
         except (ValueError, TypeError):
@@ -127,7 +130,7 @@ class IncidentListView(FlowAwareMixin, APIView):
 
         return self._get_live_incidents(request, cache_key, limit, fiber_ids)
 
-    def _get_sim_incidents(self, request, cache_key: str, limit: int):
+    def _get_sim_incidents(self, request: Request, cache_key: str, limit: int) -> Response:
         """Sim flow: return incidents from simulation cache only."""
         from apps.realtime.simulation import get_simulation_incidents
 
@@ -141,7 +144,9 @@ class IncidentListView(FlowAwareMixin, APIView):
         django_cache.set(cache_key, result, INCIDENTS_CACHE_TTL)
         return Response(result)
 
-    def _get_live_incidents(self, request, cache_key: str, limit: int, fiber_ids):
+    def _get_live_incidents(
+        self, request: Request, cache_key: str, limit: int, fiber_ids: list[str] | None
+    ) -> Response:
         """Live flow: return incidents from ClickHouse only."""
         try:
             incidents = incident_query_recent(fiber_ids=fiber_ids, hours=24, limit=limit + 1)
@@ -179,13 +184,13 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
         responses={200: IncidentSnapshotSerializer},
         tags=["incidents"],
     )
-    def get(self, request, incident_id):
+    def get(self, request: Request, incident_id: str) -> Response:
         if self._is_sim(request):
             return self._get_sim_snapshot(request, incident_id)
 
         return self._get_live_snapshot(request, incident_id)
 
-    def _get_sim_snapshot(self, request, incident_id: str):
+    def _get_sim_snapshot(self, request: Request, incident_id: str) -> Response:
         """Sim flow: return snapshot from simulation cache only."""
         from apps.realtime.simulation import get_simulation_incidents, get_simulation_snapshot
 
@@ -215,7 +220,7 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
             }
         )
 
-    def _get_live_snapshot(self, request, incident_id: str):
+    def _get_live_snapshot(self, request: Request, incident_id: str) -> Response:
         """Live flow: return snapshot from ClickHouse only."""
         try:
             incident_rows = query(
@@ -334,18 +339,20 @@ class IncidentActionView(FlowAwareMixin, APIView):
     Live flow only — sim incidents are ephemeral and don't support workflow actions.
     """
 
-    def get_permissions(self):
-        perms = [IsActiveUser()]
+    def get_permissions(self) -> list[BasePermission]:
+        perms: list[BasePermission] = [IsActiveUser()]
         if self.request.method == "POST":
             perms.append(IsNotViewer())
         return perms
 
-    def initial(self, request, *args, **kwargs):
+    def initial(self, request: Request, *args: Any, **kwargs: Any) -> None:
         super().initial(request, *args, **kwargs)
         if self._is_sim(request):
             raise ParseError("Workflow actions are not supported for simulated incidents")
 
-    def _get_incident_or_404(self, incident_id, request):
+    def _get_incident_or_404(
+        self, incident_id: str, request: Request
+    ) -> tuple[dict | None, Response | None]:
         """Fetch incident from ClickHouse and verify org access."""
         try:
             incident = incident_query_by_id(incident_id)
@@ -375,7 +382,7 @@ class IncidentActionView(FlowAwareMixin, APIView):
         responses={200: IncidentActionSerializer(many=True)},
         tags=["incidents"],
     )
-    def get(self, request, incident_id):
+    def get(self, request: Request, incident_id: str) -> Response:
         incident, error_resp = self._get_incident_or_404(incident_id, request)
         if error_resp:
             return error_resp
@@ -398,7 +405,7 @@ class IncidentActionView(FlowAwareMixin, APIView):
         responses={201: IncidentActionSerializer},
         tags=["incidents"],
     )
-    def post(self, request, incident_id):
+    def post(self, request: Request, incident_id: str) -> Response:
         from django.db import transaction
 
         input_serializer = IncidentActionInputSerializer(data=request.data)
@@ -469,7 +476,7 @@ class InfrastructureListView(APIView):
         responses={200: InfrastructureSerializer(many=True)},
         tags=["infrastructure"],
     )
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         if request.user.is_superuser:
             qs = Infrastructure.objects.all()
         elif hasattr(request.user, "organization") and request.user.organization:
@@ -517,7 +524,7 @@ class StatsView(FlowAwareMixin, APIView):
         tags=["stats"],
     )
     @clickhouse_fallback()
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         flow = self._get_flow(request)
         cache_key = f"{build_org_cache_key('stats', request.user)}:{flow}"
         cached = django_cache.get(cache_key)
@@ -532,7 +539,7 @@ class StatsView(FlowAwareMixin, APIView):
         django_cache.set(cache_key, data, STATS_CACHE_TTL)
         return Response(data)
 
-    def _get_sim_stats(self, request) -> dict:
+    def _get_sim_stats(self, request: Request) -> dict:
         """Sim flow: derive stats from simulation caches."""
         from apps.realtime.simulation import get_simulation_incidents, get_simulation_stats
 
@@ -549,7 +556,7 @@ class StatsView(FlowAwareMixin, APIView):
             "systemUptime": int(time.time() - _PROCESS_START_TIME),
         }
 
-    def _get_live_stats(self, request) -> dict:
+    def _get_live_stats(self, request: Request) -> dict:
         """Live flow: query ClickHouse for real stats."""
         fiber_ids = _get_fiber_ids_or_none(request.user)
 
@@ -665,8 +672,8 @@ class SectionListView(APIView):
 
     permission_classes = [IsActiveUser]
 
-    def get_permissions(self):
-        perms = [IsActiveUser()]
+    def get_permissions(self) -> list[BasePermission]:
+        perms: list[BasePermission] = [IsActiveUser()]
         if self.request.method == "POST":
             perms.append(IsNotViewer())
         return perms
@@ -675,7 +682,7 @@ class SectionListView(APIView):
         responses={200: SectionSerializer(many=True)},
         tags=["sections"],
     )
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         org_id = None if request.user.is_superuser else request.user.organization_id
         sections = query_sections(organization_id=org_id)
         return Response({"results": sections})
@@ -685,7 +692,7 @@ class SectionListView(APIView):
         responses={201: SectionSerializer},
         tags=["sections"],
     )
-    def post(self, request):
+    def post(self, request: Request) -> Response:
         serializer = SectionInputSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -749,7 +756,7 @@ class SectionDeleteView(APIView):
 
     permission_classes = [IsActiveUser, IsNotViewer]
 
-    def delete(self, request, section_id):
+    def delete(self, request: Request, section_id: str) -> Response:
         org_id = None if request.user.is_superuser else request.user.organization_id
         if not delete_section(section_id, organization_id=org_id):
             return Response(
@@ -789,7 +796,7 @@ class SectionHistoryView(FlowAwareMixin, APIView):
         tags=["sections"],
     )
     @clickhouse_fallback()
-    def get(self, request, section_id):
+    def get(self, request: Request, section_id: str) -> Response:
         try:
             minutes = min(int(request.query_params.get("minutes", 60)), 1440)
         except (ValueError, TypeError):
@@ -874,7 +881,7 @@ class BatchSectionHistoryView(FlowAwareMixin, APIView):
     permission_classes = [IsActiveUser]
 
     @clickhouse_fallback()
-    def post(self, request):
+    def post(self, request: Request) -> Response:
         section_ids = request.data.get("sectionIds")
         if not isinstance(section_ids, list) or not section_ids:
             return Response(
@@ -1002,7 +1009,7 @@ class SpectralDataView(APIView):
         responses={200: SpectralDataSerializer},
         tags=["shm"],
     )
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         from datetime import datetime
 
         import numpy as np
@@ -1109,7 +1116,7 @@ class SpectralPeaksView(APIView):
         responses={200: SpectralPeaksSerializer},
         tags=["shm"],
     )
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         from datetime import datetime, timedelta
 
         import numpy as np
@@ -1253,7 +1260,7 @@ class SpectralSummaryView(APIView):
         ],
         tags=["shm"],
     )
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         from apps.monitoring.hdf5_reader import get_spectral_summary, sample_file_exists
 
         # Org-scoping: validate infrastructure access if specified
@@ -1295,7 +1302,7 @@ class SHMStatusView(APIView):
         responses={200: dict},
         tags=["shm"],
     )
-    def get(self, request, infrastructure_id):
+    def get(self, request: Request, infrastructure_id: str) -> Response:
         import random
 
         import numpy as np

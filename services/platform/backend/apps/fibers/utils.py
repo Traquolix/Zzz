@@ -6,6 +6,7 @@ to which org" across REST views, WebSocket consumers, and broadcast logic.
 """
 
 import logging
+from typing import Any
 
 from django.core.cache import cache
 
@@ -16,7 +17,7 @@ _ORG_FIBER_TTL = 300  # 5 minutes
 _FIBER_MAP_TTL = 300
 
 
-def get_org_fiber_ids(organization) -> list[str]:
+def get_org_fiber_ids(organization: Any) -> list[str]:
     """Return list of fiber_ids assigned to an organization (cached 5min)."""
     cache_key = f"org_fibers:{organization.pk}"
     result: list[str] | None = cache.get(cache_key)
@@ -80,7 +81,7 @@ def fiber_belongs_to_org(fiber_id: str, fiber_ids: list[str]) -> bool:
     return fiber_id in set(fiber_ids)
 
 
-def invalidate_org_fiber_cache(org_id):
+def invalidate_org_fiber_cache(org_id: Any) -> None:
     """Invalidate all fiber caches related to an org after admin changes."""
     cache.delete(f"org_fibers:{org_id}")
     # Also invalidate view-level fiber caches
@@ -89,7 +90,7 @@ def invalidate_org_fiber_cache(org_id):
     logger.debug("Invalidated org fiber cache for %s", org_id)
 
 
-def invalidate_fiber_org_map():
+def invalidate_fiber_org_map() -> None:
     """Invalidate the global fiber→org mapping cache."""
     cache.delete("fiber_org_map")
     logger.debug("Invalidated fiber_org_map cache")
