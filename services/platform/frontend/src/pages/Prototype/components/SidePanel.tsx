@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import i18next from 'i18next'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
 import { severityColor, chartColors } from '../data'
@@ -15,7 +16,7 @@ import { MAX_SECTIONS_PER_ORG } from '@/api/sections'
 import { toast } from 'sonner'
 import { API_URL } from '@/constants/api'
 import { useRealtime } from '@/hooks/useRealtime'
-import { PanelErrorBoundary } from '@/components/ui/PanelErrorBoundary'
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { WaterfallPanel } from './WaterfallPanel'
 import { DataHubPanel, type DataHubSubTab } from './DataHubPanel'
 import { ChannelDetail } from './ChannelDetail'
@@ -68,6 +69,33 @@ interface SidePanelProps {
 }
 
 const severityOrder: Severity[] = ['critical', 'high', 'medium', 'low']
+
+/** Compact fallback UI for panel-level error boundaries. */
+const panelFallback = (retry: () => void) => (
+  <div className="flex flex-col items-center justify-center gap-3 py-12 px-4 text-center">
+    <svg
+      width="28"
+      height="28"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="var(--proto-text-muted)"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+    </svg>
+    <span className="text-[length:var(--text-sm)] text-[var(--proto-text-muted)]">
+      {i18next.t('common.somethingWentWrong')}
+    </span>
+    <button
+      onClick={retry}
+      className="px-3 py-1.5 rounded text-[length:var(--text-xs)] font-medium text-[var(--proto-text-secondary)] bg-[var(--proto-surface-raised)] hover:text-[var(--proto-text)] transition-colors cursor-pointer"
+    >
+      {i18next.t('common.tryAgain')}
+    </button>
+  </div>
+)
 
 export function SidePanel({
   state,
@@ -643,7 +671,7 @@ export function SidePanel({
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           {activeTab === 'incidents' && (
-            <PanelErrorBoundary key="incidents">
+            <ErrorBoundary key="incidents" fallback={panelFallback}>
               {incident ? (
                 <IncidentDetail
                   incident={incident}
@@ -664,10 +692,10 @@ export function SidePanel({
                   onMarkSeen={onMarkSeen}
                 />
               )}
-            </PanelErrorBoundary>
+            </ErrorBoundary>
           )}
           {activeTab === 'sections' && (
-            <PanelErrorBoundary key="sections">
+            <ErrorBoundary key="sections" fallback={panelFallback}>
               {section ? (
                 <SectionDetail
                   section={section}
@@ -690,10 +718,10 @@ export function SidePanel({
                   search={sectionSearch}
                 />
               )}
-            </PanelErrorBoundary>
+            </ErrorBoundary>
           )}
           {activeTab === 'settings' && (
-            <PanelErrorBoundary key="settings">
+            <ErrorBoundary key="settings" fallback={panelFallback}>
               <SettingsPanel
                 fiberThresholds={state.fiberThresholds}
                 fiberColors={fiberColors}
@@ -707,20 +735,20 @@ export function SidePanel({
                 availableFlows={realtimeCtx.availableFlows}
                 onFlowToggle={realtimeCtx.setFlow}
               />
-            </PanelErrorBoundary>
+            </ErrorBoundary>
           )}
           {activeTab === 'channel' && selectedChannel && (
-            <PanelErrorBoundary key="channel">
+            <ErrorBoundary key="channel" fallback={panelFallback}>
               <ChannelDetail
                 channel={selectedChannel}
                 sections={sections}
                 dispatch={dispatch}
                 fiberColors={fiberColors}
               />
-            </PanelErrorBoundary>
+            </ErrorBoundary>
           )}
           {activeTab === 'shm' && structureData && (
-            <PanelErrorBoundary key="shm">
+            <ErrorBoundary key="shm" fallback={panelFallback}>
               {selectedStructureId ? (
                 <StructureDetail
                   structure={structureData.structures.find(s => s.id === selectedStructureId) ?? null}
@@ -743,22 +771,22 @@ export function SidePanel({
                   onClearHighlight={onClearHighlight}
                 />
               )}
-            </PanelErrorBoundary>
+            </ErrorBoundary>
           )}
           {activeTab === 'waterfall' && (
-            <PanelErrorBoundary key="waterfall">
+            <ErrorBoundary key="waterfall" fallback={panelFallback}>
               <WaterfallPanel />
-            </PanelErrorBoundary>
+            </ErrorBoundary>
           )}
           {activeTab === 'dataHub' && (
-            <PanelErrorBoundary key="dataHub">
+            <ErrorBoundary key="dataHub" fallback={panelFallback}>
               <DataHubPanel
                 subTab={dataHubSubTab}
                 isAdmin={isAdmin}
                 showCreateKey={showCreateKey}
                 onCloseCreateKey={() => setShowCreateKey(false)}
               />
-            </PanelErrorBoundary>
+            </ErrorBoundary>
           )}
         </div>
       </div>
