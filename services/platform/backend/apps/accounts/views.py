@@ -135,7 +135,7 @@ class LoginView(APIView):
 
             AuditService.log(
                 request=request,
-                action=AuditLog.Action.LOGIN_SUCCESS,
+                action=AuditLog.Action.LOGIN_SUCCESS,  # type: ignore[arg-type]  # TextChoices is str at runtime; no django-stubs
                 object_type="User",
                 object_id=str(user.id),
                 changes={"username": username},
@@ -166,7 +166,7 @@ class LoginView(APIView):
 
             AuditService.log(
                 request=request,
-                action=AuditLog.Action.LOGIN_FAILED,
+                action=AuditLog.Action.LOGIN_FAILED,  # type: ignore[arg-type]  # TextChoices is str at runtime; no django-stubs
                 changes={"username": username, "attempt": attempts + 1},
                 user=target_user,
                 organization=target_user.organization if target_user else None,

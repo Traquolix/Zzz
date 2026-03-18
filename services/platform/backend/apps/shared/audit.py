@@ -120,7 +120,7 @@ class AuditService:
     @staticmethod
     def log(
         request: Any,
-        action: Any,
+        action: str,
         object_type: str = "",
         object_id: str = "",
         changes: dict[str, Any] | None = None,

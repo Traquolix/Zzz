@@ -29,7 +29,7 @@ logger = logging.getLogger("sequoia.pubsub")
 _publish_clients: dict[int, aioredis.Redis] = {}
 
 
-def pubsub_channel_name(flow: str, channel: str, org_id: str) -> str:
+def pubsub_channel_name(flow: str, channel: str, org_id: str | None) -> str:
     """Build the Redis pub/sub channel name."""
     return f"sequoia:{flow}:{channel}:org:{org_id}"
 

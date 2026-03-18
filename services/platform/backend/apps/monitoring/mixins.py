@@ -5,7 +5,7 @@ View mixins for the monitoring app.
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from typing import Any, Callable
 
 from rest_framework.request import Request
 
@@ -43,9 +43,9 @@ class FlowAwareMixin:
     def _get_sim_data(
         self,
         request: Request,
-        sim_fn: Callable[[], list[dict]],
+        sim_fn: Callable[[], list[dict[str, Any]]],
         fiber_key: str = "fiberId",
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """
         Get data from the simulation cache, org-filtered.
 

@@ -255,7 +255,7 @@ class FiberListView(APIView):
             dir_paths_map = _load_directional_paths()
 
             fibers = []
-            for row in result.named_results():  # type: ignore[attr-defined]
+            for row in result.named_results():  # type: ignore[attr-defined]  # clickhouse_connect QueryResult lacks stub
                 coords = []
                 for coord in row["channel_coordinates"]:
                     lng, lat = coord

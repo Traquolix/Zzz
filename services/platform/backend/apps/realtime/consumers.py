@@ -61,7 +61,7 @@ RATE_LIMIT_WINDOW_SECONDS = 10
 AUTH_TIMEOUT_SECONDS = 15
 
 
-def _org_group_name(channel: str, org_id: str, flow: str) -> str:
+def _org_group_name(channel: str, org_id: str | None, flow: str) -> str:
     """Build the flow-prefixed, org-scoped Channels group name."""
     return f"realtime_{flow}_{channel}_org_{org_id}"
 
@@ -93,7 +93,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         # All connections start unauthenticated — require message-based auth
         self.subscriptions: set[str] = set()
         self._user: Any | None = None
-        self._org_id: str = ""
+        self._org_id: str | None = None
         self._authenticated = False
         self._auth_timeout_task: asyncio.Task[None] | None = None
         await self.accept()

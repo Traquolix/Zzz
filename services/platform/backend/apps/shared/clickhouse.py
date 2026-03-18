@@ -54,7 +54,7 @@ def _is_in_cooldown() -> bool:
         return (time.time() - _last_failure_time) < cooldown
 
 
-def _record_failure():
+def _record_failure() -> None:
     """Record a connection failure (thread-safe)."""
     global _consecutive_failures, _last_failure_time
     with _breaker_lock:
@@ -68,7 +68,7 @@ def _record_failure():
         )
 
 
-def _record_success():
+def _record_success() -> None:
     """Reset circuit breaker on successful connection (thread-safe)."""
     global _consecutive_failures, _last_failure_time
     with _breaker_lock:

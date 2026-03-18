@@ -140,7 +140,7 @@ class UserPreferencesView(APIView):
 
         AuditService.log(
             request=request,
-            action=AuditLog.Action.PREFERENCES_UPDATED,
+            action=AuditLog.Action.PREFERENCES_UPDATED,  # type: ignore[arg-type]  # TextChoices is str at runtime; no django-stubs
             object_type="UserPreferences",
             object_id=str(request.user.id),
             changes={"updated_keys": [k for k in ("dashboard", "map") if k in data]},

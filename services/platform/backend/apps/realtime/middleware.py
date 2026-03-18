@@ -28,7 +28,7 @@ User = get_user_model()
 def get_user_from_token(token_str: str) -> Any:
     """Validate JWT access token and return the user, or AnonymousUser."""
     try:
-        token = AccessToken(token_str)  # type: ignore[arg-type]
+        token = AccessToken(token_str)  # type: ignore[arg-type]  # simplejwt stubs expect UntypedToken
         user_id = token.payload.get("user_id")
         if user_id is None:
             return AnonymousUser()

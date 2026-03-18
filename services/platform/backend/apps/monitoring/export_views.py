@@ -42,7 +42,7 @@ class ExportEstimateThrottle(UserRateThrottle):
 def _parse_params(
     request: Request,
 ) -> tuple[str | None, datetime | None, datetime | None, str | None, list[str] | None]:
-    """Parse and validate common export parameters. Returns (fiber_id, start, end, format, errors) or raises."""
+    """Parse and validate common export parameters. Returns (fiber_id, start, end, format, errors)."""
     fiber_id = request.GET.get("fiber_id")
     start_str = request.GET.get("start")
     end_str = request.GET.get("end")
