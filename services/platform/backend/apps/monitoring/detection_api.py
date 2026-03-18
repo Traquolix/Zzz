@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 from django.utils.dateparse import parse_datetime
 from drf_spectacular.utils import OpenApiParameter, extend_schema
-from rest_framework import status as http_status
+from rest_framework import status
 from rest_framework.permissions import BasePermission
 from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle
@@ -354,17 +354,17 @@ class DetectionListView(APIView):
     def get(self, request):
         params, error = _parse_detection_params(request)
         if error:
-            return Response({"detail": error}, status=http_status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": error}, status=status.HTTP_400_BAD_REQUEST)
 
         if not check_fiber_access(request.user, params.fiber_id):
             return Response(
                 {"detail": "Access denied for this fiber"},
-                status=http_status.HTTP_403_FORBIDDEN,
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         tier, tier_error = select_tier(params.start, params.end, params.resolution)
         if tier_error:
-            return Response({"detail": tier_error}, status=http_status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": tier_error}, status=status.HTTP_400_BAD_REQUEST)
 
         if tier == "hires":
             sql, query_params = _build_hires_query(params)
@@ -452,30 +452,30 @@ class DetectionSummaryView(APIView):
         if not end_str:
             errors.append("end is required")
         if errors:
-            return Response({"detail": "; ".join(errors)}, status=http_status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "; ".join(errors)}, status=status.HTTP_400_BAD_REQUEST)
 
         start = parse_datetime(start_str)
         end = parse_datetime(end_str)
         if start is None or end is None:
             return Response(
                 {"detail": "Invalid ISO 8601 format for start or end"},
-                status=http_status.HTTP_400_BAD_REQUEST,
+                status=status.HTTP_400_BAD_REQUEST,
             )
         if start >= end:
             return Response(
-                {"detail": "start must be before end"}, status=http_status.HTTP_400_BAD_REQUEST
+                {"detail": "start must be before end"}, status=status.HTTP_400_BAD_REQUEST
             )
 
         if not check_fiber_access(request.user, fiber_id):
             return Response(
                 {"detail": "Access denied for this fiber"},
-                status=http_status.HTTP_403_FORBIDDEN,
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         resolution = request.GET.get("resolution", "auto")
         tier, tier_error = select_tier(start, end, resolution)
         if tier_error:
-            return Response({"detail": tier_error}, status=http_status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": tier_error}, status=status.HTTP_400_BAD_REQUEST)
 
         direction = None
         if "direction" in request.GET:
@@ -484,12 +484,12 @@ class DetectionSummaryView(APIView):
                 if direction not in (0, 1):
                     return Response(
                         {"detail": "direction must be 0 or 1"},
-                        status=http_status.HTTP_400_BAD_REQUEST,
+                        status=status.HTTP_400_BAD_REQUEST,
                     )
             except ValueError:
                 return Response(
                     {"detail": "direction must be 0 or 1"},
-                    status=http_status.HTTP_400_BAD_REQUEST,
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
         dir_clause, dir_params = _build_direction_filter(direction)
 
@@ -709,24 +709,24 @@ class IncidentListAPIView(APIView):
         if not end_str:
             errors.append("end is required")
         if errors:
-            return Response({"detail": "; ".join(errors)}, status=http_status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": "; ".join(errors)}, status=status.HTTP_400_BAD_REQUEST)
 
         start = parse_datetime(start_str)
         end = parse_datetime(end_str)
         if start is None or end is None:
             return Response(
                 {"detail": "Invalid ISO 8601 format for start or end"},
-                status=http_status.HTTP_400_BAD_REQUEST,
+                status=status.HTTP_400_BAD_REQUEST,
             )
         if start >= end:
             return Response(
-                {"detail": "start must be before end"}, status=http_status.HTTP_400_BAD_REQUEST
+                {"detail": "start must be before end"}, status=status.HTTP_400_BAD_REQUEST
             )
 
         if not check_fiber_access(request.user, fiber_id):
             return Response(
                 {"detail": "Access denied for this fiber"},
-                status=http_status.HTTP_403_FORBIDDEN,
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         limit_str = request.GET.get("limit", "100")
@@ -734,7 +734,7 @@ class IncidentListAPIView(APIView):
             limit = max(1, min(int(limit_str), 1000))
         except ValueError:
             return Response(
-                {"detail": "limit must be an integer"}, status=http_status.HTTP_400_BAD_REQUEST
+                {"detail": "limit must be an integer"}, status=status.HTTP_400_BAD_REQUEST
             )
 
         # Optional filters
@@ -757,9 +757,7 @@ class IncidentListAPIView(APIView):
         if cursor_str:
             cursor = _decode_cursor(cursor_str)
             if cursor is None:
-                return Response(
-                    {"detail": "Invalid cursor"}, status=http_status.HTTP_400_BAD_REQUEST
-                )
+                return Response({"detail": "Invalid cursor"}, status=status.HTTP_400_BAD_REQUEST)
             cursor_ts, _, _ = cursor
             cursor_clause = "AND detected_at < {cur_ts:DateTime64(3)}"
             extra_params["cur_ts"] = cursor_ts
@@ -862,7 +860,7 @@ class IncidentDetailAPIView(APIView):
         )
 
         if not rows:
-            return Response({"detail": "Incident not found"}, status=http_status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Incident not found"}, status=status.HTTP_404_NOT_FOUND)
 
         row = rows[0]
         return Response(
@@ -948,13 +946,13 @@ class SectionHistoryAPIView(APIView):
         try:
             section = Section.objects.get(pk=section_id, organization=org, is_active=True)
         except Section.DoesNotExist:
-            return Response({"detail": "Section not found"}, status=http_status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Section not found"}, status=status.HTTP_404_NOT_FOUND)
 
         start_str = request.GET.get("start")
         end_str = request.GET.get("end")
         if not start_str or not end_str:
             return Response(
-                {"detail": "start and end are required"}, status=http_status.HTTP_400_BAD_REQUEST
+                {"detail": "start and end are required"}, status=status.HTTP_400_BAD_REQUEST
             )
 
         start = parse_datetime(start_str)
@@ -962,17 +960,17 @@ class SectionHistoryAPIView(APIView):
         if start is None or end is None:
             return Response(
                 {"detail": "Invalid ISO 8601 format for start or end"},
-                status=http_status.HTTP_400_BAD_REQUEST,
+                status=status.HTTP_400_BAD_REQUEST,
             )
         if start >= end:
             return Response(
-                {"detail": "start must be before end"}, status=http_status.HTTP_400_BAD_REQUEST
+                {"detail": "start must be before end"}, status=status.HTTP_400_BAD_REQUEST
             )
 
         resolution = request.GET.get("resolution", "auto")
         tier, tier_error = select_tier(start, end, resolution)
         if tier_error:
-            return Response({"detail": tier_error}, status=http_status.HTTP_400_BAD_REQUEST)
+            return Response({"detail": tier_error}, status=status.HTTP_400_BAD_REQUEST)
 
         total_channels = max(1, section.channel_end - section.channel_start + 1)
 
@@ -1171,7 +1169,7 @@ class InfrastructureStatusAPIView(APIView):
         org = request.user.organization
         if not Infrastructure.objects.filter(id=infra_id, organization=org).exists():
             return Response(
-                {"detail": "Infrastructure not found"}, status=http_status.HTTP_404_NOT_FOUND
+                {"detail": "Infrastructure not found"}, status=status.HTTP_404_NOT_FOUND
             )
 
         # Deterministic demo data seeded by infra_id
@@ -1182,7 +1180,7 @@ class InfrastructureStatusAPIView(APIView):
         if baseline is None:
             return Response(
                 {"detail": "Insufficient baseline data", "code": "insufficient_data"},
-                status=http_status.HTTP_400_BAD_REQUEST,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         current_freqs = np.array([1.12 + rng.gauss(0, 0.03) for _ in range(10)])
