@@ -11,6 +11,7 @@ import time
 from django.core.cache import cache as django_cache
 from django.db import IntegrityError
 from drf_spectacular.utils import OpenApiParameter, extend_schema
+from rest_framework import status
 from rest_framework.exceptions import NotFound, ParseError
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -82,7 +83,7 @@ def _verify_infrastructure_access(user, infrastructure_id):
     ).exists():
         return Response(
             {"detail": "Infrastructure not found", "code": "not_found"},
-            status=404,
+            status=status.HTTP_404_NOT_FOUND,
         )
     return None
 
@@ -148,7 +149,7 @@ class IncidentListView(FlowAwareMixin, APIView):
         except ClickHouseUnavailableError:
             return Response(
                 {"detail": "ClickHouse unavailable", "code": "clickhouse_unavailable"},
-                status=503,
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
         has_more = len(incidents) > limit
@@ -230,7 +231,8 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
             )
         except ClickHouseUnavailableError:
             return Response(
-                {"detail": "ClickHouse unavailable", "code": "clickhouse_unavailable"}, status=503
+                {"detail": "ClickHouse unavailable", "code": "clickhouse_unavailable"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
         if not incident_rows:
@@ -280,7 +282,8 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
             )
         except ClickHouseUnavailableError:
             return Response(
-                {"detail": "ClickHouse unavailable", "code": "clickhouse_unavailable"}, status=503
+                {"detail": "ClickHouse unavailable", "code": "clickhouse_unavailable"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
         # Build lookup from aggregated rows
@@ -352,13 +355,13 @@ class IncidentActionView(FlowAwareMixin, APIView):
         except ClickHouseUnavailableError:
             return None, Response(
                 {"detail": "ClickHouse unavailable", "code": "clickhouse_unavailable"},
-                status=503,
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
         if not incident:
             return None, Response(
                 {"detail": "Incident not found", "code": "incident_not_found"},
-                status=404,
+                status=status.HTTP_404_NOT_FOUND,
             )
 
         # Org-scoping
@@ -366,7 +369,7 @@ class IncidentActionView(FlowAwareMixin, APIView):
         if fiber_ids is not None and not fiber_belongs_to_org(incident["fiber_id"], fiber_ids):
             return None, Response(
                 {"detail": "Incident not found", "code": "incident_not_found"},
-                status=404,
+                status=status.HTTP_404_NOT_FOUND,
             )
 
         return incident, None
@@ -409,7 +412,7 @@ class IncidentActionView(FlowAwareMixin, APIView):
                     "code": "validation_error",
                     "errors": input_serializer.errors,
                 },
-                status=400,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         incident, error_resp = self._get_incident_or_404(incident_id, request)
@@ -438,7 +441,7 @@ class IncidentActionView(FlowAwareMixin, APIView):
                         "code": "invalid_transition",
                         "currentStatus": current_status,
                     },
-                    status=409,
+                    status=status.HTTP_409_CONFLICT,
                 )
 
             action = IncidentAction.objects.create(
@@ -451,7 +454,7 @@ class IncidentActionView(FlowAwareMixin, APIView):
 
         return Response(
             IncidentActionSerializer(action).data,
-            status=201,
+            status=status.HTTP_201_CREATED,
         )
 
 
@@ -698,7 +701,7 @@ class SectionListView(APIView):
         if request.user.organization_id is None:
             return Response(
                 {"detail": "Cannot create sections without an organization"},
-                status=400,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Enforce per-org section limit
@@ -711,7 +714,7 @@ class SectionListView(APIView):
                     "detail": f"Section limit reached ({MAX_SECTIONS_PER_ORG} per organization)",
                     "code": "limit_reached",
                 },
-                status=400,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Org-scoping: verify the fiber belongs to user's org
@@ -719,7 +722,7 @@ class SectionListView(APIView):
         if fiber_ids is not None and not fiber_belongs_to_org(fiber_id, fiber_ids):
             return Response(
                 {"detail": "Fiber not found", "code": "not_found"},
-                status=404,
+                status=status.HTTP_404_NOT_FOUND,
             )
 
         try:
@@ -735,9 +738,9 @@ class SectionListView(APIView):
         except IntegrityError:
             return Response(
                 {"detail": "A section with this range already exists", "code": "duplicate"},
-                status=409,
+                status=status.HTTP_409_CONFLICT,
             )
-        return Response(section, status=201)
+        return Response(section, status=status.HTTP_201_CREATED)
 
 
 class SectionDeleteView(APIView):
@@ -754,9 +757,9 @@ class SectionDeleteView(APIView):
         if not delete_section(section_id, organization_id=org_id):
             return Response(
                 {"detail": "Section not found", "code": "not_found"},
-                status=404,
+                status=status.HTTP_404_NOT_FOUND,
             )
-        return Response(status=204)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class SectionHistoryView(FlowAwareMixin, APIView):
@@ -815,7 +818,7 @@ class SectionHistoryView(FlowAwareMixin, APIView):
         if not section:
             return Response(
                 {"detail": "Section not found", "code": "not_found"},
-                status=404,
+                status=status.HTTP_404_NOT_FOUND,
             )
 
         if self._is_sim(request):
@@ -879,7 +882,7 @@ class BatchSectionHistoryView(FlowAwareMixin, APIView):
         if not isinstance(section_ids, list) or not section_ids:
             return Response(
                 {"detail": "sectionIds must be a non-empty list", "code": "validation_error"},
-                status=400,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Validate each element is a string
@@ -890,7 +893,7 @@ class BatchSectionHistoryView(FlowAwareMixin, APIView):
                     "detail": "sectionIds must contain at least one valid string",
                     "code": "validation_error",
                 },
-                status=400,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         if len(section_ids) > MAX_SECTIONS_PER_ORG:
@@ -900,7 +903,7 @@ class BatchSectionHistoryView(FlowAwareMixin, APIView):
                     f"max {MAX_SECTIONS_PER_ORG} per request",
                     "code": "validation_error",
                 },
-                status=400,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         try:
@@ -1021,7 +1024,7 @@ class SpectralDataView(APIView):
         if not sample_file_exists():
             return Response(
                 {"detail": "No SHM sample data available", "code": "shm_data_unavailable"},
-                status=404,
+                status=status.HTTP_404_NOT_FOUND,
             )
 
         try:
@@ -1029,7 +1032,8 @@ class SpectralDataView(APIView):
         except Exception as e:
             logger.error("Failed to load spectral data: %s", e)
             return Response(
-                {"detail": "Failed to load spectral data", "code": "shm_load_error"}, status=500
+                {"detail": "Failed to load spectral data", "code": "shm_load_error"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
         # Apply time filtering if startTime/endTime provided (takes priority over indices)
@@ -1132,7 +1136,7 @@ class SpectralPeaksView(APIView):
         if not sample_file_exists():
             return Response(
                 {"detail": "No SHM sample data available", "code": "shm_data_unavailable"},
-                status=404,
+                status=status.HTTP_404_NOT_FOUND,
             )
 
         try:
@@ -1142,7 +1146,8 @@ class SpectralPeaksView(APIView):
         except Exception as e:
             logger.error("Failed to load spectral data: %s", e)
             return Response(
-                {"detail": "Failed to load spectral data", "code": "shm_load_error"}, status=500
+                {"detail": "Failed to load spectral data", "code": "shm_load_error"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
         # Defensive copies: cached arrays are process-global and must not be
@@ -1267,7 +1272,7 @@ class SpectralSummaryView(APIView):
         if not sample_file_exists():
             return Response(
                 {"detail": "No SHM sample data available", "code": "shm_data_unavailable"},
-                status=404,
+                status=status.HTTP_404_NOT_FOUND,
             )
 
         try:
@@ -1275,7 +1280,8 @@ class SpectralSummaryView(APIView):
         except Exception as e:
             logger.error("Failed to get spectral summary: %s", e)
             return Response(
-                {"detail": "Failed to load spectral data", "code": "shm_load_error"}, status=500
+                {"detail": "Failed to load spectral data", "code": "shm_load_error"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
         return Response(summary)
@@ -1320,7 +1326,7 @@ class SHMStatusView(APIView):
         if baseline is None:
             return Response(
                 {"detail": "Insufficient baseline data", "code": "insufficient_data"},
-                status=400,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # Simulate current frequencies

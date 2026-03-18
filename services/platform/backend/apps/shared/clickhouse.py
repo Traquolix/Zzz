@@ -20,6 +20,7 @@ import threading
 import time
 
 from django.conf import settings
+from rest_framework import status
 from rest_framework.response import Response
 
 from apps.shared.exceptions import ClickHouseUnavailableError
@@ -270,7 +271,7 @@ def clickhouse_fallback(fallback_fn=None):
                         "detail": "Analytics temporarily unavailable",
                         "code": "analytics_unavailable",
                     },
-                    status=503,
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
                 )
 
         return wrapper
