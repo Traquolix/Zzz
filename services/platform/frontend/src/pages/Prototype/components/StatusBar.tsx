@@ -182,11 +182,8 @@ export function StatusBar({ connected, sectionCount, incidentCount, lastDetectio
               )}
 
               {/* Stats grid */}
-              <div
-                className="grid grid-cols-3 gap-px rounded overflow-hidden"
-                style={{ background: 'var(--proto-border)' }}
-              >
-                <div className="flex flex-col items-center py-1.5 px-1" style={{ background: 'var(--proto-surface)' }}>
+              <div className="grid grid-cols-3 gap-px rounded overflow-hidden bg-[var(--proto-border)]">
+                <div className="flex flex-col items-center py-1.5 px-1 bg-[var(--proto-surface)]">
                   <span className="text-[13px] font-semibold text-[var(--proto-text)] tabular-nums leading-none">
                     {sectionCount}
                   </span>
@@ -194,7 +191,7 @@ export function StatusBar({ connected, sectionCount, incidentCount, lastDetectio
                     Sections
                   </span>
                 </div>
-                <div className="flex flex-col items-center py-1.5 px-1" style={{ background: 'var(--proto-surface)' }}>
+                <div className="flex flex-col items-center py-1.5 px-1 bg-[var(--proto-surface)]">
                   <span className="text-[13px] font-semibold text-[var(--proto-text)] tabular-nums leading-none">
                     {incidentCount}
                   </span>
@@ -202,7 +199,7 @@ export function StatusBar({ connected, sectionCount, incidentCount, lastDetectio
                     Incidents
                   </span>
                 </div>
-                <div className="flex flex-col items-center py-1.5 px-1" style={{ background: 'var(--proto-surface)' }}>
+                <div className="flex flex-col items-center py-1.5 px-1 bg-[var(--proto-surface)]">
                   <span className="text-[13px] font-semibold text-[var(--proto-text)] tabular-nums leading-none">
                     {detectionAge != null ? `${detectionAge}s` : '—'}
                   </span>

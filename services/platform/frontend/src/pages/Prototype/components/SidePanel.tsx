@@ -300,9 +300,14 @@ export function SidePanel({
                 {filterSeverity && (
                   <button
                     onClick={() => dispatch({ type: 'SET_FILTER_SEVERITY', severity: null })}
+<<<<<<< fix/80-i18n-sweep
                     className="w-3 h-3 rounded-full transition-all cursor-pointer opacity-50 hover:opacity-80"
                     style={{ backgroundColor: 'var(--proto-text-muted)' }}
                     title={t('incidents.filters.clearFilter')}
+=======
+                    className="w-3 h-3 rounded-full transition-all cursor-pointer opacity-50 hover:opacity-80 bg-[var(--proto-text-muted)]"
+                    title="Clear filter"
+>>>>>>> main
                   >
                     <svg
                       width="12"
