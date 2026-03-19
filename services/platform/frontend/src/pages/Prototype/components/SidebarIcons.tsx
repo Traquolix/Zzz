@@ -242,6 +242,30 @@ export const DataHubIcon = () => (
   </svg>
 )
 
+export const MapIcon = () => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 16 16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M8 1.5C5.5 1.5 3.5 3.5 3.5 6C3.5 9.5 8 14.5 8 14.5C8 14.5 12.5 9.5 12.5 6C12.5 3.5 10.5 1.5 8 1.5Z" />
+    <circle cx="8" cy="6" r="2" />
+  </svg>
+)
+
+export const MoreIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor" stroke="none">
+    <circle cx="4" cy="8" r="1.5" />
+    <circle cx="8" cy="8" r="1.5" />
+    <circle cx="12" cy="8" r="1.5" />
+  </svg>
+)
+
 /* export const WaterfallIcon = () => (
     <svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <rect x="2" y="2" width="12" height="12" rx="1" />
