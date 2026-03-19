@@ -17,6 +17,7 @@ from typing import Any
 
 from django.http import JsonResponse, StreamingHttpResponse
 from django.utils.dateparse import parse_datetime
+from rest_framework import status
 from rest_framework.exceptions import ParseError
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -156,11 +157,12 @@ class ExportIncidentsView(FlowAwareMixin, APIView):
     def get(self, request: Request) -> Response | StreamingHttpResponse | JsonResponse:
         fiber_id, start, end, fmt, errors = _parse_params(request)
         if errors:
-            return Response({"detail": "; ".join(errors)}, status=400)
-        assert fiber_id is not None and start is not None and end is not None
+            return Response({"detail": "; ".join(errors)}, status=status.HTTP_400_BAD_REQUEST)
 
         if not check_fiber_access(request.user, fiber_id):
-            return Response({"detail": "Access denied for this fiber"}, status=403)
+            return Response(
+                {"detail": "Access denied for this fiber"}, status=status.HTTP_403_FORBIDDEN
+            )
 
         dir_clause, dir_params = _build_direction_clause(request)
         ch_clause, ch_params = _build_channel_clause(request, column="channel_start")
@@ -222,17 +224,17 @@ class ExportDetectionsView(FlowAwareMixin, APIView):
     def get(self, request: Request) -> Response | StreamingHttpResponse | JsonResponse:
         fiber_id, start, end, fmt, errors = _parse_params(request)
         if errors:
-            return Response({"detail": "; ".join(errors)}, status=400)
-        assert fiber_id is not None and start is not None and end is not None
+            return Response({"detail": "; ".join(errors)}, status=status.HTTP_400_BAD_REQUEST)
 
         if not check_fiber_access(request.user, fiber_id):
-            return Response({"detail": "Access denied for this fiber"}, status=403)
+            return Response(
+                {"detail": "Access denied for this fiber"}, status=status.HTTP_403_FORBIDDEN
+            )
 
         explicit_tier = request.GET.get("tier")
         tier, tier_error = select_tier(start, end, explicit_tier)
         if tier_error:
-            return Response({"detail": tier_error}, status=400)
-        assert tier is not None
+            return Response({"detail": tier_error}, status=status.HTTP_400_BAD_REQUEST)
 
         dir_clause, dir_params = _build_direction_clause(request)
         ch_clause, ch_params = _build_channel_clause(request)
@@ -310,15 +312,19 @@ class ExportEstimateView(APIView):
     def get(self, request: Request) -> Response:
         fiber_id, start, end, _, errors = _parse_params(request)
         if errors:
-            return Response({"detail": "; ".join(errors)}, status=400)
-        assert fiber_id is not None and start is not None and end is not None
+            return Response({"detail": "; ".join(errors)}, status=status.HTTP_400_BAD_REQUEST)
 
         if not check_fiber_access(request.user, fiber_id):
-            return Response({"detail": "Access denied for this fiber"}, status=403)
+            return Response(
+                {"detail": "Access denied for this fiber"}, status=status.HTTP_403_FORBIDDEN
+            )
 
         data_type = request.GET.get("type", "detections")
         if data_type not in ("detections", "incidents"):
-            return Response({"detail": "type must be 'detections' or 'incidents'"}, status=400)
+            return Response(
+                {"detail": "type must be 'detections' or 'incidents'"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         dir_clause, dir_params = _build_direction_clause(request)
         ch_clause, ch_params = _build_channel_clause(request)
@@ -349,8 +355,7 @@ class ExportEstimateView(APIView):
             explicit_tier = request.GET.get("tier")
             tier, tier_error = select_tier(start, end, explicit_tier)
             if tier_error:
-                return Response({"detail": tier_error}, status=400)
-            assert tier is not None
+                return Response({"detail": tier_error}, status=status.HTTP_400_BAD_REQUEST)
 
             table = TIER_TABLES[tier]
 

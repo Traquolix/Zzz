@@ -8,6 +8,7 @@ from typing import Any
 from django.http import HttpResponse
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers as s
+from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -138,7 +139,7 @@ class ReadinessCheckView(APIView):
                 "status": "ready" if all_critical_ok else "degraded",
                 "checks": checks,
             },
-            status=200 if all_critical_ok else 503,
+            status=status.HTTP_200_OK if all_critical_ok else status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
 

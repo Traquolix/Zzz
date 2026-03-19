@@ -4,7 +4,7 @@ import { logger } from '@/lib/logger'
 
 type ErrorBoundaryProps = {
   children: ReactNode
-  fallback?: ReactNode
+  fallback?: ReactNode | ((retry: () => void) => ReactNode)
   onError?: (error: Error, errorInfo: React.ErrorInfo) => void
 }
 
@@ -39,7 +39,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   render() {
     if (this.state.hasError) {
       if (this.props.fallback) {
-        return this.props.fallback
+        return typeof this.props.fallback === 'function' ? this.props.fallback(this.handleRetry) : this.props.fallback
       }
 
       return (
