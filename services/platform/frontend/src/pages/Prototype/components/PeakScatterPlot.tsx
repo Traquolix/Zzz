@@ -1,7 +1,7 @@
 import { useState, useMemo, useCallback, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useDebouncedResize } from '../hooks/useDebouncedResize'
 import type { PeakFrequencyData } from '@/types/infrastructure'
-import { useTranslation } from 'react-i18next'
 import { computeHourTicks } from './shmUtils'
 
 type ScatterTooltip = { x: number; y: number; freq: number; power: number; timestamp: Date } | null
