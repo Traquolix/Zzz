@@ -476,7 +476,8 @@
       "end": "End",
       "vs": "vs",
       "vsPreviousPeriod": "vs previous period",
-      "freqShift": "Freq Shift"
+      "freqShift": "Freq Shift",
+      "reset": "Reset"
     },
     "kpi": {
       "peakFreq": "Peak Freq",

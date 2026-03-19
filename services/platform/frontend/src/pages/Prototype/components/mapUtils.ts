@@ -51,7 +51,9 @@ export function findNearestFiberPoint(lngLat: [number, number], maxDistDeg = 0.0
   }
 }
 
-// ── Stable accessor functions for SimpleMeshLayer ────────────────────
+// ── Stable accessor functions for SimpleMeshLayer (avoids re-creation) ──
+// deck.gl diffs layer props by reference — these must be module-level
+// constants, not inline lambdas, to avoid triggering full layer rebuilds.
 
 export const getPosition = (d: VehiclePosition) => d.position
 export const getOrientation = (d: VehiclePosition): [number, number, number] => [0, -d.angle, 0]

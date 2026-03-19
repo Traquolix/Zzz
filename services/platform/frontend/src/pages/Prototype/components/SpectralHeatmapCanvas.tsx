@@ -1,9 +1,11 @@
 import { useEffect, useCallback, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useDebouncedResize } from '../hooks/useDebouncedResize'
 import type { SpectralTimeSeries } from '@/types/infrastructure'
-import { computeHourTicks, VIRIDIS } from './ShmCharts'
+import { computeHourTicks, VIRIDIS } from './shmUtils'
 
 export function SpectralHeatmapCanvas({ data }: { data: SpectralTimeSeries }) {
+  const { t } = useTranslation()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const { width: debouncedWidth, transitioning } = useDebouncedResize(containerRef)
@@ -97,10 +99,10 @@ export function SpectralHeatmapCanvas({ data }: { data: SpectralTimeSeries }) {
       const labelY = margin.top + plotH / 2
       ctx.translate(labelX, labelY)
       ctx.rotate(-Math.PI / 2)
-      ctx.fillText('Freq (Hz)', 0, 0)
+      ctx.fillText(t('shm.frequencyHz'), 0, 0)
       ctx.restore()
     },
-    [data],
+    [data, t],
   )
 
   useEffect(() => {
@@ -108,7 +110,7 @@ export function SpectralHeatmapCanvas({ data }: { data: SpectralTimeSeries }) {
   }, [draw, debouncedWidth])
 
   return (
-    <div ref={containerRef} className="w-full" style={{ height: 200 }}>
+    <div ref={containerRef} className="w-full h-[200px]">
       {transitioning ? (
         <div className="w-full h-full rounded-lg bg-[var(--proto-surface-raised)] animate-pulse" />
       ) : (

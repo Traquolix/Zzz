@@ -1,13 +1,15 @@
 import { useState, useMemo, useCallback, useRef } from 'react'
 import { useDebouncedResize } from '../hooks/useDebouncedResize'
 import type { PeakFrequencyData } from '@/types/infrastructure'
-import { computeHourTicks } from './ShmCharts'
+import { useTranslation } from 'react-i18next'
+import { computeHourTicks } from './shmUtils'
 
 type ScatterTooltip = { x: number; y: number; freq: number; power: number; timestamp: Date } | null
 type ScatterBrush = { startX: number; currentX: number } | null
 type ScatterZoom = { startMs: number; endMs: number } | null
 
 export function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
+  const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement>(null)
   const svgRef = useRef<SVGSVGElement>(null)
   const { width, transitioning } = useDebouncedResize(containerRef)
@@ -136,7 +138,7 @@ export function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
           onClick={() => setZoom(null)}
           className="absolute top-0 right-0 z-10 flex items-center gap-1 px-2 py-1 text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] rounded transition-colors cursor-pointer"
         >
-          ↺ Reset
+          ↺ {t('shm.comparison.reset', 'Reset')}
         </button>
       )}
       <div className="overflow-hidden">
@@ -201,7 +203,7 @@ export function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
             fill="#64748b"
             fontSize="9"
           >
-            Peak Freq (Hz)
+            {t('shm.frequencyHz')}
           </text>
 
           {/* X-axis */}
@@ -213,8 +215,8 @@ export function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
             stroke="rgba(255,255,255,0.08)"
             strokeWidth={1}
           />
-          {xTicks.map((tick, i) => (
-            <g key={i}>
+          {xTicks.map(tick => (
+            <g key={tick.label}>
               <line
                 x1={tick.x}
                 y1={height - padding.bottom}
@@ -294,8 +296,12 @@ export function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
             transform: 'translateY(-100%)',
           }}
         >
-          <div>Freq: {tooltip.freq.toFixed(3)} Hz</div>
-          <div>Power: {tooltip.power.toFixed(2)}</div>
+          <div>
+            {t('shm.detail.freq')}: {tooltip.freq.toFixed(3)} Hz
+          </div>
+          <div>
+            {t('shm.detail.amp')}: {tooltip.power.toFixed(2)}
+          </div>
           <div className="text-[var(--proto-text-muted)]">
             {tooltip.timestamp.toLocaleString(undefined, {
               month: 'short',

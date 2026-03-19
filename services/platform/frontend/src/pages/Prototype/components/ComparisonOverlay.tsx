@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { PeakFrequencyData } from '@/types/infrastructure'
 
 export type ComparisonMode = 'day' | 'week'
@@ -15,6 +16,7 @@ export function ComparisonOverlay({
   focus: FocusMode
   width: number
 }) {
+  const { t } = useTranslation()
   const rawId = useRef(Math.random().toString(36).slice(2)).current
   const clipId = `proto-overlay-${rawId}`
   const height = 140
@@ -104,7 +106,7 @@ export function ComparisonOverlay({
         fill="#64748b"
         fontSize="9"
       >
-        Freq (Hz)
+        {t('shm.frequencyHz')}
       </text>
 
       {/* X-axis */}
@@ -117,10 +119,10 @@ export function ComparisonOverlay({
         strokeWidth={1}
       />
       <text x={padding.left} y={height - 4} textAnchor="start" fill="#4a5568" fontSize="9">
-        start
+        {t('shm.comparison.start')}
       </text>
       <text x={width - padding.right} y={height - 4} textAnchor="end" fill="#4a5568" fontSize="9">
-        end
+        {t('shm.comparison.end')}
       </text>
 
       {/* Dots: render unfocused behind, focused in front */}
