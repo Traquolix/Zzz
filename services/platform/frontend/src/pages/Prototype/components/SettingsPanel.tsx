@@ -136,7 +136,7 @@ function FiberColorDot({
         style={{ backgroundColor: color }}
         title={`Change ${dirLabel} color`}
       />
-      <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)]">{dirLabel}</span>
+      <span className="text-cq-2xs text-[var(--proto-text-muted)]">{dirLabel}</span>
       {isPickerOpen && <ColorPicker current={color} onSelect={onSelect} onClose={onClosePicker} anchorRef={btnRef} />}
     </div>
   )
@@ -188,7 +188,7 @@ function SettingsPanel({
     <div className="px-4 py-4 flex flex-col gap-5">
       {/* Data source */}
       <div className="flex flex-col gap-2">
-        <span className="text-[length:var(--text-xs)] text-[var(--proto-text-secondary)]">{t('flow.label')}</span>
+        <span className="text-cq-xs text-[var(--proto-text-secondary)]">{t('flow.label')}</span>
         <FlowToggle flow={flow} switchingFlow={switchingFlow} availableFlows={availableFlows} onToggle={onFlowToggle} />
       </div>
 
@@ -196,9 +196,9 @@ function SettingsPanel({
 
       {/* Map display toggles */}
       <div className="flex flex-col gap-2">
-        <span className="text-[length:var(--text-xs)] text-[var(--proto-text-secondary)]">Map</span>
+        <span className="text-cq-xs text-[var(--proto-text-secondary)]">Map</span>
         <label className="flex items-center justify-between cursor-pointer group">
-          <span className="text-[length:var(--text-sm)] text-[var(--proto-text)]">3D Buildings</span>
+          <span className="text-cq-sm text-[var(--proto-text)]">3D Buildings</span>
           <button
             onClick={() => dispatch({ type: 'TOGGLE_3D_BUILDINGS' })}
             className={`relative w-8 h-[18px] rounded-full transition-colors ${show3DBuildings ? 'bg-[var(--proto-accent)]' : 'bg-[var(--proto-border)]'}`}
@@ -209,7 +209,7 @@ function SettingsPanel({
           </button>
         </label>
         <label className="flex items-center justify-between cursor-pointer group">
-          <span className="text-[length:var(--text-sm)] text-[var(--proto-text)]">Channel Helper</span>
+          <span className="text-cq-sm text-[var(--proto-text)]">Channel Helper</span>
           <button
             onClick={() => dispatch({ type: 'TOGGLE_CHANNEL_HELPER' })}
             className={`relative w-8 h-[18px] rounded-full transition-colors ${showChannelHelper ? 'bg-[var(--proto-accent)]' : 'bg-[var(--proto-border)]'}`}
@@ -223,7 +223,7 @@ function SettingsPanel({
 
       <div className="h-px bg-[var(--proto-border)]" />
 
-      <div className="text-[length:var(--text-xs)] text-[var(--proto-text-secondary)]">
+      <div className="text-cq-xs text-[var(--proto-text-secondary)]">
         Default speed thresholds per fiber. Sections inherit these unless overridden.
       </div>
       {cableGroups.map(([cableId, group]) => {
@@ -232,7 +232,7 @@ function SettingsPanel({
         return (
           <div key={cableId} className="flex flex-col gap-2">
             <div className="flex items-center gap-2">
-              <span className="text-[length:var(--text-sm)] font-medium text-[var(--proto-text)]">{group.name}</span>
+              <span className="text-cq-sm font-medium text-[var(--proto-text)]">{group.name}</span>
             </div>
             {/* Per-direction color dots */}
             <div className="flex gap-4 pl-0.5">

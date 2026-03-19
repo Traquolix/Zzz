@@ -120,23 +120,21 @@ export function APIKeysPanel({ showCreate, onCloseCreate }: { showCreate: boolea
               }
             }}
             placeholder={t('apiKeys.namePlaceholder')}
-            className="w-full px-2 py-1.5 rounded bg-[var(--proto-base)] border border-[var(--proto-border)] text-[length:var(--text-xs)] text-[var(--proto-text)] placeholder:text-[var(--proto-text-muted)] outline-none focus:border-[var(--proto-text-muted)]"
+            className="w-full px-2 py-1.5 rounded bg-[var(--proto-base)] border border-[var(--proto-border)] text-cq-xs text-[var(--proto-text)] placeholder:text-[var(--proto-text-muted)] outline-none focus:border-[var(--proto-text-muted)]"
           />
           <div className="flex items-center gap-1.5">
-            <label className="text-[length:var(--text-xxs)] text-[var(--proto-text-muted)] shrink-0">
-              {t('apiKeys.expiresIn')}
-            </label>
+            <label className="text-cq-xxs text-[var(--proto-text-muted)] shrink-0">{t('apiKeys.expiresIn')}</label>
             <input
               type="date"
               value={newKeyExpiry}
               onChange={e => setNewKeyExpiry(e.target.value)}
-              className="flex-1 px-1.5 py-1 rounded bg-[var(--proto-base)] border border-[var(--proto-border)] text-[length:var(--text-xxs)] text-[var(--proto-text)] outline-none focus:border-[var(--proto-text-muted)]"
+              className="flex-1 px-1.5 py-1 rounded bg-[var(--proto-base)] border border-[var(--proto-border)] text-cq-xxs text-[var(--proto-text)] outline-none focus:border-[var(--proto-text-muted)]"
             />
           </div>
           <button
             onClick={handleCreate}
             disabled={!newKeyName.trim() || createMutation.isPending}
-            className="self-start px-3 py-1.5 rounded text-[length:var(--text-xs)] font-medium bg-[var(--proto-accent)] text-white disabled:opacity-30 cursor-pointer hover:brightness-110 transition-all"
+            className="self-start px-3 py-1.5 rounded text-cq-xs font-medium bg-[var(--proto-accent)] text-white disabled:opacity-30 cursor-pointer hover:brightness-110 transition-all"
           >
             {t('admin.create')}
           </button>
@@ -146,21 +144,21 @@ export function APIKeysPanel({ showCreate, onCloseCreate }: { showCreate: boolea
       {/* Key revealed banner */}
       {revealedKey && (
         <div className="flex flex-col gap-1.5 p-2.5 rounded-md border border-amber-500/20 bg-amber-950/20">
-          <p className="text-[length:var(--text-xs)] text-amber-300/80 leading-snug">{t('apiKeys.copyWarning')}</p>
+          <p className="text-cq-xs text-amber-300/80 leading-snug">{t('apiKeys.copyWarning')}</p>
           <div className="flex items-center gap-1.5">
-            <code className="flex-1 px-1.5 py-1 rounded bg-[var(--proto-base)] text-[length:var(--text-xs)] text-[var(--proto-text)] font-mono break-all select-all leading-tight">
+            <code className="flex-1 px-1.5 py-1 rounded bg-[var(--proto-base)] text-cq-xs text-[var(--proto-text)] font-mono break-all select-all leading-tight">
               {revealedKey.key}
             </code>
             <button
               onClick={() => copyToClipboard(revealedKey.key)}
-              className="shrink-0 px-2.5 py-1 rounded text-[length:var(--text-xs)] bg-[var(--proto-surface-raised)] text-[var(--proto-text)] hover:bg-[var(--proto-border)] transition-colors cursor-pointer"
+              className="shrink-0 px-2.5 py-1 rounded text-cq-xs bg-[var(--proto-surface-raised)] text-[var(--proto-text)] hover:bg-[var(--proto-border)] transition-colors cursor-pointer"
             >
               {t('apiKeys.copy')}
             </button>
           </div>
           <button
             onClick={() => setRevealedKey(null)}
-            className="self-end text-[length:var(--text-xs)] text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)] transition-colors cursor-pointer"
+            className="self-end text-cq-xs text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)] transition-colors cursor-pointer"
           >
             {t('apiKeys.close')}
           </button>
@@ -175,9 +173,7 @@ export function APIKeysPanel({ showCreate, onCloseCreate }: { showCreate: boolea
           ))}
         </div>
       ) : keys.length === 0 ? (
-        <p className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)]/60 py-2">
-          {t('apiKeys.noKeysDescription')}
-        </p>
+        <p className="text-cq-xs text-[var(--proto-text-muted)]/60 py-2">{t('apiKeys.noKeysDescription')}</p>
       ) : (
         <div className="flex flex-col">
           {keys.map(key => {
@@ -234,27 +230,21 @@ function KeyRow({
       {/* Name + prefix */}
       <div className="flex items-center gap-1.5 min-w-0">
         <span
-          className={`text-[length:var(--text-xs)] font-medium truncate ${
+          className={`text-cq-xs font-medium truncate ${
             isExpired ? 'text-[var(--proto-text-muted)] line-through' : 'text-[var(--proto-text)]'
           }`}
         >
           {name}
         </span>
-        <code className="text-[length:var(--text-xxs)] text-[var(--proto-text-muted)]/60 font-mono shrink-0">
-          {prefix}...
-        </code>
-        {isExpired && (
-          <span className="text-[length:var(--text-xxs)] text-[var(--proto-red)]/70 shrink-0">
-            {t('apiKeys.expired')}
-          </span>
-        )}
+        <code className="text-cq-xxs text-[var(--proto-text-muted)]/60 font-mono shrink-0">{prefix}...</code>
+        {isExpired && <span className="text-cq-xxs text-[var(--proto-red)]/70 shrink-0">{t('apiKeys.expired')}</span>}
       </div>
 
       {/* Stats — visible on hover, always visible when sidebar is wide */}
-      <span className="datahub-key-stats hidden group-hover/row:inline text-[length:var(--text-xxs)] text-[var(--proto-text-muted)]/50 tabular-nums shrink-0">
+      <span className="datahub-key-stats hidden group-hover/row:inline text-cq-xxs text-[var(--proto-text-muted)]/50 tabular-nums shrink-0">
         {lastUsed ? formatRelative(lastUsed, t) : t('apiKeys.neverUsed')}
       </span>
-      <span className="datahub-key-stats hidden group-hover/row:inline text-[length:var(--text-xxs)] text-[var(--proto-text-muted)]/50 tabular-nums shrink-0">
+      <span className="datahub-key-stats hidden group-hover/row:inline text-cq-xxs text-[var(--proto-text-muted)]/50 tabular-nums shrink-0">
         {t('apiKeys.requestCount', { count: requestCount })}
       </span>
 
@@ -265,14 +255,14 @@ function KeyRow({
         <button
           onClick={onRotate}
           disabled={rotating}
-          className="text-[length:var(--text-xxs)] text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)] transition-colors cursor-pointer px-1 py-0.5"
+          className="text-cq-xxs text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)] transition-colors cursor-pointer px-1 py-0.5"
         >
           {t('apiKeys.rotate')}
         </button>
         <button
           onClick={onRevoke}
           disabled={revoking}
-          className="text-[length:var(--text-xxs)] text-[var(--proto-red)]/70 hover:text-[var(--proto-red)] transition-colors cursor-pointer px-1 py-0.5"
+          className="text-cq-xxs text-[var(--proto-red)]/70 hover:text-[var(--proto-red)] transition-colors cursor-pointer px-1 py-0.5"
         >
           {t('apiKeys.revoke')}
         </button>

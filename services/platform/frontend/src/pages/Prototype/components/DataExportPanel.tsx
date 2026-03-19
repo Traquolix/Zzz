@@ -141,7 +141,7 @@ export function DataExportPanel() {
         <select
           value={fiberId}
           onChange={e => setFiberId(e.target.value)}
-          className="w-full px-2.5 py-1.5 rounded bg-[var(--proto-base)] border border-[var(--proto-border)] text-[length:var(--text-xs)] text-[var(--proto-text)] outline-none truncate"
+          className="w-full px-2.5 py-1.5 rounded bg-[var(--proto-base)] border border-[var(--proto-border)] text-cq-xs text-[var(--proto-text)] outline-none truncate"
         >
           {uniqueCables.map(f => (
             <option key={f.parentCableId} value={f.parentCableId}>
@@ -172,19 +172,19 @@ export function DataExportPanel() {
               type="datetime-local"
               value={customStart}
               onChange={e => setCustomStart(e.target.value)}
-              className="flex-1 px-2 py-1 rounded bg-[var(--proto-base)] border border-[var(--proto-border)] text-[length:var(--text-xxs)] text-[var(--proto-text)] outline-none focus:border-[var(--proto-text-muted)]"
+              className="flex-1 px-2 py-1 rounded bg-[var(--proto-base)] border border-[var(--proto-border)] text-cq-xxs text-[var(--proto-text)] outline-none focus:border-[var(--proto-text-muted)]"
             />
             <input
               type="datetime-local"
               value={customEnd}
               onChange={e => setCustomEnd(e.target.value)}
-              className="flex-1 px-2 py-1 rounded bg-[var(--proto-base)] border border-[var(--proto-border)] text-[length:var(--text-xxs)] text-[var(--proto-text)] outline-none focus:border-[var(--proto-text-muted)]"
+              className="flex-1 px-2 py-1 rounded bg-[var(--proto-base)] border border-[var(--proto-border)] text-cq-xxs text-[var(--proto-text)] outline-none focus:border-[var(--proto-text-muted)]"
             />
           </div>
         )}
         {/* TTL tier info */}
         {tierInfo && dataType === 'detections' && (
-          <span className="text-[length:var(--text-xxs)] text-[var(--proto-text-muted)]/50 mt-0.5">
+          <span className="text-cq-xxs text-[var(--proto-text-muted)]/50 mt-0.5">
             {t('export.tierInfo', { tier: tierInfo.label })}
           </span>
         )}
@@ -223,9 +223,9 @@ export function DataExportPanel() {
             value={channelStart}
             onChange={e => setChannelStart(e.target.value)}
             placeholder="0"
-            className="w-20 px-2 py-1 rounded bg-[var(--proto-base)] border border-[var(--proto-border)] text-[length:var(--text-xxs)] text-[var(--proto-text)] placeholder:text-[var(--proto-text-muted)]/40 outline-none focus:border-[var(--proto-text-muted)] tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            className="w-20 px-2 py-1 rounded bg-[var(--proto-base)] border border-[var(--proto-border)] text-cq-xxs text-[var(--proto-text)] placeholder:text-[var(--proto-text-muted)]/40 outline-none focus:border-[var(--proto-text-muted)] tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
-          <span className="text-[length:var(--text-xxs)] text-[var(--proto-text-muted)]/40">—</span>
+          <span className="text-cq-xxs text-[var(--proto-text-muted)]/40">—</span>
           <input
             type="number"
             min={0}
@@ -233,12 +233,10 @@ export function DataExportPanel() {
             value={channelEnd}
             onChange={e => setChannelEnd(e.target.value)}
             placeholder={maxChannels ? String(maxChannels) : ''}
-            className="w-20 px-2 py-1 rounded bg-[var(--proto-base)] border border-[var(--proto-border)] text-[length:var(--text-xxs)] text-[var(--proto-text)] placeholder:text-[var(--proto-text-muted)]/40 outline-none focus:border-[var(--proto-text-muted)] tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            className="w-20 px-2 py-1 rounded bg-[var(--proto-base)] border border-[var(--proto-border)] text-cq-xxs text-[var(--proto-text)] placeholder:text-[var(--proto-text-muted)]/40 outline-none focus:border-[var(--proto-text-muted)] tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
           {maxChannels > 0 && (
-            <span className="text-[length:var(--text-xxs)] text-[var(--proto-text-muted)]/40 tabular-nums">
-              / {maxChannels}
-            </span>
+            <span className="text-cq-xxs text-[var(--proto-text-muted)]/40 tabular-nums">/ {maxChannels}</span>
           )}
         </div>
       </FieldRow>
@@ -258,7 +256,7 @@ export function DataExportPanel() {
         <button
           onClick={handleDownload}
           disabled={!canEstimate || downloadMutation.isPending}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[var(--proto-surface-raised)] border border-[var(--proto-border)] text-[length:var(--text-xs)] font-medium text-[var(--proto-text)] disabled:opacity-30 cursor-pointer hover:bg-[var(--proto-border)] transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-[var(--proto-surface-raised)] border border-[var(--proto-border)] text-cq-xs font-medium text-[var(--proto-text)] disabled:opacity-30 cursor-pointer hover:bg-[var(--proto-border)] transition-colors"
         >
           {downloadMutation.isPending ? (
             <span className="inline-block w-3 h-3 border-[1.5px] border-[var(--proto-text-muted)] border-t-[var(--proto-text)] rounded-full animate-spin" />
@@ -268,9 +266,7 @@ export function DataExportPanel() {
           {t('export.download')}
         </button>
         {canEstimate && estimateText && (
-          <span className="text-[length:var(--text-xxs)] text-[var(--proto-text-muted)]/50 tabular-nums">
-            {estimateText}
-          </span>
+          <span className="text-cq-xxs text-[var(--proto-text-muted)]/50 tabular-nums">{estimateText}</span>
         )}
       </div>
     </div>
@@ -282,9 +278,7 @@ export function DataExportPanel() {
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-[length:var(--text-xxs)] text-[var(--proto-text-muted)]/60 uppercase tracking-wider">
-        {label}
-      </label>
+      <label className="text-cq-xxs text-[var(--proto-text-muted)]/60 uppercase tracking-wider">{label}</label>
       {children}
     </div>
   )
@@ -309,7 +303,7 @@ function ToggleGroup<T extends string>({
         <button
           key={opt}
           onClick={() => onChange(opt)}
-          className={`px-2.5 py-1 rounded text-[length:var(--text-xxs)] font-medium transition-colors cursor-pointer whitespace-nowrap ${
+          className={`px-2.5 py-1 rounded text-cq-xxs font-medium transition-colors cursor-pointer whitespace-nowrap ${
             value === opt
               ? 'bg-[var(--proto-surface-raised)] text-[var(--proto-text)]'
               : 'text-[var(--proto-text-secondary)] hover:text-[var(--proto-text)]'

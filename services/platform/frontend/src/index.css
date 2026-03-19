@@ -196,6 +196,28 @@
   --color-blue-900: #153a3e;
 }
 
+/* ── Container-query text utilities ──
+   Shorthand for text-[length:var(--text-*)] — the responsive
+   font sizes defined in prototype.css via container queries. */
+@utility text-cq-2xs {
+  font-size: var(--text-2xs);
+}
+@utility text-cq-xxs {
+  font-size: var(--text-xxs);
+}
+@utility text-cq-xs {
+  font-size: var(--text-xs);
+}
+@utility text-cq-sm {
+  font-size: var(--text-sm);
+}
+@utility text-cq-lg {
+  font-size: var(--text-lg);
+}
+@utility text-cq-xl {
+  font-size: var(--text-xl);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

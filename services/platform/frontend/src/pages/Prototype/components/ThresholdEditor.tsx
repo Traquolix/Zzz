@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { COLORS } from '@/lib/theme'
 import type { SpeedThresholds } from '../types'
 
 export function ThresholdEditor({
@@ -19,21 +20,21 @@ export function ThresholdEditor({
   }, [thresholds.green, thresholds.yellow, thresholds.orange])
 
   const fields: { key: keyof SpeedThresholds; label: string; color: string }[] = [
-    { key: 'green', label: 'Green', color: '#22c55e' },
-    { key: 'yellow', label: 'Yellow', color: '#eab308' },
-    { key: 'orange', label: 'Orange', color: '#f97316' },
+    { key: 'green', label: 'Green', color: COLORS.speed.fast },
+    { key: 'yellow', label: 'Yellow', color: COLORS.speed.normal },
+    { key: 'orange', label: 'Orange', color: COLORS.speed.slow },
   ]
 
   return (
     <div className="border-t border-[var(--proto-border)] pt-3">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-[length:var(--text-xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
+        <h3 className="text-cq-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
           Speed Thresholds
         </h3>
         {isDirty && (
           <button
             onClick={() => onChange(draft)}
-            className="px-2.5 py-1 rounded text-[length:var(--text-2xs)] font-medium bg-[var(--proto-accent)] text-white cursor-pointer hover:opacity-80 transition-opacity"
+            className="px-2.5 py-1 rounded text-cq-2xs font-medium bg-[var(--proto-accent)] text-white cursor-pointer hover:opacity-80 transition-opacity"
           >
             Apply
           </button>
@@ -52,9 +53,9 @@ export function ThresholdEditor({
                   setDraft(prev => ({ ...prev, [f.key]: val }))
                 }
               }}
-              className="w-12 px-1 py-0.5 rounded bg-transparent border border-[var(--proto-border)] text-[length:var(--text-xs)] text-[var(--proto-text)] text-center outline-none focus:border-[var(--proto-text-secondary)] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              className="w-12 px-1 py-0.5 rounded bg-transparent border border-[var(--proto-border)] text-cq-xs text-[var(--proto-text)] text-center outline-none focus:border-[var(--proto-text-secondary)] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
             />
-            <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)]">km/h</span>
+            <span className="text-cq-2xs text-[var(--proto-text-muted)]">km/h</span>
           </label>
         ))}
       </div>

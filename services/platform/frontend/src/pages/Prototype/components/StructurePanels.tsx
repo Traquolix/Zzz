@@ -13,19 +13,9 @@ import type {
 import { fetchPeakFrequencies } from '@/api/infrastructure'
 import { useDebouncedResize } from '../hooks/useDebouncedResize'
 import { SpectralHeatmapCanvas, PeakScatterPlot, ComparisonOverlay } from './ShmCharts'
+import { COLORS, structureTypeColors, shmStatusColors } from '@/lib/theme'
 
 // ── Structure list ───────────────────────────────────────────────────
-
-const structureTypeColors: Record<string, { bg: string; text: string; dot: string }> = {
-  bridge: { bg: '#f59e0b', text: '#fbbf24', dot: '#f59e0b' },
-  tunnel: { bg: '#6366f1', text: '#818cf8', dot: '#6366f1' },
-}
-
-const statusColors: Record<string, string> = {
-  nominal: '#22c55e',
-  warning: '#f59e0b',
-  critical: '#ef4444',
-}
 
 function StructureList({
   structures,
@@ -46,7 +36,7 @@ function StructureList({
 }) {
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-[length:var(--text-sm)]">
+      <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-cq-sm">
         <span className="animate-pulse">Loading structures...</span>
       </div>
     )
@@ -54,7 +44,7 @@ function StructureList({
 
   if (structures.length === 0) {
     return (
-      <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-[length:var(--text-sm)]">
+      <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-cq-sm">
         No structures found
       </div>
     )
@@ -73,7 +63,7 @@ function StructureList({
   return (
     <div className="flex flex-col px-3 py-1">
       {filtered.length === 0 ? (
-        <div className="flex items-center justify-center h-24 text-[var(--proto-text-muted)] text-[length:var(--text-sm)]">
+        <div className="flex items-center justify-center h-24 text-[var(--proto-text-muted)] text-cq-sm">
           No structures match "{search}"
         </div>
       ) : (
@@ -81,7 +71,7 @@ function StructureList({
           const typeStyle = structureTypeColors[structure.type] ?? structureTypeColors.bridge
           const fiber = findFiber(structure.fiberId, structure.direction ?? 0)
           const status = allStatuses.get(structure.id)
-          const dotColor = status ? (statusColors[status.status] ?? '#64748b') : '#64748b'
+          const dotColor = status ? (shmStatusColors[status.status] ?? COLORS.shmChart.axis) : COLORS.shmChart.axis
 
           return (
             <button
@@ -140,12 +130,10 @@ function StructureList({
               )}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-[length:var(--text-sm)] text-[var(--proto-text)] font-medium truncate">
-                    {structure.name}
-                  </span>
+                  <span className="text-cq-sm text-[var(--proto-text)] font-medium truncate">{structure.name}</span>
                   <span className="shrink-0 w-2 h-2 rounded-full" style={{ backgroundColor: dotColor }} />
                 </div>
-                <span className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)] shrink-0">
+                <span className="text-cq-xs text-[var(--proto-text-muted)] shrink-0">
                   {structure.type.charAt(0).toUpperCase() + structure.type.slice(1)} ·{' '}
                   {fiber?.name ?? structure.fiberId}
                 </span>
@@ -184,7 +172,7 @@ function StructureDetail({
 
   if (!structure) {
     return (
-      <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-[length:var(--text-sm)]">
+      <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-cq-sm">
         Structure not found
       </div>
     )
@@ -192,7 +180,7 @@ function StructureDetail({
 
   const typeStyle = structureTypeColors[structure.type] ?? structureTypeColors.bridge
   const fiber = findFiber(structure.fiberId, structure.direction ?? 0)
-  const statusColor = shmStatus ? (statusColors[shmStatus.status] ?? statusColors.nominal) : '#64748b'
+  const statusColor = shmStatus ? (shmStatusColors[shmStatus.status] ?? shmStatusColors.nominal) : COLORS.shmChart.axis
 
   const kpis = [
     { label: 'Peak Freq', value: shmStatus ? `${shmStatus.currentMean.toFixed(1)}` : '--', unit: 'Hz' },
@@ -207,16 +195,14 @@ function StructureDetail({
       <div className="sticky top-0 z-10 bg-[var(--proto-surface)] border-b border-[var(--proto-border)] px-4 py-3 flex items-center gap-3">
         <button
           onClick={onBack}
-          className="text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors text-[length:var(--text-sm)] cursor-pointer"
+          className="text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors text-cq-sm cursor-pointer"
         >
           &larr; Back
         </button>
         <div className="min-w-0">
-          <span className="text-[length:var(--text-sm)] font-semibold text-[var(--proto-text)] truncate block">
-            {structure.name}
-          </span>
+          <span className="text-cq-sm font-semibold text-[var(--proto-text)] truncate block">{structure.name}</span>
           {fiber && (
-            <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] flex items-center gap-1.5">
+            <span className="text-cq-2xs text-[var(--proto-text-muted)] flex items-center gap-1.5">
               <span
                 className="inline-block w-2 h-2 rounded-full flex-shrink-0"
                 style={{ backgroundColor: typeStyle.dot }}
@@ -227,7 +213,7 @@ function StructureDetail({
         </div>
         {shmStatus && (
           <span
-            className="text-[length:var(--text-2xs)] font-medium px-1.5 py-0.5 rounded capitalize shrink-0"
+            className="text-cq-2xs font-medium px-1.5 py-0.5 rounded capitalize shrink-0"
             style={{ backgroundColor: `${statusColor}20`, color: statusColor }}
           >
             {shmStatus.status}
@@ -249,23 +235,18 @@ function StructureDetail({
         <div className="grid grid-cols-2 gap-3">
           {kpis.map(kpi => (
             <div key={kpi.label} className="rounded-lg border border-[var(--proto-border)] p-3">
-              <div className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] uppercase tracking-wider mb-1">
+              <div className="text-cq-2xs text-[var(--proto-text-muted)] uppercase tracking-wider mb-1">
                 {kpi.label}
               </div>
               <div className="flex items-end gap-1">
                 {kpi.isStatus ? (
-                  <span
-                    className="text-[length:var(--text-sm)] font-semibold capitalize"
-                    style={{ color: statusColor }}
-                  >
+                  <span className="text-cq-sm font-semibold capitalize" style={{ color: statusColor }}>
                     {kpi.value}
                   </span>
                 ) : (
                   <>
-                    <span className="text-[length:var(--text-xl)] font-semibold text-[var(--proto-text)]">
-                      {kpi.value}
-                    </span>
-                    <span className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)]">{kpi.unit}</span>
+                    <span className="text-cq-xl font-semibold text-[var(--proto-text)]">{kpi.value}</span>
+                    <span className="text-cq-xs text-[var(--proto-text-muted)]">{kpi.unit}</span>
                   </>
                 )}
               </div>
@@ -294,30 +275,26 @@ function StructureDetail({
             return (
               <div className="flex items-center justify-between rounded-lg border border-[var(--proto-border)] bg-[var(--proto-surface-raised)] px-4 py-3">
                 <div>
-                  <span className={`text-[length:var(--text-xl)] font-bold ${shiftColor}`}>
+                  <span className={`text-cq-xl font-bold ${shiftColor}`}>
                     {comparisonStats.diff > 0 ? '+' : ''}
                     {(comparisonStats.diff * 1000).toFixed(2)} mHz
                   </span>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className={`text-[length:var(--text-xs)] ${pctColor}`}>
+                    <span className={`text-cq-xs ${pctColor}`}>
                       ({comparisonStats.diffPercent > 0 ? '+' : ''}
                       {comparisonStats.diffPercent.toFixed(2)}%)
                     </span>
-                    <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)]">
-                      vs previous period
-                    </span>
+                    <span className="text-cq-2xs text-[var(--proto-text-muted)]">vs previous period</span>
                   </div>
                 </div>
-                <div className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] uppercase tracking-wider">
-                  Freq Shift
-                </div>
+                <div className="text-cq-2xs text-[var(--proto-text-muted)] uppercase tracking-wider">Freq Shift</div>
               </div>
             )
           })()}
 
         {/* Spectral Heatmap */}
         <div className="border-t border-[var(--proto-border)] pt-3">
-          <h3 className="text-[length:var(--text-xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
+          <h3 className="text-cq-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
             Spectral Heatmap
           </h3>
           <div className="rounded-lg bg-[var(--proto-surface-raised)] border border-[var(--proto-border)] p-2">
@@ -326,7 +303,7 @@ function StructureDetail({
             ) : spectralData ? (
               <SpectralHeatmapCanvas data={spectralData} />
             ) : (
-              <div className="h-[200px] flex items-center justify-center text-[length:var(--text-xs)] text-[var(--proto-text-muted)]">
+              <div className="h-[200px] flex items-center justify-center text-cq-xs text-[var(--proto-text-muted)]">
                 No spectral data
               </div>
             )}
@@ -335,7 +312,7 @@ function StructureDetail({
 
         {/* Peak Scatter */}
         <div className="border-t border-[var(--proto-border)] pt-3">
-          <h3 className="text-[length:var(--text-xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
+          <h3 className="text-cq-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
             Peak Frequencies
           </h3>
           <div className="rounded-lg bg-[var(--proto-surface-raised)] border border-[var(--proto-border)] p-2">
@@ -344,7 +321,7 @@ function StructureDetail({
             ) : peakData ? (
               <PeakScatterPlot data={peakData} />
             ) : (
-              <div className="h-[170px] flex items-center justify-center text-[length:var(--text-xs)] text-[var(--proto-text-muted)]">
+              <div className="h-[170px] flex items-center justify-center text-cq-xs text-[var(--proto-text-muted)]">
                 No peak data
               </div>
             )}
@@ -474,15 +451,13 @@ function ComparisonSection({
     <div>
       {/* Header row */}
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-[length:var(--text-xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
-          Comparison
-        </h3>
+        <h3 className="text-cq-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">Comparison</h3>
         <div className="flex items-center gap-2">
           {/* Mode selector */}
           <select
             value={mode}
             onChange={e => setMode(e.target.value as ComparisonMode)}
-            className="text-[length:var(--text-2xs)] bg-[var(--proto-surface-raised)] text-[var(--proto-text-secondary)] border border-[var(--proto-border)] rounded px-1.5 py-0.5 cursor-pointer"
+            className="text-cq-2xs bg-[var(--proto-surface-raised)] text-[var(--proto-text-secondary)] border border-[var(--proto-border)] rounded px-1.5 py-0.5 cursor-pointer"
           >
             <option value="day">Day / Day</option>
             <option value="week">Week / Week</option>
@@ -494,7 +469,7 @@ function ComparisonSection({
                 key={f}
                 onClick={() => setFocus(f)}
                 className={cn(
-                  'px-2 py-0.5 text-[length:var(--text-2xs)] font-medium rounded transition-colors cursor-pointer',
+                  'px-2 py-0.5 text-cq-2xs font-medium rounded transition-colors cursor-pointer',
                   focus === f
                     ? f === 'A'
                       ? 'bg-blue-500 text-white'
@@ -512,7 +487,7 @@ function ComparisonSection({
       </div>
 
       {/* Period labels */}
-      <div className="flex items-center gap-3 mb-2 text-[length:var(--text-2xs)]">
+      <div className="flex items-center gap-3 mb-2 text-cq-2xs">
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
           <span className="text-[var(--proto-text-secondary)]">A: {labelA}</span>
@@ -545,7 +520,7 @@ function ComparisonSection({
       {/* Stats (A/B mean and σ only — shift banner is in StructureDetail) */}
       {stats && (
         <div className="mt-2">
-          <div className="grid grid-cols-2 gap-2 text-[length:var(--text-2xs)]">
+          <div className="grid grid-cols-2 gap-2 text-cq-2xs">
             <div className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
               <span className="text-[var(--proto-text-muted)]">μ</span>
