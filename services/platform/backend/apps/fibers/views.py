@@ -14,12 +14,15 @@ are per-direction.
 
 import json
 import logging
+from collections.abc import Callable
 from functools import wraps
 from pathlib import Path
+from typing import Any
 
 from django.conf import settings
 from django.core.cache import cache
 from drf_spectacular.utils import extend_schema
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -33,12 +36,12 @@ from apps.shared.utils import build_org_cache_key
 FIBERS_CACHE_TTL = 5 * 60  # 5 minutes
 
 
-def add_cache_control(max_age=300, public=True):
+def add_cache_control(max_age: int = 300, public: bool = True) -> Callable[..., Any]:
     """Decorator to add Cache-Control headers to response."""
 
-    def decorator(func):
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
-        def wrapper(self, request, *args, **kwargs):
+        def wrapper(self: Any, request: Request, *args: Any, **kwargs: Any) -> Response:
             response = func(self, request, *args, **kwargs)
             cache_control_value = f"max-age={max_age}"
             if public:
@@ -96,7 +99,7 @@ def _load_directional_paths() -> dict[str, dict]:
     return result
 
 
-def _expand_to_directional(fiber: dict) -> list[dict]:
+def _expand_to_directional(fiber: dict[str, Any]) -> list[dict[str, Any]]:
     """Expand a single physical fiber into two directional fibers (direction 0 and 1).
 
     If `directional_paths` is provided in the fiber data with matching channel counts,
@@ -142,7 +145,7 @@ def _expand_to_directional(fiber: dict) -> list[dict]:
     return result
 
 
-def _load_fibers_from_json(fiber_ids: list[str] | None = None) -> list[dict]:
+def _load_fibers_from_json(fiber_ids: list[str] | None = None) -> list[dict[str, Any]]:
     """Load fiber data from JSON cable files (fallback when ClickHouse is unavailable).
 
     Returns directional fibers (two per physical cable).
@@ -196,7 +199,7 @@ class FiberListView(APIView):
         responses={200: FiberLineSerializer(many=True)},
         tags=["fibers"],
     )
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         cache_key = build_org_cache_key("fibers", request.user)
 
         cached = cache.get(cache_key)
@@ -252,7 +255,7 @@ class FiberListView(APIView):
             dir_paths_map = _load_directional_paths()
 
             fibers = []
-            for row in result.named_results():
+            for row in result.named_results():  # type: ignore[attr-defined]  # clickhouse_connect QueryResult lacks stub
                 coords = []
                 for coord in row["channel_coordinates"]:
                     lng, lat = coord

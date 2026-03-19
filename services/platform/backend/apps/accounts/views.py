@@ -15,6 +15,7 @@ from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers as s
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.throttling import AnonRateThrottle, ScopedRateThrottle
 from rest_framework.views import APIView
@@ -34,7 +35,7 @@ LOCKOUT_DURATION = 15 * 60  # 15 minutes
 LOCKOUT_CACHE_PREFIX = "login_fail_"
 
 
-def _set_refresh_cookie(response, refresh_token_str):
+def _set_refresh_cookie(response: Response, refresh_token_str: str) -> None:
     """Set the refresh token as an httpOnly cookie on the response."""
     response.set_cookie(
         key=settings.REFRESH_TOKEN_COOKIE_NAME,
@@ -47,7 +48,7 @@ def _set_refresh_cookie(response, refresh_token_str):
     )
 
 
-def _delete_refresh_cookie(response):
+def _delete_refresh_cookie(response: Response) -> None:
     """Delete the refresh token cookie from the response."""
     response.delete_cookie(
         key=settings.REFRESH_TOKEN_COOKIE_NAME,
@@ -70,7 +71,7 @@ class LoginView(APIView):
     throttle_classes = [AnonRateThrottle]
 
     @staticmethod
-    def _lockout_key(username):
+    def _lockout_key(username: str) -> str:
         return f"{LOCKOUT_CACHE_PREFIX}{username.lower().strip()}"
 
     @extend_schema(
@@ -88,7 +89,7 @@ class LoginView(APIView):
         },
         tags=["auth"],
     )
-    def post(self, request):
+    def post(self, request: Request) -> Response:
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -134,7 +135,7 @@ class LoginView(APIView):
 
             AuditService.log(
                 request=request,
-                action=AuditLog.Action.LOGIN_SUCCESS,
+                action=AuditLog.Action.LOGIN_SUCCESS,  # type: ignore[arg-type]  # TextChoices is str at runtime; no django-stubs
                 object_type="User",
                 object_id=str(user.id),
                 changes={"username": username},
@@ -165,7 +166,7 @@ class LoginView(APIView):
 
             AuditService.log(
                 request=request,
-                action=AuditLog.Action.LOGIN_FAILED,
+                action=AuditLog.Action.LOGIN_FAILED,  # type: ignore[arg-type]  # TextChoices is str at runtime; no django-stubs
                 changes={"username": username, "attempt": attempts + 1},
                 user=target_user,
                 organization=target_user.organization if target_user else None,
@@ -198,7 +199,7 @@ class VerifyView(APIView):
         },
         tags=["auth"],
     )
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         user = request.user
         return Response(
             {
@@ -239,7 +240,7 @@ class CookieTokenRefreshView(APIView):
         },
         tags=["auth"],
     )
-    def post(self, request):
+    def post(self, request: Request) -> Response:
         refresh_token_str = request.COOKIES.get(settings.REFRESH_TOKEN_COOKIE_NAME)
         if not refresh_token_str:
             return Response(
@@ -283,7 +284,7 @@ class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     @extend_schema(request=None, responses={205: None}, tags=["auth"])
-    def post(self, request):
+    def post(self, request: Request) -> Response:
         refresh_token = request.COOKIES.get(settings.REFRESH_TOKEN_COOKIE_NAME)
         if refresh_token:
             try:

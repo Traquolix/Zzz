@@ -11,11 +11,15 @@ Features:
 import csv
 import io
 import logging
+from collections.abc import Generator
+from datetime import datetime
+from typing import Any
 
 from django.http import JsonResponse, StreamingHttpResponse
 from django.utils.dateparse import parse_datetime
 from rest_framework import status
 from rest_framework.exceptions import ParseError
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
@@ -36,8 +40,10 @@ class ExportEstimateThrottle(UserRateThrottle):
     scope = "export_estimate"
 
 
-def _parse_params(request):
-    """Parse and validate common export parameters. Returns (fiber_id, start, end, format) or raises."""
+def _parse_params(
+    request: Request,
+) -> tuple[str | None, datetime | None, datetime | None, str | None, list[str] | None]:
+    """Parse and validate common export parameters. Returns (fiber_id, start, end, format, errors)."""
     fiber_id = request.GET.get("fiber_id")
     start_str = request.GET.get("start")
     end_str = request.GET.get("end")
@@ -81,7 +87,7 @@ def _parse_params(request):
     return fiber_id, start, end, fmt, None
 
 
-def _build_direction_clause(request) -> tuple[str, dict]:
+def _build_direction_clause(request: Request) -> tuple[str, dict[str, Any]]:
     """Build optional direction filter for export queries."""
     direction = request.GET.get("direction")
     if direction is not None:
@@ -95,7 +101,7 @@ def _build_direction_clause(request) -> tuple[str, dict]:
     return "", {}
 
 
-def _build_channel_clause(request, column: str = "ch") -> tuple[str, dict]:
+def _build_channel_clause(request: Request, column: str = "ch") -> tuple[str, dict[str, Any]]:
     """Build optional channel range filter for export queries."""
     ch_start = request.GET.get("channel_start")
     ch_end = request.GET.get("channel_end")
@@ -116,7 +122,7 @@ def _build_channel_clause(request, column: str = "ch") -> tuple[str, dict]:
     return " ".join(clause_parts), params
 
 
-def _stream_csv(columns, rows):
+def _stream_csv(columns: list[str], rows: list[list[Any]]) -> Generator[str, None, None]:
     """Generator that yields CSV rows."""
     output = io.StringIO()
     writer = csv.writer(output)
@@ -142,13 +148,13 @@ class ExportIncidentsView(FlowAwareMixin, APIView):
     permission_classes = [IsActiveUser]
     throttle_classes = [ExportThrottle]
 
-    def initial(self, request, *args, **kwargs):
+    def initial(self, request: Request, *args: Any, **kwargs: Any) -> None:
         super().initial(request, *args, **kwargs)
         if self._is_sim(request):
             raise ParseError("Export is not available for simulation data")
 
     @clickhouse_fallback()
-    def get(self, request):
+    def get(self, request: Request) -> Response | StreamingHttpResponse | JsonResponse:
         fiber_id, start, end, fmt, errors = _parse_params(request)
         if errors:
             return Response({"detail": "; ".join(errors)}, status=status.HTTP_400_BAD_REQUEST)
@@ -209,13 +215,13 @@ class ExportDetectionsView(FlowAwareMixin, APIView):
     permission_classes = [IsActiveUser]
     throttle_classes = [ExportThrottle]
 
-    def initial(self, request, *args, **kwargs):
+    def initial(self, request: Request, *args: Any, **kwargs: Any) -> None:
         super().initial(request, *args, **kwargs)
         if self._is_sim(request):
             raise ParseError("Export is not available for simulation data")
 
     @clickhouse_fallback()
-    def get(self, request):
+    def get(self, request: Request) -> Response | StreamingHttpResponse | JsonResponse:
         fiber_id, start, end, fmt, errors = _parse_params(request)
         if errors:
             return Response({"detail": "; ".join(errors)}, status=status.HTTP_400_BAD_REQUEST)
@@ -303,7 +309,7 @@ class ExportEstimateView(APIView):
     throttle_classes = [ExportEstimateThrottle]
 
     @clickhouse_fallback()
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         fiber_id, start, end, _, errors = _parse_params(request)
         if errors:
             return Response({"detail": "; ".join(errors)}, status=status.HTTP_400_BAD_REQUEST)

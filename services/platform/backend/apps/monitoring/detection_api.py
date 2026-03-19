@@ -17,6 +17,7 @@ from django.utils.dateparse import parse_datetime
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.permissions import BasePermission
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.views import APIView
@@ -51,11 +52,12 @@ class PublicAPIThrottle(SimpleRateThrottle):
 
     scope = "public_api"
 
-    def get_cache_key(self, request, view):
+    def get_cache_key(self, request: Request, view: APIView) -> str | None:
         # Key by the API key hash, not the user
         api_key = getattr(request, "auth", None)
         if isinstance(api_key, APIKey):
-            return self.cache_format % {"scope": self.scope, "ident": api_key.key_hash[:16]}
+            key: str = self.cache_format % {"scope": self.scope, "ident": api_key.key_hash[:16]}
+            return key
         # Fallback: shouldn't happen since IsAPIKeyUser rejects non-API-key requests
         return None
 
@@ -67,7 +69,7 @@ class IsAPIKeyUser(BasePermission):
     Rejects JWT-authenticated requests to keep the public API cleanly separated.
     """
 
-    def has_permission(self, request, view) -> bool:
+    def has_permission(self, request: Request, view: APIView) -> bool:
         user = request.user
         if not user or not user.is_authenticated:
             return False
@@ -92,7 +94,7 @@ class DetectionParams:
     cursor: tuple[str, int, int] | None  # (ts, channel, direction)
 
 
-def _parse_detection_params(request) -> tuple[DetectionParams | None, str | None]:
+def _parse_detection_params(request: Request) -> tuple[DetectionParams | None, str | None]:
     """Parse query params for detection endpoints. Returns (params, error)."""
     fiber_id = request.GET.get("fiber_id")
     start_str = request.GET.get("start")
@@ -351,7 +353,7 @@ class DetectionListView(APIView):
         ),
     )
     @clickhouse_fallback()
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         params, error = _parse_detection_params(request)
         if error:
             return Response({"detail": error}, status=status.HTTP_400_BAD_REQUEST)
@@ -439,7 +441,7 @@ class DetectionSummaryView(APIView):
         ),
     )
     @clickhouse_fallback()
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         fiber_id = request.GET.get("fiber_id")
         start_str = request.GET.get("start")
         end_str = request.GET.get("end")
@@ -593,7 +595,7 @@ class PublicFiberListView(APIView):
         ),
     )
     @clickhouse_fallback()
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         org = request.user.organization
         fiber_ids = get_org_fiber_ids(org)
 
@@ -696,7 +698,7 @@ class IncidentListAPIView(APIView):
         description="Query incidents for a fiber and time range with cursor-based pagination.",
     )
     @clickhouse_fallback()
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         fiber_id = request.GET.get("fiber_id")
         start_str = request.GET.get("start")
         end_str = request.GET.get("end")
@@ -842,7 +844,7 @@ class IncidentDetailAPIView(APIView):
         description="Retrieve a single incident by ID.",
     )
     @clickhouse_fallback()
-    def get(self, request, incident_id):
+    def get(self, request: Request, incident_id: str) -> Response:
         org = request.user.organization
         fiber_ids = get_org_fiber_ids(org)
 
@@ -897,7 +899,7 @@ class SectionListAPIView(APIView):
         summary="List sections",
         description="List all active road sections defined for your organization.",
     )
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         org = request.user.organization
         sections = Section.objects.filter(organization=org, is_active=True)
 
@@ -941,7 +943,7 @@ class SectionHistoryAPIView(APIView):
         description="Get time-series speed, flow, and occupancy data for a section.",
     )
     @clickhouse_fallback()
-    def get(self, request, section_id):
+    def get(self, request: Request, section_id: str) -> Response:
         org = request.user.organization
         try:
             section = Section.objects.get(pk=section_id, organization=org, is_active=True)
@@ -1046,7 +1048,7 @@ class StatsAPIView(APIView):
         description="Get aggregate system statistics for your organization.",
     )
     @clickhouse_fallback()
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         org = request.user.organization
         fiber_ids = get_org_fiber_ids(org)
 
@@ -1127,7 +1129,7 @@ class InfrastructureListAPIView(APIView):
         summary="List infrastructure",
         description="List SHM infrastructure items (bridges, tunnels) for your organization.",
     )
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         org = request.user.organization
         items = Infrastructure.objects.filter(organization=org)
 
@@ -1165,7 +1167,7 @@ class InfrastructureStatusAPIView(APIView):
             "connected in a future release."
         ),
     )
-    def get(self, request, infra_id):
+    def get(self, request: Request, infra_id: str) -> Response:
         org = request.user.organization
         if not Infrastructure.objects.filter(id=infra_id, organization=org).exists():
             return Response(

@@ -78,7 +78,7 @@ class UserPreferencesView(APIView):
     permission_classes = [IsActiveUser]
 
     @extend_schema(responses={200: _PreferencesResponse}, tags=["preferences"])
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         prefs, _ = UserPreferences.objects.get_or_create(user=request.user)
         return Response(
             {
@@ -98,7 +98,7 @@ class UserPreferencesView(APIView):
         responses={200: _PreferencesResponse},
         tags=["preferences"],
     )
-    def put(self, request):
+    def put(self, request: Request) -> Response:
         # Validate payload size to prevent abuse
         payload_size = len(json.dumps(request.data).encode("utf-8"))
         if payload_size > MAX_PREFERENCES_SIZE:
@@ -140,7 +140,7 @@ class UserPreferencesView(APIView):
 
         AuditService.log(
             request=request,
-            action=AuditLog.Action.PREFERENCES_UPDATED,
+            action=AuditLog.Action.PREFERENCES_UPDATED,  # type: ignore[arg-type]  # TextChoices is str at runtime; no django-stubs
             object_type="UserPreferences",
             object_id=str(request.user.id),
             changes={"updated_keys": [k for k in ("dashboard", "map") if k in data]},
