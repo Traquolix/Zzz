@@ -18,8 +18,10 @@ import logging
 import random
 import threading
 import time
+from typing import Any
 
 from django.conf import settings
+from rest_framework import status
 from rest_framework.response import Response
 
 from apps.shared.exceptions import ClickHouseUnavailableError
@@ -53,7 +55,7 @@ def _is_in_cooldown() -> bool:
         return (time.time() - _last_failure_time) < cooldown
 
 
-def _record_failure():
+def _record_failure() -> None:
     """Record a connection failure (thread-safe)."""
     global _consecutive_failures, _last_failure_time
     with _breaker_lock:
@@ -67,7 +69,7 @@ def _record_failure():
         )
 
 
-def _record_success():
+def _record_success() -> None:
     """Reset circuit breaker on successful connection (thread-safe)."""
     global _consecutive_failures, _last_failure_time
     with _breaker_lock:
@@ -79,7 +81,7 @@ def _record_success():
             _last_failure_time = 0.0
 
 
-def get_client():
+def get_client() -> Any:
     """
     Get or create a thread-local ClickHouse client.
 
@@ -124,7 +126,7 @@ def get_client():
         raise ClickHouseUnavailableError(str(e))
 
 
-def query(sql, parameters=None):
+def query(sql: str, parameters: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     """
     Execute a read query and return results as a list of dicts.
 
@@ -178,7 +180,7 @@ def query(sql, parameters=None):
         raise ClickHouseUnavailableError(str(e))
 
 
-def query_scalar(sql, parameters=None):
+def query_scalar(sql: str, parameters: dict[str, Any] | None = None) -> Any:
     """Execute a query and return a single scalar value."""
     rows = query(sql, parameters=parameters)
     if rows and rows[0]:
@@ -212,7 +214,7 @@ def command(sql: str) -> None:
         raise ClickHouseUnavailableError(str(e))
 
 
-def health() -> dict:
+def health() -> dict[str, Any]:
     """Return circuit breaker state for health checks."""
     with _breaker_lock:
         if _consecutive_failures == 0:
@@ -227,7 +229,7 @@ def health() -> dict:
         }
 
 
-def clickhouse_fallback(fallback_fn=None):
+def clickhouse_fallback(fallback_fn: Any | None = None) -> Any:
     """
     Decorator for DRF view methods that depend on ClickHouse.
 
@@ -270,7 +272,7 @@ def clickhouse_fallback(fallback_fn=None):
                         "detail": "Analytics temporarily unavailable",
                         "code": "analytics_unavailable",
                     },
-                    status=503,
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
                 )
 
         return wrapper

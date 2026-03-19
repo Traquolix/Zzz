@@ -26,8 +26,8 @@ export function IncidentToastStack({ toasts, onClickToast }: Props) {
   const visibleStart = Math.max(0, toasts.length - 3)
 
   return (
-    <div className="fixed bottom-4 left-4 z-50 pointer-events-auto" style={{ perspective: '600px' }}>
-      <div className="relative" style={{ minWidth: 280 }}>
+    <div className="fixed bottom-4 left-4 z-50 pointer-events-auto perspective-[600px]">
+      <div className="relative min-w-[280px]">
         {toasts.slice(visibleStart).map((toast, i) => {
           const stackPos = toasts.length - visibleStart - 1 - i // 0 = top, 1 = behind, 2 = furthest
           const scale = 1 - stackPos * 0.05

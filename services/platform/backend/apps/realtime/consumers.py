@@ -26,6 +26,7 @@ import asyncio
 import json
 import logging
 import time
+from typing import Any
 
 from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
@@ -60,7 +61,7 @@ RATE_LIMIT_WINDOW_SECONDS = 10
 AUTH_TIMEOUT_SECONDS = 15
 
 
-def _org_group_name(channel: str, org_id: str, flow: str) -> str:
+def _org_group_name(channel: str, org_id: str | None, flow: str) -> str:
     """Build the flow-prefixed, org-scoped Channels group name."""
     return f"realtime_{flow}_{channel}_org_{org_id}"
 
@@ -74,7 +75,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
     Authentication: connect then send {"action": "authenticate", "token": "<jwt>"}
     """
 
-    async def connect(self):
+    async def connect(self) -> None:
         # Origin check — reject cross-origin WebSocket connections (CSRF mitigation)
         headers = dict(self.scope.get("headers", []))
         origin = headers.get(b"origin", b"").decode("utf-8", errors="ignore")
@@ -90,11 +91,11 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
                 return
 
         # All connections start unauthenticated — require message-based auth
-        self.subscriptions = set()
-        self._user = None
-        self._org_id = None
+        self.subscriptions: set[str] = set()
+        self._user: Any | None = None
+        self._org_id: str | None = None
         self._authenticated = False
-        self._auth_timeout_task = None
+        self._auth_timeout_task: asyncio.Task[None] | None = None
         await self.accept()
         # Start auth timeout — close connection if client doesn't authenticate in time
         self._auth_timeout_task = asyncio.ensure_future(self._auth_timeout())
@@ -102,7 +103,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             "WebSocket client connected (pending authentication, %ds timeout)", AUTH_TIMEOUT_SECONDS
         )
 
-    async def _auth_timeout(self):
+    async def _auth_timeout(self) -> None:
         """Close connection if authentication is not completed within timeout."""
         try:
             await asyncio.sleep(AUTH_TIMEOUT_SECONDS)
@@ -120,31 +121,32 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         except asyncio.CancelledError:
             pass  # Auth succeeded or connection closed before timeout
 
-    def _setup_user(self, user):
+    def _setup_user(self, user: Any) -> None:
         """Initialize user state after authentication."""
         self.subscriptions = set()
         self._user = user
         self._authenticated = True
-        self._flow = "live"  # Overwritten in _handle_authenticate based on availability
+        self._flow: str = "live"  # Overwritten in _handle_authenticate based on availability
         # Rate limiting state
-        self._message_times = []
+        self._message_times: list[float] = []
         # Pub/sub state (lazily initialized on first high-frequency subscribe)
-        self._redis_client = None
-        self._pubsub = None
-        self._pubsub_task = None
+        self._redis_client: Any | None = None
+        self._pubsub: Any | None = None
+        self._pubsub_task: asyncio.Task[None] | None = None
         self._pubsub_subscriptions: dict[str, str] = {}  # channel -> redis pubsub channel name
         # Superusers see all data; regular users scoped to their org
         if user.is_superuser:
             self._org_id = "__all__"
-            self._org = None
+            self._org: Any | None = None
         else:
             self._org_id = str(user.organization_id)
             self._org = user.organization
 
-    async def disconnect(self, close_code):
+    async def disconnect(self, close_code: int) -> None:
         # Cancel auth timeout if still pending
-        if getattr(self, "_auth_timeout_task", None) and not self._auth_timeout_task.done():
-            self._auth_timeout_task.cancel()
+        task = getattr(self, "_auth_timeout_task", None)
+        if task is not None and not task.done():
+            task.cancel()
 
         # Clean up pub/sub resources
         await self._cleanup_pubsub()
@@ -177,7 +179,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         self._message_times.append(now)
         return False
 
-    async def receive_json(self, content):
+    async def receive_json(self, content: dict[str, Any]) -> None:
         action = content.get("action")
 
         if action == "ping":
@@ -253,7 +255,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
                     )
                 logger.debug("Client unsubscribed from: %s", channel)
 
-    async def _handle_authenticate(self, token: str | None):
+    async def _handle_authenticate(self, token: str | None) -> None:
         """Handle message-based authentication with rate limiting."""
         # Rate limit auth attempts (max 5 per connection)
         self._auth_attempts = getattr(self, "_auth_attempts", 0) + 1
@@ -288,8 +290,9 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
 
         self._setup_user(user)
         # Cancel auth timeout — client authenticated successfully
-        if getattr(self, "_auth_timeout_task", None) and not self._auth_timeout_task.done():
-            self._auth_timeout_task.cancel()
+        auth_task = getattr(self, "_auth_timeout_task", None)
+        if auth_task is not None and not auth_task.done():
+            auth_task.cancel()
         from apps.shared.metrics import WEBSOCKET_CONNECTIONS
 
         WEBSOCKET_CONNECTIONS.inc()
@@ -314,7 +317,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             }
         )
 
-    async def _switch_flow(self, new_flow: str):
+    async def _switch_flow(self, new_flow: str) -> None:
         """Switch client from current flow to new_flow, re-joining all groups."""
         old_flow = self._flow
         if old_flow == new_flow:
@@ -352,7 +355,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
 
     # ----- Redis pub/sub helpers (detections, SHM) -----
 
-    async def _ensure_pubsub(self):
+    async def _ensure_pubsub(self) -> None:
         """Lazily create Redis pub/sub connection on first high-frequency subscribe."""
         if self._redis_client is None:
             from apps.realtime.redis_pubsub import create_subscriber
@@ -360,15 +363,16 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             self._redis_client = create_subscriber()
             self._pubsub = self._redis_client.pubsub()
 
-    def _ensure_pubsub_listener(self):
+    def _ensure_pubsub_listener(self) -> None:
         """Start the pub/sub listener task if not already running."""
         if self._pubsub_task is None or self._pubsub_task.done():
             self._pubsub_task = asyncio.create_task(self._pubsub_listener())
 
-    async def _pubsub_listener(self):
+    async def _pubsub_listener(self) -> None:
         """Read pub/sub messages and forward to WebSocket."""
         from apps.shared.metrics import WEBSOCKET_MESSAGES_SENT, WEBSOCKET_SEND_TIMEOUTS
 
+        assert self._pubsub is not None
         try:
             async for message in self._pubsub.listen():
                 if message["type"] != "message":
@@ -392,40 +396,44 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
                 self._pubsub_task = None
                 self._ensure_pubsub_listener()
 
-    async def _subscribe_pubsub(self, channel: str):
+    async def _subscribe_pubsub(self, channel: str) -> None:
         """Subscribe to a Redis pub/sub channel."""
         from apps.realtime.redis_pubsub import pubsub_channel_name
 
         await self._ensure_pubsub()
+        assert self._pubsub is not None
         redis_channel = pubsub_channel_name(self._flow, channel, self._org_id)
         await self._pubsub.subscribe(redis_channel)
         self._pubsub_subscriptions[channel] = redis_channel
         # Start listener after first subscription (listen() exits if no subs)
         self._ensure_pubsub_listener()
 
-    async def _unsubscribe_pubsub(self, channel: str):
+    async def _unsubscribe_pubsub(self, channel: str) -> None:
         """Unsubscribe from a Redis pub/sub channel."""
         redis_channel = self._pubsub_subscriptions.pop(channel, None)
         if redis_channel and self._pubsub:
             await self._pubsub.unsubscribe(redis_channel)
 
-    async def _cleanup_pubsub(self):
+    async def _cleanup_pubsub(self) -> None:
         """Clean up all pub/sub resources."""
-        if getattr(self, "_pubsub_task", None) and not self._pubsub_task.done():
-            self._pubsub_task.cancel()
+        ps_task = getattr(self, "_pubsub_task", None)
+        if ps_task is not None and not ps_task.done():
+            ps_task.cancel()
             try:
-                await self._pubsub_task
+                await ps_task
             except asyncio.CancelledError:
                 pass
-        if getattr(self, "_pubsub", None):
-            await self._pubsub.close()
-        if getattr(self, "_redis_client", None):
-            await self._redis_client.aclose()
+        ps = getattr(self, "_pubsub", None)
+        if ps is not None:
+            await ps.close()
+        rc = getattr(self, "_redis_client", None)
+        if rc is not None:
+            await rc.aclose()
 
     # ----- Group message handlers (Channels layer: incidents, fibers) -----
     # These are called when the Channels layer routes a group_send to this consumer
 
-    async def broadcast_message(self, event):
+    async def broadcast_message(self, event: dict[str, Any]) -> None:
         """Handle broadcast from channel layer group. Timeout prevents slow clients from blocking."""
         try:
             await asyncio.wait_for(
@@ -451,21 +459,25 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
 
     # ----- Initial data senders -----
 
-    async def _send_initial_incidents(self):
+    async def _send_initial_incidents(self) -> None:
         """Send current incidents snapshot on subscribe."""
         try:
             incidents = await sync_to_async(self._query_initial_incidents)()
             await self.send_json({"channel": "incidents", "data": incidents})
         except ObjectDoesNotExist as e:
             # Organization not found - should not happen for authenticated users
-            logger.error("Organization not found for user %s: %s", self._user.username, e)
+            logger.error(
+                "Organization not found for user %s: %s",
+                getattr(self._user, "username", None),
+                e,
+            )
             await self.send_json({"channel": "incidents", "data": []})
         except Exception as e:
             # Unexpected error - log at error level with stack trace
             logger.exception("Unexpected error sending initial incidents: %s", e)
             await self.send_json({"channel": "incidents", "data": []})
 
-    def _query_initial_incidents(self):
+    def _query_initial_incidents(self) -> list[dict[str, Any]]:
         """Synchronous query for initial incidents (org-scoped, flow-aware).
 
         In 'sim' flow: returns simulation cache (org-filtered).
@@ -506,7 +518,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         except ClickHouseUnavailableError:
             return []
 
-    async def _send_initial_fibers(self):
+    async def _send_initial_fibers(self) -> None:
         """Send fiber configuration on subscribe.
 
         Falls back to JSON cable files when ClickHouse is unavailable
@@ -520,14 +532,18 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             logger.info("ClickHouse unavailable, falling back to JSON for fibers: %s", e)
             await self._send_fibers_from_json_fallback()
         except ObjectDoesNotExist as e:
-            logger.error("Organization not found for user %s: %s", self._user.username, e)
+            logger.error(
+                "Organization not found for user %s: %s",
+                getattr(self._user, "username", None),
+                e,
+            )
             await self.send_json({"channel": "fibers", "data": []})
         except Exception as e:
             # Unexpected error - log and try fallback
             logger.exception("Unexpected error querying fibers from ClickHouse: %s", e)
             await self._send_fibers_from_json_fallback()
 
-    async def _send_fibers_from_json_fallback(self):
+    async def _send_fibers_from_json_fallback(self) -> None:
         """Load fibers from JSON cable files as fallback."""
         try:
             from apps.fibers.views import _load_fibers_from_json
@@ -549,7 +565,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             logger.exception("Failed to load fibers from JSON fallback: %s", e)
             await self.send_json({"channel": "fibers", "data": []})
 
-    def _query_initial_fibers(self):
+    def _query_initial_fibers(self) -> list[dict[str, Any]]:
         """Synchronous ClickHouse query for fiber configuration (org-scoped)."""
         from apps.shared.clickhouse import get_client
 

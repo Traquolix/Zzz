@@ -7,6 +7,8 @@ from typing import Any
 
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers as s
+from rest_framework import status
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -77,7 +79,7 @@ class UserPreferencesView(APIView):
     permission_classes = [IsActiveUser]
 
     @extend_schema(responses={200: _PreferencesResponse}, tags=["preferences"])
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         prefs, _ = UserPreferences.objects.get_or_create(user=request.user)
         return Response(
             {
@@ -97,7 +99,7 @@ class UserPreferencesView(APIView):
         responses={200: _PreferencesResponse},
         tags=["preferences"],
     )
-    def put(self, request):
+    def put(self, request: Request) -> Response:
         # Validate payload size to prevent abuse
         payload_size = len(json.dumps(request.data).encode("utf-8"))
         if payload_size > MAX_PREFERENCES_SIZE:
@@ -106,7 +108,7 @@ class UserPreferencesView(APIView):
                     "detail": f"Payload too large ({payload_size} bytes, max {MAX_PREFERENCES_SIZE}).",
                     "code": "payload_too_large",
                 },
-                status=400,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         data = request.data
@@ -125,7 +127,7 @@ class UserPreferencesView(APIView):
                     "errors": validation_errors[:10],
                     "code": "validation_error",
                 },
-                status=400,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         prefs, _ = UserPreferences.objects.get_or_create(user=request.user)
@@ -139,7 +141,7 @@ class UserPreferencesView(APIView):
 
         AuditService.log(
             request=request,
-            action=AuditLog.Action.PREFERENCES_UPDATED,
+            action=AuditLog.Action.PREFERENCES_UPDATED,  # type: ignore[arg-type]  # TextChoices is str at runtime; no django-stubs
             object_type="UserPreferences",
             object_id=str(request.user.id),
             changes={"updated_keys": [k for k in ("dashboard", "map") if k in data]},

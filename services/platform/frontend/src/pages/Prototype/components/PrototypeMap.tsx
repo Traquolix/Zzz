@@ -361,11 +361,16 @@ export const PrototypeMap = memo(
 
       map.on('load', () => {
         // ── Fiber route layers (single merged source, simplified geometry) ──
-        const fiberFeatures = fibers.map(fiber => ({
-          type: 'Feature' as const,
-          properties: { id: fiber.id, name: fiber.name, color: fiber.color },
-          geometry: { type: 'LineString' as const, coordinates: fiberRenderCache.get(fiber.id)! },
-        }))
+        const fiberFeatures: GeoJSON.Feature[] = []
+        for (const fiber of fibers) {
+          const coords = fiberRenderCache.get(fiber.id)
+          if (!coords) continue
+          fiberFeatures.push({
+            type: 'Feature' as const,
+            properties: { id: fiber.id, name: fiber.name, color: fiber.color },
+            geometry: { type: 'LineString' as const, coordinates: coords },
+          })
+        }
         map.addSource('fibers', {
           type: 'geojson',
           data: { type: 'FeatureCollection', features: fiberFeatures },
@@ -874,13 +879,14 @@ export const PrototypeMap = memo(
                 const lookup = thresholdLookupRef.current
                 if (lookup) {
                   for (const f of geojson.features) {
-                    const p = f.properties!
-                    const t = lookup(p.fiberId, p.direction, p.channel)
-                    p.color = getSpeedColor(p.speed, t)
+                    if (!f.properties) continue
+                    const t = lookup(f.properties.fiberId, f.properties.direction, f.properties.channel)
+                    f.properties.color = getSpeedColor(f.properties.speed, t)
                   }
                 } else {
                   for (const f of geojson.features) {
-                    f.properties!.color = getSpeedColor(f.properties!.speed)
+                    if (!f.properties) continue
+                    f.properties.color = getSpeedColor(f.properties.speed)
                   }
                 }
                 const source = map.getSource('vehicles') as mapboxgl.GeoJSONSource | undefined
@@ -923,7 +929,7 @@ export const PrototypeMap = memo(
                 })
                 ensureDeckOverlay()
                 try {
-                  deckOverlay!.setProps({ layers: [layer] })
+                  deckOverlay?.setProps({ layers: [layer] })
                 } catch {
                   /* not ready */
                 }
@@ -1082,11 +1088,16 @@ export const PrototypeMap = memo(
       if (!map || !fiberColors) return
       const src = map.getSource('fibers') as mapboxgl.GeoJSONSource | undefined
       if (!src) return
-      const features = fibers.map(fiber => ({
-        type: 'Feature' as const,
-        properties: { id: fiber.id, name: fiber.name, color: getFiberColor(fiber, fiberColors) },
-        geometry: { type: 'LineString' as const, coordinates: fiberRenderCache.get(fiber.id)! },
-      }))
+      const features: GeoJSON.Feature[] = []
+      for (const fiber of fibers) {
+        const coords = fiberRenderCache.get(fiber.id)
+        if (!coords) continue
+        features.push({
+          type: 'Feature' as const,
+          properties: { id: fiber.id, name: fiber.name, color: getFiberColor(fiber, fiberColors) },
+          geometry: { type: 'LineString' as const, coordinates: coords },
+        })
+      }
       src.setData({ type: 'FeatureCollection', features })
     }, [fiberColors])
 

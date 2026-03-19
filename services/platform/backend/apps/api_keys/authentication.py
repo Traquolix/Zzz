@@ -7,11 +7,13 @@ and returns a service user scoped to the key's organization.
 
 import hashlib
 import logging
+from typing import Any
 
 from django.db.models import F
 from django.utils import timezone
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.request import Request
 
 from apps.api_keys.models import APIKey
 
@@ -29,7 +31,7 @@ class APIKeyAuthentication(BaseAuthentication):
     with role='viewer' scoped to the key's organization.
     """
 
-    def authenticate(self, request):
+    def authenticate(self, request: Request) -> tuple[Any, APIKey] | None:
         raw_key = request.META.get("HTTP_X_API_KEY")
         if not raw_key:
             return None  # Not an API key request — let other auth backends try
@@ -67,7 +69,7 @@ class APIKeyAuthentication(BaseAuthentication):
 
         return (user, api_key)
 
-    def _get_service_user(self, organization):
+    def _get_service_user(self, organization: Any) -> Any:
         """Get or create a viewer-role service user for API key access."""
         from django.contrib.auth import get_user_model
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
+import i18next from 'i18next'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
 import { severityColor, chartColors } from '../data'
@@ -15,6 +16,7 @@ import { MAX_SECTIONS_PER_ORG } from '@/api/sections'
 import { toast } from 'sonner'
 import { API_URL } from '@/constants/api'
 import { useRealtime } from '@/hooks/useRealtime'
+import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { WaterfallPanel } from './WaterfallPanel'
 import { DataHubPanel, type DataHubSubTab } from './DataHubPanel'
 import { ChannelDetail } from './ChannelDetail'
@@ -67,6 +69,33 @@ interface SidePanelProps {
 }
 
 const severityOrder: Severity[] = ['critical', 'high', 'medium', 'low']
+
+/** Compact fallback UI for panel-level error boundaries. */
+const panelFallback = (retry: () => void) => (
+  <div className="flex flex-col items-center justify-center gap-3 py-12 px-4 text-center">
+    <svg
+      width="28"
+      height="28"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="var(--proto-text-muted)"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+    </svg>
+    <span className="text-[length:var(--text-sm)] text-[var(--proto-text-muted)]">
+      {i18next.t('common.somethingWentWrong')}
+    </span>
+    <button
+      onClick={retry}
+      className="px-3 py-1.5 rounded text-[length:var(--text-xs)] font-medium text-[var(--proto-text-secondary)] bg-[var(--proto-surface-raised)] hover:text-[var(--proto-text)] transition-colors cursor-pointer"
+    >
+      {i18next.t('common.tryAgain')}
+    </button>
+  </div>
+)
 
 export function SidePanel({
   state,
@@ -271,9 +300,8 @@ export function SidePanel({
                 {filterSeverity && (
                   <button
                     onClick={() => dispatch({ type: 'SET_FILTER_SEVERITY', severity: null })}
-                    className="w-3 h-3 rounded-full transition-all cursor-pointer opacity-50 hover:opacity-80"
-                    style={{ backgroundColor: 'var(--proto-text-muted)' }}
-                    title="Clear filter"
+                    className="w-3 h-3 rounded-full transition-all cursor-pointer opacity-50 hover:opacity-80 bg-[var(--proto-text-muted)]"
+                    title={t('incidents.filters.clearFilter')}
                   >
                     <svg
                       width="12"
@@ -301,7 +329,7 @@ export function SidePanel({
                         : 'opacity-50 hover:opacity-80',
                     )}
                     style={{ backgroundColor: severityColor[s] }}
-                    title={s.charAt(0).toUpperCase() + s.slice(1)}
+                    title={t(`incidents.severity.${s}`)}
                   />
                 ))}
                 <button
@@ -312,7 +340,7 @@ export function SidePanel({
                       ? 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)]'
                       : 'text-[var(--proto-accent)]',
                   )}
-                  title={hideResolved ? 'Show resolved' : 'Hide resolved'}
+                  title={hideResolved ? t('incidents.filters.showResolved') : t('incidents.filters.hideResolved')}
                 >
                   {hideResolved ? (
                     <svg
@@ -353,7 +381,7 @@ export function SidePanel({
                       ? 'text-[var(--proto-accent)]'
                       : 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)]',
                   )}
-                  title={showIncidentsOnMap ? 'Hide on map' : 'Show on map'}
+                  title={showIncidentsOnMap ? t('sidebar.hideOnMap') : t('sidebar.showOnMap')}
                 >
                   <svg
                     width="14"
@@ -372,7 +400,7 @@ export function SidePanel({
                 <button
                   onClick={() => setIncidentSortBy(s => (s === 'newest' ? 'oldest' : 'newest'))}
                   className="flex items-center justify-center w-6 h-6 rounded text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors cursor-pointer"
-                  title={incidentSortBy === 'newest' ? 'Newest first' : 'Oldest first'}
+                  title={incidentSortBy === 'newest' ? t('sidebar.newestFirst') : t('sidebar.oldestFirst')}
                 >
                   <svg
                     width="12"
@@ -394,7 +422,7 @@ export function SidePanel({
                   <button
                     onClick={onMarkAllSeen}
                     className="flex items-center justify-center w-6 h-6 rounded text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors cursor-pointer"
-                    title="Mark all read"
+                    title={t('notifications.markAllRead')}
                   >
                     <svg
                       width="14"
@@ -434,7 +462,7 @@ export function SidePanel({
                     type="text"
                     value={shmSearch}
                     onChange={e => setShmSearch(e.target.value)}
-                    placeholder="Search..."
+                    placeholder={t('common.search')}
                     className="w-28 focus:w-36 pl-5 pr-1.5 py-1 rounded bg-transparent border border-[var(--proto-border)] text-[length:var(--text-xs)] text-[var(--proto-text)] placeholder:text-[var(--proto-text-muted)] outline-none focus:border-[var(--proto-text-secondary)] transition-all"
                   />
                 </div>
@@ -446,7 +474,7 @@ export function SidePanel({
                       ? 'text-[var(--proto-accent)]'
                       : 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text)]',
                   )}
-                  title="Show on map"
+                  title={t('sidebar.showOnMap')}
                 >
                   <svg
                     width="14"
@@ -474,7 +502,7 @@ export function SidePanel({
                       ? 'text-[var(--proto-accent)]'
                       : 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text)]',
                   )}
-                  title="Show labels"
+                  title={t('sidebar.showLabels')}
                 >
                   <svg
                     width="14"
@@ -514,7 +542,7 @@ export function SidePanel({
                     type="text"
                     value={sectionSearch}
                     onChange={e => setSectionSearch(e.target.value)}
-                    placeholder="Search..."
+                    placeholder={t('common.search')}
                     className="w-28 focus:w-36 pl-5 pr-1.5 py-1 rounded bg-transparent border border-[var(--proto-border)] text-[length:var(--text-xs)] text-[var(--proto-text)] placeholder:text-[var(--proto-text-muted)] outline-none focus:border-[var(--proto-text-secondary)] transition-all"
                   />
                 </div>
@@ -529,8 +557,8 @@ export function SidePanel({
                   )}
                   title={
                     sections.length >= MAX_SECTIONS_PER_ORG
-                      ? `Section limit reached (${MAX_SECTIONS_PER_ORG} per organization)`
-                      : 'Add section'
+                      ? t('sidebar.sectionLimitReached', { max: MAX_SECTIONS_PER_ORG })
+                      : t('sidebar.addSection')
                   }
                 >
                   <svg
@@ -553,7 +581,7 @@ export function SidePanel({
                     dispatch({ type: 'SET_SECTION_METRIC', metric: keys[(idx + 1) % keys.length] })
                   }}
                   className="flex items-center justify-center w-6 h-6 rounded hover:bg-[var(--proto-border)] transition-colors cursor-pointer"
-                  title={chartColors[sectionMetric].label}
+                  title={t(`sections.metric.${sectionMetric}`)}
                 >
                   <MetricIcon metric={sectionMetric} />
                 </button>
@@ -641,105 +669,123 @@ export function SidePanel({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
-          {activeTab === 'incidents' &&
-            (incident ? (
-              <IncidentDetail
-                incident={incident}
-                sections={sections}
-                dispatch={dispatch}
-                onBack={() => dispatch({ type: 'CLEAR_SELECTION' })}
-              />
-            ) : (
-              <IncidentList
-                incidents={incidents}
-                filterSeverity={filterSeverity}
-                hideResolved={hideResolved}
-                sortBy={incidentSortBy}
-                dispatch={dispatch}
-                onHighlightIncident={onHighlightIncident}
-                onClearHighlight={onClearHighlight}
-                unseenIds={unseenIds}
-                onMarkSeen={onMarkSeen}
-              />
-            ))}
-          {activeTab === 'sections' &&
-            (section ? (
-              <SectionDetail
-                section={section}
-                onBack={() => dispatch({ type: 'CLEAR_SELECTION' })}
-                liveStats={liveStats}
-                liveSeriesData={liveSeriesData}
-                dispatch={dispatch}
-                fiberColors={fiberColors}
-              />
-            ) : (
-              <SectionList
-                sections={sections}
-                dispatch={dispatch}
-                liveStats={liveStats}
-                liveSeriesData={liveSeriesData}
-                metric={sectionMetric}
-                fiberColors={fiberColors}
-                onHighlightSection={onHighlightSection}
-                onClearHighlight={onClearHighlight}
-                search={sectionSearch}
-              />
-            ))}
+          {activeTab === 'incidents' && (
+            <ErrorBoundary key="incidents" fallback={panelFallback}>
+              {incident ? (
+                <IncidentDetail
+                  incident={incident}
+                  sections={sections}
+                  dispatch={dispatch}
+                  onBack={() => dispatch({ type: 'CLEAR_SELECTION' })}
+                />
+              ) : (
+                <IncidentList
+                  incidents={incidents}
+                  filterSeverity={filterSeverity}
+                  hideResolved={hideResolved}
+                  sortBy={incidentSortBy}
+                  dispatch={dispatch}
+                  onHighlightIncident={onHighlightIncident}
+                  onClearHighlight={onClearHighlight}
+                  unseenIds={unseenIds}
+                  onMarkSeen={onMarkSeen}
+                />
+              )}
+            </ErrorBoundary>
+          )}
+          {activeTab === 'sections' && (
+            <ErrorBoundary key="sections" fallback={panelFallback}>
+              {section ? (
+                <SectionDetail
+                  section={section}
+                  onBack={() => dispatch({ type: 'CLEAR_SELECTION' })}
+                  liveStats={liveStats}
+                  liveSeriesData={liveSeriesData}
+                  dispatch={dispatch}
+                  fiberColors={fiberColors}
+                />
+              ) : (
+                <SectionList
+                  sections={sections}
+                  dispatch={dispatch}
+                  liveStats={liveStats}
+                  liveSeriesData={liveSeriesData}
+                  metric={sectionMetric}
+                  fiberColors={fiberColors}
+                  onHighlightSection={onHighlightSection}
+                  onClearHighlight={onClearHighlight}
+                  search={sectionSearch}
+                />
+              )}
+            </ErrorBoundary>
+          )}
           {activeTab === 'settings' && (
-            <SettingsPanel
-              fiberThresholds={state.fiberThresholds}
-              fiberColors={fiberColors}
-              dispatch={dispatch}
-              onHighlightFiber={onHighlightFiber}
-              onClearHighlight={onClearHighlight}
-              show3DBuildings={state.show3DBuildings}
-              showChannelHelper={state.showChannelHelper}
-              flow={realtimeCtx.flow}
-              switchingFlow={realtimeCtx.switchingFlow}
-              availableFlows={realtimeCtx.availableFlows}
-              onFlowToggle={realtimeCtx.setFlow}
-            />
+            <ErrorBoundary key="settings" fallback={panelFallback}>
+              <SettingsPanel
+                fiberThresholds={state.fiberThresholds}
+                fiberColors={fiberColors}
+                dispatch={dispatch}
+                onHighlightFiber={onHighlightFiber}
+                onClearHighlight={onClearHighlight}
+                show3DBuildings={state.show3DBuildings}
+                showChannelHelper={state.showChannelHelper}
+                flow={realtimeCtx.flow}
+                switchingFlow={realtimeCtx.switchingFlow}
+                availableFlows={realtimeCtx.availableFlows}
+                onFlowToggle={realtimeCtx.setFlow}
+              />
+            </ErrorBoundary>
           )}
           {activeTab === 'channel' && selectedChannel && (
-            <ChannelDetail
-              channel={selectedChannel}
-              sections={sections}
-              dispatch={dispatch}
-              fiberColors={fiberColors}
-            />
-          )}
-          {activeTab === 'shm' &&
-            structureData &&
-            (selectedStructureId ? (
-              <StructureDetail
-                structure={structureData.structures.find(s => s.id === selectedStructureId) ?? null}
-                shmStatus={structureData.shmStatus}
-                spectralData={structureData.spectralData}
-                spectralLoading={structureData.spectralLoading}
-                peakData={structureData.peakData}
-                peakLoading={structureData.peakLoading}
-                dataSummary={structureData.dataSummary}
-                onBack={() => dispatch({ type: 'CLEAR_SELECTION' })}
-              />
-            ) : (
-              <StructureList
-                structures={structureData.structures}
-                loading={structureData.loading}
-                allStatuses={structureData.allStatuses}
-                search={shmSearch}
+            <ErrorBoundary key="channel" fallback={panelFallback}>
+              <ChannelDetail
+                channel={selectedChannel}
+                sections={sections}
                 dispatch={dispatch}
-                onHighlightSection={onHighlightSection}
-                onClearHighlight={onClearHighlight}
+                fiberColors={fiberColors}
               />
-            ))}
-          {activeTab === 'waterfall' && <WaterfallPanel />}
+            </ErrorBoundary>
+          )}
+          {activeTab === 'shm' && structureData && (
+            <ErrorBoundary key="shm" fallback={panelFallback}>
+              {selectedStructureId ? (
+                <StructureDetail
+                  structure={structureData.structures.find(s => s.id === selectedStructureId) ?? null}
+                  shmStatus={structureData.shmStatus}
+                  spectralData={structureData.spectralData}
+                  spectralLoading={structureData.spectralLoading}
+                  peakData={structureData.peakData}
+                  peakLoading={structureData.peakLoading}
+                  dataSummary={structureData.dataSummary}
+                  onBack={() => dispatch({ type: 'CLEAR_SELECTION' })}
+                />
+              ) : (
+                <StructureList
+                  structures={structureData.structures}
+                  loading={structureData.loading}
+                  allStatuses={structureData.allStatuses}
+                  search={shmSearch}
+                  dispatch={dispatch}
+                  onHighlightSection={onHighlightSection}
+                  onClearHighlight={onClearHighlight}
+                />
+              )}
+            </ErrorBoundary>
+          )}
+          {activeTab === 'waterfall' && (
+            <ErrorBoundary key="waterfall" fallback={panelFallback}>
+              <WaterfallPanel />
+            </ErrorBoundary>
+          )}
           {activeTab === 'dataHub' && (
-            <DataHubPanel
-              subTab={dataHubSubTab}
-              isAdmin={isAdmin}
-              showCreateKey={showCreateKey}
-              onCloseCreateKey={() => setShowCreateKey(false)}
-            />
+            <ErrorBoundary key="dataHub" fallback={panelFallback}>
+              <DataHubPanel
+                subTab={dataHubSubTab}
+                isAdmin={isAdmin}
+                showCreateKey={showCreateKey}
+                onCloseCreateKey={() => setShowCreateKey(false)}
+              />
+            </ErrorBoundary>
           )}
         </div>
       </div>

@@ -71,9 +71,26 @@
     "total": "{{count}} au total",
     "hideDetails": "Masquer les details",
     "showDetails": "Afficher les details",
+    "noMatchingFilter": "Aucun incident ne correspond a ce filtre",
+    "detail": {
+      "before": "Avant",
+      "during": "Pendant",
+      "drop": "Chute",
+      "type": "Type :",
+      "time": "Heure :",
+      "location": "Position :",
+      "channel": "Canal :",
+      "status": "Statut :",
+      "affectedSection": "Section concernee",
+      "collecting": "collecte...",
+      "snapshot": "Apercu"
+    },
     "filters": {
       "allTypes": "Tous les types",
-      "allSeverities": "Toutes les severites"
+      "allSeverities": "Toutes les severites",
+      "clearFilter": "Effacer le filtre",
+      "showResolved": "Afficher les resolus",
+      "hideResolved": "Masquer les resolus"
     },
     "sort": {
       "severity": "Tri : Severite",
@@ -149,7 +166,9 @@
     "menu": "Menu",
     "min": "Min",
     "avg": "Moy",
-    "max": "Max"
+    "max": "Max",
+    "back": "Retour",
+    "search": "Rechercher..."
   },
   "flow": {
     "label": "Source de données",
@@ -292,9 +311,38 @@
       "shm": "Sante structurelle"
     }
   },
+  "sections": {
+    "noMatchingSections": "Aucune section correspondante",
+    "kpi": {
+      "avgSpeed": "Vitesse moy.",
+      "flow": "Debit",
+      "occupancy": "Occupation",
+      "travelTime": "Temps de parcours"
+    },
+    "timeSeries": "Serie temporelle",
+    "recentData": "Donnees recentes",
+    "table": {
+      "time": "Heure",
+      "speed": "Vitesse",
+      "flow": "Debit",
+      "occupancy": "Occ."
+    },
+    "metric": {
+      "speed": "Vitesse",
+      "flow": "Debit",
+      "occupancy": "Occupation"
+    }
+  },
   "sidebar": {
     "expandPanel": "Agrandir le panneau",
-    "collapsePanel": "Réduire le panneau"
+    "collapsePanel": "Réduire le panneau",
+    "hideOnMap": "Masquer sur la carte",
+    "showOnMap": "Afficher sur la carte",
+    "newestFirst": "Plus recents",
+    "oldestFirst": "Plus anciens",
+    "showLabels": "Afficher les etiquettes",
+    "sectionLimitReached": "Limite de sections atteinte ({{max}} par organisation)",
+    "addSection": "Ajouter une section"
   },
   "channelDetail": {
     "detectionsWindow": "en 60s"
@@ -401,6 +449,10 @@
     "loadingSpectral": "Chargement des donnees spectrales...",
     "spectralLoadError": "Echec du chargement des donnees spectrales",
     "spectralErrorDesc": "Les donnees d'exemple peuvent ne pas etre disponibles",
+    "loadingStructures": "Chargement des structures...",
+    "noMatchingStructures": "Aucune structure ne correspond a \"{{search}}\"",
+    "structureNotFound": "Structure introuvable",
+    "noPeakData": "Aucune donnee de pic",
     "noSpectralData": "Aucune donnee spectrale disponible",
     "spectralHeatmap": "Carte thermique spectrale",
     "heatmapDesc": "Spectre de puissance dans le temps (echelle log)",
@@ -422,7 +474,15 @@
       "mean": "Moyenne :",
       "start": "Debut",
       "end": "Fin",
-      "vs": "vs"
+      "vs": "vs",
+      "vsPreviousPeriod": "vs periode precedente",
+      "freqShift": "Decalage freq."
+    },
+    "kpi": {
+      "peakFreq": "Freq. pic",
+      "baseline": "Ref.",
+      "deviation": "Ecart",
+      "status": "Statut"
     },
     "status": {
       "nominal": "Nominal",

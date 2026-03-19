@@ -15,7 +15,9 @@ from datetime import datetime, timedelta, timezone
 import numpy as np
 from django.utils.dateparse import parse_datetime
 from drf_spectacular.utils import OpenApiParameter, extend_schema
+from rest_framework import status
 from rest_framework.permissions import BasePermission
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.views import APIView
@@ -50,11 +52,12 @@ class PublicAPIThrottle(SimpleRateThrottle):
 
     scope = "public_api"
 
-    def get_cache_key(self, request, view):
+    def get_cache_key(self, request: Request, view: APIView) -> str | None:
         # Key by the API key hash, not the user
         api_key = getattr(request, "auth", None)
         if isinstance(api_key, APIKey):
-            return self.cache_format % {"scope": self.scope, "ident": api_key.key_hash[:16]}
+            key: str = self.cache_format % {"scope": self.scope, "ident": api_key.key_hash[:16]}
+            return key
         # Fallback: shouldn't happen since IsAPIKeyUser rejects non-API-key requests
         return None
 
@@ -66,7 +69,7 @@ class IsAPIKeyUser(BasePermission):
     Rejects JWT-authenticated requests to keep the public API cleanly separated.
     """
 
-    def has_permission(self, request, view) -> bool:
+    def has_permission(self, request: Request, view: APIView) -> bool:
         user = request.user
         if not user or not user.is_authenticated:
             return False
@@ -91,7 +94,7 @@ class DetectionParams:
     cursor: tuple[str, int, int] | None  # (ts, channel, direction)
 
 
-def _parse_detection_params(request) -> tuple[DetectionParams | None, str | None]:
+def _parse_detection_params(request: Request) -> tuple[DetectionParams | None, str | None]:
     """Parse query params for detection endpoints. Returns (params, error)."""
     fiber_id = request.GET.get("fiber_id")
     start_str = request.GET.get("start")
@@ -350,17 +353,20 @@ class DetectionListView(APIView):
         ),
     )
     @clickhouse_fallback()
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         params, error = _parse_detection_params(request)
         if error:
-            return Response({"detail": error}, status=400)
+            return Response({"detail": error}, status=status.HTTP_400_BAD_REQUEST)
 
         if not check_fiber_access(request.user, params.fiber_id):
-            return Response({"detail": "Access denied for this fiber"}, status=403)
+            return Response(
+                {"detail": "Access denied for this fiber"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         tier, tier_error = select_tier(params.start, params.end, params.resolution)
         if tier_error:
-            return Response({"detail": tier_error}, status=400)
+            return Response({"detail": tier_error}, status=status.HTTP_400_BAD_REQUEST)
 
         if tier == "hires":
             sql, query_params = _build_hires_query(params)
@@ -435,7 +441,7 @@ class DetectionSummaryView(APIView):
         ),
     )
     @clickhouse_fallback()
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         fiber_id = request.GET.get("fiber_id")
         start_str = request.GET.get("start")
         end_str = request.GET.get("end")
@@ -448,31 +454,45 @@ class DetectionSummaryView(APIView):
         if not end_str:
             errors.append("end is required")
         if errors:
-            return Response({"detail": "; ".join(errors)}, status=400)
+            return Response({"detail": "; ".join(errors)}, status=status.HTTP_400_BAD_REQUEST)
 
         start = parse_datetime(start_str)
         end = parse_datetime(end_str)
         if start is None or end is None:
-            return Response({"detail": "Invalid ISO 8601 format for start or end"}, status=400)
+            return Response(
+                {"detail": "Invalid ISO 8601 format for start or end"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if start >= end:
-            return Response({"detail": "start must be before end"}, status=400)
+            return Response(
+                {"detail": "start must be before end"}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         if not check_fiber_access(request.user, fiber_id):
-            return Response({"detail": "Access denied for this fiber"}, status=403)
+            return Response(
+                {"detail": "Access denied for this fiber"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         resolution = request.GET.get("resolution", "auto")
         tier, tier_error = select_tier(start, end, resolution)
         if tier_error:
-            return Response({"detail": tier_error}, status=400)
+            return Response({"detail": tier_error}, status=status.HTTP_400_BAD_REQUEST)
 
         direction = None
         if "direction" in request.GET:
             try:
                 direction = int(request.GET["direction"])
                 if direction not in (0, 1):
-                    return Response({"detail": "direction must be 0 or 1"}, status=400)
+                    return Response(
+                        {"detail": "direction must be 0 or 1"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
             except ValueError:
-                return Response({"detail": "direction must be 0 or 1"}, status=400)
+                return Response(
+                    {"detail": "direction must be 0 or 1"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
         dir_clause, dir_params = _build_direction_filter(direction)
 
         if tier == "hires":
@@ -575,7 +595,7 @@ class PublicFiberListView(APIView):
         ),
     )
     @clickhouse_fallback()
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         org = request.user.organization
         fiber_ids = get_org_fiber_ids(org)
 
@@ -678,7 +698,7 @@ class IncidentListAPIView(APIView):
         description="Query incidents for a fiber and time range with cursor-based pagination.",
     )
     @clickhouse_fallback()
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         fiber_id = request.GET.get("fiber_id")
         start_str = request.GET.get("start")
         end_str = request.GET.get("end")
@@ -691,23 +711,33 @@ class IncidentListAPIView(APIView):
         if not end_str:
             errors.append("end is required")
         if errors:
-            return Response({"detail": "; ".join(errors)}, status=400)
+            return Response({"detail": "; ".join(errors)}, status=status.HTTP_400_BAD_REQUEST)
 
         start = parse_datetime(start_str)
         end = parse_datetime(end_str)
         if start is None or end is None:
-            return Response({"detail": "Invalid ISO 8601 format for start or end"}, status=400)
+            return Response(
+                {"detail": "Invalid ISO 8601 format for start or end"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if start >= end:
-            return Response({"detail": "start must be before end"}, status=400)
+            return Response(
+                {"detail": "start must be before end"}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         if not check_fiber_access(request.user, fiber_id):
-            return Response({"detail": "Access denied for this fiber"}, status=403)
+            return Response(
+                {"detail": "Access denied for this fiber"},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         limit_str = request.GET.get("limit", "100")
         try:
             limit = max(1, min(int(limit_str), 1000))
         except ValueError:
-            return Response({"detail": "limit must be an integer"}, status=400)
+            return Response(
+                {"detail": "limit must be an integer"}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         # Optional filters
         extra_clauses = []
@@ -729,7 +759,7 @@ class IncidentListAPIView(APIView):
         if cursor_str:
             cursor = _decode_cursor(cursor_str)
             if cursor is None:
-                return Response({"detail": "Invalid cursor"}, status=400)
+                return Response({"detail": "Invalid cursor"}, status=status.HTTP_400_BAD_REQUEST)
             cursor_ts, _, _ = cursor
             cursor_clause = "AND detected_at < {cur_ts:DateTime64(3)}"
             extra_params["cur_ts"] = cursor_ts
@@ -814,7 +844,7 @@ class IncidentDetailAPIView(APIView):
         description="Retrieve a single incident by ID.",
     )
     @clickhouse_fallback()
-    def get(self, request, incident_id):
+    def get(self, request: Request, incident_id: str) -> Response:
         org = request.user.organization
         fiber_ids = get_org_fiber_ids(org)
 
@@ -832,7 +862,7 @@ class IncidentDetailAPIView(APIView):
         )
 
         if not rows:
-            return Response({"detail": "Incident not found"}, status=404)
+            return Response({"detail": "Incident not found"}, status=status.HTTP_404_NOT_FOUND)
 
         row = rows[0]
         return Response(
@@ -869,7 +899,7 @@ class SectionListAPIView(APIView):
         summary="List sections",
         description="List all active road sections defined for your organization.",
     )
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         org = request.user.organization
         sections = Section.objects.filter(organization=org, is_active=True)
 
@@ -913,29 +943,36 @@ class SectionHistoryAPIView(APIView):
         description="Get time-series speed, flow, and occupancy data for a section.",
     )
     @clickhouse_fallback()
-    def get(self, request, section_id):
+    def get(self, request: Request, section_id: str) -> Response:
         org = request.user.organization
         try:
             section = Section.objects.get(pk=section_id, organization=org, is_active=True)
         except Section.DoesNotExist:
-            return Response({"detail": "Section not found"}, status=404)
+            return Response({"detail": "Section not found"}, status=status.HTTP_404_NOT_FOUND)
 
         start_str = request.GET.get("start")
         end_str = request.GET.get("end")
         if not start_str or not end_str:
-            return Response({"detail": "start and end are required"}, status=400)
+            return Response(
+                {"detail": "start and end are required"}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         start = parse_datetime(start_str)
         end = parse_datetime(end_str)
         if start is None or end is None:
-            return Response({"detail": "Invalid ISO 8601 format for start or end"}, status=400)
+            return Response(
+                {"detail": "Invalid ISO 8601 format for start or end"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if start >= end:
-            return Response({"detail": "start must be before end"}, status=400)
+            return Response(
+                {"detail": "start must be before end"}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         resolution = request.GET.get("resolution", "auto")
         tier, tier_error = select_tier(start, end, resolution)
         if tier_error:
-            return Response({"detail": tier_error}, status=400)
+            return Response({"detail": tier_error}, status=status.HTTP_400_BAD_REQUEST)
 
         total_channels = max(1, section.channel_end - section.channel_start + 1)
 
@@ -1011,7 +1048,7 @@ class StatsAPIView(APIView):
         description="Get aggregate system statistics for your organization.",
     )
     @clickhouse_fallback()
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         org = request.user.organization
         fiber_ids = get_org_fiber_ids(org)
 
@@ -1092,7 +1129,7 @@ class InfrastructureListAPIView(APIView):
         summary="List infrastructure",
         description="List SHM infrastructure items (bridges, tunnels) for your organization.",
     )
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         org = request.user.organization
         items = Infrastructure.objects.filter(organization=org)
 
@@ -1130,10 +1167,12 @@ class InfrastructureStatusAPIView(APIView):
             "connected in a future release."
         ),
     )
-    def get(self, request, infra_id):
+    def get(self, request: Request, infra_id: str) -> Response:
         org = request.user.organization
         if not Infrastructure.objects.filter(id=infra_id, organization=org).exists():
-            return Response({"detail": "Infrastructure not found"}, status=404)
+            return Response(
+                {"detail": "Infrastructure not found"}, status=status.HTTP_404_NOT_FOUND
+            )
 
         # Deterministic demo data seeded by infra_id
         rng = random.Random(infra_id)
@@ -1143,7 +1182,7 @@ class InfrastructureStatusAPIView(APIView):
         if baseline is None:
             return Response(
                 {"detail": "Insufficient baseline data", "code": "insufficient_data"},
-                status=400,
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         current_freqs = np.array([1.12 + rng.gauss(0, 0.03) for _ in range(10)])
