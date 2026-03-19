@@ -301,7 +301,7 @@ export function SidePanel({
                   <button
                     onClick={() => dispatch({ type: 'SET_FILTER_SEVERITY', severity: null })}
                     className="w-3 h-3 rounded-full transition-all cursor-pointer opacity-50 hover:opacity-80 bg-[var(--proto-text-muted)]"
-                    title="Clear filter"
+                    title={t('incidents.filters.clearFilter')}
                   >
                     <svg
                       width="12"
@@ -329,7 +329,7 @@ export function SidePanel({
                         : 'opacity-50 hover:opacity-80',
                     )}
                     style={{ backgroundColor: severityColor[s] }}
-                    title={s.charAt(0).toUpperCase() + s.slice(1)}
+                    title={t(`incidents.severity.${s}`)}
                   />
                 ))}
                 <button
@@ -340,7 +340,7 @@ export function SidePanel({
                       ? 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)]'
                       : 'text-[var(--proto-accent)]',
                   )}
-                  title={hideResolved ? 'Show resolved' : 'Hide resolved'}
+                  title={hideResolved ? t('incidents.filters.showResolved') : t('incidents.filters.hideResolved')}
                 >
                   {hideResolved ? (
                     <svg
@@ -381,7 +381,7 @@ export function SidePanel({
                       ? 'text-[var(--proto-accent)]'
                       : 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)]',
                   )}
-                  title={showIncidentsOnMap ? 'Hide on map' : 'Show on map'}
+                  title={showIncidentsOnMap ? t('sidebar.hideOnMap') : t('sidebar.showOnMap')}
                 >
                   <svg
                     width="14"
@@ -400,7 +400,7 @@ export function SidePanel({
                 <button
                   onClick={() => setIncidentSortBy(s => (s === 'newest' ? 'oldest' : 'newest'))}
                   className="flex items-center justify-center w-6 h-6 rounded text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors cursor-pointer"
-                  title={incidentSortBy === 'newest' ? 'Newest first' : 'Oldest first'}
+                  title={incidentSortBy === 'newest' ? t('sidebar.newestFirst') : t('sidebar.oldestFirst')}
                 >
                   <svg
                     width="12"
@@ -422,7 +422,7 @@ export function SidePanel({
                   <button
                     onClick={onMarkAllSeen}
                     className="flex items-center justify-center w-6 h-6 rounded text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors cursor-pointer"
-                    title="Mark all read"
+                    title={t('notifications.markAllRead')}
                   >
                     <svg
                       width="14"
@@ -462,7 +462,7 @@ export function SidePanel({
                     type="text"
                     value={shmSearch}
                     onChange={e => setShmSearch(e.target.value)}
-                    placeholder="Search..."
+                    placeholder={t('common.search')}
                     className="w-28 focus:w-36 pl-5 pr-1.5 py-1 rounded bg-transparent border border-[var(--proto-border)] text-[length:var(--text-xs)] text-[var(--proto-text)] placeholder:text-[var(--proto-text-muted)] outline-none focus:border-[var(--proto-text-secondary)] transition-all"
                   />
                 </div>
@@ -474,7 +474,7 @@ export function SidePanel({
                       ? 'text-[var(--proto-accent)]'
                       : 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text)]',
                   )}
-                  title="Show on map"
+                  title={t('sidebar.showOnMap')}
                 >
                   <svg
                     width="14"
@@ -502,7 +502,7 @@ export function SidePanel({
                       ? 'text-[var(--proto-accent)]'
                       : 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text)]',
                   )}
-                  title="Show labels"
+                  title={t('sidebar.showLabels')}
                 >
                   <svg
                     width="14"
@@ -542,7 +542,7 @@ export function SidePanel({
                     type="text"
                     value={sectionSearch}
                     onChange={e => setSectionSearch(e.target.value)}
-                    placeholder="Search..."
+                    placeholder={t('common.search')}
                     className="w-28 focus:w-36 pl-5 pr-1.5 py-1 rounded bg-transparent border border-[var(--proto-border)] text-[length:var(--text-xs)] text-[var(--proto-text)] placeholder:text-[var(--proto-text-muted)] outline-none focus:border-[var(--proto-text-secondary)] transition-all"
                   />
                 </div>
@@ -557,8 +557,8 @@ export function SidePanel({
                   )}
                   title={
                     sections.length >= MAX_SECTIONS_PER_ORG
-                      ? `Section limit reached (${MAX_SECTIONS_PER_ORG} per organization)`
-                      : 'Add section'
+                      ? t('sidebar.sectionLimitReached', { max: MAX_SECTIONS_PER_ORG })
+                      : t('sidebar.addSection')
                   }
                 >
                   <svg
@@ -581,7 +581,7 @@ export function SidePanel({
                     dispatch({ type: 'SET_SECTION_METRIC', metric: keys[(idx + 1) % keys.length] })
                   }}
                   className="flex items-center justify-center w-6 h-6 rounded hover:bg-[var(--proto-border)] transition-colors cursor-pointer"
-                  title={chartColors[sectionMetric].label}
+                  title={t(`sections.metric.${sectionMetric}`)}
                 >
                   <MetricIcon metric={sectionMetric} />
                 </button>

@@ -71,9 +71,26 @@
     "total": "{{count}} total",
     "hideDetails": "Hide details",
     "showDetails": "Show details",
+    "noMatchingFilter": "No incidents match this filter",
+    "detail": {
+      "before": "Before",
+      "during": "During",
+      "drop": "Drop",
+      "type": "Type:",
+      "time": "Time:",
+      "location": "Location:",
+      "channel": "Channel:",
+      "status": "Status:",
+      "affectedSection": "Affected Section",
+      "collecting": "collecting...",
+      "snapshot": "Snapshot"
+    },
     "filters": {
       "allTypes": "All types",
-      "allSeverities": "All severities"
+      "allSeverities": "All severities",
+      "clearFilter": "Clear filter",
+      "showResolved": "Show resolved",
+      "hideResolved": "Hide resolved"
     },
     "sort": {
       "severity": "Sort: Severity",
@@ -149,7 +166,9 @@
     "menu": "Menu",
     "min": "Min",
     "avg": "Avg",
-    "max": "Max"
+    "max": "Max",
+    "back": "Back",
+    "search": "Search..."
   },
   "flow": {
     "label": "Data Source",
@@ -292,9 +311,38 @@
       "shm": "Structural Health"
     }
   },
+  "sections": {
+    "noMatchingSections": "No matching sections",
+    "kpi": {
+      "avgSpeed": "Avg Speed",
+      "flow": "Flow",
+      "occupancy": "Occupancy",
+      "travelTime": "Travel Time"
+    },
+    "timeSeries": "Time Series",
+    "recentData": "Recent Data",
+    "table": {
+      "time": "Time",
+      "speed": "Speed",
+      "flow": "Flow",
+      "occupancy": "Occ."
+    },
+    "metric": {
+      "speed": "Speed",
+      "flow": "Flow",
+      "occupancy": "Occupancy"
+    }
+  },
   "sidebar": {
     "expandPanel": "Expand panel",
-    "collapsePanel": "Collapse panel"
+    "collapsePanel": "Collapse panel",
+    "hideOnMap": "Hide on map",
+    "showOnMap": "Show on map",
+    "newestFirst": "Newest first",
+    "oldestFirst": "Oldest first",
+    "showLabels": "Show labels",
+    "sectionLimitReached": "Section limit reached ({{max}} per organization)",
+    "addSection": "Add section"
   },
   "channelDetail": {
     "detectionsWindow": "in 60s"
@@ -401,6 +449,10 @@
     "loadingSpectral": "Loading spectral data...",
     "spectralLoadError": "Failed to load spectral data",
     "spectralErrorDesc": "Sample data may not be available",
+    "loadingStructures": "Loading structures...",
+    "noMatchingStructures": "No structures match \"{{search}}\"",
+    "structureNotFound": "Structure not found",
+    "noPeakData": "No peak data",
     "noSpectralData": "No spectral data available",
     "spectralHeatmap": "Spectral Heatmap",
     "heatmapDesc": "Power spectrum over time (log scale)",
@@ -422,7 +474,15 @@
       "mean": "Mean:",
       "start": "Start",
       "end": "End",
-      "vs": "vs"
+      "vs": "vs",
+      "vsPreviousPeriod": "vs previous period",
+      "freqShift": "Freq Shift"
+    },
+    "kpi": {
+      "peakFreq": "Peak Freq",
+      "baseline": "Baseline",
+      "deviation": "Deviation",
+      "status": "Status"
     },
     "status": {
       "nominal": "Nominal",

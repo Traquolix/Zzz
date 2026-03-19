@@ -11,6 +11,8 @@ from django.core.mail import send_mail
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
+from rest_framework.permissions import BasePermission
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
