@@ -47,7 +47,8 @@ export function ComparisonOverlay({
   const pointsB = processData(dataB, '#f59e0b')
   const opacityA = focus === 'A' ? 0.7 : focus === 'equal' ? 0.3 : 0.04
   const opacityB = focus === 'B' ? 0.7 : focus === 'equal' ? 0.3 : 0.04
-  const yTicks = [SHM_FREQ_MIN, 1.09, 1.12, SHM_FREQ_MAX]
+  const range = SHM_FREQ_MAX - SHM_FREQ_MIN
+  const yTicks = [SHM_FREQ_MIN, SHM_FREQ_MIN + range / 3, SHM_FREQ_MIN + (2 * range) / 3, SHM_FREQ_MAX]
 
   return (
     <svg

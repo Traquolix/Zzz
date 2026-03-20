@@ -483,6 +483,8 @@
       "start": "Start",
       "end": "End",
       "vs": "vs",
+      "labelA": "A: {{date}}",
+      "labelB": "B: {{date}}",
       "vsPreviousPeriod": "vs previous period",
       "freqShift": "Freq Shift",
       "reset": "Reset"

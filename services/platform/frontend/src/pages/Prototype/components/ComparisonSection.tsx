@@ -5,10 +5,9 @@ import { cn } from '@/lib/utils'
 import type { PeakFrequencyData, SpectralSummary } from '@/types/infrastructure'
 import { fetchPeakFrequencies } from '@/api/infrastructure'
 import { useDebouncedResize } from '../hooks/useDebouncedResize'
-import { ComparisonOverlay } from './ShmCharts'
-
-type ComparisonMode = 'day' | 'week'
-type FocusMode = 'A' | 'equal' | 'B'
+import { ComparisonOverlay } from './ComparisonOverlay'
+import type { ComparisonMode, FocusMode } from './ComparisonOverlay'
+import { SHM_FREQ_MIN, SHM_FREQ_MAX } from './shmUtils'
 
 export type ComparisonStats = {
   a: { mean: number; std: number; count: number }
@@ -96,7 +95,7 @@ export function ComparisonSection({
   const stats = useMemo(() => {
     const calc = (d: PeakFrequencyData | null) => {
       if (!d) return null
-      const valid = d.peakFrequencies.filter(f => f >= 1.05 && f <= 1.2)
+      const valid = d.peakFrequencies.filter(f => f >= SHM_FREQ_MIN && f <= SHM_FREQ_MAX)
       if (!valid.length) return null
       const mean = valid.reduce((a, b) => a + b, 0) / valid.length
       const variance = valid.reduce((s, f) => s + (f - mean) ** 2, 0) / valid.length
@@ -161,12 +160,12 @@ export function ComparisonSection({
       <div className="flex items-center gap-3 mb-2 text-[length:var(--text-2xs)]">
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
-          <span className="text-[var(--proto-text-secondary)]">A: {labelA}</span>
+          <span className="text-[var(--proto-text-secondary)]">{t('shm.comparison.labelA', { date: labelA })}</span>
         </div>
-        <span className="text-[var(--proto-text-muted)]">vs</span>
+        <span className="text-[var(--proto-text-muted)]">{t('shm.comparison.vs')}</span>
         <div className="flex items-center gap-1.5">
           <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />
-          <span className="text-[var(--proto-text-secondary)]">B: {labelB}</span>
+          <span className="text-[var(--proto-text-secondary)]">{t('shm.comparison.labelB', { date: labelB })}</span>
         </div>
       </div>
 
@@ -195,13 +194,17 @@ export function ComparisonSection({
             <div className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
               <span className="text-[var(--proto-text-muted)]">μ</span>
-              <span className="text-[var(--proto-text-secondary)]">{stats.a.mean.toFixed(4)} Hz</span>
+              <span className="text-[var(--proto-text-secondary)]">
+                {stats.a.mean.toFixed(4)} {t('shm.hzUnit')}
+              </span>
               <span className="text-[var(--proto-text-muted)]">(σ={stats.a.std.toFixed(4)})</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
               <span className="text-[var(--proto-text-muted)]">μ</span>
-              <span className="text-[var(--proto-text-secondary)]">{stats.b.mean.toFixed(4)} Hz</span>
+              <span className="text-[var(--proto-text-secondary)]">
+                {stats.b.mean.toFixed(4)} {t('shm.hzUnit')}
+              </span>
               <span className="text-[var(--proto-text-muted)]">(σ={stats.b.std.toFixed(4)})</span>
             </div>
           </div>

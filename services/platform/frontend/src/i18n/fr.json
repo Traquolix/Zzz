@@ -483,9 +483,11 @@
       "start": "Debut",
       "end": "Fin",
       "vs": "vs",
+      "labelA": "A : {{date}}",
+      "labelB": "B : {{date}}",
       "vsPreviousPeriod": "vs periode precedente",
       "freqShift": "Decalage freq.",
-      "reset": "Reinitialiser"
+      "reset": "Réinitialiser"
     },
     "kpi": {
       "peakFreq": "Freq. pic",
