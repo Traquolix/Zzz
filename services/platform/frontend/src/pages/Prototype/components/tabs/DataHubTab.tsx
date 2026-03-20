@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 import { API_URL } from '@/constants/api'
 import { DataHubPanel, type DataHubSubTab } from '../DataHubPanel'
 
@@ -8,7 +9,6 @@ interface DataHubTabToolbarProps {
   showCreateKey: boolean
   setShowCreateKey: React.Dispatch<React.SetStateAction<boolean>>
   isAdmin: boolean
-  dispatch: React.Dispatch<import('../../types').ProtoAction>
 }
 
 export function DataHubTabToolbar({ dataHubSubTab, showCreateKey, setShowCreateKey, isAdmin }: DataHubTabToolbarProps) {
@@ -20,11 +20,12 @@ export function DataHubTabToolbar({ dataHubSubTab, showCreateKey, setShowCreateK
         <>
           <button
             onClick={() => setShowCreateKey(v => !v)}
-            className={`flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer ${
+            className={cn(
+              'flex items-center justify-center w-6 h-6 rounded transition-colors cursor-pointer',
               showCreateKey
                 ? 'text-[var(--proto-text)] bg-[var(--proto-surface-raised)]'
-                : 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text)]'
-            }`}
+                : 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text)]',
+            )}
             title={t('apiKeys.createKey')}
           >
             <svg

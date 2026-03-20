@@ -119,8 +119,6 @@ export interface StructureDataProp {
   peakData: PeakFrequencyData | null
   peakLoading: boolean
   dataSummary: SpectralSummary | null
-  selectedDay: Date | null
-  setSelectedDay: (d: Date | null) => void
 }
 
 interface ShmTabContentProps {
@@ -133,8 +131,6 @@ interface ShmTabContentProps {
   peakData: PeakFrequencyData | null
   peakLoading: boolean
   dataSummary: SpectralSummary | null
-  selectedDay: Date | null
-  setSelectedDay: (d: Date | null) => void
   selectedStructureId: string | null
   dispatch: React.Dispatch<ProtoAction>
   onHighlightSection?: (sectionId: string) => void

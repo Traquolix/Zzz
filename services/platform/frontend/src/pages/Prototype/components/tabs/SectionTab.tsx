@@ -11,7 +11,6 @@ interface SectionTabToolbarProps {
   setSectionSearch: (value: string) => void
   sections: Section[]
   sectionMetric: MetricKey
-  selectedSectionId: string | null
   dispatch: React.Dispatch<ProtoAction>
 }
 
@@ -20,12 +19,9 @@ export function SectionTabToolbar({
   setSectionSearch,
   sections,
   sectionMetric,
-  selectedSectionId,
   dispatch,
 }: SectionTabToolbarProps) {
   const { t } = useTranslation()
-
-  if (selectedSectionId) return null
 
   return (
     <>

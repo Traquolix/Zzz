@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { severityColor } from '../../data'
-import type { ProtoAction, Severity, ProtoIncident } from '../../types'
+import type { ProtoAction, Severity, ProtoIncident, Section } from '../../types'
 import { IncidentList, IncidentDetail } from '../IncidentPanels'
 
 const severityOrder: Severity[] = ['critical', 'high', 'medium', 'low']
@@ -19,7 +19,7 @@ interface IncidentTabProps {
   hasUnseen?: boolean
   onMarkSeen?: (id: string) => void
   onMarkAllSeen?: () => void
-  sections: import('../../types').Section[]
+  sections: Section[]
 }
 
 export function IncidentTabToolbar({

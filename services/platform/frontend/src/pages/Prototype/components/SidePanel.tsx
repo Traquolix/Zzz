@@ -124,6 +124,7 @@ export function SidePanel({
   }, [sidebarOpen])
 
   const handleTransitionEnd = (e: React.TransitionEvent) => {
+    // Only act on the transform transition (the slide), not width or other properties
     if (e.propertyName !== 'transform') return
     if (!sidebarOpen) {
       setFullyClosed(true)
@@ -133,7 +134,7 @@ export function SidePanel({
 
   return (
     <div className="relative h-full">
-      {/* Collapsed toggle */}
+      {/* Collapsed toggle — fixed to top-right, only after panel fully closes */}
       {fullyClosed && !sidebarOpen && (
         <button
           onClick={() => dispatch({ type: 'TOGGLE_SIDEBAR' })}
@@ -146,7 +147,7 @@ export function SidePanel({
         </button>
       )}
 
-      {/* Main panel */}
+      {/* Main panel — slides in/out via transform, tabs ride along */}
       <div
         ref={panelRef}
         className={cn(
@@ -159,7 +160,7 @@ export function SidePanel({
         }}
         onTransitionEnd={handleTransitionEnd}
       >
-        {/* Floating tab buttons */}
+        {/* Floating tab buttons — anchored to the left edge of the panel */}
         <div
           className="absolute top-[28px] bottom-4 flex flex-col justify-between"
           style={{
@@ -172,20 +173,20 @@ export function SidePanel({
         >
           <div className="flex flex-col gap-1.5 mt-8">
             <TabButton
-              label="Sections"
+              label={t('sidebar.tabs.sections')}
               icon={<SectionsIcon />}
               active={activeTab === 'sections'}
               onClick={() => dispatch({ type: 'SET_TAB', tab: 'sections' })}
             />
             <TabButton
-              label="Incidents"
+              label={t('sidebar.tabs.incidents')}
               icon={<IncidentsIcon />}
               active={activeTab === 'incidents'}
               onClick={() => dispatch({ type: 'SET_TAB', tab: 'incidents' })}
               showDot={hasUnseen}
             />
             <TabButton
-              label="SHM"
+              label={t('sidebar.tabs.shm')}
               icon={<BridgeIcon />}
               active={activeTab === 'shm'}
               onClick={() => dispatch({ type: 'SET_TAB', tab: 'shm' })}
@@ -201,7 +202,7 @@ export function SidePanel({
             </button>
             {selectedChannel && (
               <TabButton
-                label="Channel"
+                label={t('sidebar.tabs.channel')}
                 icon={<ChannelIcon />}
                 active={activeTab === 'channel'}
                 onClick={() => dispatch({ type: 'SELECT_CHANNEL', channel: selectedChannel })}
@@ -209,7 +210,7 @@ export function SidePanel({
             )}
             {activeTab === 'settings' && (
               <TabButton
-                label="Settings"
+                label={t('sidebar.tabs.settings')}
                 icon={<SettingsIcon />}
                 active
                 onClick={() => dispatch({ type: 'SET_TAB', tab: 'settings' })}
@@ -217,7 +218,7 @@ export function SidePanel({
             )}
             {activeTab === 'dataHub' && (
               <TabButton
-                label="Data Hub"
+                label={t('sidebar.tabs.dataHub')}
                 icon={<DataHubIcon />}
                 active
                 onClick={() => dispatch({ type: 'SET_TAB', tab: 'dataHub' })}
@@ -285,7 +286,6 @@ export function SidePanel({
                 setSectionSearch={setSectionSearch}
                 sections={sections}
                 sectionMetric={sectionMetric}
-                selectedSectionId={selectedSectionId}
                 dispatch={dispatch}
               />
             )}
@@ -295,7 +295,6 @@ export function SidePanel({
                 showCreateKey={showCreateKey}
                 setShowCreateKey={setShowCreateKey}
                 isAdmin={isAdmin}
-                dispatch={dispatch}
               />
             )}
             <button
@@ -381,8 +380,6 @@ export function SidePanel({
                 peakData={structureData.peakData}
                 peakLoading={structureData.peakLoading}
                 dataSummary={structureData.dataSummary}
-                selectedDay={structureData.selectedDay}
-                setSelectedDay={structureData.setSelectedDay}
                 selectedStructureId={selectedStructureId}
                 dispatch={dispatch}
                 onHighlightSection={onHighlightSection}
