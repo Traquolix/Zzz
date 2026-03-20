@@ -33,6 +33,10 @@ export function computeHourTicks(tMin: number, tMax: number): { frac: number; la
   return ticks
 }
 
+// SHM resonant frequency band — the monitoring window for structural peak frequencies.
+export const SHM_FREQ_MIN = 1.06
+export const SHM_FREQ_MAX = 1.16
+
 // Viridis colormap (256 colors, RGB) — scientific colormap, not a theme color.
 export const VIRIDIS: [number, number, number][] = [
   [68, 1, 84],

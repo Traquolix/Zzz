@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { PeakFrequencyData } from '@/types/infrastructure'
+import { SHM_FREQ_MIN, SHM_FREQ_MAX } from './shmUtils'
 
 export type ComparisonMode = 'day' | 'week'
 export type FocusMode = 'A' | 'equal' | 'B'
@@ -24,9 +25,7 @@ export function ComparisonOverlay({
   const plotW = Math.max(80, width - padding.left - padding.right)
   const plotH = height - padding.top - padding.bottom
 
-  const freqMin = 1.06,
-    freqMax = 1.16
-  const yScale = (f: number) => padding.top + ((freqMax - f) / (freqMax - freqMin)) * plotH
+  const yScale = (f: number) => padding.top + ((SHM_FREQ_MAX - f) / (SHM_FREQ_MAX - SHM_FREQ_MIN)) * plotH
 
   const processData = (data: PeakFrequencyData | null, color: string) => {
     if (!data || !data.dt.length) return []
@@ -34,7 +33,13 @@ export function ComparisonOverlay({
     return data.dt.map((off, i) => {
       const nx = (off * 1000) / duration
       const freq = data.peakFrequencies[i]
-      return { x: padding.left + nx * plotW, y: yScale(freq), freq, inRange: freq >= freqMin && freq <= freqMax, color }
+      return {
+        x: padding.left + nx * plotW,
+        y: yScale(freq),
+        freq,
+        inRange: freq >= SHM_FREQ_MIN && freq <= SHM_FREQ_MAX,
+        color,
+      }
     })
   }
 
@@ -42,7 +47,7 @@ export function ComparisonOverlay({
   const pointsB = processData(dataB, '#f59e0b')
   const opacityA = focus === 'A' ? 0.7 : focus === 'equal' ? 0.3 : 0.04
   const opacityB = focus === 'B' ? 0.7 : focus === 'equal' ? 0.3 : 0.04
-  const yTicks = [1.06, 1.09, 1.12, 1.16]
+  const yTicks = [SHM_FREQ_MIN, 1.09, 1.12, SHM_FREQ_MAX]
 
   return (
     <svg

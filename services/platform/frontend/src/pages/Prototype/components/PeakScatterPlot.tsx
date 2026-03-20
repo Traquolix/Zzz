@@ -2,7 +2,7 @@ import { useState, useMemo, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useDebouncedResize } from '../hooks/useDebouncedResize'
 import type { PeakFrequencyData } from '@/types/infrastructure'
-import { computeHourTicks } from './shmUtils'
+import { computeHourTicks, SHM_FREQ_MIN, SHM_FREQ_MAX } from './shmUtils'
 
 type ScatterTooltip = { x: number; y: number; freq: number; power: number; timestamp: Date } | null
 type ScatterBrush = { startX: number; currentX: number } | null
@@ -37,10 +37,7 @@ export function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
     return fullTimeRange
   }, [zoom, fullTimeRange])
 
-  const { points, xScale, yScale, freqMin, freqMax, inverseXScale } = useMemo(() => {
-    const freqMin = 1.06
-    const freqMax = 1.16
-
+  const { points, xScale, yScale, inverseXScale } = useMemo(() => {
     let pMin = Infinity,
       pMax = -Infinity
     for (const p of data.peakPowers) {
@@ -49,7 +46,7 @@ export function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
     }
     const { min: timeMin, max: timeMax } = timeRange
     const xScale = (ms: number) => padding.left + ((ms - timeMin) / (timeMax - timeMin || 1)) * plotW
-    const yScale = (f: number) => padding.top + ((freqMax - f) / (freqMax - freqMin || 1)) * plotH
+    const yScale = (f: number) => padding.top + ((SHM_FREQ_MAX - f) / (SHM_FREQ_MAX - SHM_FREQ_MIN || 1)) * plotH
     const inverseXScale = (px: number) => timeMin + ((px - padding.left) / plotW) * (timeMax - timeMin)
 
     const pts = data.dt.map((offsetSec, i) => {
@@ -63,22 +60,25 @@ export function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
         power: data.peakPowers[i],
         timestamp: ts,
         size: 2 + ((data.peakPowers[i] - pMin) / (pMax - pMin + 1e-10)) * 4,
-        inRange: freq >= freqMin && freq <= freqMax,
+        inRange: freq >= SHM_FREQ_MIN && freq <= SHM_FREQ_MAX,
         inTimeRange: ms >= timeMin && ms <= timeMax,
       }
     })
-    return { points: pts, xScale, yScale, freqMin, freqMax, inverseXScale }
+    return { points: pts, xScale, yScale, inverseXScale }
   }, [data, t0, plotW, plotH, padding.left, padding.top, timeRange])
 
   const yTicks = useMemo(() => {
     const count = 5
-    const step = (freqMax - freqMin) / (count - 1)
-    return Array.from({ length: count }, (_, i) => freqMin + i * step)
-  }, [freqMin, freqMax])
+    const step = (SHM_FREQ_MAX - SHM_FREQ_MIN) / (count - 1)
+    return Array.from({ length: count }, (_, i) => SHM_FREQ_MIN + i * step)
+  }, [])
 
   const xTicks = useMemo(() => {
     const { min: tMin, max: tMax } = timeRange
-    return computeHourTicks(tMin, tMax).map(t => ({ x: xScale(tMin + t.frac * (tMax - tMin)), label: t.label }))
+    return computeHourTicks(tMin, tMax).map(tick => ({
+      x: xScale(tMin + tick.frac * (tMax - tMin)),
+      label: tick.label,
+    }))
   }, [timeRange, xScale])
 
   // Brush handlers
