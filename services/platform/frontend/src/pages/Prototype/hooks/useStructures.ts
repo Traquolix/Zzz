@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type {
   Infrastructure,
@@ -27,13 +27,6 @@ async function fetchAllStatuses(structures: Infrastructure[]): Promise<Map<strin
 }
 
 export function useStructures(selectedId: string | null) {
-  const [selectedDay, setSelectedDay] = useState<Date | null>(null)
-
-  // Reset selectedDay when structure selection changes
-  useEffect(() => {
-    setSelectedDay(null)
-  }, [selectedId])
-
   // Infrastructure list
   const { data: structures = [], isLoading: loading } = useQuery({
     queryKey: ['infrastructure'],
@@ -121,20 +114,7 @@ export function useStructures(selectedId: string | null) {
       peakData,
       peakLoading,
       dataSummary,
-      selectedDay,
-      setSelectedDay,
     }),
-    [
-      structures,
-      loading,
-      allStatuses,
-      shmStatus,
-      spectralData,
-      spectralLoading,
-      peakData,
-      peakLoading,
-      dataSummary,
-      selectedDay,
-    ],
+    [structures, loading, allStatuses, shmStatus, spectralData, spectralLoading, peakData, peakLoading, dataSummary],
   )
 }

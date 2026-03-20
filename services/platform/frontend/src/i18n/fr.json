@@ -342,7 +342,15 @@
     "oldestFirst": "Plus anciens",
     "showLabels": "Afficher les etiquettes",
     "sectionLimitReached": "Limite de sections atteinte ({{max}} par organisation)",
-    "addSection": "Ajouter une section"
+    "addSection": "Ajouter une section",
+    "tabs": {
+      "sections": "Sections",
+      "incidents": "Incidents",
+      "shm": "SHM",
+      "channel": "Canal",
+      "settings": "Paramètres",
+      "dataHub": "Data Hub"
+    }
   },
   "channelDetail": {
     "detectionsWindow": "en 60s"
