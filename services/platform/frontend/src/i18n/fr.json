@@ -484,7 +484,8 @@
       "end": "Fin",
       "vs": "vs",
       "vsPreviousPeriod": "vs periode precedente",
-      "freqShift": "Decalage freq."
+      "freqShift": "Decalage freq.",
+      "reset": "Reinitialiser"
     },
     "kpi": {
       "peakFreq": "Freq. pic",

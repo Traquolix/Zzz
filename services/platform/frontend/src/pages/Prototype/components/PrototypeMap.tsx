@@ -9,7 +9,6 @@ import {
   fibers,
   fiberOffsetCache,
   fiberRenderCache,
-  offsetIndexToChannel,
   severityColor,
   MAP_CENTER,
   MAP_ZOOM,
@@ -25,6 +24,15 @@ import type { Infrastructure } from '@/types/infrastructure'
 import type { VehiclePosition } from '../hooks/useVehicleSim'
 import { getSidebarWidth, SidebarRefContext } from '../hooks/useSidebarWidth'
 import i18n from '@/i18n'
+import {
+  findNearestFiberPoint,
+  getPosition,
+  getOrientation,
+  getScale,
+  FIBER_WIDTH_EXPR,
+  FIBER_OPACITY_EXPR,
+  buildSectionHighlightData,
+} from './mapUtils'
 
 export interface PrototypeMapHandle {
   flyTo: (center: [number, number], zoom?: number) => void
@@ -65,61 +73,6 @@ interface PrototypeMapProps {
   show3DBuildings?: boolean
   showChannelHelper?: boolean
 }
-
-function findNearestFiberPoint(lngLat: [number, number], maxDistDeg = 0.003) {
-  let best: {
-    fiberId: string
-    direction: 0 | 1
-    channel: number
-    dist: number
-    coord: [number, number]
-  } | null = null
-
-  for (const fiber of fibers) {
-    // Use offset coords (what's actually rendered on the map) so the dot
-    // lands on the visible line rather than the shared cable centerline.
-    const offsetCoords = fiberOffsetCache.get(fiber.id)
-    const coords = offsetCoords ?? fiber.coordinates
-    // The offset cache is null-filtered and shorter than fiber.coordinates,
-    // so the loop index is NOT the real channel number. Use the reverse map
-    // to translate offset index → real channel.
-    const reverseMap = offsetIndexToChannel.get(fiber.id)
-    for (let i = 0; i < coords.length; i++) {
-      const c = coords[i]
-      if (c[0] == null || c[1] == null) continue
-      const dx = c[0] - lngLat[0]
-      const dy = c[1] - lngLat[1]
-      const dist = Math.sqrt(dx * dx + dy * dy)
-      if (dist < maxDistDeg && (!best || dist < best.dist)) {
-        best = {
-          fiberId: fiber.parentCableId,
-          direction: fiber.direction,
-          channel: reverseMap ? reverseMap[i] : i,
-          dist,
-          coord: c as [number, number],
-        }
-      }
-    }
-  }
-
-  if (!best) return null
-  return {
-    fiberId: best.fiberId,
-    direction: best.direction,
-    channel: best.channel,
-    lng: best.coord[0],
-    lat: best.coord[1],
-  }
-}
-
-// Stable accessor functions for SimpleMeshLayer (avoids re-creation)
-const getPosition = (d: VehiclePosition) => d.position
-const getOrientation = (d: VehiclePosition): [number, number, number] => [0, -d.angle, 0]
-const getScale = (): [number, number, number] => [3, 6, 2]
-
-// Zoom expressions for fiber lines — module-level constants (used in addLayer + clearHighlight)
-const FIBER_WIDTH_EXPR: mapboxgl.Expression = ['interpolate', ['linear'], ['zoom'], 10, 1.5, 12, 2, 14, 2.5]
-const FIBER_OPACITY_EXPR: mapboxgl.Expression = ['interpolate', ['linear'], ['zoom'], 10, 0.5, 12.5, 0.7, 14, 0.8]
 
 export const PrototypeMap = memo(
   forwardRef<PrototypeMapHandle, PrototypeMapProps>(function PrototypeMap(
@@ -1068,26 +1021,7 @@ export const PrototypeMap = memo(
     function updateSectionHighlights(map: mapboxgl.Map, secs: Section[]) {
       const source = map.getSource('section-highlights') as mapboxgl.GeoJSONSource | undefined
       if (!source) return
-      const colors = fiberColorsRef.current
-      const fiberMap = sectionFibersRef.current
-
-      const features = secs
-        .map(sec => {
-          const sf = fiberMap.get(sec.id)
-          if (!sf) return null
-          const coords = getSectionCoords(sf, sec.startChannel, sec.endChannel)
-          if (coords.length < 2) return null
-          const color = colors ? getFiberColor(sf, colors) : (sf.color ?? '#888')
-
-          return {
-            type: 'Feature' as const,
-            properties: { color },
-            geometry: { type: 'LineString' as const, coordinates: coords },
-          }
-        })
-        .filter(Boolean)
-
-      source.setData({ type: 'FeatureCollection', features: features as GeoJSON.Feature[] })
+      source.setData(buildSectionHighlightData(secs, sectionFibersRef.current, fiberColorsRef.current))
     }
 
     useEffect(() => {
