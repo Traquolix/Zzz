@@ -342,7 +342,15 @@
     "oldestFirst": "Oldest first",
     "showLabels": "Show labels",
     "sectionLimitReached": "Section limit reached ({{max}} per organization)",
-    "addSection": "Add section"
+    "addSection": "Add section",
+    "tabs": {
+      "sections": "Sections",
+      "incidents": "Incidents",
+      "shm": "SHM",
+      "channel": "Channel",
+      "settings": "Settings",
+      "dataHub": "Data Hub"
+    }
   },
   "channelDetail": {
     "detectionsWindow": "in 60s"
