@@ -24,6 +24,7 @@ import math
 import random
 import time
 import uuid
+from collections import deque
 from dataclasses import dataclass
 from typing import Optional, TypedDict
 
@@ -59,8 +60,11 @@ _simulation_stats: dict[str, int] = {}
 # Per-second: 5 min retention, aggregated once per second.
 # Per-minute: 60 min retention, aggregated from per-second every 60s.
 # Each entry: {time: epoch_ms, speed: float, speedMax: float, samples: int}
-_simulation_per_second_buffer: dict[tuple[str, int, int], list[dict]] = {}
-_simulation_per_minute_buffer: dict[tuple[str, int, int], list[dict]] = {}
+# maxlen caps memory even if time-based eviction misses entries.
+_simulation_per_second_buffer: dict[tuple[str, int, int], deque[dict]] = {}
+_simulation_per_minute_buffer: dict[tuple[str, int, int], deque[dict]] = {}
+_SEC_BUFFER_MAXLEN = 400  # 5 min + headroom
+_MIN_BUFFER_MAXLEN = 70  # 60 min + headroom
 
 
 def get_simulation_incidents() -> list:
@@ -1030,9 +1034,10 @@ class SimulationEngine:
         # Fixed window: detected_at ± SNAPSHOT_WINDOW_S, capped at SNAPSHOT_MAX_DETECTIONS
         self.incident_snapshots: dict[str, dict] = {}
 
-        # Rolling detection buffer per fiber — always keeps last SNAPSHOT_WINDOW_S seconds
-        # Used to seed snapshots with pre-incident data when a new incident spawns
-        self._detection_ring: dict[str, list[dict]] = {f.id: [] for f in fibers}
+        # Rolling detection buffer per fiber — always keeps last SNAPSHOT_WINDOW_S seconds.
+        # Used to seed snapshots with pre-incident data when a new incident spawns.
+        # maxlen caps memory even if time-based eviction misses entries.
+        self._detection_ring: dict[str, deque[dict]] = {f.id: deque(maxlen=20_000) for f in fibers}
 
         # SHM state
         self.shm_base_freq: dict[str, float] = {}
@@ -1188,6 +1193,17 @@ class SimulationEngine:
             for rid in removed_ids:
                 self.incident_snapshots.pop(rid, None)
 
+        # Evict completed snapshots older than 5 minutes (frontend has had
+        # plenty of time to fetch them; holding them forever leaks memory).
+        snapshot_ttl_ms = 5 * 60 * 1000
+        stale_ids = [
+            iid
+            for iid, snap in self.incident_snapshots.items()
+            if snap["complete"] and now_ms - snap["end_ms"] > snapshot_ttl_ms
+        ]
+        for iid in stale_ids:
+            del self.incident_snapshots[iid]
+
         return detections, new_incidents, resolved_incidents
 
     def _generate_detections(self) -> list[Detection]:
@@ -1251,11 +1267,10 @@ class SimulationEngine:
                 }
             )
 
-        # Evict old entries from all rings
-        for fid in self._detection_ring:
-            ring = self._detection_ring[fid]
-            if ring and ring[0]["timestamp"] < cutoff_ms:
-                self._detection_ring[fid] = [det for det in ring if det["timestamp"] >= cutoff_ms]
+        # Evict old entries from all rings (deque is ordered, pop from left)
+        for ring in self._detection_ring.values():
+            while ring and ring[0]["timestamp"] < cutoff_ms:
+                ring.popleft()
 
     def _init_snapshot(self, inc: Incident):
         """Initialize a snapshot for a new incident, seeding with pre-incident data from the ring."""
@@ -1368,13 +1383,13 @@ class SimulationEngine:
                 "vehicle_count": acc["vehicle_count"],
             }
             if key not in _simulation_per_second_buffer:
-                _simulation_per_second_buffer[key] = []
+                _simulation_per_second_buffer[key] = deque(maxlen=_SEC_BUFFER_MAXLEN)
             buf = _simulation_per_second_buffer[key]
             buf.append(entry)
 
-            # Evict old entries
-            if buf and buf[0]["time"] < cutoff_ms:
-                _simulation_per_second_buffer[key] = [e for e in buf if e["time"] >= cutoff_ms]
+            # Evict old entries (deque is ordered, pop from left)
+            while buf and buf[0]["time"] < cutoff_ms:
+                buf.popleft()
 
         self._sec_accum.clear()
 
@@ -1414,13 +1429,13 @@ class SimulationEngine:
             }
 
             if key not in _simulation_per_minute_buffer:
-                _simulation_per_minute_buffer[key] = []
+                _simulation_per_minute_buffer[key] = deque(maxlen=_MIN_BUFFER_MAXLEN)
             buf = _simulation_per_minute_buffer[key]
             buf.append(entry)
 
-            # Evict old entries
-            if buf and buf[0]["time"] < cutoff_ms:
-                _simulation_per_minute_buffer[key] = [e for e in buf if e["time"] >= cutoff_ms]
+            # Evict old entries (deque is ordered, pop from left)
+            while buf and buf[0]["time"] < cutoff_ms:
+                buf.popleft()
 
     def generate_shm_readings(self) -> list[SHMReading]:
         """Generate SHM frequency readings for all infrastructure."""
