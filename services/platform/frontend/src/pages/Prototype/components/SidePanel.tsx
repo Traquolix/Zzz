@@ -136,6 +136,7 @@ export function SidePanel({
       {fullyClosed && !sidebarOpen && (
         <button
           onClick={() => dispatch({ type: 'TOGGLE_SIDEBAR' })}
+          aria-label={t('sidebar.toggleSidebar')}
           className="absolute top-3 right-3 z-30 flex items-center justify-center w-9 h-9 rounded-lg bg-[var(--proto-surface)] border border-[var(--proto-border)] text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] hover:border-[var(--proto-text-muted)]/30 transition-all cursor-pointer pointer-events-auto"
         >
           <SidebarIcon />
@@ -169,7 +170,7 @@ export function SidePanel({
               : `opacity ${sidebarExpanded ? '200ms' : '100ms'} ease-out`,
           }}
         >
-          <div className="flex flex-col gap-1.5 mt-8">
+          <div className="flex flex-col gap-1.5 mt-8" role="tablist" aria-label={t('sidebar.tablistLabel')}>
             <TabButton
               label={t('sidebar.tabs.sections')}
               icon={<SectionsIcon />}
@@ -193,6 +194,8 @@ export function SidePanel({
           <div className="flex flex-col gap-1.5">
             <button
               title={sidebarExpanded ? t('sidebar.collapsePanel') : t('sidebar.expandPanel')}
+              aria-label={sidebarExpanded ? t('sidebar.collapsePanel') : t('sidebar.expandPanel')}
+              aria-expanded={!!sidebarExpanded}
               onClick={() => dispatch({ type: 'TOGGLE_SIDEBAR_EXPANDED' })}
               className="group/exp flex items-center justify-center self-end w-[32px] hover:w-full h-7 rounded-l-lg border border-r-0 border-transparent bg-[var(--proto-surface)]/40 text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)] hover:bg-[var(--proto-surface)]/80 transition-all cursor-pointer"
             >
@@ -297,6 +300,7 @@ export function SidePanel({
             )}
             <button
               onClick={() => dispatch({ type: 'TOGGLE_SIDEBAR' })}
+              aria-label={t('sidebar.toggleSidebar')}
               className="flex items-center justify-center w-6 h-6 rounded text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-all cursor-pointer"
             >
               <SidebarIcon />
@@ -305,7 +309,7 @@ export function SidePanel({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto" role="tabpanel" id={`panel-${activeTab}`}>
           {activeTab === 'incidents' && (
             <ErrorBoundary key="incidents" fallback={panelFallback}>
               <IncidentTabContent

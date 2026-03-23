@@ -336,6 +336,9 @@
   "sidebar": {
     "expandPanel": "Expand panel",
     "collapsePanel": "Collapse panel",
+    "toggleSidebar": "Toggle sidebar",
+    "tablistLabel": "Sidebar navigation",
+    "markAllRead": "Mark all as read",
     "hideOnMap": "Hide on map",
     "showOnMap": "Show on map",
     "newestFirst": "Newest first",
@@ -447,6 +450,8 @@
   },
   "shm": {
     "title": "Structural Health Monitoring",
+    "showOnMap": "Show structures on map",
+    "showLabels": "Show structure labels",
     "noInfrastructure": "No infrastructure configured",
     "noInfrastructureDesc": "Bridges and tunnels will appear here",
     "noData": "No data",

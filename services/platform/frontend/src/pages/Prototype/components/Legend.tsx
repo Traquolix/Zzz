@@ -60,6 +60,7 @@ export function Legend({
             className="cursor-pointer flex items-center justify-center transition-colors"
             style={{ color: hideFibersInOverview ? 'var(--proto-text-muted)' : 'var(--proto-text)' }}
             title={hideFibersInOverview ? t('map.legend.showFibers') : t('map.legend.hideFibers')}
+            aria-label={hideFibersInOverview ? t('map.legend.showFibers') : t('map.legend.hideFibers')}
           >
             {hideFibersInOverview ? <EyeOffIcon /> : <EyeIcon />}
           </button>

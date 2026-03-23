@@ -224,10 +224,19 @@ export function IncidentDetail({
             </div>
           ) : (
             <div
+              role="button"
+              tabIndex={0}
               className="text-cq-sm text-[var(--proto-text)] mb-2 cursor-pointer hover:bg-[var(--proto-surface-raised)] rounded px-1 -mx-1 py-0.5 transition-colors"
               onClick={() => {
                 setDraft(incident.description)
                 setEditing(true)
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  setDraft(incident.description)
+                  setEditing(true)
+                }
               }}
               title={t('common.clickToEdit')}
             >

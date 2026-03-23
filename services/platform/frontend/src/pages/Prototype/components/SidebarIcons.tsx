@@ -19,6 +19,8 @@ export function TabButton({
 }) {
   return (
     <button
+      role="tab"
+      aria-selected={active}
       onClick={onClick}
       className={cn(
         'relative flex flex-col items-center justify-center gap-1.5 w-[56px] py-3 rounded-l-lg border border-r-0 transition-colors cursor-pointer',

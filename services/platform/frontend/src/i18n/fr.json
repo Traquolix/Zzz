@@ -336,11 +336,14 @@
   "sidebar": {
     "expandPanel": "Agrandir le panneau",
     "collapsePanel": "Réduire le panneau",
+    "toggleSidebar": "Basculer le panneau latéral",
+    "tablistLabel": "Navigation du panneau latéral",
+    "markAllRead": "Tout marquer comme lu",
     "hideOnMap": "Masquer sur la carte",
     "showOnMap": "Afficher sur la carte",
-    "newestFirst": "Plus recents",
+    "newestFirst": "Plus récents",
     "oldestFirst": "Plus anciens",
-    "showLabels": "Afficher les etiquettes",
+    "showLabels": "Afficher les étiquettes",
     "sectionLimitReached": "Limite de sections atteinte ({{max}} par organisation)",
     "addSection": "Ajouter une section",
     "tabs": {
@@ -447,6 +450,8 @@
   },
   "shm": {
     "title": "Surveillance de la Sante Structurelle",
+    "showOnMap": "Afficher les structures sur la carte",
+    "showLabels": "Afficher les etiquettes",
     "noInfrastructure": "Aucune infrastructure configuree",
     "noInfrastructureDesc": "Les ponts et tunnels apparaitront ici",
     "noData": "Aucune donnee",
