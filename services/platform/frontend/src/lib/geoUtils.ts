@@ -6,7 +6,7 @@
 import type { FiberLine } from '@/types/fiber'
 
 /** Perpendicular offset distance in meters for each direction's line. */
-export const DIRECTION_OFFSET_METERS = 12
+const DIRECTION_OFFSET_METERS = 12
 
 const METERS_PER_DEG_LAT = 111320
 
@@ -14,7 +14,7 @@ const METERS_PER_DEG_LAT = 111320
  * Filter out null/invalid coordinates, returning only valid [lng, lat] pairs.
  * Used before passing coordinates to Mapbox or offset calculations.
  */
-export function filterValidCoords(coords: ([number, number] | [null, null])[]): [number, number][] {
+function filterValidCoords(coords: ([number, number] | [null, null])[]): [number, number][] {
   return coords.filter((c): c is [number, number] => c[0] != null && c[1] != null)
 }
 
@@ -25,10 +25,7 @@ export function filterValidCoords(coords: ([number, number] | [null, null])[]): 
  * Uses flat-earth approximation (adequate for small offsets like 10-15m).
  * Null/invalid coordinates are filtered out before processing.
  */
-export function offsetCoordinates(
-  coords: ([number, number] | [null, null])[],
-  offsetMeters: number,
-): [number, number][] {
+function offsetCoordinates(coords: ([number, number] | [null, null])[], offsetMeters: number): [number, number][] {
   const valid = filterValidCoords(coords)
   if (valid.length < 2) return valid
 

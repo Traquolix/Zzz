@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import { severityColor } from '../../data'
+import { severityColor } from '@/lib/theme'
 import type { ProtoAction, Severity, ProtoIncident, Section } from '../../types'
 import { IncidentList, IncidentDetail } from '../IncidentPanels'
 

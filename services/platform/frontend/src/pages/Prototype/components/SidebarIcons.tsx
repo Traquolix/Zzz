@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import { chartColors } from '../data'
+import { chartColors } from '@/lib/theme'
 import type { MetricKey } from '../types'
 
 // ── Tab button ──────────────────────────────────────────────────────────

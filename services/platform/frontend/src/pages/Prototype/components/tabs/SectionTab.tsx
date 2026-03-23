@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import { chartColors } from '../../data'
+import { chartColors } from '@/lib/theme'
 import type { ProtoAction, MetricKey, Section, LiveSectionStats, SectionDataPoint } from '../../types'
 import { MAX_SECTIONS_PER_ORG } from '@/api/sections'
 import { MetricIcon } from '../SidebarIcons'

@@ -1,7 +1,7 @@
 import { useState, lazy, Suspense } from 'react'
 import { cn } from '@/lib/utils'
 import type { TimeSeriesPoint } from '../types'
-import { chartColors } from '../data'
+import { chartColors } from '@/lib/theme'
 
 const LazyChart = lazy(() => import('./TimeSeriesChartInner'))
 
