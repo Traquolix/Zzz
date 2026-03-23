@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/hooks/useAuth'
 import { API_URL } from '@/constants/api'
 import type { ProtoAction } from '../types'
+import { SettingsIcon, DataHubIcon } from './SidebarIcons'
 
 interface UserMenuProps {
   dispatch: React.Dispatch<ProtoAction>
@@ -102,7 +103,7 @@ export function UserMenu({ dispatch }: UserMenuProps) {
                   onClick={() => openPanel('dataHub')}
                   className="flex-1 flex items-center gap-2.5 px-3 py-2 text-xs text-[var(--proto-text-secondary)] hover:bg-[var(--proto-surface-raised)] hover:text-[var(--proto-text)] transition-colors cursor-pointer"
                 >
-                  <DataHubMenuIcon />
+                  <DataHubIcon size={14} />
                   <span>{t('userMenu.dataHub')}</span>
                 </button>
                 <a
@@ -117,7 +118,11 @@ export function UserMenu({ dispatch }: UserMenuProps) {
                 </a>
               </div>
             )}
-            <MenuItem icon={<SettingsIcon />} label={t('userMenu.settings')} onClick={() => openPanel('settings')} />
+            <MenuItem
+              icon={<SettingsIcon size={14} />}
+              label={t('userMenu.settings')}
+              onClick={() => openPanel('settings')}
+            />
           </div>
 
           {/* Logout */}
@@ -157,39 +162,6 @@ function MenuItem({
 }
 
 // ── Icons ──────────────────────────────────────────────────────────
-
-const SettingsIcon = () => (
-  <svg
-    width="14"
-    height="14"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-    <circle cx="12" cy="12" r="3" />
-  </svg>
-)
-
-const DataHubMenuIcon = () => (
-  <svg
-    width="14"
-    height="14"
-    viewBox="0 0 16 16"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.5"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <ellipse cx="8" cy="4" rx="6" ry="2" />
-    <path d="M2 4v4c0 1.1 2.7 2 6 2s6-.9 6-2V4" />
-    <path d="M2 8v4c0 1.1 2.7 2 6 2s6-.9 6-2V8" />
-  </svg>
-)
 
 const DocsIcon = () => (
   <svg

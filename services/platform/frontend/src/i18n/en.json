@@ -385,6 +385,13 @@
       "forward": "Forward",
       "backward": "Backward"
     },
+    "legend": {
+      "overview": "Overview",
+      "showFibers": "Show fibers",
+      "hideFibers": "Hide fibers",
+      "dots": "Dots",
+      "3d": "3D"
+    },
     "landmark": {
       "selectedTitle": "Selected Landmark",
       "deleteLabel": "Delete label",
@@ -483,6 +490,8 @@
       "start": "Start",
       "end": "End",
       "vs": "vs",
+      "labelA": "A: {{date}}",
+      "labelB": "B: {{date}}",
       "vsPreviousPeriod": "vs previous period",
       "freqShift": "Freq Shift",
       "reset": "Reset"
