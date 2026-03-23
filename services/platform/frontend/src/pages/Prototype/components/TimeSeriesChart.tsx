@@ -1,7 +1,7 @@
 import { useState, lazy, Suspense } from 'react'
 import { cn } from '@/lib/utils'
 import type { TimeSeriesPoint } from '../types'
-import { chartColors } from '../data'
+import { chartColors } from '@/lib/theme'
 
 const LazyChart = lazy(() => import('./TimeSeriesChartInner'))
 
@@ -24,7 +24,7 @@ export function TimeSeriesChart({ data, timeRange, incidentTime }: TimeSeriesCha
             key={key}
             onClick={() => setMetric(key)}
             className={cn(
-              'px-2.5 py-1 rounded text-[length:var(--text-xs)] transition-colors cursor-pointer',
+              'px-2.5 py-1 rounded text-cq-xs transition-colors cursor-pointer',
               metric === key
                 ? 'bg-[var(--proto-accent)] text-white'
                 : 'bg-[var(--proto-surface)] text-[var(--proto-text-secondary)] hover:text-[var(--proto-text)]',
@@ -36,13 +36,13 @@ export function TimeSeriesChart({ data, timeRange, incidentTime }: TimeSeriesCha
       </div>
 
       {data.length === 0 ? (
-        <div className="h-[200px] flex items-center justify-center text-[var(--proto-text-muted)] text-[length:var(--text-xs)]">
+        <div className="h-[200px] flex items-center justify-center text-[var(--proto-text-muted)] text-cq-xs">
           No data available
         </div>
       ) : (
         <Suspense
           fallback={
-            <div className="h-[200px] flex items-center justify-center text-[var(--proto-text-muted)] text-[length:var(--text-xs)]">
+            <div className="h-[200px] flex items-center justify-center text-[var(--proto-text-muted)] text-cq-xs">
               Loading chart...
             </div>
           }

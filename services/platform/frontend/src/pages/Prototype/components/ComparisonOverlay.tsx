@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { PeakFrequencyData } from '@/types/infrastructure'
 import { SHM_FREQ_MIN, SHM_FREQ_MAX } from './shmUtils'
+import { COLORS } from '@/lib/theme'
 
 export type ComparisonMode = 'day' | 'week'
 export type FocusMode = 'A' | 'equal' | 'B'
@@ -43,8 +44,8 @@ export function ComparisonOverlay({
     })
   }
 
-  const pointsA = processData(dataA, '#3b82f6')
-  const pointsB = processData(dataB, '#f59e0b')
+  const pointsA = processData(dataA, COLORS.shmChart.comparisonA)
+  const pointsB = processData(dataB, COLORS.shmChart.comparisonB)
   const opacityA = focus === 'A' ? 0.7 : focus === 'equal' ? 0.3 : 0.04
   const opacityB = focus === 'B' ? 0.7 : focus === 'equal' ? 0.3 : 0.04
   const range = SHM_FREQ_MAX - SHM_FREQ_MIN
@@ -70,7 +71,7 @@ export function ComparisonOverlay({
         y1={padding.top}
         x2={padding.left}
         y2={height - padding.bottom}
-        stroke="rgba(255,255,255,0.08)"
+        stroke={COLORS.shmChart.axisStroke}
         strokeWidth={1}
       />
       {yTicks.map(tick => (
@@ -80,7 +81,7 @@ export function ComparisonOverlay({
             y1={yScale(tick)}
             x2={padding.left}
             y2={yScale(tick)}
-            stroke="#64748b"
+            stroke={COLORS.shmChart.axis}
             strokeWidth={1}
           />
           <text
@@ -88,7 +89,7 @@ export function ComparisonOverlay({
             y={yScale(tick)}
             textAnchor="end"
             dominantBaseline="middle"
-            fill="#64748b"
+            fill={COLORS.shmChart.axis}
             fontSize="10"
           >
             {tick.toFixed(2)}
@@ -98,7 +99,7 @@ export function ComparisonOverlay({
             y1={yScale(tick)}
             x2={width - padding.right}
             y2={yScale(tick)}
-            stroke="rgba(255,255,255,0.03)"
+            stroke={COLORS.shmChart.gridLine}
             strokeWidth={1}
           />
         </g>
@@ -109,7 +110,7 @@ export function ComparisonOverlay({
         textAnchor="middle"
         dominantBaseline="middle"
         transform={`rotate(-90, 4, ${height / 2})`}
-        fill="#64748b"
+        fill={COLORS.shmChart.axis}
         fontSize="9"
       >
         {t('shm.frequencyHz')}
@@ -121,13 +122,13 @@ export function ComparisonOverlay({
         y1={height - padding.bottom}
         x2={width - padding.right}
         y2={height - padding.bottom}
-        stroke="rgba(255,255,255,0.08)"
+        stroke={COLORS.shmChart.axisStroke}
         strokeWidth={1}
       />
-      <text x={padding.left} y={height - 4} textAnchor="start" fill="#4a5568" fontSize="9">
+      <text x={padding.left} y={height - 4} textAnchor="start" fill={COLORS.shmChart.axisSecondary} fontSize="9">
         {t('shm.comparison.start')}
       </text>
-      <text x={width - padding.right} y={height - 4} textAnchor="end" fill="#4a5568" fontSize="9">
+      <text x={width - padding.right} y={height - 4} textAnchor="end" fill={COLORS.shmChart.axisSecondary} fontSize="9">
         {t('shm.comparison.end')}
       </text>
 

@@ -1,4 +1,5 @@
 import { useRef, useEffect, useCallback } from 'react'
+import { COLORS } from '@/lib/theme'
 import { getSpeedColor } from '../data'
 import type { WaterfallDot } from '../hooks/useWaterfallBuffer'
 
@@ -12,9 +13,9 @@ interface WaterfallCanvasProps {
   maxChannel: number
 }
 
-const BG = '#0f172a'
-const GRID_COLOR = '#1e293b'
-const LABEL_COLOR = '#64748b'
+const BG = COLORS.waterfall.background
+const GRID_COLOR = COLORS.waterfall.grid
+const LABEL_COLOR = COLORS.waterfall.label
 const DOT_SIZE = 3
 const TARGET_FPS = 30
 const FRAME_INTERVAL = 1000 / TARGET_FPS

@@ -11,19 +11,9 @@ import type {
 } from '@/types/infrastructure'
 import { SpectralHeatmapCanvas, PeakScatterPlot } from './ShmCharts'
 import { ComparisonSection, type ComparisonStats } from './ComparisonSection'
+import { COLORS, structureTypeColors, shmStatusColors } from '@/lib/theme'
 
 // ── Structure list ───────────────────────────────────────────────────
-
-const structureTypeColors: Record<string, { bg: string; text: string; dot: string }> = {
-  bridge: { bg: '#f59e0b', text: '#fbbf24', dot: '#f59e0b' },
-  tunnel: { bg: '#6366f1', text: '#818cf8', dot: '#6366f1' },
-}
-
-const statusColors: Record<string, string> = {
-  nominal: '#22c55e',
-  warning: '#f59e0b',
-  critical: '#ef4444',
-}
 
 function StructureList({
   structures,
@@ -46,7 +36,7 @@ function StructureList({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-[length:var(--text-sm)]">
+      <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-cq-sm">
         <span className="animate-pulse">{t('shm.loadingStructures')}</span>
       </div>
     )
@@ -54,7 +44,7 @@ function StructureList({
 
   if (structures.length === 0) {
     return (
-      <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-[length:var(--text-sm)]">
+      <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-cq-sm">
         {t('shm.noInfrastructure')}
       </div>
     )
@@ -73,7 +63,7 @@ function StructureList({
   return (
     <div className="flex flex-col px-3 py-1">
       {filtered.length === 0 ? (
-        <div className="flex items-center justify-center h-24 text-[var(--proto-text-muted)] text-[length:var(--text-sm)]">
+        <div className="flex items-center justify-center h-24 text-[var(--proto-text-muted)] text-cq-sm">
           {t('shm.noMatchingStructures', { search })}
         </div>
       ) : (
@@ -81,7 +71,7 @@ function StructureList({
           const typeStyle = structureTypeColors[structure.type] ?? structureTypeColors.bridge
           const fiber = findFiber(structure.fiberId, structure.direction ?? 0)
           const status = allStatuses.get(structure.id)
-          const dotColor = status ? (statusColors[status.status] ?? '#64748b') : '#64748b'
+          const dotColor = status ? (shmStatusColors[status.status] ?? COLORS.shmChart.axis) : COLORS.shmChart.axis
 
           return (
             <button
@@ -140,12 +130,10 @@ function StructureList({
               )}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-[length:var(--text-sm)] text-[var(--proto-text)] font-medium truncate">
-                    {structure.name}
-                  </span>
+                  <span className="text-cq-sm text-[var(--proto-text)] font-medium truncate">{structure.name}</span>
                   <span className="shrink-0 w-2 h-2 rounded-full" style={{ backgroundColor: dotColor }} />
                 </div>
-                <span className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)] shrink-0">
+                <span className="text-cq-xs text-[var(--proto-text-muted)] shrink-0">
                   {structure.type.charAt(0).toUpperCase() + structure.type.slice(1)} ·{' '}
                   {fiber?.name ?? structure.fiberId}
                 </span>
@@ -185,7 +173,7 @@ function StructureDetail({
 
   if (!structure) {
     return (
-      <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-[length:var(--text-sm)]">
+      <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-cq-sm">
         {t('shm.structureNotFound')}
       </div>
     )
@@ -193,7 +181,7 @@ function StructureDetail({
 
   const typeStyle = structureTypeColors[structure.type] ?? structureTypeColors.bridge
   const fiber = findFiber(structure.fiberId, structure.direction ?? 0)
-  const statusColor = shmStatus ? (statusColors[shmStatus.status] ?? statusColors.nominal) : '#64748b'
+  const statusColor = shmStatus ? (shmStatusColors[shmStatus.status] ?? shmStatusColors.nominal) : COLORS.shmChart.axis
 
   const kpis = [
     { label: t('shm.kpi.peakFreq'), value: shmStatus ? `${shmStatus.currentMean.toFixed(1)}` : '--', unit: 'Hz' },
@@ -208,16 +196,14 @@ function StructureDetail({
       <div className="sticky top-0 z-10 bg-[var(--proto-surface)] border-b border-[var(--proto-border)] px-4 py-3 flex items-center gap-3">
         <button
           onClick={onBack}
-          className="text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors text-[length:var(--text-sm)] cursor-pointer"
+          className="text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors text-cq-sm cursor-pointer"
         >
           &larr; {t('common.back')}
         </button>
         <div className="min-w-0">
-          <span className="text-[length:var(--text-sm)] font-semibold text-[var(--proto-text)] truncate block">
-            {structure.name}
-          </span>
+          <span className="text-cq-sm font-semibold text-[var(--proto-text)] truncate block">{structure.name}</span>
           {fiber && (
-            <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] flex items-center gap-1.5">
+            <span className="text-cq-2xs text-[var(--proto-text-muted)] flex items-center gap-1.5">
               <span
                 className="inline-block w-2 h-2 rounded-full flex-shrink-0"
                 style={{ backgroundColor: typeStyle.dot }}
@@ -228,7 +214,7 @@ function StructureDetail({
         </div>
         {shmStatus && (
           <span
-            className="text-[length:var(--text-2xs)] font-medium px-1.5 py-0.5 rounded capitalize shrink-0"
+            className="text-cq-2xs font-medium px-1.5 py-0.5 rounded capitalize shrink-0"
             style={{ backgroundColor: `${statusColor}20`, color: statusColor }}
           >
             {shmStatus.status}
@@ -250,23 +236,18 @@ function StructureDetail({
         <div className="grid grid-cols-2 gap-3">
           {kpis.map(kpi => (
             <div key={kpi.label} className="rounded-lg border border-[var(--proto-border)] p-3">
-              <div className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] uppercase tracking-wider mb-1">
+              <div className="text-cq-2xs text-[var(--proto-text-muted)] uppercase tracking-wider mb-1">
                 {kpi.label}
               </div>
               <div className="flex items-end gap-1">
                 {kpi.isStatus ? (
-                  <span
-                    className="text-[length:var(--text-sm)] font-semibold capitalize"
-                    style={{ color: statusColor }}
-                  >
+                  <span className="text-cq-sm font-semibold capitalize" style={{ color: statusColor }}>
                     {kpi.value}
                   </span>
                 ) : (
                   <>
-                    <span className="text-[length:var(--text-xl)] font-semibold text-[var(--proto-text)]">
-                      {kpi.value}
-                    </span>
-                    <span className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)]">{kpi.unit}</span>
+                    <span className="text-cq-xl font-semibold text-[var(--proto-text)]">{kpi.value}</span>
+                    <span className="text-cq-xs text-[var(--proto-text-muted)]">{kpi.unit}</span>
                   </>
                 )}
               </div>
@@ -295,21 +276,21 @@ function StructureDetail({
             return (
               <div className="flex items-center justify-between rounded-lg border border-[var(--proto-border)] bg-[var(--proto-surface-raised)] px-4 py-3">
                 <div>
-                  <span className={`text-[length:var(--text-xl)] font-bold ${shiftColor}`}>
+                  <span className={`text-cq-xl font-bold ${shiftColor}`}>
                     {comparisonStats.diff > 0 ? '+' : ''}
                     {(comparisonStats.diff * 1000).toFixed(2)} mHz
                   </span>
                   <div className="flex items-center gap-2 mt-0.5">
-                    <span className={`text-[length:var(--text-xs)] ${pctColor}`}>
+                    <span className={`text-cq-xs ${pctColor}`}>
                       ({comparisonStats.diffPercent > 0 ? '+' : ''}
                       {comparisonStats.diffPercent.toFixed(2)}%)
                     </span>
-                    <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)]">
+                    <span className="text-cq-2xs text-[var(--proto-text-muted)]">
                       {t('shm.comparison.vsPreviousPeriod')}
                     </span>
                   </div>
                 </div>
-                <div className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] uppercase tracking-wider">
+                <div className="text-cq-2xs text-[var(--proto-text-muted)] uppercase tracking-wider">
                   {t('shm.comparison.freqShift')}
                 </div>
               </div>
@@ -318,7 +299,7 @@ function StructureDetail({
 
         {/* Spectral Heatmap */}
         <div className="border-t border-[var(--proto-border)] pt-3">
-          <h3 className="text-[length:var(--text-xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
+          <h3 className="text-cq-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
             {t('shm.spectralHeatmap')}
           </h3>
           <div className="rounded-lg bg-[var(--proto-surface-raised)] border border-[var(--proto-border)] p-2">
@@ -327,7 +308,7 @@ function StructureDetail({
             ) : spectralData ? (
               <SpectralHeatmapCanvas data={spectralData} />
             ) : (
-              <div className="h-[200px] flex items-center justify-center text-[length:var(--text-xs)] text-[var(--proto-text-muted)]">
+              <div className="h-[200px] flex items-center justify-center text-cq-xs text-[var(--proto-text-muted)]">
                 {t('shm.noSpectralData')}
               </div>
             )}
@@ -336,7 +317,7 @@ function StructureDetail({
 
         {/* Peak Scatter */}
         <div className="border-t border-[var(--proto-border)] pt-3">
-          <h3 className="text-[length:var(--text-xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
+          <h3 className="text-cq-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
             {t('shm.peakFrequencies')}
           </h3>
           <div className="rounded-lg bg-[var(--proto-surface-raised)] border border-[var(--proto-border)] p-2">
@@ -345,7 +326,7 @@ function StructureDetail({
             ) : peakData ? (
               <PeakScatterPlot data={peakData} />
             ) : (
-              <div className="h-[170px] flex items-center justify-center text-[length:var(--text-xs)] text-[var(--proto-text-muted)]">
+              <div className="h-[170px] flex items-center justify-center text-cq-xs text-[var(--proto-text-muted)]">
                 {t('shm.noPeakData')}
               </div>
             )}

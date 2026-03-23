@@ -28,7 +28,7 @@ export function FlowToggle({ flow, switchingFlow, availableFlows, onToggle }: Fl
             disabled={disabled}
             title={disabled ? t('flow.unavailable', { label }) : t('flow.switchTo', { label })}
             className={cn(
-              'px-2.5 py-0.5 text-[length:var(--text-xxs)] font-medium rounded transition-colors cursor-pointer',
+              'px-2.5 py-0.5 text-cq-xxs font-medium rounded transition-colors cursor-pointer',
               active && 'bg-[var(--proto-surface-raised)] text-[var(--proto-text)]',
               !active && !disabled && 'text-[var(--proto-text-secondary)] hover:text-[var(--proto-text)]',
               disabled && !switchingFlow && 'text-[var(--proto-text-muted)] opacity-40 cursor-not-allowed',

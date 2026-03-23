@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useDebouncedResize } from '../hooks/useDebouncedResize'
 import type { SpectralTimeSeries } from '@/types/infrastructure'
 import { computeHourTicks, VIRIDIS } from './shmUtils'
+import { COLORS } from '@/lib/theme'
 
 export function SpectralHeatmapCanvas({ data }: { data: SpectralTimeSeries }) {
   const { t } = useTranslation()
@@ -68,7 +69,7 @@ export function SpectralHeatmapCanvas({ data }: { data: SpectralTimeSeries }) {
       }
 
       // Axes
-      ctx.fillStyle = '#64748b'
+      ctx.fillStyle = COLORS.shmChart.axis
       ctx.font = '10px sans-serif'
 
       // X axis (time) — hour-aligned ticks

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { useDebouncedResize } from '../hooks/useDebouncedResize'
 import type { PeakFrequencyData } from '@/types/infrastructure'
 import { computeHourTicks, SHM_FREQ_MIN, SHM_FREQ_MAX } from './shmUtils'
+import { COLORS } from '@/lib/theme'
 
 type ScatterTooltip = { x: number; y: number; freq: number; power: number; timestamp: Date } | null
 type ScatterBrush = { startX: number; currentX: number } | null
@@ -136,7 +137,7 @@ export function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
       {zoom && (
         <button
           onClick={() => setZoom(null)}
-          className="absolute top-0 right-0 z-10 flex items-center gap-1 px-2 py-1 text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] rounded transition-colors cursor-pointer"
+          className="absolute top-0 right-0 z-10 flex items-center gap-1 px-2 py-1 text-cq-2xs text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] rounded transition-colors cursor-pointer"
         >
           ↺ {t('shm.comparison.reset', 'Reset')}
         </button>
@@ -169,7 +170,7 @@ export function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
             y1={padding.top}
             x2={padding.left}
             y2={height - padding.bottom}
-            stroke="rgba(255,255,255,0.08)"
+            stroke={COLORS.shmChart.axisStroke}
             strokeWidth={1}
           />
           {yTicks.map(tick => (
@@ -179,7 +180,7 @@ export function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
                 y1={yScale(tick)}
                 x2={padding.left}
                 y2={yScale(tick)}
-                stroke="#64748b"
+                stroke={COLORS.shmChart.axis}
                 strokeWidth={1}
               />
               <text
@@ -187,7 +188,7 @@ export function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
                 y={yScale(tick)}
                 textAnchor="end"
                 dominantBaseline="middle"
-                fill="#64748b"
+                fill={COLORS.shmChart.axis}
                 fontSize="10"
               >
                 {tick.toFixed(2)}
@@ -200,7 +201,7 @@ export function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
             textAnchor="middle"
             dominantBaseline="middle"
             transform={`rotate(-90, 4, ${height / 2})`}
-            fill="#64748b"
+            fill={COLORS.shmChart.axis}
             fontSize="9"
           >
             {t('shm.frequencyHz')}
@@ -212,7 +213,7 @@ export function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
             y1={height - padding.bottom}
             x2={width - padding.right}
             y2={height - padding.bottom}
-            stroke="rgba(255,255,255,0.08)"
+            stroke={COLORS.shmChart.axisStroke}
             strokeWidth={1}
           />
           {xTicks.map(tick => (
@@ -222,10 +223,16 @@ export function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
                 y1={height - padding.bottom}
                 x2={tick.x}
                 y2={height - padding.bottom + 3}
-                stroke="#64748b"
+                stroke={COLORS.shmChart.axis}
                 strokeWidth={1}
               />
-              <text x={tick.x} y={height - padding.bottom + 14} textAnchor="middle" fill="#64748b" fontSize="10">
+              <text
+                x={tick.x}
+                y={height - padding.bottom + 14}
+                textAnchor="middle"
+                fill={COLORS.shmChart.axis}
+                fontSize="10"
+              >
                 {tick.label}
               </text>
             </g>
@@ -239,7 +246,7 @@ export function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
               y1={yScale(tick)}
               x2={width - padding.right}
               y2={yScale(tick)}
-              stroke="rgba(255,255,255,0.03)"
+              stroke={COLORS.shmChart.gridLine}
               strokeWidth={1}
             />
           ))}
@@ -254,7 +261,7 @@ export function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
                   cx={pt.x}
                   cy={pt.y}
                   r={pt.size}
-                  fill="#f59e0b"
+                  fill={COLORS.shmChart.scatter}
                   fillOpacity={0.12}
                   stroke="none"
                   className="cursor-crosshair hover:!fill-opacity-60"
@@ -288,7 +295,7 @@ export function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
       {/* Tooltip */}
       {tooltip && !brush && (
         <div
-          className="absolute bg-[var(--proto-surface-raised)] text-[var(--proto-text)] text-[length:var(--text-2xs)] px-2 py-1.5 rounded shadow-lg pointer-events-none z-10 whitespace-nowrap border border-[var(--proto-border)]"
+          className="absolute bg-[var(--proto-surface-raised)] text-[var(--proto-text)] text-cq-2xs px-2 py-1.5 rounded shadow-lg pointer-events-none z-10 whitespace-nowrap border border-[var(--proto-border)]"
           style={{
             left: tooltip.x > width * 0.6 ? undefined : tooltip.x + 10,
             right: tooltip.x > width * 0.6 ? width - tooltip.x + 10 : undefined,

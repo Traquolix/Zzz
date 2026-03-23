@@ -1,4 +1,5 @@
 import type { ExpressionSpecification } from 'mapbox-gl'
+import { COLORS } from '@/lib/theme'
 import { fibers, fiberOffsetCache, offsetIndexToChannel, getSectionCoords, getFiberColor } from '../data'
 import type { Fiber, Section } from '../types'
 import type { VehiclePosition } from '../hooks/useVehicleSim'
@@ -86,7 +87,7 @@ export function buildSectionHighlightData(
       if (!sf) return null
       const coords = getSectionCoords(sf, sec.startChannel, sec.endChannel)
       if (coords.length < 2) return null
-      const color = fiberColors ? getFiberColor(sf, fiberColors) : (sf.color ?? '#888')
+      const color = fiberColors ? getFiberColor(sf, fiberColors) : (sf.color ?? COLORS.fiber.default)
 
       return {
         type: 'Feature' as const,

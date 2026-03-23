@@ -5,11 +5,11 @@ import { MapboxOverlay } from '@deck.gl/mapbox'
 import { SimpleMeshLayer } from '@deck.gl/mesh-layers'
 import { CubeGeometry } from '@luma.gl/engine'
 import { MAPBOX_TOKEN } from '@/config/mapbox'
+import { COLORS, shmStatusColors, severityColor } from '@/lib/theme'
 import {
   fibers,
   fiberOffsetCache,
   fiberRenderCache,
-  severityColor,
   MAP_CENTER,
   MAP_ZOOM,
   getSpeedColor,
@@ -264,7 +264,7 @@ export const PrototypeMap = memo(
         if (!secFiber) return
         const coords = getSectionCoords(secFiber, sec.startChannel, sec.endChannel)
         if (coords.length < 2) return
-        const color = fiberColorsRef.current ? getFiberColor(secFiber, fiberColorsRef.current) : '#888'
+        const color = fiberColorsRef.current ? getFiberColor(secFiber, fiberColorsRef.current) : COLORS.fiber.default
         const src = map.getSource('hover-highlight') as mapboxgl.GeoJSONSource | undefined
         src?.setData({
           type: 'FeatureCollection',
@@ -303,7 +303,7 @@ export const PrototypeMap = memo(
         const sFiber = findFiber(structure.fiberId, structure.direction ?? 0)
         const coords = sFiber ? getSectionCoords(sFiber, structure.startChannel, structure.endChannel) : []
         if (coords.length < 2) return
-        const typeColor = structure.type === 'bridge' ? '#f59e0b' : '#6366f1'
+        const typeColor = COLORS.structure[structure.type].dot
         const src = map.getSource('hover-highlight') as mapboxgl.GeoJSONSource | undefined
         src?.setData({
           type: 'FeatureCollection',
@@ -330,8 +330,8 @@ export const PrototypeMap = memo(
         const el = document.createElement('div')
         el.style.cssText = `
                 width: 14px; height: 14px; border-radius: 50%;
-                background-color: #3b82f6;
-                border: 2px solid #fff;
+                background-color: ${COLORS.ui.primary};
+                border: 2px solid ${COLORS.map.channelDotBorder};
                 animation: proto-channel-pulse 2s ease-in-out infinite;
             `
         channelMarkerRef.current = new mapboxgl.Marker({ element: el, anchor: 'center' })
@@ -453,7 +453,7 @@ export const PrototypeMap = memo(
           type: 'line',
           source: 'hover-highlight',
           paint: {
-            'line-color': '#ffffff',
+            'line-color': COLORS.map.glowLine,
             'line-width': 14,
             'line-opacity': 0.4,
             'line-blur': 7,
@@ -481,7 +481,7 @@ export const PrototypeMap = memo(
             'circle-radius': 4,
             'circle-color': ['get', 'color'],
             'circle-opacity': ['get', 'opacity'],
-            'circle-stroke-color': 'rgba(0,0,0,0.3)',
+            'circle-stroke-color': COLORS.map.vehicleStroke,
             'circle-stroke-width': 1,
           },
         })
@@ -497,7 +497,7 @@ export const PrototypeMap = memo(
           type: 'line',
           source: 'pending-section',
           paint: {
-            'line-color': '#f59e0b',
+            'line-color': COLORS.ui.pending,
             'line-width': 4,
             'line-opacity': 0.6,
             'line-dasharray': [2, 2],
@@ -516,8 +516,8 @@ export const PrototypeMap = memo(
           source: 'pending-point',
           paint: {
             'circle-radius': 6,
-            'circle-color': '#f59e0b',
-            'circle-stroke-color': '#fff',
+            'circle-color': COLORS.ui.pending,
+            'circle-stroke-color': COLORS.map.pendingPointStroke,
             'circle-stroke-width': 2,
           },
         })
@@ -580,7 +580,7 @@ export const PrototypeMap = memo(
             type: 'fill-extrusion',
             minzoom: 12.5,
             paint: {
-              'fill-extrusion-color': '#aaa',
+              'fill-extrusion-color': COLORS.map.buildingFill,
               'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 12.5, 0, 13, ['get', 'height']],
               'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], 12.5, 0, 13, ['get', 'min_height']],
               'fill-extrusion-opacity': ['interpolate', ['linear'], ['zoom'], 12.5, 0, 13, 0.4, 15, 0.6],
@@ -1120,7 +1120,7 @@ export const PrototypeMap = memo(
             const sFiber = findFiber(s.fiberId, s.direction ?? 0)
             const coords = sFiber ? getSectionCoords(sFiber, s.startChannel, s.endChannel) : []
             if (coords.length < 2) return null
-            const color = s.type === 'bridge' ? '#f59e0b' : '#6366f1'
+            const color = COLORS.structure[s.type].dot
             return {
               type: 'Feature' as const,
               properties: { color, id: s.id },
@@ -1150,8 +1150,6 @@ export const PrototypeMap = memo(
 
       if (!showStructureLabels || !structures?.length) return
 
-      const shmStatusColors: Record<string, string> = { nominal: '#22c55e', warning: '#f59e0b', critical: '#ef4444' }
-
       for (const s of structures) {
         const sFiber = findFiber(s.fiberId, s.direction ?? 0)
         const midChannel = Math.floor((s.startChannel + s.endChannel) / 2)
@@ -1159,7 +1157,7 @@ export const PrototypeMap = memo(
         if (!coord) continue
 
         const status = structureStatuses?.get(s.id)
-        const statusDotColor = status ? (shmStatusColors[status.status] ?? '#64748b') : '#64748b'
+        const statusDotColor = status ? (shmStatusColors[status.status] ?? COLORS.shmChart.axis) : COLORS.shmChart.axis
         const isSelected = selectedStructureId === s.id
 
         const imageHtml = s.imageUrl
@@ -1226,9 +1224,9 @@ export const PrototypeMap = memo(
                 width: 20px; height: 20px; border-radius: 50%;
                 display: flex; align-items: center; justify-content: center;
                 cursor: pointer;
-                background: rgba(30, 30, 40, 0.75);
+                background: ${COLORS.map.incidentMarkerBg};
                 border: 2px solid ${color};
-                box-shadow: 0 0 8px rgba(0,0,0,0.5);
+                box-shadow: 0 0 8px ${COLORS.map.incidentMarkerShadow};
             `
         const dot = document.createElement('div')
         dot.style.cssText = `

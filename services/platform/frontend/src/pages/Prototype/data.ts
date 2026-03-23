@@ -1,5 +1,6 @@
-import type { Fiber, Section, IncidentType, SpeedThresholds } from './types'
+import type { Fiber, Section, SpeedThresholds } from './types'
 import { getFiberOffsetCoords } from '@/lib/geoUtils'
+import { COLORS } from '@/lib/theme'
 import carrosJson from '../../../../../../infrastructure/clickhouse/cables/carros.json'
 import mathisJson from '../../../../../../infrastructure/clickhouse/cables/mathis.json'
 import promenadeJson from '../../../../../../infrastructure/clickhouse/cables/promenade.json'
@@ -21,9 +22,9 @@ interface CableJson {
 // ── Build fibers from cable JSONs (full per-channel coordinates) ──────────
 
 const cableConfigs: { json: CableJson; colors: [string, string] }[] = [
-  { json: carrosJson as unknown as CableJson, colors: ['#94a3b8', '#94a3b8'] },
-  { json: mathisJson as unknown as CableJson, colors: ['#94a3b8', '#94a3b8'] },
-  { json: promenadeJson as unknown as CableJson, colors: ['#94a3b8', '#94a3b8'] },
+  { json: carrosJson as unknown as CableJson, colors: [COLORS.fiber.default, COLORS.fiber.default] },
+  { json: mathisJson as unknown as CableJson, colors: [COLORS.fiber.default, COLORS.fiber.default] },
+  { json: promenadeJson as unknown as CableJson, colors: [COLORS.fiber.default, COLORS.fiber.default] },
 ]
 
 function buildFibers(): Fiber[] {
@@ -117,14 +118,13 @@ export const fiberRenderCache = new Map<string, [number, number][]>(
 // ── Helpers ─────────────────────────────────────────────────────────────
 
 export const defaultSpeedThresholds: SpeedThresholds = { green: 80, yellow: 60, orange: 30 }
-export const citySpeedThresholds: SpeedThresholds = { green: 45, yellow: 30, orange: 15 }
 
 export function getSpeedColor(speed: number, thresholds?: SpeedThresholds): string {
   const t = thresholds ?? defaultSpeedThresholds
-  if (speed >= t.green) return '#22c55e'
-  if (speed >= t.yellow) return '#eab308'
-  if (speed >= t.orange) return '#f97316'
-  return '#ef4444'
+  if (speed >= t.green) return COLORS.speed.fast
+  if (speed >= t.yellow) return COLORS.speed.normal
+  if (speed >= t.orange) return COLORS.speed.slow
+  return COLORS.speed.stopped
 }
 
 export function getSpeedColorRGBA(
@@ -134,10 +134,10 @@ export function getSpeedColorRGBA(
 ): [number, number, number, number] {
   const a = Math.floor(opacity * 220)
   const t = thresholds ?? defaultSpeedThresholds
-  if (speed >= t.green) return [34, 197, 94, a] // green
-  if (speed >= t.yellow) return [234, 179, 8, a] // yellow
-  if (speed >= t.orange) return [249, 115, 22, a] // orange
-  return [239, 68, 68, a] // red
+  if (speed >= t.green) return [...COLORS.speedRGB.fast, a]
+  if (speed >= t.yellow) return [...COLORS.speedRGB.normal, a]
+  if (speed >= t.orange) return [...COLORS.speedRGB.slow, a]
+  return [...COLORS.speedRGB.stopped, a]
 }
 
 /** Build a lookup to find which section a (cableId, direction, channel) belongs to, returning its thresholds. */
@@ -268,26 +268,4 @@ export function getSectionCoords(fiber: Fiber, startChannel: number, endChannel:
     }
   }
   return result
-}
-
-// ── Severity / style constants ──────────────────────────────────────────
-
-export const severityColor: Record<string, string> = {
-  critical: '#ef4444',
-  high: '#f97316',
-  medium: '#f59e0b',
-  low: '#22c55e',
-}
-
-export const incidentTypeIcon: Record<IncidentType, string> = {
-  accident: '!',
-  congestion: '\u25CF',
-  slowdown: '\u25BC',
-  anomaly: '?',
-}
-
-export const chartColors = {
-  speed: { label: 'Speed', unit: 'km/h', color: '#6366f1' },
-  flow: { label: 'Flow', unit: 'veh/h', color: '#8b5cf6' },
-  occupancy: { label: 'Occupancy', unit: '%', color: '#0ea5e9' },
 }
