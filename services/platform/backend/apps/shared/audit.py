@@ -7,6 +7,7 @@ Provides a simple interface to record audit events from views and services.
 import ipaddress
 import logging
 import re
+from typing import Any
 
 from django.conf import settings
 
@@ -62,7 +63,7 @@ def _is_trusted_proxy(ip_str: str) -> bool:
     return False
 
 
-def get_client_ip(request):
+def get_client_ip(request: Any) -> str | None:
     """
     Extract client IP from request, safely handling proxies.
 
@@ -71,10 +72,10 @@ def get_client_ip(request):
     - Only trust X-Forwarded-For if the direct connection is from a trusted proxy
     - Use rightmost untrusted IP in chain (most recently added by our infrastructure)
     """
-    remote_addr = request.META.get("REMOTE_ADDR", "")
+    remote_addr: str = request.META.get("REMOTE_ADDR", "")
 
     # If no proxy header or direct connection isn't from trusted proxy, use REMOTE_ADDR
-    x_forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
+    x_forwarded_for: str | None = request.META.get("HTTP_X_FORWARDED_FOR")
     if not x_forwarded_for:
         return remote_addr if _is_valid_ip(remote_addr) else None
 
@@ -118,14 +119,14 @@ class AuditService:
 
     @staticmethod
     def log(
-        request,
-        action,
-        object_type="",
-        object_id="",
-        changes=None,
-        organization=None,
-        user=None,
-    ):
+        request: Any,
+        action: str,
+        object_type: str = "",
+        object_id: str = "",
+        changes: dict[str, Any] | None = None,
+        organization: Any | None = None,
+        user: Any | None = None,
+    ) -> AuditLog | None:
         if changes is None:
             changes = {}
 
@@ -137,7 +138,7 @@ class AuditService:
         ip = get_client_ip(request)
 
         try:
-            entry = AuditLog.objects.create(
+            entry: AuditLog = AuditLog.objects.create(
                 organization=org,
                 user=acting_user if acting_user and acting_user.is_authenticated else None,
                 action=action,

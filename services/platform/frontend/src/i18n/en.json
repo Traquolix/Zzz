@@ -71,16 +71,26 @@
     "total": "{{count}} total",
     "hideDetails": "Hide details",
     "showDetails": "Show details",
+    "noMatchingFilter": "No incidents match this filter",
+    "detail": {
+      "before": "Before",
+      "during": "During",
+      "drop": "Drop",
+      "type": "Type:",
+      "time": "Time:",
+      "location": "Location:",
+      "channel": "Channel:",
+      "status": "Status:",
+      "affectedSection": "Affected Section",
+      "collecting": "collecting...",
+      "snapshot": "Snapshot"
+    },
     "filters": {
       "allTypes": "All types",
       "allSeverities": "All severities",
-      "clearFilter": "Clear severity filter",
-      "showResolved": "Show resolved incidents",
-      "hideResolved": "Hide resolved incidents",
-      "showOnMap": "Show incidents on map",
-      "hideOnMap": "Hide incidents from map",
-      "newestFirst": "Sort newest first",
-      "oldestFirst": "Sort oldest first"
+      "clearFilter": "Clear filter",
+      "showResolved": "Show resolved",
+      "hideResolved": "Hide resolved"
     },
     "sort": {
       "severity": "Sort: Severity",
@@ -156,7 +166,9 @@
     "menu": "Menu",
     "min": "Min",
     "avg": "Avg",
-    "max": "Max"
+    "max": "Max",
+    "back": "Back",
+    "search": "Search..."
   },
   "flow": {
     "label": "Data Source",
@@ -299,11 +311,49 @@
       "shm": "Structural Health"
     }
   },
+  "sections": {
+    "noMatchingSections": "No matching sections",
+    "kpi": {
+      "avgSpeed": "Avg Speed",
+      "flow": "Flow",
+      "occupancy": "Occupancy",
+      "travelTime": "Travel Time"
+    },
+    "timeSeries": "Time Series",
+    "recentData": "Recent Data",
+    "table": {
+      "time": "Time",
+      "speed": "Speed",
+      "flow": "Flow",
+      "occupancy": "Occ."
+    },
+    "metric": {
+      "speed": "Speed",
+      "flow": "Flow",
+      "occupancy": "Occupancy"
+    }
+  },
   "sidebar": {
     "expandPanel": "Expand panel",
     "collapsePanel": "Collapse panel",
     "toggleSidebar": "Toggle sidebar",
-    "markAllRead": "Mark all as read"
+    "tablistLabel": "Sidebar navigation",
+    "markAllRead": "Mark all as read",
+    "hideOnMap": "Hide on map",
+    "showOnMap": "Show on map",
+    "newestFirst": "Newest first",
+    "oldestFirst": "Oldest first",
+    "showLabels": "Show labels",
+    "sectionLimitReached": "Section limit reached ({{max}} per organization)",
+    "addSection": "Add section",
+    "tabs": {
+      "sections": "Sections",
+      "incidents": "Incidents",
+      "shm": "SHM",
+      "channel": "Channel",
+      "settings": "Settings",
+      "dataHub": "Data Hub"
+    }
   },
   "channelDetail": {
     "detectionsWindow": "in 60s"
@@ -337,6 +387,13 @@
       "direction": "Direction:",
       "forward": "Forward",
       "backward": "Backward"
+    },
+    "legend": {
+      "overview": "Overview",
+      "showFibers": "Show fibers",
+      "hideFibers": "Hide fibers",
+      "dots": "Dots",
+      "3d": "3D"
     },
     "landmark": {
       "selectedTitle": "Selected Landmark",
@@ -412,6 +469,10 @@
     "loadingSpectral": "Loading spectral data...",
     "spectralLoadError": "Failed to load spectral data",
     "spectralErrorDesc": "Sample data may not be available",
+    "loadingStructures": "Loading structures...",
+    "noMatchingStructures": "No structures match \"{{search}}\"",
+    "structureNotFound": "Structure not found",
+    "noPeakData": "No peak data",
     "noSpectralData": "No spectral data available",
     "spectralHeatmap": "Spectral Heatmap",
     "heatmapDesc": "Power spectrum over time (log scale)",
@@ -433,7 +494,18 @@
       "mean": "Mean:",
       "start": "Start",
       "end": "End",
-      "vs": "vs"
+      "vs": "vs",
+      "labelA": "A: {{date}}",
+      "labelB": "B: {{date}}",
+      "vsPreviousPeriod": "vs previous period",
+      "freqShift": "Freq Shift",
+      "reset": "Reset"
+    },
+    "kpi": {
+      "peakFreq": "Peak Freq",
+      "baseline": "Baseline",
+      "deviation": "Deviation",
+      "status": "Status"
     },
     "status": {
       "nominal": "Nominal",

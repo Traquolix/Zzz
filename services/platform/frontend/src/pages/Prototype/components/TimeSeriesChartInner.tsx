@@ -2,6 +2,7 @@ import { useRef, useState, useEffect } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine } from 'recharts'
 import type { TimeSeriesPoint } from '../types'
 import { useDebouncedResize } from '../hooks/useDebouncedResize'
+import { COLORS } from '@/lib/theme'
 
 interface Props {
   data: TimeSeriesPoint[]
@@ -39,14 +40,14 @@ export default function TimeSeriesChartInner({ data, metric, config, timeRange, 
             <CartesianGrid stroke="var(--proto-chart-grid, rgba(255,255,255,0.03))" strokeDasharray="3 3" />
             <XAxis
               dataKey="time"
-              tick={{ fill: '#64748b', fontSize: 10 }}
+              tick={{ fill: COLORS.timeSeries.tickFill, fontSize: 10 }}
               tickLine={false}
               axisLine={false}
               interval={Math.max(0, Math.floor(data.length / 6) - 1)}
               tickFormatter={tickFormatter}
             />
             <YAxis
-              tick={{ fill: '#64748b', fontSize: 10 }}
+              tick={{ fill: COLORS.timeSeries.tickFill, fontSize: 10 }}
               tickLine={false}
               axisLine={false}
               width={36}
@@ -54,11 +55,11 @@ export default function TimeSeriesChartInner({ data, metric, config, timeRange, 
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: '#2b2d31',
-                border: '1px solid rgba(255,255,255,0.08)',
+                backgroundColor: COLORS.timeSeries.tooltipBg,
+                border: `1px solid ${COLORS.timeSeries.tooltipBorder}`,
                 borderRadius: 8,
                 fontSize: 12,
-                color: '#e2e8f0',
+                color: COLORS.timeSeries.tooltipText,
                 boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
               }}
               formatter={(value: number | undefined) => [`${value ?? 0} ${config.unit}`, config.label]}

@@ -5,7 +5,9 @@ View mixins for the monitoring app.
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from typing import Any, Callable
+
+from rest_framework.request import Request
 
 logger = logging.getLogger("sequoia")
 
@@ -29,21 +31,21 @@ class FlowAwareMixin:
                 # ... ClickHouse path (live flow) ...
     """
 
-    def _get_flow(self, request) -> str:
+    def _get_flow(self, request: Request) -> str:
         """Return the active flow for this request ('sim' or 'live')."""
         flow = request.query_params.get("flow", "sim")
         return flow if flow in ("sim", "live") else "sim"
 
-    def _is_sim(self, request) -> bool:
+    def _is_sim(self, request: Request) -> bool:
         """Return True if the client is on the simulation flow."""
         return self._get_flow(request) == "sim"
 
     def _get_sim_data(
         self,
-        request,
-        sim_fn: Callable[[], list[dict]],
+        request: Request,
+        sim_fn: Callable[[], list[dict[str, Any]]],
         fiber_key: str = "fiberId",
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """
         Get data from the simulation cache, org-filtered.
 

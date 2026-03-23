@@ -5,7 +5,8 @@ and time constants.
 Used by both the bulk export views and the public v1 API.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
+from typing import Any
 
 from apps.fibers.utils import get_org_fiber_ids
 
@@ -25,7 +26,7 @@ TIER_TABLES: dict[str, str] = {
 }
 
 
-def check_fiber_access(user, fiber_id: str) -> bool:
+def check_fiber_access(user: Any, fiber_id: str) -> bool:
     """Check if user has access to the specified fiber. Returns True/False."""
     if user.is_superuser:
         return True
@@ -33,7 +34,9 @@ def check_fiber_access(user, fiber_id: str) -> bool:
     return fiber_id in fiber_ids
 
 
-def select_tier(start, end, explicit_tier: str | None = None) -> tuple[str | None, str | None]:
+def select_tier(
+    start: datetime, end: datetime, explicit_tier: str | None = None
+) -> tuple[str | None, str | None]:
     """Select the appropriate data tier based on time range.
 
     Args:

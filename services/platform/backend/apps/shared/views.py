@@ -8,7 +8,9 @@ from typing import Any
 from django.http import HttpResponse
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers as s
+from rest_framework import status
 from rest_framework.permissions import AllowAny
+from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -32,7 +34,7 @@ class HealthCheckView(APIView):
         },
         tags=["health"],
     )
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         version = os.environ.get("GIT_SHA", "dev")
         return Response({"status": "ok", "version": version})
 
@@ -61,7 +63,7 @@ class ReadinessCheckView(APIView):
         },
         tags=["health"],
     )
-    def get(self, request):
+    def get(self, request: Request) -> Response:
         from django.db import connection
 
         checks = {}
@@ -137,7 +139,7 @@ class ReadinessCheckView(APIView):
                 "status": "ready" if all_critical_ok else "degraded",
                 "checks": checks,
             },
-            status=200 if all_critical_ok else 503,
+            status=status.HTTP_200_OK if all_critical_ok else status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
 
@@ -149,7 +151,7 @@ class MetricsView(APIView):
     throttle_classes: list[Any] = []
 
     @extend_schema(exclude=True)  # Not part of the public API docs
-    def get(self, request):
+    def get(self, request: Request) -> HttpResponse:
         from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
         # Import metrics module to ensure all collectors are registered

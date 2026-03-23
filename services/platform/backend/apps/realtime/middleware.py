@@ -12,6 +12,7 @@ The get_user_from_token() function is used by the consumer for message-based aut
 """
 
 import logging
+from typing import Any
 
 from channels.db import database_sync_to_async
 from channels.middleware import BaseMiddleware
@@ -24,10 +25,10 @@ User = get_user_model()
 
 
 @database_sync_to_async
-def get_user_from_token(token_str):
+def get_user_from_token(token_str: str) -> Any:
     """Validate JWT access token and return the user, or AnonymousUser."""
     try:
-        token = AccessToken(token_str)
+        token = AccessToken(token_str)  # type: ignore[arg-type]  # simplejwt stubs expect UntypedToken
         user_id = token.payload.get("user_id")
         if user_id is None:
             return AnonymousUser()
@@ -52,7 +53,7 @@ class JWTAuthMiddleware(BaseMiddleware):
     and waits for an 'authenticate' message with a valid JWT token.
     """
 
-    async def __call__(self, scope, receive, send):
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> Any:
         scope["user"] = AnonymousUser()
         scope["_pending_auth"] = True
         return await super().__call__(scope, receive, send)

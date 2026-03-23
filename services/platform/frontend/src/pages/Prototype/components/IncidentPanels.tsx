@@ -1,6 +1,7 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import { severityColor } from '../data'
+import { severityColor } from '@/lib/theme'
 import { useIncidentSnapshot } from '@/hooks/useIncidentSnapshot'
 import type { ProtoIncident, ProtoAction, Severity, Section } from '../types'
 import { useRealtime } from '@/hooks/useRealtime'
@@ -29,6 +30,7 @@ export function IncidentList({
   unseenIds?: Set<string>
   onMarkSeen?: (id: string) => void
 }) {
+  const { t } = useTranslation()
   let filtered = filterSeverity ? incidents.filter(i => i.severity === filterSeverity) : incidents
   if (hideResolved) filtered = filtered.filter(i => !i.resolved)
 
@@ -41,8 +43,8 @@ export function IncidentList({
   return (
     <>
       {sorted.length === 0 ? (
-        <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-[length:var(--text-sm)]">
-          No incidents match this filter
+        <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-cq-sm">
+          {t('incidents.noMatchingFilter')}
         </div>
       ) : (
         <div className="flex flex-col px-3 py-1">
@@ -67,14 +69,12 @@ export function IncidentList({
                 )}
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-[length:var(--text-sm)] text-[var(--proto-text)] font-medium truncate">
-                      {inc.title}
-                    </span>
-                    <span className="shrink-0 text-[length:var(--text-xs)] tabular-nums text-[var(--proto-text-secondary)]">
+                    <span className="text-cq-sm text-[var(--proto-text)] font-medium truncate">{inc.title}</span>
+                    <span className="shrink-0 text-cq-xs tabular-nums text-[var(--proto-text-secondary)]">
                       {new Date(inc.detectedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-[length:var(--text-xxs)] text-[var(--proto-text-muted)] mt-0.5">
+                  <div className="flex items-center gap-1.5 text-cq-xxs text-[var(--proto-text-muted)] mt-0.5">
                     <span>
                       Ch {inc.channel}
                       {inc.channelEnd && inc.channelEnd !== inc.channel ? `–${inc.channelEnd}` : ''}
@@ -84,7 +84,7 @@ export function IncidentList({
                     {inc.resolved && (
                       <>
                         <span className="opacity-40">·</span>
-                        <span className="text-[var(--proto-green)]">resolved</span>
+                        <span className="text-[var(--proto-green)]">{t('incidents.resolved').toLowerCase()}</span>
                       </>
                     )}
                   </div>
@@ -111,6 +111,7 @@ export function IncidentDetail({
   dispatch: React.Dispatch<ProtoAction>
   onBack: () => void
 }) {
+  const { t } = useTranslation()
   const { flow } = useRealtime()
 
   // Find containing section by channel range
@@ -137,15 +138,13 @@ export function IncidentDetail({
       <div className="sticky top-0 z-10 bg-[var(--proto-surface)] border-b border-[var(--proto-border)] px-4 py-3 flex items-center gap-3">
         <button
           onClick={onBack}
-          className="text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors text-[length:var(--text-sm)] cursor-pointer"
+          className="text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors text-cq-sm cursor-pointer"
         >
-          &larr; Back
+          &larr; {t('common.back')}
         </button>
-        <span className="text-[length:var(--text-sm)] font-semibold text-[var(--proto-text)] truncate">
-          {incident.title}
-        </span>
+        <span className="text-cq-sm font-semibold text-[var(--proto-text)] truncate">{incident.title}</span>
         <span
-          className="text-[length:var(--text-2xs)] font-medium px-1.5 py-0.5 rounded capitalize shrink-0"
+          className="text-cq-2xs font-medium px-1.5 py-0.5 rounded capitalize shrink-0"
           style={{ backgroundColor: `${severityColor[incident.severity]}20`, color: severityColor[incident.severity] }}
         >
           {incident.severity}
@@ -158,35 +157,35 @@ export function IncidentDetail({
           <div className="grid grid-cols-3 gap-2 pb-3 border-b border-[var(--proto-border)]">
             {incident.speedBefore != null && (
               <div className="rounded-lg border border-[var(--proto-border)] p-2.5">
-                <div className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] uppercase tracking-wider mb-0.5">
-                  Before
+                <div className="text-cq-2xs text-[var(--proto-text-muted)] uppercase tracking-wider mb-0.5">
+                  {t('incidents.detail.before')}
                 </div>
-                <span className="text-[length:var(--text-lg)] font-semibold text-[var(--proto-text)]">
+                <span className="text-cq-lg font-semibold text-[var(--proto-text)]">
                   {Math.round(incident.speedBefore)}
                 </span>
-                <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] ml-0.5">km/h</span>
+                <span className="text-cq-2xs text-[var(--proto-text-muted)] ml-0.5">km/h</span>
               </div>
             )}
             {incident.speedDuring != null && (
               <div className="rounded-lg border border-[var(--proto-border)] p-2.5">
-                <div className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] uppercase tracking-wider mb-0.5">
-                  During
+                <div className="text-cq-2xs text-[var(--proto-text-muted)] uppercase tracking-wider mb-0.5">
+                  {t('incidents.detail.during')}
                 </div>
-                <span className="text-[length:var(--text-lg)] font-semibold text-[var(--proto-red)]">
+                <span className="text-cq-lg font-semibold text-[var(--proto-red)]">
                   {Math.round(incident.speedDuring)}
                 </span>
-                <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] ml-0.5">km/h</span>
+                <span className="text-cq-2xs text-[var(--proto-text-muted)] ml-0.5">km/h</span>
               </div>
             )}
             {incident.speedDropPercent != null && (
               <div className="rounded-lg border border-[var(--proto-border)] p-2.5">
-                <div className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] uppercase tracking-wider mb-0.5">
-                  Drop
+                <div className="text-cq-2xs text-[var(--proto-text-muted)] uppercase tracking-wider mb-0.5">
+                  {t('incidents.detail.drop')}
                 </div>
-                <span className="text-[length:var(--text-lg)] font-semibold text-[var(--proto-red)]">
+                <span className="text-cq-lg font-semibold text-[var(--proto-red)]">
                   {Math.round(incident.speedDropPercent)}
                 </span>
-                <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] ml-0.5">%</span>
+                <span className="text-cq-2xs text-[var(--proto-text-muted)] ml-0.5">%</span>
               </div>
             )}
           </div>
@@ -200,7 +199,7 @@ export function IncidentDetail({
                 value={draft}
                 onChange={e => setDraft(e.target.value)}
                 rows={3}
-                className="w-full px-2 py-1.5 rounded bg-[var(--proto-surface)] border border-[var(--proto-border)] text-[length:var(--text-sm)] text-[var(--proto-text)] outline-none focus:border-[var(--proto-accent)] resize-none"
+                className="w-full px-2 py-1.5 rounded bg-[var(--proto-surface)] border border-[var(--proto-border)] text-cq-sm text-[var(--proto-text)] outline-none focus:border-[var(--proto-accent)] resize-none"
               />
               <div className="flex gap-2 justify-end">
                 <button
@@ -208,18 +207,18 @@ export function IncidentDetail({
                     setDraft(incident.description)
                     setEditing(false)
                   }}
-                  className="px-2 py-1 rounded text-[length:var(--text-xs)] text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors cursor-pointer"
+                  className="px-2 py-1 rounded text-cq-xs text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors cursor-pointer"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={() => {
                     dispatch({ type: 'UPDATE_INCIDENT_DESCRIPTION', id: incident.id, description: draft })
                     setEditing(false)
                   }}
-                  className="px-2 py-1 rounded text-[length:var(--text-xs)] bg-[var(--proto-accent)] text-white cursor-pointer hover:opacity-80 transition-opacity"
+                  className="px-2 py-1 rounded text-cq-xs bg-[var(--proto-accent)] text-white cursor-pointer hover:opacity-80 transition-opacity"
                 >
-                  Save
+                  {t('common.save')}
                 </button>
               </div>
             </div>
@@ -227,7 +226,7 @@ export function IncidentDetail({
             <div
               role="button"
               tabIndex={0}
-              className="text-[length:var(--text-sm)] text-[var(--proto-text)] mb-2 cursor-pointer hover:bg-[var(--proto-surface-raised)] rounded px-1 -mx-1 py-0.5 transition-colors"
+              className="text-cq-sm text-[var(--proto-text)] mb-2 cursor-pointer hover:bg-[var(--proto-surface-raised)] rounded px-1 -mx-1 py-0.5 transition-colors"
               onClick={() => {
                 setDraft(incident.description)
                 setEditing(true)
@@ -239,29 +238,30 @@ export function IncidentDetail({
                   setEditing(true)
                 }
               }}
-              title="Click to edit"
+              title={t('common.clickToEdit')}
             >
               {incident.description}
             </div>
           )}
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[length:var(--text-xs)] text-[var(--proto-text-secondary)]">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-cq-xs text-[var(--proto-text-secondary)]">
             <span>
-              Type: <span className="capitalize">{incident.type}</span>
+              {t('incidents.detail.type')} <span className="capitalize">{incident.type}</span>
             </span>
             <span>
-              Time: {new Date(incident.detectedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              {t('incidents.detail.time')}{' '}
+              {new Date(incident.detectedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
             <span>
-              Location: {incident.location[1].toFixed(4)}N, {incident.location[0].toFixed(4)}E
+              {t('incidents.detail.location')} {incident.location[1].toFixed(4)}N, {incident.location[0].toFixed(4)}E
             </span>
             <span>
-              Channel: {incident.channel}
+              {t('incidents.detail.channel')} {incident.channel}
               {incident.channelEnd != null && incident.channelEnd !== incident.channel ? `–${incident.channelEnd}` : ''}
             </span>
             <span>
-              Status:{' '}
+              {t('incidents.detail.status')}{' '}
               <span className={cn(incident.resolved ? 'text-[var(--proto-green)]' : 'text-[var(--proto-red)]')}>
-                {incident.resolved ? 'Resolved' : 'Active'}
+                {incident.resolved ? t('incidents.resolved') : t('incidents.ongoing')}
               </span>
             </span>
           </div>
@@ -269,11 +269,11 @@ export function IncidentDetail({
 
         {relatedSection && (
           <div className="pb-3 border-b border-[var(--proto-border)]">
-            <h3 className="text-[length:var(--text-xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-2">
-              Affected Section
+            <h3 className="text-cq-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-2">
+              {t('incidents.detail.affectedSection')}
             </h3>
-            <div className="text-[length:var(--text-sm)] text-[var(--proto-text)] mb-1">{relatedSection.name}</div>
-            <div className="flex gap-4 text-[length:var(--text-xs)] text-[var(--proto-text-secondary)]">
+            <div className="text-cq-sm text-[var(--proto-text)] mb-1">{relatedSection.name}</div>
+            <div className="flex gap-4 text-cq-xs text-[var(--proto-text-secondary)]">
               <span>{relatedSection.avgSpeed} km/h</span>
               <span>{relatedSection.flow} veh/h</span>
               <span>{relatedSection.occupancy}% occ.</span>
@@ -285,15 +285,15 @@ export function IncidentDetail({
         )}
 
         <div>
-          <h3 className="text-[length:var(--text-xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
-            Snapshot
+          <h3 className="text-cq-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
+            {t('incidents.detail.snapshot')}
             {!snapshotComplete && !snapshotLoading && (
-              <span className="ml-2 text-[var(--proto-accent)] animate-pulse">collecting...</span>
+              <span className="ml-2 text-[var(--proto-accent)] animate-pulse">{t('incidents.detail.collecting')}</span>
             )}
           </h3>
           {snapshotLoading ? (
             <div className="h-[200px] rounded bg-[var(--proto-surface)] animate-pulse flex items-center justify-center">
-              <span className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)]">Loading snapshot...</span>
+              <span className="text-cq-xs text-[var(--proto-text-muted)]">{t('incidents.loadingSnapshot')}</span>
             </div>
           ) : snapshotData ? (
             <TimeSeriesChart
@@ -306,8 +306,8 @@ export function IncidentDetail({
               })}
             />
           ) : (
-            <div className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)] italic py-4 text-center">
-              No snapshot data available
+            <div className="text-cq-xs text-[var(--proto-text-muted)] italic py-4 text-center">
+              {t('common.noSnapshot')}
             </div>
           )}
         </div>

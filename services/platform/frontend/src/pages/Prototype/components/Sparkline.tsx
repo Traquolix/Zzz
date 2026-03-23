@@ -1,3 +1,5 @@
+import { COLORS } from '@/lib/theme'
+
 interface SparklineProps {
   data: number[]
   width?: number
@@ -5,7 +7,7 @@ interface SparklineProps {
   color?: string
 }
 
-export function Sparkline({ data, width = 64, height = 20, color = '#3b82f6' }: SparklineProps) {
+export function Sparkline({ data, width = 64, height = 20, color = COLORS.ui.primary }: SparklineProps) {
   if (data.length < 2) return null
 
   const min = Math.min(...data)

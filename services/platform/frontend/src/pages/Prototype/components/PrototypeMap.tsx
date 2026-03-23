@@ -5,12 +5,11 @@ import { MapboxOverlay } from '@deck.gl/mapbox'
 import { SimpleMeshLayer } from '@deck.gl/mesh-layers'
 import { CubeGeometry } from '@luma.gl/engine'
 import { MAPBOX_TOKEN } from '@/config/mapbox'
+import { COLORS, shmStatusColors, severityColor } from '@/lib/theme'
 import {
   fibers,
   fiberOffsetCache,
   fiberRenderCache,
-  offsetIndexToChannel,
-  severityColor,
   MAP_CENTER,
   MAP_ZOOM,
   getSpeedColor,
@@ -25,6 +24,15 @@ import type { Infrastructure } from '@/types/infrastructure'
 import type { VehiclePosition } from '../hooks/useVehicleSim'
 import { getSidebarWidth, SidebarRefContext } from '../hooks/useSidebarWidth'
 import i18n from '@/i18n'
+import {
+  findNearestFiberPoint,
+  getPosition,
+  getOrientation,
+  getScale,
+  FIBER_WIDTH_EXPR,
+  FIBER_OPACITY_EXPR,
+  buildSectionHighlightData,
+} from './mapUtils'
 
 export interface PrototypeMapHandle {
   flyTo: (center: [number, number], zoom?: number) => void
@@ -65,61 +73,6 @@ interface PrototypeMapProps {
   show3DBuildings?: boolean
   showChannelHelper?: boolean
 }
-
-function findNearestFiberPoint(lngLat: [number, number], maxDistDeg = 0.003) {
-  let best: {
-    fiberId: string
-    direction: 0 | 1
-    channel: number
-    dist: number
-    coord: [number, number]
-  } | null = null
-
-  for (const fiber of fibers) {
-    // Use offset coords (what's actually rendered on the map) so the dot
-    // lands on the visible line rather than the shared cable centerline.
-    const offsetCoords = fiberOffsetCache.get(fiber.id)
-    const coords = offsetCoords ?? fiber.coordinates
-    // The offset cache is null-filtered and shorter than fiber.coordinates,
-    // so the loop index is NOT the real channel number. Use the reverse map
-    // to translate offset index → real channel.
-    const reverseMap = offsetIndexToChannel.get(fiber.id)
-    for (let i = 0; i < coords.length; i++) {
-      const c = coords[i]
-      if (c[0] == null || c[1] == null) continue
-      const dx = c[0] - lngLat[0]
-      const dy = c[1] - lngLat[1]
-      const dist = Math.sqrt(dx * dx + dy * dy)
-      if (dist < maxDistDeg && (!best || dist < best.dist)) {
-        best = {
-          fiberId: fiber.parentCableId,
-          direction: fiber.direction,
-          channel: reverseMap ? reverseMap[i] : i,
-          dist,
-          coord: c as [number, number],
-        }
-      }
-    }
-  }
-
-  if (!best) return null
-  return {
-    fiberId: best.fiberId,
-    direction: best.direction,
-    channel: best.channel,
-    lng: best.coord[0],
-    lat: best.coord[1],
-  }
-}
-
-// Stable accessor functions for SimpleMeshLayer (avoids re-creation)
-const getPosition = (d: VehiclePosition) => d.position
-const getOrientation = (d: VehiclePosition): [number, number, number] => [0, -d.angle, 0]
-const getScale = (): [number, number, number] => [3, 6, 2]
-
-// Zoom expressions for fiber lines — module-level constants (used in addLayer + clearHighlight)
-const FIBER_WIDTH_EXPR: mapboxgl.Expression = ['interpolate', ['linear'], ['zoom'], 10, 1.5, 12, 2, 14, 2.5]
-const FIBER_OPACITY_EXPR: mapboxgl.Expression = ['interpolate', ['linear'], ['zoom'], 10, 0.5, 12.5, 0.7, 14, 0.8]
 
 export const PrototypeMap = memo(
   forwardRef<PrototypeMapHandle, PrototypeMapProps>(function PrototypeMap(
@@ -311,7 +264,7 @@ export const PrototypeMap = memo(
         if (!secFiber) return
         const coords = getSectionCoords(secFiber, sec.startChannel, sec.endChannel)
         if (coords.length < 2) return
-        const color = fiberColorsRef.current ? getFiberColor(secFiber, fiberColorsRef.current) : '#888'
+        const color = fiberColorsRef.current ? getFiberColor(secFiber, fiberColorsRef.current) : COLORS.fiber.default
         const src = map.getSource('hover-highlight') as mapboxgl.GeoJSONSource | undefined
         src?.setData({
           type: 'FeatureCollection',
@@ -350,7 +303,7 @@ export const PrototypeMap = memo(
         const sFiber = findFiber(structure.fiberId, structure.direction ?? 0)
         const coords = sFiber ? getSectionCoords(sFiber, structure.startChannel, structure.endChannel) : []
         if (coords.length < 2) return
-        const typeColor = structure.type === 'bridge' ? '#f59e0b' : '#6366f1'
+        const typeColor = COLORS.structure[structure.type].dot
         const src = map.getSource('hover-highlight') as mapboxgl.GeoJSONSource | undefined
         src?.setData({
           type: 'FeatureCollection',
@@ -377,8 +330,8 @@ export const PrototypeMap = memo(
         const el = document.createElement('div')
         el.style.cssText = `
                 width: 14px; height: 14px; border-radius: 50%;
-                background-color: #3b82f6;
-                border: 2px solid #fff;
+                background-color: ${COLORS.ui.primary};
+                border: 2px solid ${COLORS.map.channelDotBorder};
                 animation: proto-channel-pulse 2s ease-in-out infinite;
             `
         channelMarkerRef.current = new mapboxgl.Marker({ element: el, anchor: 'center' })
@@ -408,11 +361,16 @@ export const PrototypeMap = memo(
 
       map.on('load', () => {
         // ── Fiber route layers (single merged source, simplified geometry) ──
-        const fiberFeatures = fibers.map(fiber => ({
-          type: 'Feature' as const,
-          properties: { id: fiber.id, name: fiber.name, color: fiber.color },
-          geometry: { type: 'LineString' as const, coordinates: fiberRenderCache.get(fiber.id)! },
-        }))
+        const fiberFeatures: GeoJSON.Feature[] = []
+        for (const fiber of fibers) {
+          const coords = fiberRenderCache.get(fiber.id)
+          if (!coords) continue
+          fiberFeatures.push({
+            type: 'Feature' as const,
+            properties: { id: fiber.id, name: fiber.name, color: fiber.color },
+            geometry: { type: 'LineString' as const, coordinates: coords },
+          })
+        }
         map.addSource('fibers', {
           type: 'geojson',
           data: { type: 'FeatureCollection', features: fiberFeatures },
@@ -495,7 +453,7 @@ export const PrototypeMap = memo(
           type: 'line',
           source: 'hover-highlight',
           paint: {
-            'line-color': '#ffffff',
+            'line-color': COLORS.map.glowLine,
             'line-width': 14,
             'line-opacity': 0.4,
             'line-blur': 7,
@@ -523,7 +481,7 @@ export const PrototypeMap = memo(
             'circle-radius': 4,
             'circle-color': ['get', 'color'],
             'circle-opacity': ['get', 'opacity'],
-            'circle-stroke-color': 'rgba(0,0,0,0.3)',
+            'circle-stroke-color': COLORS.map.vehicleStroke,
             'circle-stroke-width': 1,
           },
         })
@@ -539,7 +497,7 @@ export const PrototypeMap = memo(
           type: 'line',
           source: 'pending-section',
           paint: {
-            'line-color': '#f59e0b',
+            'line-color': COLORS.ui.pending,
             'line-width': 4,
             'line-opacity': 0.6,
             'line-dasharray': [2, 2],
@@ -558,8 +516,8 @@ export const PrototypeMap = memo(
           source: 'pending-point',
           paint: {
             'circle-radius': 6,
-            'circle-color': '#f59e0b',
-            'circle-stroke-color': '#fff',
+            'circle-color': COLORS.ui.pending,
+            'circle-stroke-color': COLORS.map.pendingPointStroke,
             'circle-stroke-width': 2,
           },
         })
@@ -622,7 +580,7 @@ export const PrototypeMap = memo(
             type: 'fill-extrusion',
             minzoom: 12.5,
             paint: {
-              'fill-extrusion-color': '#aaa',
+              'fill-extrusion-color': COLORS.map.buildingFill,
               'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 12.5, 0, 13, ['get', 'height']],
               'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], 12.5, 0, 13, ['get', 'min_height']],
               'fill-extrusion-opacity': ['interpolate', ['linear'], ['zoom'], 12.5, 0, 13, 0.4, 15, 0.6],
@@ -921,13 +879,14 @@ export const PrototypeMap = memo(
                 const lookup = thresholdLookupRef.current
                 if (lookup) {
                   for (const f of geojson.features) {
-                    const p = f.properties!
-                    const t = lookup(p.fiberId, p.direction, p.channel)
-                    p.color = getSpeedColor(p.speed, t)
+                    if (!f.properties) continue
+                    const t = lookup(f.properties.fiberId, f.properties.direction, f.properties.channel)
+                    f.properties.color = getSpeedColor(f.properties.speed, t)
                   }
                 } else {
                   for (const f of geojson.features) {
-                    f.properties!.color = getSpeedColor(f.properties!.speed)
+                    if (!f.properties) continue
+                    f.properties.color = getSpeedColor(f.properties.speed)
                   }
                 }
                 const source = map.getSource('vehicles') as mapboxgl.GeoJSONSource | undefined
@@ -970,7 +929,7 @@ export const PrototypeMap = memo(
                 })
                 ensureDeckOverlay()
                 try {
-                  deckOverlay!.setProps({ layers: [layer] })
+                  deckOverlay?.setProps({ layers: [layer] })
                 } catch {
                   /* not ready */
                 }
@@ -1062,26 +1021,7 @@ export const PrototypeMap = memo(
     function updateSectionHighlights(map: mapboxgl.Map, secs: Section[]) {
       const source = map.getSource('section-highlights') as mapboxgl.GeoJSONSource | undefined
       if (!source) return
-      const colors = fiberColorsRef.current
-      const fiberMap = sectionFibersRef.current
-
-      const features = secs
-        .map(sec => {
-          const sf = fiberMap.get(sec.id)
-          if (!sf) return null
-          const coords = getSectionCoords(sf, sec.startChannel, sec.endChannel)
-          if (coords.length < 2) return null
-          const color = colors ? getFiberColor(sf, colors) : (sf.color ?? '#888')
-
-          return {
-            type: 'Feature' as const,
-            properties: { color },
-            geometry: { type: 'LineString' as const, coordinates: coords },
-          }
-        })
-        .filter(Boolean)
-
-      source.setData({ type: 'FeatureCollection', features: features as GeoJSON.Feature[] })
+      source.setData(buildSectionHighlightData(secs, sectionFibersRef.current, fiberColorsRef.current))
     }
 
     useEffect(() => {
@@ -1148,11 +1088,16 @@ export const PrototypeMap = memo(
       if (!map || !fiberColors) return
       const src = map.getSource('fibers') as mapboxgl.GeoJSONSource | undefined
       if (!src) return
-      const features = fibers.map(fiber => ({
-        type: 'Feature' as const,
-        properties: { id: fiber.id, name: fiber.name, color: getFiberColor(fiber, fiberColors) },
-        geometry: { type: 'LineString' as const, coordinates: fiberRenderCache.get(fiber.id)! },
-      }))
+      const features: GeoJSON.Feature[] = []
+      for (const fiber of fibers) {
+        const coords = fiberRenderCache.get(fiber.id)
+        if (!coords) continue
+        features.push({
+          type: 'Feature' as const,
+          properties: { id: fiber.id, name: fiber.name, color: getFiberColor(fiber, fiberColors) },
+          geometry: { type: 'LineString' as const, coordinates: coords },
+        })
+      }
       src.setData({ type: 'FeatureCollection', features })
     }, [fiberColors])
 
@@ -1175,7 +1120,7 @@ export const PrototypeMap = memo(
             const sFiber = findFiber(s.fiberId, s.direction ?? 0)
             const coords = sFiber ? getSectionCoords(sFiber, s.startChannel, s.endChannel) : []
             if (coords.length < 2) return null
-            const color = s.type === 'bridge' ? '#f59e0b' : '#6366f1'
+            const color = COLORS.structure[s.type].dot
             return {
               type: 'Feature' as const,
               properties: { color, id: s.id },
@@ -1205,8 +1150,6 @@ export const PrototypeMap = memo(
 
       if (!showStructureLabels || !structures?.length) return
 
-      const shmStatusColors: Record<string, string> = { nominal: '#22c55e', warning: '#f59e0b', critical: '#ef4444' }
-
       for (const s of structures) {
         const sFiber = findFiber(s.fiberId, s.direction ?? 0)
         const midChannel = Math.floor((s.startChannel + s.endChannel) / 2)
@@ -1214,7 +1157,7 @@ export const PrototypeMap = memo(
         if (!coord) continue
 
         const status = structureStatuses?.get(s.id)
-        const statusDotColor = status ? (shmStatusColors[status.status] ?? '#64748b') : '#64748b'
+        const statusDotColor = status ? (shmStatusColors[status.status] ?? COLORS.shmChart.axis) : COLORS.shmChart.axis
         const isSelected = selectedStructureId === s.id
 
         const imageHtml = s.imageUrl
@@ -1281,9 +1224,9 @@ export const PrototypeMap = memo(
                 width: 20px; height: 20px; border-radius: 50%;
                 display: flex; align-items: center; justify-content: center;
                 cursor: pointer;
-                background: rgba(30, 30, 40, 0.75);
+                background: ${COLORS.map.incidentMarkerBg};
                 border: 2px solid ${color};
-                box-shadow: 0 0 8px rgba(0,0,0,0.5);
+                box-shadow: 0 0 8px ${COLORS.map.incidentMarkerShadow};
             `
         const dot = document.createElement('div')
         dot.style.cssText = `

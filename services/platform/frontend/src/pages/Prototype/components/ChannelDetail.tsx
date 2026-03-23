@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { findFiber, getFiberColor, getSpeedColor } from '../data'
+import { COLORS } from '@/lib/theme'
 import type { ProtoAction, Section, SelectedChannel } from '../types'
 import { useRealtime } from '@/hooks/useRealtime'
 import { parseDetections } from '@/lib/parseMessage'
@@ -18,7 +19,7 @@ export function ChannelDetail({
 }) {
   const { t } = useTranslation()
   const fiber = findFiber(channel.fiberId, channel.direction)
-  const fiberColor = fiber ? getFiberColor(fiber, fiberColors) : '#6366f1'
+  const fiberColor = fiber ? getFiberColor(fiber, fiberColors) : COLORS.chart.speed
   const directionLabel = fiber?.direction === 0 ? 'Dir A' : 'Dir B'
 
   // Find sections containing this channel
@@ -122,7 +123,7 @@ export function ChannelDetail({
 
       // Grid lines
       const maxSpeed = 140
-      ctx.strokeStyle = 'rgba(148, 163, 184, 0.1)'
+      ctx.strokeStyle = COLORS.shmChart.canvasGrid
       ctx.lineWidth = 1
       for (const spd of [0, 30, 60, 90, 120]) {
         const y = h - (spd / maxSpeed) * h
@@ -133,7 +134,7 @@ export function ChannelDetail({
       }
 
       // Y-axis labels
-      ctx.fillStyle = 'rgba(148, 163, 184, 0.4)'
+      ctx.fillStyle = COLORS.shmChart.canvasLabel
       ctx.font = '9px monospace'
       ctx.textAlign = 'left'
       for (const spd of [30, 60, 90, 120]) {
@@ -180,10 +181,10 @@ export function ChannelDetail({
       {/* Header — matching SectionDetail pattern */}
       <div className="sticky top-0 z-10 bg-[var(--proto-surface)] border-b border-[var(--proto-border)] px-4 py-3">
         <div className="min-w-0">
-          <span className="text-[length:var(--text-sm)] font-semibold text-[var(--proto-text)] truncate block">
+          <span className="text-cq-sm font-semibold text-[var(--proto-text)] truncate block">
             Channel {channel.channel}
           </span>
-          <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] flex items-center gap-1.5">
+          <span className="text-cq-2xs text-[var(--proto-text-muted)] flex items-center gap-1.5">
             <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: fiberColor }} />
             {fiber?.name ?? channel.fiberId} · {directionLabel} · {channel.lat.toFixed(5)}N, {channel.lng.toFixed(5)}E
           </span>
@@ -194,28 +195,21 @@ export function ChannelDetail({
         {/* KPI cards — 2-column grid */}
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-lg border border-[var(--proto-border)] p-3">
-            <div className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] uppercase tracking-wider mb-1">
-              Detections
-            </div>
+            <div className="text-cq-2xs text-[var(--proto-text-muted)] uppercase tracking-wider mb-1">Detections</div>
             <div>
-              <span className="text-[length:var(--text-xl)] font-semibold text-[var(--proto-text)]">{liveCount}</span>
-              <span className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)] ml-1">
+              <span className="text-cq-xl font-semibold text-[var(--proto-text)]">{liveCount}</span>
+              <span className="text-cq-xs text-[var(--proto-text-muted)] ml-1">
                 {t('channelDetail.detectionsWindow')}
               </span>
             </div>
           </div>
           <div className="rounded-lg border border-[var(--proto-border)] p-3">
-            <div className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] uppercase tracking-wider mb-1">
-              Avg Speed
-            </div>
+            <div className="text-cq-2xs text-[var(--proto-text-muted)] uppercase tracking-wider mb-1">Avg Speed</div>
             <div>
-              <span
-                className="text-[length:var(--text-xl)] font-semibold"
-                style={{ color: speedColor ?? 'var(--proto-text)' }}
-              >
+              <span className="text-cq-xl font-semibold" style={{ color: speedColor ?? 'var(--proto-text)' }}>
                 {liveAvgSpeed != null ? liveAvgSpeed : '\u2014'}
               </span>
-              <span className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)] ml-1">km/h</span>
+              <span className="text-cq-xs text-[var(--proto-text-muted)] ml-1">km/h</span>
             </div>
           </div>
         </div>
@@ -223,24 +217,24 @@ export function ChannelDetail({
         {/* Live speed chart */}
         <div className="rounded-lg border border-[var(--proto-border)] overflow-hidden">
           <div className="px-3 py-2 flex items-center justify-between">
-            <h3 className="text-[length:var(--text-2xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
+            <h3 className="text-cq-2xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
               Live Speed
             </h3>
-            <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)]">(60s)</span>
+            <span className="text-cq-2xs text-[var(--proto-text-muted)]">(60s)</span>
           </div>
-          <canvas ref={canvasRef} className="w-full" style={{ height: 160, borderRadius: '0 0 8px 8px' }} />
+          <canvas ref={canvasRef} className="w-full h-40 rounded-b-lg" />
         </div>
 
         {/* Containing sections */}
         <div>
-          <h3 className="text-[length:var(--text-2xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-2">
+          <h3 className="text-cq-2xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-2">
             Sections
           </h3>
           {containingSections.length > 0 ? (
             <div className="flex flex-col gap-1.5">
               {containingSections.map(sec => {
                 const secFiber = findFiber(sec.fiberId, sec.direction)
-                const secColor = secFiber ? getFiberColor(secFiber, fiberColors) : '#888'
+                const secColor = secFiber ? getFiberColor(secFiber, fiberColors) : COLORS.fiber.default
                 return (
                   <button
                     key={sec.id}
@@ -248,10 +242,8 @@ export function ChannelDetail({
                     className="flex items-center gap-2.5 w-full text-left rounded-lg border border-[var(--proto-border)] px-3 py-2 hover:bg-[var(--proto-surface-raised)] transition-colors cursor-pointer"
                   >
                     <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: secColor }} />
-                    <span className="text-[length:var(--text-sm)] text-[var(--proto-text)] truncate flex-1">
-                      {sec.name}
-                    </span>
-                    <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] flex-shrink-0 px-1.5 py-0.5 rounded bg-[var(--proto-base)]">
+                    <span className="text-cq-sm text-[var(--proto-text)] truncate flex-1">{sec.name}</span>
+                    <span className="text-cq-2xs text-[var(--proto-text-muted)] flex-shrink-0 px-1.5 py-0.5 rounded bg-[var(--proto-base)]">
                       Ch {sec.startChannel}–{sec.endChannel}
                     </span>
                   </button>
@@ -259,9 +251,7 @@ export function ChannelDetail({
               })}
             </div>
           ) : (
-            <p className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)] italic">
-              No sections contain this channel
-            </p>
+            <p className="text-cq-xs text-[var(--proto-text-muted)] italic">No sections contain this channel</p>
           )}
         </div>
       </div>
