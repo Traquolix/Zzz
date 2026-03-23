@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useLayoutEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+import { COLORS } from '@/lib/theme'
 import { fibers, defaultSpeedThresholds, getFiberColor } from '../data'
 import type { Fiber, ProtoAction, SpeedThresholds } from '../types'
 import { FlowToggle } from './FlowToggle'
@@ -9,33 +10,6 @@ import { ThresholdEditor } from './ThresholdEditor'
 import type { DataFlow } from '@/context/RealtimeContext'
 
 // ── Settings panel ──────────────────────────────────────────────────────
-
-const FIBER_COLOR_PALETTE = [
-  '#6366f1',
-  '#818cf8',
-  '#8b5cf6',
-  '#a78bfa',
-  '#0ea5e9',
-  '#38bdf8',
-  '#06b6d4',
-  '#22d3ee',
-  '#10b981',
-  '#34d399',
-  '#22c55e',
-  '#4ade80',
-  '#f59e0b',
-  '#fbbf24',
-  '#f97316',
-  '#fb923c',
-  '#ef4444',
-  '#f87171',
-  '#ec4899',
-  '#f472b6',
-  '#64748b',
-  '#94a3b8',
-  '#e2e8f0',
-  '#ffffff',
-]
 
 function ColorPicker({
   current,
@@ -85,7 +59,7 @@ function ColorPicker({
   return createPortal(
     <div ref={ref} className="prototype" style={{ position: 'fixed', zIndex: 9999, top: pos.top, left: pos.left }}>
       <div className="p-2 rounded-lg bg-[var(--proto-surface-raised)] border border-[var(--proto-border)] shadow-xl grid grid-cols-6 gap-1.5">
-        {FIBER_COLOR_PALETTE.map(c => (
+        {COLORS.fiber.palette.map(c => (
           <button
             key={c}
             onClick={() => {

@@ -65,7 +65,7 @@ export function ComparisonOverlay({
         y1={padding.top}
         x2={padding.left}
         y2={height - padding.bottom}
-        stroke="rgba(255,255,255,0.08)"
+        stroke={COLORS.shmChart.axisStroke}
         strokeWidth={1}
       />
       {yTicks.map(tick => (
@@ -93,7 +93,7 @@ export function ComparisonOverlay({
             y1={yScale(tick)}
             x2={width - padding.right}
             y2={yScale(tick)}
-            stroke="rgba(255,255,255,0.03)"
+            stroke={COLORS.shmChart.gridLine}
             strokeWidth={1}
           />
         </g>
@@ -116,7 +116,7 @@ export function ComparisonOverlay({
         y1={height - padding.bottom}
         x2={width - padding.right}
         y2={height - padding.bottom}
-        stroke="rgba(255,255,255,0.08)"
+        stroke={COLORS.shmChart.axisStroke}
         strokeWidth={1}
       />
       <text x={padding.left} y={height - 4} textAnchor="start" fill={COLORS.shmChart.axisSecondary} fontSize="9">

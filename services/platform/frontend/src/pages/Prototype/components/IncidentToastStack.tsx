@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { severityColor } from '../data'
+import { severityColor } from '@/lib/theme'
 import type { IncidentToast } from '../hooks/useUnseenIncidents'
 
 interface Props {

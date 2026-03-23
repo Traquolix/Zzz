@@ -170,7 +170,7 @@ export function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
             y1={padding.top}
             x2={padding.left}
             y2={height - padding.bottom}
-            stroke="rgba(255,255,255,0.08)"
+            stroke={COLORS.shmChart.axisStroke}
             strokeWidth={1}
           />
           {yTicks.map(tick => (
@@ -213,7 +213,7 @@ export function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
             y1={height - padding.bottom}
             x2={width - padding.right}
             y2={height - padding.bottom}
-            stroke="rgba(255,255,255,0.08)"
+            stroke={COLORS.shmChart.axisStroke}
             strokeWidth={1}
           />
           {xTicks.map(tick => (
@@ -246,7 +246,7 @@ export function PeakScatterPlot({ data }: { data: PeakFrequencyData }) {
               y1={yScale(tick)}
               x2={width - padding.right}
               y2={yScale(tick)}
-              stroke="rgba(255,255,255,0.03)"
+              stroke={COLORS.shmChart.gridLine}
               strokeWidth={1}
             />
           ))}

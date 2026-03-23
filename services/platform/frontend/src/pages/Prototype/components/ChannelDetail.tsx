@@ -123,7 +123,7 @@ export function ChannelDetail({
 
       // Grid lines
       const maxSpeed = 140
-      ctx.strokeStyle = 'rgba(148, 163, 184, 0.1)'
+      ctx.strokeStyle = COLORS.shmChart.canvasGrid
       ctx.lineWidth = 1
       for (const spd of [0, 30, 60, 90, 120]) {
         const y = h - (spd / maxSpeed) * h
@@ -134,7 +134,7 @@ export function ChannelDetail({
       }
 
       // Y-axis labels
-      ctx.fillStyle = 'rgba(148, 163, 184, 0.4)'
+      ctx.fillStyle = COLORS.shmChart.canvasLabel
       ctx.font = '9px monospace'
       ctx.textAlign = 'left'
       for (const spd of [30, 60, 90, 120]) {
@@ -234,7 +234,7 @@ export function ChannelDetail({
             <div className="flex flex-col gap-1.5">
               {containingSections.map(sec => {
                 const secFiber = findFiber(sec.fiberId, sec.direction)
-                const secColor = secFiber ? getFiberColor(secFiber, fiberColors) : '#888'
+                const secColor = secFiber ? getFiberColor(secFiber, fiberColors) : COLORS.fiber.default
                 return (
                   <button
                     key={sec.id}

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import { severityColor } from '../data'
+import { severityColor } from '@/lib/theme'
 import { useIncidentSnapshot } from '@/hooks/useIncidentSnapshot'
 import type { ProtoIncident, ProtoAction, Severity, Section } from '../types'
 import { useRealtime } from '@/hooks/useRealtime'
