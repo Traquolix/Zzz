@@ -5,6 +5,7 @@ import { MapboxOverlay } from '@deck.gl/mapbox'
 import { SimpleMeshLayer } from '@deck.gl/mesh-layers'
 import { CubeGeometry } from '@luma.gl/engine'
 import { MAPBOX_TOKEN } from '@/config/mapbox'
+import { COLORS, shmStatusColors as shmStatusColorsMap } from '@/lib/theme'
 import {
   fibers,
   fiberOffsetCache,
@@ -303,7 +304,7 @@ export const PrototypeMap = memo(
         const sFiber = findFiber(structure.fiberId, structure.direction ?? 0)
         const coords = sFiber ? getSectionCoords(sFiber, structure.startChannel, structure.endChannel) : []
         if (coords.length < 2) return
-        const typeColor = structure.type === 'bridge' ? '#f59e0b' : '#6366f1'
+        const typeColor = COLORS.structure[structure.type as 'bridge' | 'tunnel']?.dot ?? COLORS.structure.bridge.dot
         const src = map.getSource('hover-highlight') as mapboxgl.GeoJSONSource | undefined
         src?.setData({
           type: 'FeatureCollection',
@@ -497,7 +498,7 @@ export const PrototypeMap = memo(
           type: 'line',
           source: 'pending-section',
           paint: {
-            'line-color': '#f59e0b',
+            'line-color': COLORS.structure.bridge.dot,
             'line-width': 4,
             'line-opacity': 0.6,
             'line-dasharray': [2, 2],
@@ -516,7 +517,7 @@ export const PrototypeMap = memo(
           source: 'pending-point',
           paint: {
             'circle-radius': 6,
-            'circle-color': '#f59e0b',
+            'circle-color': COLORS.structure.bridge.dot,
             'circle-stroke-color': '#fff',
             'circle-stroke-width': 2,
           },
@@ -1120,7 +1121,7 @@ export const PrototypeMap = memo(
             const sFiber = findFiber(s.fiberId, s.direction ?? 0)
             const coords = sFiber ? getSectionCoords(sFiber, s.startChannel, s.endChannel) : []
             if (coords.length < 2) return null
-            const color = s.type === 'bridge' ? '#f59e0b' : '#6366f1'
+            const color = COLORS.structure[s.type as 'bridge' | 'tunnel']?.dot ?? COLORS.structure.bridge.dot
             return {
               type: 'Feature' as const,
               properties: { color, id: s.id },
@@ -1150,7 +1151,7 @@ export const PrototypeMap = memo(
 
       if (!showStructureLabels || !structures?.length) return
 
-      const shmStatusColors: Record<string, string> = { nominal: '#22c55e', warning: '#f59e0b', critical: '#ef4444' }
+      const shmStatusColors = shmStatusColorsMap
 
       for (const s of structures) {
         const sFiber = findFiber(s.fiberId, s.direction ?? 0)
@@ -1159,7 +1160,7 @@ export const PrototypeMap = memo(
         if (!coord) continue
 
         const status = structureStatuses?.get(s.id)
-        const statusDotColor = status ? (shmStatusColors[status.status] ?? '#64748b') : '#64748b'
+        const statusDotColor = status ? (shmStatusColors[status.status] ?? COLORS.shmChart.axis) : COLORS.shmChart.axis
         const isSelected = selectedStructureId === s.id
 
         const imageHtml = s.imageUrl

@@ -1,4 +1,5 @@
 import { useState, type RefObject } from 'react'
+import { COLORS } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { fibers } from '../data'
 import { useWaterfallBuffer } from '../hooks/useWaterfallBuffer'
@@ -28,7 +29,7 @@ export function WaterfallPanel() {
         <select
           value={selectedIndex}
           onChange={e => setSelectedIndex(Number(e.target.value))}
-          className="text-[length:var(--text-xs)] px-2 py-1 rounded bg-[var(--proto-base)] border border-[var(--proto-border)] text-[var(--proto-text)] outline-none"
+          className="text-cq-xs px-2 py-1 rounded bg-[var(--proto-base)] border border-[var(--proto-border)] text-[var(--proto-text)] outline-none"
         >
           {fibers.map((f, i) => (
             <option key={f.id} value={i}>
@@ -42,7 +43,7 @@ export function WaterfallPanel() {
               key={ms}
               onClick={() => setWindowMs(ms)}
               className={cn(
-                'text-[length:var(--text-xs)] px-2 py-1 transition-colors cursor-pointer',
+                'text-cq-xs px-2 py-1 transition-colors cursor-pointer',
                 windowMs === ms
                   ? 'bg-[var(--proto-accent)] text-white'
                   : 'bg-[var(--proto-base)] text-[var(--proto-text-muted)] hover:text-[var(--proto-text)]',
@@ -69,19 +70,19 @@ export function WaterfallPanel() {
 
       {/* Speed color legend */}
       <div className="flex items-center gap-3 px-4 py-2 border-t border-[var(--proto-border)]">
-        <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)]">Speed:</span>
+        <span className="text-cq-2xs text-[var(--proto-text-muted)]">Speed:</span>
         {[
-          { color: '#22c55e', label: '≥80' },
-          { color: '#eab308', label: '≥60' },
-          { color: '#f97316', label: '≥30' },
-          { color: '#ef4444', label: '<30' },
+          { color: COLORS.speed.fast, label: '≥80' },
+          { color: COLORS.speed.normal, label: '≥60' },
+          { color: COLORS.speed.slow, label: '≥30' },
+          { color: COLORS.speed.stopped, label: '<30' },
         ].map(({ color, label }) => (
           <div key={label} className="flex items-center gap-1">
             <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: color }} />
-            <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)]">{label}</span>
+            <span className="text-cq-2xs text-[var(--proto-text-muted)]">{label}</span>
           </div>
         ))}
-        <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] ml-auto">km/h</span>
+        <span className="text-cq-2xs text-[var(--proto-text-muted)] ml-auto">km/h</span>
       </div>
     </div>
   )

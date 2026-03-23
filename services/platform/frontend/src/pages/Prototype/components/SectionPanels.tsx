@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { chartColors, findFiber, getSpeedColor, getFiberColor } from '../data'
+import { COLORS } from '@/lib/theme'
 import type { ProtoAction, Section, LiveSectionStats, SectionDataPoint, MetricKey } from '../types'
 import { TimeSeriesChart } from './TimeSeriesChart'
 import { Sparkline } from './Sparkline'
@@ -25,7 +26,7 @@ export function TrendBadge({ pct, positiveIsGood }: { pct: number; positiveIsGoo
   const isUp = pct > 0
   const isGood = positiveIsGood ? isUp : !isUp
   return (
-    <span className={cn('text-[length:var(--text-2xs)] ml-1', isGood ? 'text-green-400' : 'text-red-400')}>
+    <span className={cn('text-cq-2xs ml-1', isGood ? 'text-green-400' : 'text-red-400')}>
       {isUp ? '\u2191' : '\u2193'}
       {Math.abs(pct)}%
     </span>
@@ -68,11 +69,11 @@ export function SectionList({
   return (
     <>
       {sections.length === 0 ? (
-        <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-[length:var(--text-sm)]">
+        <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-cq-sm">
           {t('traffic.empty.noSections')}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-[length:var(--text-sm)]">
+        <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-cq-sm">
           {t('sections.noMatchingSections')}
         </div>
       ) : (
@@ -113,11 +114,9 @@ export function SectionList({
                       className="shrink-0 w-2 h-2 rounded-full"
                       style={{ backgroundColor: fiber ? getFiberColor(fiber, fiberColors) : undefined }}
                     />
-                    <span className="text-[length:var(--text-sm)] text-[var(--proto-text)] font-medium truncate">
-                      {section.name}
-                    </span>
+                    <span className="text-cq-sm text-[var(--proto-text)] font-medium truncate">{section.name}</span>
                   </div>
-                  <div className="flex items-center justify-between text-[length:var(--text-xs)] text-[var(--proto-text-secondary)] pl-4">
+                  <div className="flex items-center justify-between text-cq-xs text-[var(--proto-text-secondary)] pl-4">
                     <span>
                       <span
                         style={{
@@ -144,7 +143,7 @@ export function SectionList({
                     e.stopPropagation()
                     dispatch({ type: 'DELETE_SECTION', id: section.id })
                   }}
-                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-[var(--proto-text-muted)] hover:text-[var(--proto-red)] transition-all text-[length:var(--text-xs)] cursor-pointer px-1"
+                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-[var(--proto-text-muted)] hover:text-[var(--proto-red)] transition-all text-cq-xs cursor-pointer px-1"
                 >
                   &times;
                 </button>
@@ -176,7 +175,7 @@ export function SectionDetail({
 }) {
   const { t } = useTranslation()
   const fiber = findFiber(section.fiberId, section.direction)
-  const fiberColor = fiber ? getFiberColor(fiber, fiberColors) : '#6366f1'
+  const fiberColor = fiber ? getFiberColor(fiber, fiberColors) : COLORS.chart.speed
 
   const [timeRange, setTimeRange] = useState<TimeRange>('1m')
 
@@ -208,7 +207,7 @@ export function SectionDetail({
       value: `${displaySpeed}`,
       unit: 'km/h',
       trend: speedSpark,
-      color: '#6366f1',
+      color: COLORS.chart.speed,
       trendPct: speedTrend.pct,
       positiveIsGood: true,
     },
@@ -217,7 +216,7 @@ export function SectionDetail({
       value: `${displayFlow}`,
       unit: 'veh/h',
       trend: flowSpark,
-      color: '#8b5cf6',
+      color: COLORS.chart.flow,
       trendPct: flowTrend.pct,
       positiveIsGood: true,
     },
@@ -226,7 +225,7 @@ export function SectionDetail({
       value: `${displayOccupancy}`,
       unit: '%',
       trend: occupancySpark,
-      color: '#0ea5e9',
+      color: COLORS.chart.occupancy,
     },
     { label: t('sections.kpi.travelTime'), value: `${displayTravelTime}`, unit: 'min', color: fiberColor },
   ]
@@ -249,16 +248,14 @@ export function SectionDetail({
       <div className="sticky top-0 z-10 bg-[var(--proto-surface)] border-b border-[var(--proto-border)] px-4 py-3 flex items-center gap-3">
         <button
           onClick={onBack}
-          className="text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors text-[length:var(--text-sm)] cursor-pointer"
+          className="text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors text-cq-sm cursor-pointer"
         >
           &larr; {t('common.back')}
         </button>
         <div className="min-w-0">
-          <span className="text-[length:var(--text-sm)] font-semibold text-[var(--proto-text)] truncate block">
-            {section.name}
-          </span>
+          <span className="text-cq-sm font-semibold text-[var(--proto-text)] truncate block">{section.name}</span>
           {fiber && (
-            <span className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] flex items-center gap-1.5">
+            <span className="text-cq-2xs text-[var(--proto-text-muted)] flex items-center gap-1.5">
               <span
                 className="inline-block w-2 h-2 rounded-full flex-shrink-0"
                 style={{ backgroundColor: fiberColor }}
@@ -275,7 +272,7 @@ export function SectionDetail({
         <div className="grid grid-cols-2 gap-3">
           {kpis.map(kpi => (
             <div key={kpi.label} className="rounded-lg border border-[var(--proto-border)] p-3">
-              <div className="text-[length:var(--text-2xs)] text-[var(--proto-text-muted)] uppercase tracking-wider mb-1">
+              <div className="text-cq-2xs text-[var(--proto-text-muted)] uppercase tracking-wider mb-1">
                 {kpi.label}
                 {kpi.trendPct !== undefined && (
                   <TrendBadge pct={kpi.trendPct} positiveIsGood={kpi.positiveIsGood ?? true} />
@@ -283,10 +280,8 @@ export function SectionDetail({
               </div>
               <div className="flex items-end justify-between">
                 <div>
-                  <span className="text-[length:var(--text-xl)] font-semibold text-[var(--proto-text)]">
-                    {kpi.value}
-                  </span>
-                  <span className="text-[length:var(--text-xs)] text-[var(--proto-text-muted)] ml-1">{kpi.unit}</span>
+                  <span className="text-cq-xl font-semibold text-[var(--proto-text)]">{kpi.value}</span>
+                  <span className="text-cq-xs text-[var(--proto-text-muted)] ml-1">{kpi.unit}</span>
                 </div>
                 {kpi.trend && <Sparkline data={kpi.trend} color={kpi.color} width={48} height={20} />}
               </div>
@@ -297,7 +292,7 @@ export function SectionDetail({
         {/* Time series chart */}
         <div className="border-t border-[var(--proto-border)] pt-3">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-[length:var(--text-xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
+            <h3 className="text-cq-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
               {t('sections.timeSeries')}
             </h3>
             <div className="flex gap-1">
@@ -306,7 +301,7 @@ export function SectionDetail({
                   key={r}
                   onClick={() => setTimeRange(r)}
                   className={cn(
-                    'px-2 py-0.5 rounded text-[length:var(--text-2xs)] transition-colors cursor-pointer',
+                    'px-2 py-0.5 rounded text-cq-2xs transition-colors cursor-pointer',
                     timeRange === r
                       ? 'bg-[var(--proto-accent)] text-white'
                       : 'bg-[var(--proto-surface)] text-[var(--proto-text-muted)] hover:text-[var(--proto-text)]',
@@ -328,11 +323,11 @@ export function SectionDetail({
         <div
           className={`border-t border-[var(--proto-border)] pt-3 ${historyStale ? 'opacity-50 transition-opacity duration-200' : 'transition-opacity duration-200'}`}
         >
-          <h3 className="text-[length:var(--text-xs)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
+          <h3 className="text-cq-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
             {t('sections.recentData')}
           </h3>
           <div className="overflow-x-auto">
-            <table className="w-full text-[length:var(--text-xs)]">
+            <table className="w-full text-cq-xs">
               <thead>
                 <tr className="text-[var(--proto-text-muted)] border-b border-[var(--proto-border)]">
                   <th className="text-left py-1.5 pr-3 font-medium">{t('sections.table.time')}</th>

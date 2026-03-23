@@ -58,12 +58,10 @@ const panelFallback = (retry: () => void) => (
     >
       <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
     </svg>
-    <span className="text-[length:var(--text-sm)] text-[var(--proto-text-muted)]">
-      {i18next.t('common.somethingWentWrong')}
-    </span>
+    <span className="text-cq-sm text-[var(--proto-text-muted)]">{i18next.t('common.somethingWentWrong')}</span>
     <button
       onClick={retry}
-      className="px-3 py-1.5 rounded text-[length:var(--text-xs)] font-medium text-[var(--proto-text-secondary)] bg-[var(--proto-surface-raised)] hover:text-[var(--proto-text)] transition-colors cursor-pointer"
+      className="px-3 py-1.5 rounded text-cq-xs font-medium text-[var(--proto-text-secondary)] bg-[var(--proto-surface-raised)] hover:text-[var(--proto-text)] transition-colors cursor-pointer"
     >
       {i18next.t('common.tryAgain')}
     </button>
@@ -230,7 +228,7 @@ export function SidePanel({
         {/* Panel header */}
         <div className="flex items-center justify-between px-4 h-[52px] shrink-0 border-b border-[var(--proto-border)]">
           <div className="flex items-center gap-3">
-            <span className="text-[length:var(--text-sm)] font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
+            <span className="text-cq-sm font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
               {activeTab === 'dataHub'
                 ? t('userMenu.dataHub')
                 : activeTab === 'shm'
@@ -246,7 +244,7 @@ export function SidePanel({
                       setDataHubSubTab(tab)
                       if (tab !== 'apiKeys') setShowCreateKey(false)
                     }}
-                    className={`relative px-2 py-1 text-[length:var(--text-xxs)] font-medium transition-colors cursor-pointer rounded ${
+                    className={`relative px-2 py-1 text-cq-xxs font-medium transition-colors cursor-pointer rounded ${
                       dataHubSubTab === tab
                         ? 'text-[var(--proto-text)] bg-[var(--proto-surface-raised)]'
                         : 'text-[var(--proto-text-muted)] hover:text-[var(--proto-text-secondary)]'
