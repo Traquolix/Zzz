@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { severityColor } from '../data'
 import { useIncidentSnapshot } from '@/hooks/useIncidentSnapshot'
@@ -29,6 +30,7 @@ export function IncidentList({
   unseenIds?: Set<string>
   onMarkSeen?: (id: string) => void
 }) {
+  const { t } = useTranslation()
   let filtered = filterSeverity ? incidents.filter(i => i.severity === filterSeverity) : incidents
   if (hideResolved) filtered = filtered.filter(i => !i.resolved)
 
@@ -42,7 +44,7 @@ export function IncidentList({
     <>
       {sorted.length === 0 ? (
         <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-cq-sm">
-          No incidents match this filter
+          {t('incidents.noMatchingFilter')}
         </div>
       ) : (
         <div className="flex flex-col px-3 py-1">
@@ -82,7 +84,7 @@ export function IncidentList({
                     {inc.resolved && (
                       <>
                         <span className="opacity-40">·</span>
-                        <span className="text-[var(--proto-green)]">resolved</span>
+                        <span className="text-[var(--proto-green)]">{t('incidents.resolved').toLowerCase()}</span>
                       </>
                     )}
                   </div>
@@ -109,6 +111,7 @@ export function IncidentDetail({
   dispatch: React.Dispatch<ProtoAction>
   onBack: () => void
 }) {
+  const { t } = useTranslation()
   const { flow } = useRealtime()
 
   // Find containing section by channel range
@@ -137,7 +140,7 @@ export function IncidentDetail({
           onClick={onBack}
           className="text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors text-cq-sm cursor-pointer"
         >
-          &larr; Back
+          &larr; {t('common.back')}
         </button>
         <span className="text-cq-sm font-semibold text-[var(--proto-text)] truncate">{incident.title}</span>
         <span
@@ -154,7 +157,9 @@ export function IncidentDetail({
           <div className="grid grid-cols-3 gap-2 pb-3 border-b border-[var(--proto-border)]">
             {incident.speedBefore != null && (
               <div className="rounded-lg border border-[var(--proto-border)] p-2.5">
-                <div className="text-cq-2xs text-[var(--proto-text-muted)] uppercase tracking-wider mb-0.5">Before</div>
+                <div className="text-cq-2xs text-[var(--proto-text-muted)] uppercase tracking-wider mb-0.5">
+                  {t('incidents.detail.before')}
+                </div>
                 <span className="text-cq-lg font-semibold text-[var(--proto-text)]">
                   {Math.round(incident.speedBefore)}
                 </span>
@@ -163,7 +168,9 @@ export function IncidentDetail({
             )}
             {incident.speedDuring != null && (
               <div className="rounded-lg border border-[var(--proto-border)] p-2.5">
-                <div className="text-cq-2xs text-[var(--proto-text-muted)] uppercase tracking-wider mb-0.5">During</div>
+                <div className="text-cq-2xs text-[var(--proto-text-muted)] uppercase tracking-wider mb-0.5">
+                  {t('incidents.detail.during')}
+                </div>
                 <span className="text-cq-lg font-semibold text-[var(--proto-red)]">
                   {Math.round(incident.speedDuring)}
                 </span>
@@ -172,7 +179,9 @@ export function IncidentDetail({
             )}
             {incident.speedDropPercent != null && (
               <div className="rounded-lg border border-[var(--proto-border)] p-2.5">
-                <div className="text-cq-2xs text-[var(--proto-text-muted)] uppercase tracking-wider mb-0.5">Drop</div>
+                <div className="text-cq-2xs text-[var(--proto-text-muted)] uppercase tracking-wider mb-0.5">
+                  {t('incidents.detail.drop')}
+                </div>
                 <span className="text-cq-lg font-semibold text-[var(--proto-red)]">
                   {Math.round(incident.speedDropPercent)}
                 </span>
@@ -200,7 +209,7 @@ export function IncidentDetail({
                   }}
                   className="px-2 py-1 rounded text-cq-xs text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors cursor-pointer"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={() => {
@@ -209,7 +218,7 @@ export function IncidentDetail({
                   }}
                   className="px-2 py-1 rounded text-cq-xs bg-[var(--proto-accent)] text-white cursor-pointer hover:opacity-80 transition-opacity"
                 >
-                  Save
+                  {t('common.save')}
                 </button>
               </div>
             </div>
@@ -220,29 +229,30 @@ export function IncidentDetail({
                 setDraft(incident.description)
                 setEditing(true)
               }}
-              title="Click to edit"
+              title={t('common.clickToEdit')}
             >
               {incident.description}
             </div>
           )}
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-cq-xs text-[var(--proto-text-secondary)]">
             <span>
-              Type: <span className="capitalize">{incident.type}</span>
+              {t('incidents.detail.type')} <span className="capitalize">{incident.type}</span>
             </span>
             <span>
-              Time: {new Date(incident.detectedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              {t('incidents.detail.time')}{' '}
+              {new Date(incident.detectedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
             <span>
-              Location: {incident.location[1].toFixed(4)}N, {incident.location[0].toFixed(4)}E
+              {t('incidents.detail.location')} {incident.location[1].toFixed(4)}N, {incident.location[0].toFixed(4)}E
             </span>
             <span>
-              Channel: {incident.channel}
+              {t('incidents.detail.channel')} {incident.channel}
               {incident.channelEnd != null && incident.channelEnd !== incident.channel ? `–${incident.channelEnd}` : ''}
             </span>
             <span>
-              Status:{' '}
+              {t('incidents.detail.status')}{' '}
               <span className={cn(incident.resolved ? 'text-[var(--proto-green)]' : 'text-[var(--proto-red)]')}>
-                {incident.resolved ? 'Resolved' : 'Active'}
+                {incident.resolved ? t('incidents.resolved') : t('incidents.ongoing')}
               </span>
             </span>
           </div>
@@ -251,7 +261,7 @@ export function IncidentDetail({
         {relatedSection && (
           <div className="pb-3 border-b border-[var(--proto-border)]">
             <h3 className="text-cq-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-2">
-              Affected Section
+              {t('incidents.detail.affectedSection')}
             </h3>
             <div className="text-cq-sm text-[var(--proto-text)] mb-1">{relatedSection.name}</div>
             <div className="flex gap-4 text-cq-xs text-[var(--proto-text-secondary)]">
@@ -267,14 +277,14 @@ export function IncidentDetail({
 
         <div>
           <h3 className="text-cq-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
-            Snapshot
+            {t('incidents.detail.snapshot')}
             {!snapshotComplete && !snapshotLoading && (
-              <span className="ml-2 text-[var(--proto-accent)] animate-pulse">collecting...</span>
+              <span className="ml-2 text-[var(--proto-accent)] animate-pulse">{t('incidents.detail.collecting')}</span>
             )}
           </h3>
           {snapshotLoading ? (
             <div className="h-[200px] rounded bg-[var(--proto-surface)] animate-pulse flex items-center justify-center">
-              <span className="text-cq-xs text-[var(--proto-text-muted)]">Loading snapshot...</span>
+              <span className="text-cq-xs text-[var(--proto-text-muted)]">{t('incidents.loadingSnapshot')}</span>
             </div>
           ) : snapshotData ? (
             <TimeSeriesChart
@@ -288,7 +298,7 @@ export function IncidentDetail({
             />
           ) : (
             <div className="text-cq-xs text-[var(--proto-text-muted)] italic py-4 text-center">
-              No snapshot data available
+              {t('common.noSnapshot')}
             </div>
           )}
         </div>

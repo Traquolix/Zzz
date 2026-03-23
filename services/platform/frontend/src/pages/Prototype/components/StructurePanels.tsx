@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 import { findFiber } from '../data'
@@ -34,10 +35,12 @@ function StructureList({
   onHighlightSection?: (sectionId: string) => void
   onClearHighlight?: () => void
 }) {
+  const { t } = useTranslation()
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-cq-sm">
-        <span className="animate-pulse">Loading structures...</span>
+        <span className="animate-pulse">{t('shm.loadingStructures')}</span>
       </div>
     )
   }
@@ -45,7 +48,7 @@ function StructureList({
   if (structures.length === 0) {
     return (
       <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-cq-sm">
-        No structures found
+        {t('shm.noInfrastructure')}
       </div>
     )
   }
@@ -64,7 +67,7 @@ function StructureList({
     <div className="flex flex-col px-3 py-1">
       {filtered.length === 0 ? (
         <div className="flex items-center justify-center h-24 text-[var(--proto-text-muted)] text-cq-sm">
-          No structures match "{search}"
+          {t('shm.noMatchingStructures', { search })}
         </div>
       ) : (
         filtered.map(structure => {
@@ -167,13 +170,14 @@ function StructureDetail({
   dataSummary: SpectralSummary | null
   onBack: () => void
 }) {
+  const { t } = useTranslation()
   const [comparisonStats, setComparisonStats] = useState<ComparisonStats | null>(null)
   const handleComparisonStats = useCallback((s: ComparisonStats | null) => setComparisonStats(s), [])
 
   if (!structure) {
     return (
       <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-cq-sm">
-        Structure not found
+        {t('shm.structureNotFound')}
       </div>
     )
   }
@@ -183,10 +187,10 @@ function StructureDetail({
   const statusColor = shmStatus ? (shmStatusColors[shmStatus.status] ?? shmStatusColors.nominal) : COLORS.shmChart.axis
 
   const kpis = [
-    { label: 'Peak Freq', value: shmStatus ? `${shmStatus.currentMean.toFixed(1)}` : '--', unit: 'Hz' },
-    { label: 'Baseline', value: shmStatus ? `${shmStatus.baselineMean.toFixed(1)}` : '--', unit: 'Hz' },
-    { label: 'Deviation', value: shmStatus ? `${shmStatus.deviationSigma.toFixed(2)}` : '--', unit: 'σ' },
-    { label: 'Status', value: shmStatus?.status ?? '--', unit: '', isStatus: true },
+    { label: t('shm.kpi.peakFreq'), value: shmStatus ? `${shmStatus.currentMean.toFixed(1)}` : '--', unit: 'Hz' },
+    { label: t('shm.kpi.baseline'), value: shmStatus ? `${shmStatus.baselineMean.toFixed(1)}` : '--', unit: 'Hz' },
+    { label: t('shm.kpi.deviation'), value: shmStatus ? `${shmStatus.deviationSigma.toFixed(2)}` : '--', unit: 'σ' },
+    { label: t('shm.kpi.status'), value: shmStatus?.status ?? '--', unit: '', isStatus: true },
   ]
 
   return (
@@ -197,7 +201,7 @@ function StructureDetail({
           onClick={onBack}
           className="text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors text-cq-sm cursor-pointer"
         >
-          &larr; Back
+          &larr; {t('common.back')}
         </button>
         <div className="min-w-0">
           <span className="text-cq-sm font-semibold text-[var(--proto-text)] truncate block">{structure.name}</span>
@@ -284,10 +288,14 @@ function StructureDetail({
                       ({comparisonStats.diffPercent > 0 ? '+' : ''}
                       {comparisonStats.diffPercent.toFixed(2)}%)
                     </span>
-                    <span className="text-cq-2xs text-[var(--proto-text-muted)]">vs previous period</span>
+                    <span className="text-cq-2xs text-[var(--proto-text-muted)]">
+                      {t('shm.comparison.vsPreviousPeriod')}
+                    </span>
                   </div>
                 </div>
-                <div className="text-cq-2xs text-[var(--proto-text-muted)] uppercase tracking-wider">Freq Shift</div>
+                <div className="text-cq-2xs text-[var(--proto-text-muted)] uppercase tracking-wider">
+                  {t('shm.comparison.freqShift')}
+                </div>
               </div>
             )
           })()}
@@ -295,7 +303,7 @@ function StructureDetail({
         {/* Spectral Heatmap */}
         <div className="border-t border-[var(--proto-border)] pt-3">
           <h3 className="text-cq-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
-            Spectral Heatmap
+            {t('shm.spectralHeatmap')}
           </h3>
           <div className="rounded-lg bg-[var(--proto-surface-raised)] border border-[var(--proto-border)] p-2">
             {spectralLoading ? (
@@ -304,7 +312,7 @@ function StructureDetail({
               <SpectralHeatmapCanvas data={spectralData} />
             ) : (
               <div className="h-[200px] flex items-center justify-center text-cq-xs text-[var(--proto-text-muted)]">
-                No spectral data
+                {t('shm.noSpectralData')}
               </div>
             )}
           </div>
@@ -313,7 +321,7 @@ function StructureDetail({
         {/* Peak Scatter */}
         <div className="border-t border-[var(--proto-border)] pt-3">
           <h3 className="text-cq-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
-            Peak Frequencies
+            {t('shm.peakFrequencies')}
           </h3>
           <div className="rounded-lg bg-[var(--proto-surface-raised)] border border-[var(--proto-border)] p-2">
             {peakLoading ? (
@@ -322,7 +330,7 @@ function StructureDetail({
               <PeakScatterPlot data={peakData} />
             ) : (
               <div className="h-[170px] flex items-center justify-center text-cq-xs text-[var(--proto-text-muted)]">
-                No peak data
+                {t('shm.noPeakData')}
               </div>
             )}
           </div>
@@ -356,6 +364,7 @@ function ComparisonSection({
   dataSummary: SpectralSummary | null
   onStats?: (stats: ComparisonStats | null) => void
 }) {
+  const { t } = useTranslation()
   const containerRef = useRef<HTMLDivElement>(null)
   const { width: rawChartWidth, transitioning: chartTransitioning } = useDebouncedResize(containerRef)
   const chartWidth = Math.max(160, rawChartWidth)
@@ -451,7 +460,9 @@ function ComparisonSection({
     <div>
       {/* Header row */}
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-cq-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">Comparison</h3>
+        <h3 className="text-cq-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
+          {t('shm.comparison.title')}
+        </h3>
         <div className="flex items-center gap-2">
           {/* Mode selector */}
           <select
@@ -459,8 +470,8 @@ function ComparisonSection({
             onChange={e => setMode(e.target.value as ComparisonMode)}
             className="text-cq-2xs bg-[var(--proto-surface-raised)] text-[var(--proto-text-secondary)] border border-[var(--proto-border)] rounded px-1.5 py-0.5 cursor-pointer"
           >
-            <option value="day">Day / Day</option>
-            <option value="week">Week / Week</option>
+            <option value="day">{t('shm.comparison.dayOverDay')}</option>
+            <option value="week">{t('shm.comparison.weekOverWeek')}</option>
           </select>
           {/* Focus toggle */}
           <div className="flex items-center bg-[var(--proto-surface-raised)] rounded p-0.5 border border-[var(--proto-border)]">

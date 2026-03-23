@@ -222,7 +222,7 @@ export function ChannelDetail({
             </h3>
             <span className="text-cq-2xs text-[var(--proto-text-muted)]">(60s)</span>
           </div>
-          <canvas ref={canvasRef} className="w-full" style={{ height: 160, borderRadius: '0 0 8px 8px' }} />
+          <canvas ref={canvasRef} className="w-full h-40 rounded-b-lg" />
         </div>
 
         {/* Containing sections */}

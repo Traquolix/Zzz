@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { chartColors, findFiber, getSpeedColor, getFiberColor } from '../data'
 import { COLORS } from '@/lib/theme'
@@ -58,6 +59,7 @@ export function SectionList({
   onClearHighlight?: () => void
   search?: string
 }) {
+  const { t } = useTranslation()
   const metricConfig = chartColors[metric]
   const query = search?.trim().toLowerCase() ?? ''
   const filtered = query
@@ -68,11 +70,11 @@ export function SectionList({
     <>
       {sections.length === 0 ? (
         <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-cq-sm">
-          No sections yet
+          {t('traffic.empty.noSections')}
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex items-center justify-center h-32 text-[var(--proto-text-muted)] text-cq-sm">
-          No matching sections
+          {t('sections.noMatchingSections')}
         </div>
       ) : (
         <div className="flex flex-col px-3 py-1">
@@ -171,6 +173,7 @@ export function SectionDetail({
   dispatch: React.Dispatch<ProtoAction>
   fiberColors: Record<string, string>
 }) {
+  const { t } = useTranslation()
   const fiber = findFiber(section.fiberId, section.direction)
   const fiberColor = fiber ? getFiberColor(fiber, fiberColors) : COLORS.chart.speed
 
@@ -200,7 +203,7 @@ export function SectionDetail({
 
   const kpis = [
     {
-      label: 'Avg Speed',
+      label: t('sections.kpi.avgSpeed'),
       value: `${displaySpeed}`,
       unit: 'km/h',
       trend: speedSpark,
@@ -209,7 +212,7 @@ export function SectionDetail({
       positiveIsGood: true,
     },
     {
-      label: 'Flow',
+      label: t('sections.kpi.flow'),
       value: `${displayFlow}`,
       unit: 'veh/h',
       trend: flowSpark,
@@ -218,13 +221,13 @@ export function SectionDetail({
       positiveIsGood: true,
     },
     {
-      label: 'Occupancy',
+      label: t('sections.kpi.occupancy'),
       value: `${displayOccupancy}`,
       unit: '%',
       trend: occupancySpark,
       color: COLORS.chart.occupancy,
     },
-    { label: 'Travel Time', value: `${displayTravelTime}`, unit: 'min', color: fiberColor },
+    { label: t('sections.kpi.travelTime'), value: `${displayTravelTime}`, unit: 'min', color: fiberColor },
   ]
 
   const chartData = historySeries.map(p => ({
@@ -247,7 +250,7 @@ export function SectionDetail({
           onClick={onBack}
           className="text-[var(--proto-text-muted)] hover:text-[var(--proto-text)] transition-colors text-cq-sm cursor-pointer"
         >
-          &larr; Back
+          &larr; {t('common.back')}
         </button>
         <div className="min-w-0">
           <span className="text-cq-sm font-semibold text-[var(--proto-text)] truncate block">{section.name}</span>
@@ -290,7 +293,7 @@ export function SectionDetail({
         <div className="border-t border-[var(--proto-border)] pt-3">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-cq-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider">
-              Time Series
+              {t('sections.timeSeries')}
             </h3>
             <div className="flex gap-1">
               {(['1m', '5m', '15m', '1h'] as TimeRange[]).map(r => (
@@ -321,16 +324,16 @@ export function SectionDetail({
           className={`border-t border-[var(--proto-border)] pt-3 ${historyStale ? 'opacity-50 transition-opacity duration-200' : 'transition-opacity duration-200'}`}
         >
           <h3 className="text-cq-xs font-medium text-[var(--proto-text-muted)] uppercase tracking-wider mb-3">
-            Recent Data
+            {t('sections.recentData')}
           </h3>
           <div className="overflow-x-auto">
             <table className="w-full text-cq-xs">
               <thead>
                 <tr className="text-[var(--proto-text-muted)] border-b border-[var(--proto-border)]">
-                  <th className="text-left py-1.5 pr-3 font-medium">Time</th>
-                  <th className="text-right py-1.5 px-3 font-medium">Speed</th>
-                  <th className="text-right py-1.5 px-3 font-medium">Flow</th>
-                  <th className="text-right py-1.5 pl-3 font-medium">Occ.</th>
+                  <th className="text-left py-1.5 pr-3 font-medium">{t('sections.table.time')}</th>
+                  <th className="text-right py-1.5 px-3 font-medium">{t('sections.table.speed')}</th>
+                  <th className="text-right py-1.5 px-3 font-medium">{t('sections.table.flow')}</th>
+                  <th className="text-right py-1.5 pl-3 font-medium">{t('sections.table.occupancy')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -352,7 +355,7 @@ export function SectionDetail({
         {/* Speed thresholds editor */}
         <ThresholdEditor
           thresholds={section.speedThresholds}
-          onChange={t => dispatch({ type: 'UPDATE_SECTION_THRESHOLDS', id: section.id, thresholds: t })}
+          onChange={th => dispatch({ type: 'UPDATE_SECTION_THRESHOLDS', id: section.id, thresholds: th })}
         />
       </div>
     </div>
