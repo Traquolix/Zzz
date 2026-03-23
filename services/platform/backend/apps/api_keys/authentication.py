@@ -11,6 +11,7 @@ from typing import Any
 
 from django.db.models import F
 from django.utils import timezone
+from drf_spectacular.extensions import OpenApiAuthenticationExtension
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.request import Request
@@ -18,6 +19,16 @@ from rest_framework.request import Request
 from apps.api_keys.models import APIKey
 
 logger = logging.getLogger("sequoia.api_keys")
+
+
+class APIKeyAuthenticationScheme(OpenApiAuthenticationExtension):
+    """Tell drf-spectacular how to document APIKeyAuthentication in the OpenAPI schema."""
+
+    target_class = "apps.api_keys.authentication.APIKeyAuthentication"
+    name = "apiKeyAuth"
+
+    def get_security_definition(self, auto_schema: Any) -> dict[str, Any]:
+        return {"type": "apiKey", "in": "header", "name": "X-API-Key"}
 
 
 class APIKeyAuthentication(BaseAuthentication):
