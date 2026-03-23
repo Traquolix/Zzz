@@ -385,6 +385,13 @@
       "forward": "Avant",
       "backward": "Arriere"
     },
+    "legend": {
+      "overview": "Vue d'ensemble",
+      "showFibers": "Afficher les fibres",
+      "hideFibers": "Masquer les fibres",
+      "dots": "Points",
+      "3d": "3D"
+    },
     "landmark": {
       "selectedTitle": "Point de repere selectionne",
       "deleteLabel": "Supprimer le repere",

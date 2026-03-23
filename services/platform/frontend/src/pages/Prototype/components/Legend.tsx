@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useSidebarWidth } from '../hooks/useSidebarWidth'
 import { EyeIcon, EyeOffIcon } from './SidebarIcons'
 
@@ -23,6 +24,7 @@ export function Legend({
   hideFibersInOverview,
   onToggleHideFibers,
 }: LegendProps) {
+  const { t } = useTranslation()
   const sidebarWidth = useSidebarWidth()
   const right = sidebarOpen && sidebarWidth > 0 ? `${sidebarWidth + 12}px` : `${TAB_BAR_OFFSET}px`
 
@@ -57,11 +59,13 @@ export function Legend({
             onClick={onToggleHideFibers}
             className="cursor-pointer flex items-center justify-center transition-colors"
             style={{ color: hideFibersInOverview ? 'var(--proto-text-muted)' : 'var(--proto-text)' }}
-            title={hideFibersInOverview ? 'Show fibers' : 'Hide fibers'}
+            title={hideFibersInOverview ? t('map.legend.showFibers') : t('map.legend.hideFibers')}
           >
             {hideFibersInOverview ? <EyeOffIcon /> : <EyeIcon />}
           </button>
-          <span className="text-[10px] font-medium uppercase tracking-wider text-[var(--proto-text)]">Overview</span>
+          <span className="text-[10px] font-medium uppercase tracking-wider text-[var(--proto-text)]">
+            {t('map.legend.overview')}
+          </span>
         </div>
       ) : (
         <div className="flex items-center w-full h-full p-0.5 gap-0.5">
@@ -74,7 +78,7 @@ export function Legend({
             }`}
           >
             <DotsIcon />
-            Dots
+            {t('map.legend.dots')}
           </button>
           <button
             onClick={() => displayMode !== 'vehicles' && onToggleDisplayMode()}
@@ -85,7 +89,7 @@ export function Legend({
             }`}
           >
             <CubeIcon />
-            3D
+            {t('map.legend.3d')}
           </button>
         </div>
       )}
