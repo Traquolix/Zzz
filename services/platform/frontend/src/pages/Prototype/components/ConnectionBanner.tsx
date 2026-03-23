@@ -49,7 +49,7 @@ export function ConnectionBanner() {
 
   return (
     <div
-      className="absolute top-0 left-0 right-0 z-50 flex items-center justify-center gap-2 py-1.5 text-cq-xs font-medium"
+      className="absolute top-0 left-0 right-0 z-50 flex items-center justify-center gap-2 py-3 text-cq-xs font-medium pointer-events-none"
       style={{
         background: `linear-gradient(135deg, color-mix(in srgb, ${color} 15%, transparent), color-mix(in srgb, ${color} 8%, transparent))`,
         borderBottom: `1px solid color-mix(in srgb, ${color} 25%, transparent)`,
@@ -67,7 +67,11 @@ export function ConnectionBanner() {
       )}
       <span>{message}</span>
       {showLogin && (
-        <a href="/login" className="underline underline-offset-2 hover:brightness-125 transition-all" style={{ color }}>
+        <a
+          href="/login"
+          className="underline underline-offset-2 hover:brightness-125 transition-all pointer-events-auto"
+          style={{ color }}
+        >
           {t('connection.reLogin')}
         </a>
       )}
