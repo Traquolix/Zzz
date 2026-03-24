@@ -2,22 +2,13 @@ import { useEffect, useRef } from 'react'
 import mapboxgl from 'mapbox-gl'
 import { COLORS, severityColor } from '@/lib/theme'
 import type { ProtoIncident } from '../../types'
-import type { PendingPoint } from '../../types'
-
-interface Handlers {
-  onIncidentClick?: (id: string) => void
-  onMapClick?: () => void
-  onFiberClick?: (point: PendingPoint) => void
-  onSectionComplete?: (fiberId: string, direction: 0 | 1, startChannel: number, endChannel: number) => void
-  onOverviewChange?: (isOverview: boolean) => void
-  onChannelClick?: (point: PendingPoint) => void
-}
+import type { MapHandlers } from './mapTypes'
 
 interface UseIncidentMarkersParams {
   mapRef: React.RefObject<mapboxgl.Map | null>
   incidents?: ProtoIncident[]
   incidentClickedRef: React.MutableRefObject<boolean>
-  handlersRef: React.RefObject<Handlers>
+  handlersRef: React.RefObject<MapHandlers>
 }
 
 export function useIncidentMarkers({ mapRef, incidents, incidentClickedRef, handlersRef }: UseIncidentMarkersParams) {

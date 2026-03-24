@@ -8,6 +8,7 @@ import { useMapLayers } from './hooks/useMapLayers'
 import { useMapHighlights } from './hooks/useMapHighlights'
 import { useIncidentMarkers } from './hooks/useIncidentMarkers'
 import { useStructureMarkers } from './hooks/useStructureMarkers'
+import { useVehiclePopup } from './hooks/useVehiclePopup'
 import { useRenderLoop } from './hooks/useRenderLoop'
 import { useMapInteractions } from './hooks/useMapInteractions'
 import { useMapToggles } from './hooks/useMapToggles'
@@ -151,7 +152,7 @@ export const PrototypeMap = memo(
     const onStructureClickRef = useRef(onStructureClick)
     onStructureClickRef.current = onStructureClick
 
-    // ── Hooks ──
+    // ── Hooks (order matters: layers must register before render loop) ──
     const { containerRef, mapRef } = useMapInstance()
     useMapLayers(mapRef)
 
@@ -180,7 +181,9 @@ export const PrototypeMap = memo(
       sidebarOpenRef,
     })
 
-    const { dismissVehiclePopupRef, vehicleClickedRef, deckOverlayRef } = useRenderLoop({
+    const vehiclePopup = useVehiclePopup({ mapRef, thresholdLookupRef })
+
+    const { vehicleClickedRef, deckOverlayRef } = useRenderLoop({
       mapRef,
       overviewRef,
       displayModeRef,
@@ -190,6 +193,7 @@ export const PrototypeMap = memo(
       sectionsRef,
       sectionFibersRef,
       thresholdLookupRef,
+      vehiclePopup,
     })
 
     useMapInteractions({
@@ -202,7 +206,7 @@ export const PrototypeMap = memo(
       overviewRef,
       hideFibersRef,
       deckOverlayRef,
-      dismissVehiclePopupRef,
+      dismissVehiclePopup: vehiclePopup.dismiss,
     })
 
     useMapToggles({

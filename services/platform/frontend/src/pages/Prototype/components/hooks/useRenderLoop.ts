@@ -1,17 +1,15 @@
 import { useEffect, useRef } from 'react'
-import mapboxgl from 'mapbox-gl'
+import type { Map as MapboxMap, IControl, GeoJSONSource } from 'mapbox-gl'
 import { MapboxOverlay } from '@deck.gl/mapbox'
 import { SimpleMeshLayer } from '@deck.gl/mesh-layers'
 import { CubeGeometry } from '@luma.gl/engine'
-import { findFiber, getSpeedColor, getSectionCoords, getSpeedColorRGBA } from '../../data'
+import { getSpeedColor, getSectionCoords, getSpeedColorRGBA } from '../../data'
 import type { Fiber, Section, LiveSectionStats, SpeedThresholds } from '../../types'
 import type { VehiclePosition } from '../../hooks/useVehicleSim'
-import { getPosition, getOrientation, getScale } from '../mapUtils'
-import { onMapReady } from '../mapUtils'
-import i18n from '@/i18n'
+import { getPosition, getOrientation, getScale, onMapReady } from '../mapUtils'
 
 interface UseRenderLoopParams {
-  mapRef: React.RefObject<mapboxgl.Map | null>
+  mapRef: React.RefObject<MapboxMap | null>
   overviewRef: React.MutableRefObject<boolean>
   displayModeRef: React.RefObject<'dots' | 'vehicles'>
   buildGeoJSONRef: React.RefObject<(() => GeoJSON.FeatureCollection) | undefined>
@@ -22,6 +20,13 @@ interface UseRenderLoopParams {
   thresholdLookupRef: React.RefObject<
     ((cableId: string, direction: 0 | 1, channel: number) => SpeedThresholds) | undefined
   >
+  vehiclePopup: {
+    update: (positions: VehiclePosition[]) => void
+    select: (vehicleId: string) => void
+    isSelected: (vehicleId: string) => boolean
+    dismiss: () => void
+    cleanup: () => void
+  }
 }
 
 export function useRenderLoop({
@@ -34,64 +39,21 @@ export function useRenderLoop({
   sectionsRef,
   sectionFibersRef,
   thresholdLookupRef,
+  vehiclePopup,
 }: UseRenderLoopParams) {
   const vehicleClickedRef = useRef(false)
   const deckOverlayRef = useRef<MapboxOverlay | null>(null)
   const cubeRef = useRef<CubeGeometry | null>(null)
-  const dismissVehiclePopupRef = useRef<() => void>(() => {})
 
   useEffect(() => {
     return onMapReady(mapRef, map => {
       // ── Vehicle color accessor (stable reference for deck.gl diffing) ──
-      let selectedVehicleId: string | null = null
       const getVehicleColor = (d: VehiclePosition): [number, number, number, number] => {
-        if (d.id === selectedVehicleId) return [255, 255, 255, 220]
+        if (vehiclePopup.isSelected(d.id)) return [255, 255, 255, 220]
         const lookup = thresholdLookupRef.current
         const thresholds = lookup?.(d.fiberId, d.direction, d.channel)
         return getSpeedColorRGBA(d.detectionSpeed, d.opacity, thresholds)
       }
-
-      // ── Vehicle popup ──
-      const vehiclePopup = new mapboxgl.Popup({
-        closeButton: false,
-        closeOnClick: false,
-        className: 'proto-vehicle-popup',
-        maxWidth: '220px',
-        offset: [0, -12],
-      })
-
-      function updateVehiclePopup(positions: VehiclePosition[]) {
-        if (!selectedVehicleId) return
-        const v = positions.find(p => p.id === selectedVehicleId)
-        if (!v || v.opacity < 0.05) {
-          dismissPopup()
-          return
-        }
-        const fiber = findFiber(v.fiberId, v.direction)
-        const fiberName = fiber?.name ?? v.fiberId
-        const dir = v.direction === 0 ? '→' : '←'
-        const lookup = thresholdLookupRef.current
-        const thresholds = lookup?.(v.fiberId, v.direction, v.channel)
-        const speedColor = getSpeedColor(v.detectionSpeed, thresholds)
-        const vehicleLabel =
-          v.carCount > 1 ? `${v.carCount} ${i18n.t('common.vehicles')}` : `1 ${i18n.t('common.vehicles')}`
-        vehiclePopup
-          .setLngLat([v.position[0], v.position[1]])
-          .setHTML(
-            `<div class="proto-vehicle-popup-body">` +
-              `<div class="proto-vehicle-popup-speed" style="color:${speedColor}">${Math.round(v.detectionSpeed)} km/h</div>` +
-              `<div class="proto-vehicle-popup-detail">${fiberName} ${dir} · ch ${v.channel}</div>` +
-              `<div class="proto-vehicle-popup-detail">${vehicleLabel}</div>` +
-              `</div>`,
-          )
-        if (!vehiclePopup.isOpen()) vehiclePopup.addTo(map)
-      }
-
-      function dismissPopup() {
-        selectedVehicleId = null
-        vehiclePopup.remove()
-      }
-      dismissVehiclePopupRef.current = dismissPopup
 
       // ── deck.gl overlay (lazily added only in vehicles mode) ──
       let deckOverlay: MapboxOverlay | null = null
@@ -105,7 +67,7 @@ export function useRenderLoop({
             onClick: info => {
               if (info.object) {
                 const v = info.object as VehiclePosition
-                selectedVehicleId = v.id
+                vehiclePopup.select(v.id)
                 vehicleClickedRef.current = true
                 return true
               }
@@ -115,20 +77,20 @@ export function useRenderLoop({
           deckOverlayRef.current = deckOverlay
         }
         if (!deckAdded) {
-          map.addControl(deckOverlay as unknown as mapboxgl.IControl)
+          map.addControl(deckOverlay as unknown as IControl)
           deckAdded = true
         }
       }
 
       function removeDeckOverlay() {
-        dismissPopup()
+        vehiclePopup.dismiss()
         if (deckOverlay && deckAdded) {
           try {
             deckOverlay.setProps({ layers: [] })
           } catch {
             /* not ready */
           }
-          map.removeControl(deckOverlay as unknown as mapboxgl.IControl)
+          map.removeControl(deckOverlay as unknown as IControl)
           deckAdded = false
         }
       }
@@ -149,7 +111,6 @@ export function useRenderLoop({
       let slowInterval: ReturnType<typeof setInterval> | null = null
       let loopStopped = false
       let lastSpeedSectionsKey = ''
-      let lastSpeedSectionsData: GeoJSON.FeatureCollection | null = null
 
       function updateSpeedSections() {
         const secs = sectionsRef.current ?? []
@@ -180,9 +141,12 @@ export function useRenderLoop({
             }
           })
           .filter(Boolean)
-        lastSpeedSectionsData = { type: 'FeatureCollection', features: features as GeoJSON.Feature[] }
-        const source = map.getSource('speed-sections') as mapboxgl.GeoJSONSource | undefined
-        source?.setData(lastSpeedSectionsData)
+        const data: GeoJSON.FeatureCollection = {
+          type: 'FeatureCollection',
+          features: features as GeoJSON.Feature[],
+        }
+        const source = map.getSource('speed-sections') as GeoJSONSource | undefined
+        source?.setData(data)
       }
 
       function renderTick() {
@@ -223,7 +187,7 @@ export function useRenderLoop({
                   f.properties.color = getSpeedColor(f.properties.speed)
                 }
               }
-              const source = map.getSource('vehicles') as mapboxgl.GeoJSONSource | undefined
+              const source = map.getSource('vehicles') as GeoJSONSource | undefined
               source?.setData(geojson)
             }
           }
@@ -233,7 +197,7 @@ export function useRenderLoop({
           }
         } else {
           if (!vehiclesCleared) {
-            const source = map.getSource('vehicles') as mapboxgl.GeoJSONSource | undefined
+            const source = map.getSource('vehicles') as GeoJSONSource | undefined
             source?.setData({ type: 'FeatureCollection', features: [] })
             vehiclesCleared = true
             lastGeoJSON = null
@@ -242,7 +206,7 @@ export function useRenderLoop({
           const tick = tickAndCollectRef.current
           if (tick && cubeRef.current) {
             const positions = tick(now, deltaMs)
-            updateVehiclePopup(positions)
+            vehiclePopup.update(positions)
             if (positions.length === 0 && !deckHasLayers) {
               // Nothing to render
             } else {
@@ -318,17 +282,17 @@ export function useRenderLoop({
         if (rafId !== null) cancelAnimationFrame(rafId)
         if (slowInterval !== null) clearInterval(slowInterval)
         clearInterval(loopSyncInterval)
-        vehiclePopup.remove()
+        vehiclePopup.cleanup()
       })
 
       return () => {
         loopStopped = true
         stopCurrentLoop()
         clearInterval(loopSyncInterval)
-        vehiclePopup.remove()
+        vehiclePopup.cleanup()
         if (deckOverlay && deckAdded) {
           try {
-            map.removeControl(deckOverlay as unknown as mapboxgl.IControl)
+            map.removeControl(deckOverlay as unknown as IControl)
           } catch {
             /* map may already be removed */
           }
@@ -346,10 +310,10 @@ export function useRenderLoop({
     sectionsRef,
     sectionFibersRef,
     thresholdLookupRef,
+    vehiclePopup,
   ])
 
   return {
-    dismissVehiclePopupRef,
     vehicleClickedRef,
     deckOverlayRef,
   }

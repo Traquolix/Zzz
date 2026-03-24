@@ -3,20 +3,12 @@ import type { Map as MapboxMap, GeoJSONSource, MapMouseEvent } from 'mapbox-gl'
 import type { MapboxOverlay } from '@deck.gl/mapbox'
 import { findFiber, getSectionCoords } from '../../data'
 import type { PendingPoint } from '../../types'
+import type { MapHandlers } from './mapTypes'
 import { findNearestFiberPoint, onMapReady } from '../mapUtils'
-
-interface Handlers {
-  onIncidentClick?: (id: string) => void
-  onMapClick?: () => void
-  onFiberClick?: (point: PendingPoint) => void
-  onSectionComplete?: (fiberId: string, direction: 0 | 1, startChannel: number, endChannel: number) => void
-  onOverviewChange?: (isOverview: boolean) => void
-  onChannelClick?: (point: PendingPoint) => void
-}
 
 interface UseMapInteractionsParams {
   mapRef: React.RefObject<MapboxMap | null>
-  handlersRef: React.RefObject<Handlers>
+  handlersRef: React.RefObject<MapHandlers>
   pendingPointRef: React.RefObject<PendingPoint | null | undefined>
   sectionCreationRef: React.RefObject<boolean | undefined>
   incidentClickedRef: React.MutableRefObject<boolean>
@@ -24,7 +16,7 @@ interface UseMapInteractionsParams {
   overviewRef: React.MutableRefObject<boolean>
   hideFibersRef: React.RefObject<boolean | undefined>
   deckOverlayRef: React.RefObject<MapboxOverlay | null>
-  dismissVehiclePopupRef: React.RefObject<() => void>
+  dismissVehiclePopup: () => void
 }
 
 export function useMapInteractions({
@@ -37,7 +29,7 @@ export function useMapInteractions({
   overviewRef,
   hideFibersRef,
   deckOverlayRef,
-  dismissVehiclePopupRef,
+  dismissVehiclePopup,
 }: UseMapInteractionsParams) {
   useEffect(() => {
     return onMapReady(mapRef, map => {
@@ -85,7 +77,7 @@ export function useMapInteractions({
           vehicleClickedRef.current = false
           return
         }
-        dismissVehiclePopupRef.current()
+        dismissVehiclePopup()
         if (!sectionCreationRef.current) {
           const hit = findNearestFiberPoint([e.lngLat.lng, e.lngLat.lat])
           if (hit) {
@@ -162,6 +154,6 @@ export function useMapInteractions({
     overviewRef,
     hideFibersRef,
     deckOverlayRef,
-    dismissVehiclePopupRef,
+    dismissVehiclePopup,
   ])
 }
