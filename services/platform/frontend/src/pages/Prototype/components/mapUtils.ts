@@ -1,8 +1,44 @@
-import type { ExpressionSpecification } from 'mapbox-gl'
+import type { ExpressionSpecification, Map as MapboxMap } from 'mapbox-gl'
 import { COLORS } from '@/lib/theme'
 import { fibers, fiberOffsetCache, offsetIndexToChannel, getSectionCoords, getFiberColor } from '../data'
 import type { Fiber, Section } from '../types'
 import type { VehiclePosition } from '../hooks/useVehicleSim'
+
+// ── Map-ready helper ─────────────────────────────────────────────────
+// Defers a callback until the map is loaded. Returns a cleanup function.
+
+export function onMapReady(
+  mapRef: React.RefObject<MapboxMap | null>,
+  callback: (map: MapboxMap) => (() => void) | void,
+): () => void {
+  const map = mapRef.current
+  if (!map) return () => {}
+
+  let cleanup: (() => void) | void
+  let settled = false
+
+  if (map.isStyleLoaded()) {
+    cleanup = callback(map)
+    settled = true
+  } else {
+    const onLoad = () => {
+      settled = true
+      cleanup = callback(map)
+    }
+    map.on('load', onLoad)
+    return () => {
+      if (!settled) {
+        map.off('load', onLoad)
+      } else {
+        cleanup?.()
+      }
+    }
+  }
+
+  return () => {
+    cleanup?.()
+  }
+}
 
 // ── Nearest fiber point snapping ─────────────────────────────────────
 
