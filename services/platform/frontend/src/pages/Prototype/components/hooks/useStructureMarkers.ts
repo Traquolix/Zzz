@@ -27,6 +27,8 @@ export function useStructureMarkers({
   const structureMarkersRef = useRef<Map<string, mapboxgl.Marker>>(new Map())
 
   // Update structure line source
+  // NOTE: switched from onMapReady (fires once on load) to isStyleLoaded + idle
+  // to match the pattern used by useMapToggles and handle flyTo/style-reload races
   useEffect(() => {
     const map = mapRef.current
     if (!map) return

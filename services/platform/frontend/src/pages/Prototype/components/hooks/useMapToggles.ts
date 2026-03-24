@@ -122,8 +122,11 @@ export function useMapToggles({
     if (map.getLayer(MAP_LAYERS.fiberLines)) {
       map.setLayoutProperty(MAP_LAYERS.fiberLines, 'visibility', hide ? 'none' : 'visible')
     }
-    // overviewRef is intentionally omitted — the zoom handler in useMapInteractions
-    // handles real-time toggling; this effect only runs when the prop changes
+    // Two paths control fiber visibility: the zoom handler in useMapInteractions
+    // toggles on zoom changes (reading hideFibersRef), and this effect toggles on
+    // prop changes (reading overviewRef). overviewRef is a mutable ref set by the
+    // zoom handler — always current when read synchronously — so omitting it from
+    // deps is correct; including it would be a no-op (refs don't trigger re-renders).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapRef, hideFibersInOverview])
 
