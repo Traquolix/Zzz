@@ -1196,9 +1196,9 @@ class SimulationEngine:
             for rid in removed_ids:
                 self.incident_snapshots.pop(rid, None)
 
-        # Evict completed snapshots older than 5 minutes (frontend has had
-        # plenty of time to fetch them; holding them forever leaks memory).
-        snapshot_ttl_ms = 5 * 60 * 1000
+        # Evict completed snapshots older than 12 hours — long enough for
+        # demos/presentations, short enough to bound memory over multi-day runs.
+        snapshot_ttl_ms = 12 * 60 * 60 * 1000
         stale_ids = [
             iid
             for iid, snap in self.incident_snapshots.items()
