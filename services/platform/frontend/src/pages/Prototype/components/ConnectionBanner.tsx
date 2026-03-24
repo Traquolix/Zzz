@@ -49,7 +49,7 @@ export function ConnectionBanner() {
 
   return (
     <div
-      className="absolute top-0 left-0 right-0 z-50 flex items-center justify-center gap-2 py-3 text-cq-xs font-medium pointer-events-none"
+      className="absolute top-0 left-0 right-0 z-10 flex items-center justify-center gap-2 py-5 text-cq-xs font-medium pointer-events-none"
       style={{
         background: `linear-gradient(135deg, color-mix(in srgb, ${color} 15%, transparent), color-mix(in srgb, ${color} 8%, transparent))`,
         borderBottom: `1px solid color-mix(in srgb, ${color} 25%, transparent)`,
