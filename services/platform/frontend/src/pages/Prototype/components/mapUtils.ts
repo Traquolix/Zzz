@@ -27,9 +27,8 @@ export function onMapReady(
     }
     map.on('load', onLoad)
     return () => {
-      if (!settled) {
-        map.off('load', onLoad)
-      } else {
+      map.off('load', onLoad) // always remove listener
+      if (settled) {
         cleanup?.()
       }
     }
@@ -91,6 +90,8 @@ export function findNearestFiberPoint(lngLat: [number, number], maxDistDeg = 0.0
 // ── Stable accessor functions for SimpleMeshLayer (avoids re-creation) ──
 // deck.gl diffs layer props by reference — these must be module-level
 // constants, not inline lambdas, to avoid triggering full layer rebuilds.
+// Exception: getVehicleColor (in useRenderLoop) must be a closure to access
+// runtime state; it is stable for the lifetime of the onMapReady callback.
 
 export const getPosition = (d: VehiclePosition) => d.position
 export const getOrientation = (d: VehiclePosition): [number, number, number] => [0, -d.angle, 0]

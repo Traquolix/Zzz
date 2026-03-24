@@ -96,8 +96,8 @@ export function useStructureMarkers({
           ${imageHtml}
           <div style="padding:6px 10px;display:flex;align-items:center;gap:6px;">
             <span style="width:6px;height:6px;border-radius:50%;background:${statusDotColor};flex-shrink:0;"></span>
-            <span style="font-size:11px;color:#e2e8f0;font-weight:500;overflow:hidden;text-overflow:ellipsis;">${s.name}</span>
-            <span style="font-size:10px;color:#64748b;flex-shrink:0;">${s.type}</span>
+            <span style="font-size:11px;color:${COLORS.timeSeries.tooltipText};font-weight:500;overflow:hidden;text-overflow:ellipsis;">${s.name}</span>
+            <span style="font-size:10px;color:${COLORS.shmChart.axis};flex-shrink:0;">${s.type}</span>
           </div>
         </div>
       `

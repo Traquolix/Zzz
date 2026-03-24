@@ -30,7 +30,6 @@ interface PrototypeMapProps {
   sectionCreationMode?: boolean
   pendingPoint?: PendingPoint | null
   sections?: Section[]
-  selectedSectionId?: string | null
   onFiberClick?: (point: PendingPoint) => void
   onSectionComplete?: (fiberId: string, direction: 0 | 1, startChannel: number, endChannel: number) => void
   buildVehicleGeoJSON?: () => GeoJSON.FeatureCollection
@@ -152,7 +151,7 @@ export const PrototypeMap = memo(
     const onStructureClickRef = useRef(onStructureClick)
     onStructureClickRef.current = onStructureClick
 
-    // ── Hooks (order matters: layers must register before render loop) ──
+    // ── Hooks (order matters: layers before render loop; interactions after for vehicleClickedRef) ──
     const { containerRef, mapRef } = useMapInstance()
     useMapLayers(mapRef)
 

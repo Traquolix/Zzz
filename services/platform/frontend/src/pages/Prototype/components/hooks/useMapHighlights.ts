@@ -1,4 +1,4 @@
-import { useRef, useCallback, useContext } from 'react'
+import { useRef, useCallback, useContext, useEffect } from 'react'
 import mapboxgl from 'mapbox-gl'
 import { COLORS } from '@/lib/theme'
 import { findFiber, getSectionCoords, getFiberColor } from '../../data'
@@ -49,6 +49,13 @@ export function useMapHighlights({
       highlightedMarkerRef.current = null
     }
   }, [mapRef])
+
+  // Clean up active highlights on unmount (timers + channel marker)
+  useEffect(() => {
+    return () => {
+      clearHighlight()
+    }
+  }, [clearHighlight])
 
   const flyTo = useCallback(
     (center: [number, number], zoom = 14) => {

@@ -57,6 +57,11 @@ export function useIncidentMarkers({ mapRef, incidents, incidentClickedRef, hand
       const marker = new mapboxgl.Marker({ element: el, anchor: 'center' }).setLngLat(lngLat).addTo(map)
       markersRef.current.set(inc.id, marker)
     }
+
+    return () => {
+      markersRef.current.forEach(m => m.remove())
+      markersRef.current = new Map()
+    }
   }, [incidents, mapRef, incidentClickedRef, handlersRef])
 
   return { markersRef }

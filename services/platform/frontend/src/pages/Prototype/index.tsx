@@ -470,7 +470,6 @@ export function Prototype() {
             sectionCreationMode={state.sectionCreationMode}
             pendingPoint={state.pendingPoint}
             sections={state.sections}
-            selectedSectionId={state.selectedSectionId}
             onFiberClick={handleFiberClick}
             onSectionComplete={handleSectionComplete}
             buildVehicleGeoJSON={buildGeoJSON}

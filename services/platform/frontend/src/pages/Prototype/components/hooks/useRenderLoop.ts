@@ -282,7 +282,6 @@ export function useRenderLoop({
         if (rafId !== null) cancelAnimationFrame(rafId)
         if (slowInterval !== null) clearInterval(slowInterval)
         clearInterval(loopSyncInterval)
-        vehiclePopup.cleanup()
       })
 
       return () => {

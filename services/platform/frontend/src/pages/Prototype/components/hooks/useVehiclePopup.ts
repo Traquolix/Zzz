@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useMemo } from 'react'
 import mapboxgl from 'mapbox-gl'
 import { findFiber, getSpeedColor } from '../../data'
 import type { SpeedThresholds } from '../../types'
@@ -62,7 +62,7 @@ export function useVehiclePopup({ mapRef, thresholdLookupRef }: UseVehiclePopupP
         .setLngLat([v.position[0], v.position[1]])
         .setHTML(
           `<div class="proto-vehicle-popup-body">` +
-            `<div class="proto-vehicle-popup-speed" style="color:${speedColor}">${Math.round(v.detectionSpeed)} km/h</div>` +
+            `<div class="proto-vehicle-popup-speed" style="color:${speedColor}">${Math.round(v.detectionSpeed)} ${i18n.t('common.speedUnit')}</div>` +
             `<div class="proto-vehicle-popup-detail">${fiberName} ${dir} · ch ${v.channel}</div>` +
             `<div class="proto-vehicle-popup-detail">${vehicleLabel}</div>` +
             `</div>`,
@@ -80,5 +80,8 @@ export function useVehiclePopup({ mapRef, thresholdLookupRef }: UseVehiclePopupP
     selectedVehicleIdRef.current = null
   }, [])
 
-  return { dismiss, select, update, isSelected, selectedVehicleIdRef, cleanup }
+  return useMemo(
+    () => ({ dismiss, select, update, isSelected, selectedVehicleIdRef, cleanup }),
+    [dismiss, select, update, isSelected, cleanup],
+  )
 }

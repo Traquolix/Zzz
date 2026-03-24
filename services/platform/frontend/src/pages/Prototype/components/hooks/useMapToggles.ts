@@ -42,7 +42,11 @@ export function useMapToggles({
       source.setData(buildSectionHighlightData(sections ?? [], sectionFibersRef.current, fiberColorsRef.current))
     }
 
-    apply()
+    if (map.isStyleLoaded()) {
+      apply()
+    }
+    // Always also apply on next idle — covers races where getSource() returns
+    // undefined during flyTo transitions or style reloads
     const onIdle = () => apply()
     map.once('idle', onIdle)
     return () => {
