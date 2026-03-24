@@ -1,4 +1,4 @@
-import { useRef, useCallback, useContext, useEffect } from 'react'
+import { useRef, useCallback, useContext, useEffect, useMemo } from 'react'
 import mapboxgl from 'mapbox-gl'
 import { COLORS } from '@/lib/theme'
 import { findFiber, getSectionCoords, getFiberColor } from '../../data'
@@ -6,6 +6,7 @@ import type { Section } from '../../types'
 import type { Infrastructure } from '@/types/infrastructure'
 import { getSidebarWidth, SidebarRefContext } from '../../hooks/useSidebarWidth'
 import { FIBER_WIDTH_EXPR, FIBER_OPACITY_EXPR } from '../mapUtils'
+import { MAP_SOURCES, MAP_LAYERS } from './mapTypes'
 
 interface UseMapHighlightsParams {
   mapRef: React.RefObject<mapboxgl.Map | null>
@@ -34,11 +35,11 @@ export function useMapHighlights({
       clearInterval(highlightTimerRef.current)
       highlightTimerRef.current = null
     }
-    if (map.getLayer('fiber-lines')) {
-      map.setPaintProperty('fiber-lines', 'line-width', FIBER_WIDTH_EXPR)
-      map.setPaintProperty('fiber-lines', 'line-opacity', FIBER_OPACITY_EXPR)
+    if (map.getLayer(MAP_LAYERS.fiberLines)) {
+      map.setPaintProperty(MAP_LAYERS.fiberLines, 'line-width', FIBER_WIDTH_EXPR)
+      map.setPaintProperty(MAP_LAYERS.fiberLines, 'line-opacity', FIBER_OPACITY_EXPR)
     }
-    const src = map.getSource('hover-highlight') as mapboxgl.GeoJSONSource | undefined
+    const src = map.getSource(MAP_SOURCES.hoverHighlight) as mapboxgl.GeoJSONSource | undefined
     src?.setData({ type: 'FeatureCollection', features: [] })
     if (channelMarkerRef.current) {
       channelMarkerRef.current.remove()
@@ -73,9 +74,9 @@ export function useMapHighlights({
   const highlightFiber = useCallback(
     (fiberId: string) => {
       const map = mapRef.current
-      if (!map || !map.getLayer('fiber-lines')) return
+      if (!map || !map.getLayer(MAP_LAYERS.fiberLines)) return
       clearHighlight()
-      map.setPaintProperty('fiber-lines', 'line-width', [
+      map.setPaintProperty(MAP_LAYERS.fiberLines, 'line-width', [
         'interpolate',
         ['linear'],
         ['zoom'],
@@ -86,11 +87,11 @@ export function useMapHighlights({
         14,
         ['case', ['==', ['get', 'id'], fiberId], 5, 2.5],
       ])
-      map.setPaintProperty('fiber-lines', 'line-opacity', ['case', ['==', ['get', 'id'], fiberId], 1, 0.15])
+      map.setPaintProperty(MAP_LAYERS.fiberLines, 'line-opacity', ['case', ['==', ['get', 'id'], fiberId], 1, 0.15])
       let tick = 0
       highlightTimerRef.current = window.setInterval(() => {
-        if (!map.getLayer('fiber-lines')) return
-        map.setPaintProperty('fiber-lines', 'line-opacity', [
+        if (!map.getLayer(MAP_LAYERS.fiberLines)) return
+        map.setPaintProperty(MAP_LAYERS.fiberLines, 'line-opacity', [
           'case',
           ['==', ['get', 'id'], fiberId],
           0.5 + 0.5 * Math.abs(Math.sin(tick * 0.6)),
@@ -114,7 +115,7 @@ export function useMapHighlights({
       const coords = getSectionCoords(secFiber, sec.startChannel, sec.endChannel)
       if (coords.length < 2) return
       const color = fiberColorsRef.current ? getFiberColor(secFiber, fiberColorsRef.current) : COLORS.fiber.default
-      const src = map.getSource('hover-highlight') as mapboxgl.GeoJSONSource | undefined
+      const src = map.getSource(MAP_SOURCES.hoverHighlight) as mapboxgl.GeoJSONSource | undefined
       src?.setData({
         type: 'FeatureCollection',
         features: [
@@ -127,8 +128,12 @@ export function useMapHighlights({
       })
       let tick = 0
       highlightTimerRef.current = window.setInterval(() => {
-        if (map.getLayer('hover-highlight-glow')) {
-          map.setPaintProperty('hover-highlight-glow', 'line-opacity', 0.2 + 0.3 * Math.abs(Math.sin(tick * 0.6)))
+        if (map.getLayer(MAP_LAYERS.hoverHighlightGlow)) {
+          map.setPaintProperty(
+            MAP_LAYERS.hoverHighlightGlow,
+            'line-opacity',
+            0.2 + 0.3 * Math.abs(Math.sin(tick * 0.6)),
+          )
         }
         tick++
       }, 200)
@@ -160,7 +165,7 @@ export function useMapHighlights({
       const coords = sFiber ? getSectionCoords(sFiber, structure.startChannel, structure.endChannel) : []
       if (coords.length < 2) return
       const typeColor = COLORS.structure[structure.type].dot
-      const src = map.getSource('hover-highlight') as mapboxgl.GeoJSONSource | undefined
+      const src = map.getSource(MAP_SOURCES.hoverHighlight) as mapboxgl.GeoJSONSource | undefined
       src?.setData({
         type: 'FeatureCollection',
         features: [
@@ -173,8 +178,12 @@ export function useMapHighlights({
       })
       let tick = 0
       highlightTimerRef.current = window.setInterval(() => {
-        if (map.getLayer('hover-highlight-glow')) {
-          map.setPaintProperty('hover-highlight-glow', 'line-opacity', 0.2 + 0.3 * Math.abs(Math.sin(tick * 0.6)))
+        if (map.getLayer(MAP_LAYERS.hoverHighlightGlow)) {
+          map.setPaintProperty(
+            MAP_LAYERS.hoverHighlightGlow,
+            'line-opacity',
+            0.2 + 0.3 * Math.abs(Math.sin(tick * 0.6)),
+          )
         }
         tick++
       }, 200)
@@ -199,13 +208,16 @@ export function useMapHighlights({
     [mapRef, clearHighlight],
   )
 
-  return {
-    flyTo,
-    highlightFiber,
-    highlightSection,
-    highlightIncident,
-    highlightStructure,
-    highlightChannel,
-    clearHighlight,
-  }
+  return useMemo(
+    () => ({
+      flyTo,
+      highlightFiber,
+      highlightSection,
+      highlightIncident,
+      highlightStructure,
+      highlightChannel,
+      clearHighlight,
+    }),
+    [flyTo, highlightFiber, highlightSection, highlightIncident, highlightStructure, highlightChannel, clearHighlight],
+  )
 }

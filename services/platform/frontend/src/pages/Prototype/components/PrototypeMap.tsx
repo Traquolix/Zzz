@@ -222,7 +222,7 @@ export const PrototypeMap = memo(
       overviewRef,
     })
 
-    useImperativeHandle(ref, () => highlights)
+    useImperativeHandle(ref, () => highlights, [highlights])
 
     return (
       <div className="relative w-full h-full">

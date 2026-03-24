@@ -3,6 +3,7 @@ import type { Map as MapboxMap, GeoJSONSource } from 'mapbox-gl'
 import { fibers, fiberRenderCache, getFiberColor } from '../../data'
 import type { Fiber, Section, PendingPoint } from '../../types'
 import { buildSectionHighlightData } from '../mapUtils'
+import { MAP_SOURCES, MAP_LAYERS } from './mapTypes'
 
 interface UseMapTogglesParams {
   mapRef: React.RefObject<MapboxMap | null>
@@ -37,7 +38,7 @@ export function useMapToggles({
     if (!map) return
 
     const apply = () => {
-      const source = map.getSource('section-highlights') as GeoJSONSource | undefined
+      const source = map.getSource(MAP_SOURCES.sectionHighlights) as GeoJSONSource | undefined
       if (!source) return
       source.setData(buildSectionHighlightData(sections ?? [], sectionFibersRef.current, fiberColorsRef.current))
     }
@@ -60,7 +61,7 @@ export function useMapToggles({
     if (!map) return
 
     const apply = () => {
-      const pointSource = map.getSource('pending-point') as GeoJSONSource | undefined
+      const pointSource = map.getSource(MAP_SOURCES.pendingPoint) as GeoJSONSource | undefined
       if (!pointSource) return
 
       if (pendingPoint) {
@@ -78,7 +79,7 @@ export function useMapToggles({
         pointSource.setData({ type: 'FeatureCollection', features: [] })
       }
 
-      const sectionSource = map.getSource('pending-section') as GeoJSONSource | undefined
+      const sectionSource = map.getSource(MAP_SOURCES.pendingSection) as GeoJSONSource | undefined
       if (sectionSource && !pendingPoint) {
         sectionSource.setData({ type: 'FeatureCollection', features: [] })
       }
@@ -98,7 +99,7 @@ export function useMapToggles({
   useEffect(() => {
     const map = mapRef.current
     if (!map || !fiberColors) return
-    const src = map.getSource('fibers') as GeoJSONSource | undefined
+    const src = map.getSource(MAP_SOURCES.fibers) as GeoJSONSource | undefined
     if (!src) return
     const features: GeoJSON.Feature[] = []
     for (const fiber of fibers) {
@@ -118,17 +119,20 @@ export function useMapToggles({
     const map = mapRef.current
     if (!map || !map.isStyleLoaded()) return
     const hide = hideFibersInOverview && overviewRef.current
-    if (map.getLayer('fiber-lines')) {
-      map.setLayoutProperty('fiber-lines', 'visibility', hide ? 'none' : 'visible')
+    if (map.getLayer(MAP_LAYERS.fiberLines)) {
+      map.setLayoutProperty(MAP_LAYERS.fiberLines, 'visibility', hide ? 'none' : 'visible')
     }
-  }, [mapRef, hideFibersInOverview, overviewRef])
+    // overviewRef is intentionally omitted — the zoom handler in useMapInteractions
+    // handles real-time toggling; this effect only runs when the prop changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mapRef, hideFibersInOverview])
 
   // 5. 3D buildings
   useEffect(() => {
     const map = mapRef.current
     if (!map || !map.isStyleLoaded()) return
-    if (map.getLayer('3d-buildings')) {
-      map.setLayoutProperty('3d-buildings', 'visibility', show3DBuildings ? 'visible' : 'none')
+    if (map.getLayer(MAP_LAYERS.buildings3d)) {
+      map.setLayoutProperty(MAP_LAYERS.buildings3d, 'visibility', show3DBuildings ? 'visible' : 'none')
     }
   }, [mapRef, show3DBuildings])
 
@@ -136,8 +140,8 @@ export function useMapToggles({
   useEffect(() => {
     const map = mapRef.current
     if (!map || !map.isStyleLoaded()) return
-    if (map.getLayer('channel-helper-dots')) {
-      map.setLayoutProperty('channel-helper-dots', 'visibility', showChannelHelper ? 'visible' : 'none')
+    if (map.getLayer(MAP_LAYERS.channelHelperDots)) {
+      map.setLayoutProperty(MAP_LAYERS.channelHelperDots, 'visibility', showChannelHelper ? 'visible' : 'none')
     }
   }, [mapRef, showChannelHelper])
 

@@ -3,6 +3,7 @@ import type { Map as MapboxMap } from 'mapbox-gl'
 import { COLORS } from '@/lib/theme'
 import { fibers, fiberOffsetCache, fiberRenderCache } from '../../data'
 import { onMapReady } from '../mapUtils'
+import { MAP_SOURCES, MAP_LAYERS } from './mapTypes'
 
 export function useMapLayers(mapRef: React.RefObject<MapboxMap | null>) {
   useEffect(() => {
@@ -18,14 +19,14 @@ export function useMapLayers(mapRef: React.RefObject<MapboxMap | null>) {
           geometry: { type: 'LineString' as const, coordinates: coords },
         })
       }
-      map.addSource('fibers', {
+      map.addSource(MAP_SOURCES.fibers, {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: fiberFeatures },
       })
       map.addLayer({
-        id: 'fiber-lines',
+        id: MAP_LAYERS.fiberLines,
         type: 'line',
-        source: 'fibers',
+        source: MAP_SOURCES.fibers,
         paint: {
           'line-color': ['get', 'color'],
           'line-width': ['interpolate', ['linear'], ['zoom'], 10, 1.5, 12, 2, 14, 2.5],
@@ -48,14 +49,14 @@ export function useMapLayers(mapRef: React.RefObject<MapboxMap | null>) {
           })
         }
       }
-      map.addSource('channel-helper', {
+      map.addSource(MAP_SOURCES.channelHelper, {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: channelFeatures },
       })
       map.addLayer({
-        id: 'channel-helper-dots',
+        id: MAP_LAYERS.channelHelperDots,
         type: 'circle',
-        source: 'channel-helper',
+        source: MAP_SOURCES.channelHelper,
         layout: { visibility: 'none' },
         paint: {
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 1, 14, 2.5, 17, 4],
@@ -65,22 +66,21 @@ export function useMapLayers(mapRef: React.RefObject<MapboxMap | null>) {
       })
 
       // ── Vehicle dots source ──
-      map.addSource('vehicles', {
+      map.addSource(MAP_SOURCES.vehicles, {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
       })
 
       // ── Section highlight source ──
-      map.addSource('section-highlights', {
+      map.addSource(MAP_SOURCES.sectionHighlights, {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
       })
       map.addLayer({
-        id: 'section-highlight-layer',
+        id: MAP_LAYERS.sectionHighlight,
         type: 'line',
-        source: 'section-highlights',
+        source: MAP_SOURCES.sectionHighlights,
         minzoom: 12.5,
-        layout: { visibility: 'none' },
         paint: {
           'line-color': ['get', 'color'],
           'line-width': 6,
@@ -89,14 +89,14 @@ export function useMapLayers(mapRef: React.RefObject<MapboxMap | null>) {
       })
 
       // ── Hover highlight source ──
-      map.addSource('hover-highlight', {
+      map.addSource(MAP_SOURCES.hoverHighlight, {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
       })
       map.addLayer({
-        id: 'hover-highlight-glow',
+        id: MAP_LAYERS.hoverHighlightGlow,
         type: 'line',
-        source: 'hover-highlight',
+        source: MAP_SOURCES.hoverHighlight,
         paint: {
           'line-color': COLORS.map.glowLine,
           'line-width': 14,
@@ -105,9 +105,9 @@ export function useMapLayers(mapRef: React.RefObject<MapboxMap | null>) {
         },
       })
       map.addLayer({
-        id: 'hover-highlight-line',
+        id: MAP_LAYERS.hoverHighlightLine,
         type: 'line',
-        source: 'hover-highlight',
+        source: MAP_SOURCES.hoverHighlight,
         paint: {
           'line-color': ['get', 'color'],
           'line-width': 5,
@@ -117,9 +117,9 @@ export function useMapLayers(mapRef: React.RefObject<MapboxMap | null>) {
 
       // ── Vehicle dots layer (after sections so sections show through) ──
       map.addLayer({
-        id: 'vehicle-dots',
+        id: MAP_LAYERS.vehicleDots,
         type: 'circle',
-        source: 'vehicles',
+        source: MAP_SOURCES.vehicles,
         minzoom: 12.5,
         paint: {
           'circle-radius': 4,
@@ -131,14 +131,14 @@ export function useMapLayers(mapRef: React.RefObject<MapboxMap | null>) {
       })
 
       // ── Pending section preview source ──
-      map.addSource('pending-section', {
+      map.addSource(MAP_SOURCES.pendingSection, {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
       })
       map.addLayer({
-        id: 'pending-section-layer',
+        id: MAP_LAYERS.pendingSection,
         type: 'line',
-        source: 'pending-section',
+        source: MAP_SOURCES.pendingSection,
         paint: {
           'line-color': COLORS.ui.pending,
           'line-width': 4,
@@ -148,14 +148,14 @@ export function useMapLayers(mapRef: React.RefObject<MapboxMap | null>) {
       })
 
       // ── Pending point marker source ──
-      map.addSource('pending-point', {
+      map.addSource(MAP_SOURCES.pendingPoint, {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
       })
       map.addLayer({
-        id: 'pending-point-layer',
+        id: MAP_LAYERS.pendingPoint,
         type: 'circle',
-        source: 'pending-point',
+        source: MAP_SOURCES.pendingPoint,
         paint: {
           'circle-radius': 6,
           'circle-color': COLORS.ui.pending,
@@ -165,14 +165,14 @@ export function useMapLayers(mapRef: React.RefObject<MapboxMap | null>) {
       })
 
       // ── Structure segment lines ──
-      map.addSource('structure-lines', {
+      map.addSource(MAP_SOURCES.structureLines, {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
       })
       map.addLayer({
-        id: 'structure-lines-layer',
+        id: MAP_LAYERS.structureLines,
         type: 'line',
-        source: 'structure-lines',
+        source: MAP_SOURCES.structureLines,
         paint: {
           'line-color': ['get', 'color'],
           'line-width': 4,
@@ -181,14 +181,14 @@ export function useMapLayers(mapRef: React.RefObject<MapboxMap | null>) {
       })
 
       // ── Overview speed-section lines ──
-      map.addSource('speed-sections', {
+      map.addSource(MAP_SOURCES.speedSections, {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
       })
       map.addLayer({
-        id: 'speed-section-lines',
+        id: MAP_LAYERS.speedSectionLines,
         type: 'line',
-        source: 'speed-sections',
+        source: MAP_SOURCES.speedSections,
         paint: {
           'line-color': ['get', 'color'],
           'line-width': ['interpolate', ['linear'], ['zoom'], 10, 2.5, 12, 3, 13, 3.5],
@@ -203,14 +203,17 @@ export function useMapLayers(mapRef: React.RefObject<MapboxMap | null>) {
         if (layer.type === 'symbol' && (layer as { layout?: { 'text-field'?: unknown } }).layout?.['text-field']) {
           if (!labelLayerId) labelLayerId = layer.id
         }
-        if ((layer['source-layer'] === 'building' || layer.id.includes('building')) && layer.id !== '3d-buildings') {
+        if (
+          (layer['source-layer'] === 'building' || layer.id.includes('building')) &&
+          layer.id !== MAP_LAYERS.buildings3d
+        ) {
           map.setLayoutProperty(layer.id, 'visibility', 'none')
         }
       }
 
       map.addLayer(
         {
-          id: '3d-buildings',
+          id: MAP_LAYERS.buildings3d,
           source: 'composite',
           'source-layer': 'building',
           filter: ['==', 'extrude', 'true'],

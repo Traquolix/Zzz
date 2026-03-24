@@ -19,7 +19,7 @@ export function useIncidentMarkers({ mapRef, incidents, incidentClickedRef, hand
     if (!map) return
 
     markersRef.current.forEach(m => m.remove())
-    markersRef.current = new Map()
+    markersRef.current.clear()
 
     if (!incidents?.length) return
 
@@ -60,7 +60,7 @@ export function useIncidentMarkers({ mapRef, incidents, incidentClickedRef, hand
 
     return () => {
       markersRef.current.forEach(m => m.remove())
-      markersRef.current = new Map()
+      markersRef.current.clear()
     }
   }, [incidents, mapRef, incidentClickedRef, handlersRef])
 

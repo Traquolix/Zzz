@@ -3,7 +3,7 @@ import type { Map as MapboxMap, GeoJSONSource, MapMouseEvent } from 'mapbox-gl'
 import type { MapboxOverlay } from '@deck.gl/mapbox'
 import { findFiber, getSectionCoords } from '../../data'
 import type { PendingPoint } from '../../types'
-import type { MapHandlers } from './mapTypes'
+import { MAP_SOURCES, MAP_LAYERS, type MapHandlers } from './mapTypes'
 import { findNearestFiberPoint, onMapReady } from '../mapUtils'
 
 interface UseMapInteractionsParams {
@@ -44,7 +44,7 @@ export function useMapInteractions({
         overviewRef.current = shouldOverview
 
         if (shouldOverview) {
-          const src = map.getSource('vehicles') as GeoJSONSource | undefined
+          const src = map.getSource(MAP_SOURCES.vehicles) as GeoJSONSource | undefined
           src?.setData({ type: 'FeatureCollection', features: [] })
           if (deckOverlayRef.current) {
             try {
@@ -56,12 +56,12 @@ export function useMapInteractions({
         }
 
         const layerVis = shouldOverview ? 'none' : 'visible'
-        for (const lid of ['vehicle-dots', 'pending-section-layer', 'pending-point-layer']) {
+        for (const lid of [MAP_LAYERS.vehicleDots, MAP_LAYERS.pendingSection, MAP_LAYERS.pendingPoint]) {
           if (map.getLayer(lid)) map.setLayoutProperty(lid, 'visibility', layerVis)
         }
 
-        if (hideFibersRef.current && map.getLayer('fiber-lines')) {
-          map.setLayoutProperty('fiber-lines', 'visibility', shouldOverview ? 'none' : 'visible')
+        if (hideFibersRef.current && map.getLayer(MAP_LAYERS.fiberLines)) {
+          map.setLayoutProperty(MAP_LAYERS.fiberLines, 'visibility', shouldOverview ? 'none' : 'visible')
         }
 
         handlersRef.current.onOverviewChange?.(shouldOverview)
@@ -110,7 +110,7 @@ export function useMapInteractions({
         if (!pending) return
 
         const hit = findNearestFiberPoint([e.lngLat.lng, e.lngLat.lat])
-        const sectionSource = map.getSource('pending-section') as GeoJSONSource | undefined
+        const sectionSource = map.getSource(MAP_SOURCES.pendingSection) as GeoJSONSource | undefined
         if (!sectionSource) return
 
         if (!hit || hit.fiberId !== pending.fiberId) {

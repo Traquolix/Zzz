@@ -3,7 +3,7 @@ import mapboxgl from 'mapbox-gl'
 import { COLORS, shmStatusColors } from '@/lib/theme'
 import { findFiber, getSectionCoords, channelToCoord } from '../../data'
 import type { Infrastructure, SHMStatus } from '@/types/infrastructure'
-import { onMapReady } from '../mapUtils'
+import { MAP_SOURCES } from './mapTypes'
 
 interface UseStructureMarkersParams {
   mapRef: React.RefObject<mapboxgl.Map | null>
@@ -28,8 +28,11 @@ export function useStructureMarkers({
 
   // Update structure line source
   useEffect(() => {
-    return onMapReady(mapRef, map => {
-      const src = map.getSource('structure-lines') as mapboxgl.GeoJSONSource | undefined
+    const map = mapRef.current
+    if (!map) return
+
+    const apply = () => {
+      const src = map.getSource(MAP_SOURCES.structureLines) as mapboxgl.GeoJSONSource | undefined
       if (!src) return
 
       if (!showStructuresOnMap || !structures?.length) {
@@ -52,7 +55,18 @@ export function useStructureMarkers({
         .filter(Boolean)
 
       src.setData({ type: 'FeatureCollection', features: features as GeoJSON.Feature[] })
-    })
+    }
+
+    if (map.isStyleLoaded()) {
+      apply()
+    }
+    // Also apply on next idle — covers races where getSource() returns
+    // undefined during flyTo transitions or style reloads
+    const onIdle = () => apply()
+    map.once('idle', onIdle)
+    return () => {
+      map.off('idle', onIdle)
+    }
   }, [mapRef, structures, showStructuresOnMap])
 
   // Update structure label markers
@@ -61,7 +75,7 @@ export function useStructureMarkers({
     if (!map) return
 
     structureMarkersRef.current.forEach(m => m.remove())
-    structureMarkersRef.current = new Map()
+    structureMarkersRef.current.clear()
 
     if (!showStructureLabels || !structures?.length) return
 
@@ -113,7 +127,7 @@ export function useStructureMarkers({
 
     return () => {
       structureMarkersRef.current.forEach(m => m.remove())
-      structureMarkersRef.current = new Map()
+      structureMarkersRef.current.clear()
     }
   }, [mapRef, structures, structureStatuses, showStructureLabels, selectedStructureId, onStructureClickRef])
 }

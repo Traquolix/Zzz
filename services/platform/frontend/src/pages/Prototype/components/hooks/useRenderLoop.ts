@@ -7,6 +7,7 @@ import { getSpeedColor, getSectionCoords, getSpeedColorRGBA } from '../../data'
 import type { Fiber, Section, LiveSectionStats, SpeedThresholds } from '../../types'
 import type { VehiclePosition } from '../../hooks/useVehicleSim'
 import { getPosition, getOrientation, getScale, onMapReady } from '../mapUtils'
+import { MAP_SOURCES } from './mapTypes'
 
 interface UseRenderLoopParams {
   mapRef: React.RefObject<MapboxMap | null>
@@ -44,12 +45,14 @@ export function useRenderLoop({
   const vehicleClickedRef = useRef(false)
   const deckOverlayRef = useRef<MapboxOverlay | null>(null)
   const cubeRef = useRef<CubeGeometry | null>(null)
+  const vehiclePopupRef = useRef(vehiclePopup)
+  vehiclePopupRef.current = vehiclePopup
 
   useEffect(() => {
     return onMapReady(mapRef, map => {
       // ── Vehicle color accessor (stable reference for deck.gl diffing) ──
       const getVehicleColor = (d: VehiclePosition): [number, number, number, number] => {
-        if (vehiclePopup.isSelected(d.id)) return [255, 255, 255, 220]
+        if (vehiclePopupRef.current.isSelected(d.id)) return [255, 255, 255, 220]
         const lookup = thresholdLookupRef.current
         const thresholds = lookup?.(d.fiberId, d.direction, d.channel)
         return getSpeedColorRGBA(d.detectionSpeed, d.opacity, thresholds)
@@ -67,7 +70,7 @@ export function useRenderLoop({
             onClick: info => {
               if (info.object) {
                 const v = info.object as VehiclePosition
-                vehiclePopup.select(v.id)
+                vehiclePopupRef.current.select(v.id)
                 vehicleClickedRef.current = true
                 return true
               }
@@ -83,7 +86,7 @@ export function useRenderLoop({
       }
 
       function removeDeckOverlay() {
-        vehiclePopup.dismiss()
+        vehiclePopupRef.current.dismiss()
         if (deckOverlay && deckAdded) {
           try {
             deckOverlay.setProps({ layers: [] })
@@ -145,7 +148,7 @@ export function useRenderLoop({
           type: 'FeatureCollection',
           features: features as GeoJSON.Feature[],
         }
-        const source = map.getSource('speed-sections') as GeoJSONSource | undefined
+        const source = map.getSource(MAP_SOURCES.speedSections) as GeoJSONSource | undefined
         source?.setData(data)
       }
 
@@ -187,7 +190,7 @@ export function useRenderLoop({
                   f.properties.color = getSpeedColor(f.properties.speed)
                 }
               }
-              const source = map.getSource('vehicles') as GeoJSONSource | undefined
+              const source = map.getSource(MAP_SOURCES.vehicles) as GeoJSONSource | undefined
               source?.setData(geojson)
             }
           }
@@ -197,7 +200,7 @@ export function useRenderLoop({
           }
         } else {
           if (!vehiclesCleared) {
-            const source = map.getSource('vehicles') as GeoJSONSource | undefined
+            const source = map.getSource(MAP_SOURCES.vehicles) as GeoJSONSource | undefined
             source?.setData({ type: 'FeatureCollection', features: [] })
             vehiclesCleared = true
             lastGeoJSON = null
@@ -206,7 +209,7 @@ export function useRenderLoop({
           const tick = tickAndCollectRef.current
           if (tick && cubeRef.current) {
             const positions = tick(now, deltaMs)
-            vehiclePopup.update(positions)
+            vehiclePopupRef.current.update(positions)
             if (positions.length === 0 && !deckHasLayers) {
               // Nothing to render
             } else {
@@ -277,18 +280,11 @@ export function useRenderLoop({
       syncLoop()
       const loopSyncInterval = setInterval(syncLoop, 500)
 
-      map.once('remove', () => {
-        loopStopped = true
-        if (rafId !== null) cancelAnimationFrame(rafId)
-        if (slowInterval !== null) clearInterval(slowInterval)
-        clearInterval(loopSyncInterval)
-      })
-
       return () => {
         loopStopped = true
         stopCurrentLoop()
         clearInterval(loopSyncInterval)
-        vehiclePopup.cleanup()
+        vehiclePopupRef.current.cleanup()
         if (deckOverlay && deckAdded) {
           try {
             map.removeControl(deckOverlay as unknown as IControl)
@@ -309,7 +305,6 @@ export function useRenderLoop({
     sectionsRef,
     sectionFibersRef,
     thresholdLookupRef,
-    vehiclePopup,
   ])
 
   return {
