@@ -76,8 +76,9 @@ export function useStructureMarkers({
     const map = mapRef.current
     if (!map) return
 
-    structureMarkersRef.current.forEach(m => m.remove())
-    structureMarkersRef.current.clear()
+    const markers = structureMarkersRef.current
+    markers.forEach(m => m.remove())
+    markers.clear()
 
     if (!showStructureLabels || !structures?.length) return
 
@@ -128,8 +129,8 @@ export function useStructureMarkers({
     }
 
     return () => {
-      structureMarkersRef.current.forEach(m => m.remove())
-      structureMarkersRef.current.clear()
+      markers.forEach(m => m.remove())
+      markers.clear()
     }
   }, [mapRef, structures, structureStatuses, showStructureLabels, selectedStructureId, onStructureClickRef])
 }

@@ -18,8 +18,9 @@ export function useIncidentMarkers({ mapRef, incidents, incidentClickedRef, hand
     const map = mapRef.current
     if (!map) return
 
-    markersRef.current.forEach(m => m.remove())
-    markersRef.current.clear()
+    const markers = markersRef.current
+    markers.forEach(m => m.remove())
+    markers.clear()
 
     if (!incidents?.length) return
 
@@ -59,8 +60,8 @@ export function useIncidentMarkers({ mapRef, incidents, incidentClickedRef, hand
     }
 
     return () => {
-      markersRef.current.forEach(m => m.remove())
-      markersRef.current.clear()
+      markers.forEach(m => m.remove())
+      markers.clear()
     }
   }, [incidents, mapRef, incidentClickedRef, handlersRef])
 
