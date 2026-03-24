@@ -65,6 +65,7 @@ _simulation_per_second_buffer: dict[tuple[str, int, int], deque[dict]] = {}
 _simulation_per_minute_buffer: dict[tuple[str, int, int], deque[dict]] = {}
 _SEC_BUFFER_MAXLEN = 400  # 5 min + headroom
 _MIN_BUFFER_MAXLEN = 70  # 60 min + headroom
+_DETECTION_RING_MAXLEN = 20_000  # ~60s × 20Hz × 15 detections/tick + headroom
 
 
 def get_simulation_incidents() -> list:
@@ -1037,7 +1038,9 @@ class SimulationEngine:
         # Rolling detection buffer per fiber — always keeps last SNAPSHOT_WINDOW_S seconds.
         # Used to seed snapshots with pre-incident data when a new incident spawns.
         # maxlen caps memory even if time-based eviction misses entries.
-        self._detection_ring: dict[str, deque[dict]] = {f.id: deque(maxlen=20_000) for f in fibers}
+        self._detection_ring: dict[str, deque[dict]] = {
+            f.id: deque(maxlen=_DETECTION_RING_MAXLEN) for f in fibers
+        }
 
         # SHM state
         self.shm_base_freq: dict[str, float] = {}
