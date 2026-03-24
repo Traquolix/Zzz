@@ -148,6 +148,7 @@
     "trafficSnapshot": "Traffic Snapshot",
     "noSnapshot": "No snapshot available",
     "vehicles": "vehicles",
+    "speedUnit": "km/h",
     "beta": "BETA",
     "appName": "Sequoia",
     "appTagline": "Traffic Monitoring Platform",

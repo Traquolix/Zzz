@@ -148,6 +148,7 @@
     "trafficSnapshot": "Apercu du trafic",
     "noSnapshot": "Aucun apercu disponible",
     "vehicles": "vehicules",
+    "speedUnit": "km/h",
     "beta": "BETA",
     "appName": "Sequoia",
     "appTagline": "Plateforme de supervision du trafic",
