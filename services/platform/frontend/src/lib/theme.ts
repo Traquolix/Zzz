@@ -18,7 +18,7 @@
  * but this is the canonical reference.
  */
 export const COLORS = {
-  /** Incident severity — matches the live values used by all 17+ Prototype components. */
+  /** Incident severity — matches the live values used by all 17+ Dashboard components. */
   severity: {
     critical: '#ef4444', // red-500
     high: '#f97316', // orange-500
@@ -114,7 +114,7 @@ export const COLORS = {
     primary: '#3b82f6', // blue-500
     pending: '#f59e0b', // amber-500 — draw cursor for section creation
   },
-  /** Mapbox layer and DOM marker colors for the prototype map. */
+  /** Mapbox layer and DOM marker colors for the dashboard map. */
   map: {
     channelDotBorder: '#ffffff',
     glowLine: '#ffffff',
