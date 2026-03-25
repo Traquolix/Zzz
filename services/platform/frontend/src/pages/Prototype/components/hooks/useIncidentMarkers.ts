@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react'
 import mapboxgl from 'mapbox-gl'
 import { COLORS, severityColor } from '@/lib/theme'
-import type { ProtoIncident } from '../../types'
+import type { DisplayIncident } from '../../types'
 import type { MapHandlers } from './mapTypes'
 
 interface UseIncidentMarkersParams {
   mapRef: React.RefObject<mapboxgl.Map | null>
-  incidents?: ProtoIncident[]
+  incidents?: DisplayIncident[]
   incidentClickedRef: React.MutableRefObject<boolean>
   handlersRef: React.RefObject<MapHandlers>
 }

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import i18next from 'i18next'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
-import type { ProtoState, ProtoAction, LiveSectionStats, SectionDataPoint } from '../types'
+import type { MapPageState, MapPageAction, LiveSectionStats, SectionDataPoint } from '../types'
 import { useRealtime } from '@/hooks/useRealtime'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { WaterfallPanel } from './WaterfallPanel'
@@ -27,8 +27,8 @@ import { DataHubTabToolbar, DataHubTabContent } from './tabs/DataHubTab'
 import type { DataHubSubTab } from './DataHubPanel'
 
 interface SidePanelProps {
-  state: ProtoState
-  dispatch: React.Dispatch<ProtoAction>
+  state: MapPageState
+  dispatch: React.Dispatch<MapPageAction>
   panelRef: React.RefObject<HTMLDivElement | null>
   liveStats: Map<string, LiveSectionStats>
   liveSeriesData: Map<string, SectionDataPoint[]>

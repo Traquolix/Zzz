@@ -1,6 +1,6 @@
-import type { Severity, IncidentType, ProtoIncident } from '@/types/incident'
+import type { Severity, IncidentType, DisplayIncident } from '@/types/incident'
 
-export type { Severity, IncidentType, ProtoIncident }
+export type { Severity, IncidentType, DisplayIncident }
 export type SidebarTab = 'incidents' | 'sections' | 'settings' | 'shm' | 'channel' | 'waterfall' | 'dataHub'
 
 /**
@@ -94,7 +94,7 @@ export interface LiveSectionStats {
 
 export type MetricKey = 'speed' | 'flow' | 'occupancy'
 
-export interface ProtoState {
+export interface MapPageState {
   activeTab: SidebarTab
   selectedIncidentId: string | null
   selectedSectionId: string | null
@@ -102,7 +102,7 @@ export interface ProtoState {
   hideResolved: boolean
   sectionMetric: MetricKey
   sections: Section[]
-  incidents: ProtoIncident[]
+  incidents: DisplayIncident[]
   sectionCreationMode: boolean
   pendingPoint: PendingPoint | null
   showNamingDialog: boolean
@@ -122,7 +122,7 @@ export interface ProtoState {
   selectedChannel: SelectedChannel | null
 }
 
-export type ProtoAction =
+export type MapPageAction =
   | { type: 'SET_TAB'; tab: SidebarTab }
   | { type: 'SELECT_INCIDENT'; id: string }
   | { type: 'SELECT_SECTION'; id: string }
@@ -147,7 +147,7 @@ export type ProtoAction =
   | { type: 'TOGGLE_STRUCTURES_ON_MAP' }
   | { type: 'TOGGLE_STRUCTURE_LABELS' }
   | { type: 'SELECT_CHANNEL'; channel: SelectedChannel }
-  | { type: 'SET_INCIDENTS'; incidents: ProtoIncident[] }
+  | { type: 'SET_INCIDENTS'; incidents: DisplayIncident[] }
   | { type: 'SET_SECTIONS'; sections: Section[] }
   | { type: 'TOGGLE_HIDE_RESOLVED' }
   | { type: 'TOGGLE_INCIDENTS_ON_MAP' }

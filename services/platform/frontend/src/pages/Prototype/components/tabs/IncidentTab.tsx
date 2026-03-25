@@ -1,18 +1,18 @@
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { severityColor } from '@/lib/theme'
-import type { ProtoAction, Severity, ProtoIncident, Section } from '../../types'
+import type { MapPageAction, Severity, DisplayIncident, Section } from '../../types'
 import { IncidentList, IncidentDetail } from '../IncidentPanels'
 
 const severityOrder: Severity[] = ['critical', 'high', 'medium', 'low']
 
 interface IncidentTabProps {
-  incidents: ProtoIncident[]
+  incidents: DisplayIncident[]
   selectedIncidentId: string | null
   filterSeverity: Severity | null
   hideResolved: boolean
   showIncidentsOnMap: boolean
-  dispatch: React.Dispatch<ProtoAction>
+  dispatch: React.Dispatch<MapPageAction>
   onHighlightIncident?: (incidentId: string) => void
   onClearHighlight?: () => void
   unseenIds?: Set<string>

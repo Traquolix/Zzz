@@ -1,6 +1,6 @@
 import { useReducer, useEffect, useCallback, useRef, useState, useMemo } from 'react'
 import { toast } from 'sonner'
-import type { ProtoState, ProtoAction, ProtoIncident, PendingPoint } from './types'
+import type { MapPageState, MapPageAction, DisplayIncident, PendingPoint } from './types'
 import { fibers, defaultSpeedThresholds, buildThresholdLookup, findFiber, channelToCoord } from './data'
 import { PrototypeMap, type PrototypeMapHandle } from './components/PrototypeMap'
 import { StatusBar } from './components/StatusBar'
@@ -22,7 +22,7 @@ import type { Incident as ApiIncident } from '@/types/incident'
 import './prototype.css'
 
 /** Enrich an API incident with display fields computed from fiber geometry. */
-function toProtoIncident(api: ApiIncident): ProtoIncident {
+function toDisplayIncident(api: ApiIncident): DisplayIncident {
   const fiber = findFiber(api.fiberId, api.direction)
   const loc = fiber ? channelToCoord(fiber, api.channel) : null
   const fiberName = fiber?.name ?? api.fiberId
@@ -43,7 +43,7 @@ function toProtoIncident(api: ApiIncident): ProtoIncident {
   }
 }
 
-const initialState: ProtoState = {
+const initialState: MapPageState = {
   activeTab: 'sections',
   selectedIncidentId: null,
   selectedSectionId: null,
@@ -71,7 +71,7 @@ const initialState: ProtoState = {
   selectedChannel: null,
 }
 
-function reducer(state: ProtoState, action: ProtoAction): ProtoState {
+function reducer(state: MapPageState, action: MapPageAction): MapPageState {
   switch (action.type) {
     case 'SET_TAB':
       return {
@@ -292,15 +292,15 @@ export function Prototype() {
 
   // Real incidents from API + WebSocket
   const { incidents: apiIncidents, loading: incidentsLoading } = useIncidents()
-  const protoIncidents = useMemo(() => apiIncidents.map(toProtoIncident), [apiIncidents])
+  const displayIncidents = useMemo(() => apiIncidents.map(toDisplayIncident), [apiIncidents])
   const { unseenIds, hasUnseen, markSeen, markAllSeen, toasts, dismissToast } = useUnseenIncidents(
-    protoIncidents,
+    displayIncidents,
     incidentsLoading,
   )
 
   useEffect(() => {
-    dispatch({ type: 'SET_INCIDENTS', incidents: protoIncidents })
-  }, [protoIncidents])
+    dispatch({ type: 'SET_INCIDENTS', incidents: displayIncidents })
+  }, [displayIncidents])
 
   // Real sections from API
   const { sections: apiSections, addSection, removeSection } = useSections()
@@ -315,7 +315,7 @@ export function Prototype() {
 
   // Wrapped dispatch that intercepts DELETE_SECTION to also call the API
   const wrappedDispatch = useCallback(
-    (action: ProtoAction) => {
+    (action: MapPageAction) => {
       if (action.type === 'DELETE_SECTION') {
         removeSection(action.id).catch(() => {
           toast.error('Failed to delete section')
@@ -353,7 +353,7 @@ export function Prototype() {
     dispatch({ type: 'SELECT_CHANNEL', channel: point })
   }, [])
 
-  const emptyIncidents = useMemo(() => [] as ProtoIncident[], [])
+  const emptyIncidents = useMemo(() => [] as DisplayIncident[], [])
   const visibleIncidents = state.showIncidentsOnMap ? state.incidents : emptyIncidents
 
   // FlyTo on incident selection

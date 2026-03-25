@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { COLORS } from '@/lib/theme'
 import { fibers, defaultSpeedThresholds, getFiberColor } from '../data'
-import type { Fiber, ProtoAction, SpeedThresholds } from '../types'
+import type { Fiber, MapPageAction, SpeedThresholds } from '../types'
 import { FlowToggle } from './FlowToggle'
 import { ThresholdEditor } from './ThresholdEditor'
 import type { DataFlow } from '@/context/RealtimeContext'
@@ -131,7 +131,7 @@ function SettingsPanel({
 }: {
   fiberThresholds: Record<string, SpeedThresholds>
   fiberColors: Record<string, string>
-  dispatch: React.Dispatch<ProtoAction>
+  dispatch: React.Dispatch<MapPageAction>
   onHighlightFiber?: (fiberId: string) => void
   onClearHighlight?: () => void
   show3DBuildings: boolean

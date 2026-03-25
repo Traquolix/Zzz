@@ -3,11 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/hooks/useAuth'
 import { API_URL } from '@/constants/api'
-import type { ProtoAction } from '../types'
+import type { MapPageAction } from '../types'
 import { SettingsIcon, DataHubIcon } from './SidebarIcons'
 
 interface UserMenuProps {
-  dispatch: React.Dispatch<ProtoAction>
+  dispatch: React.Dispatch<MapPageAction>
 }
 
 export function UserMenu({ dispatch }: UserMenuProps) {

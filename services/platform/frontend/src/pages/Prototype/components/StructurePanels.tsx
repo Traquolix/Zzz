@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { findFiber } from '../data'
-import type { ProtoAction } from '../types'
+import type { MapPageAction } from '../types'
 import type {
   Infrastructure,
   SHMStatus,
@@ -28,7 +28,7 @@ function StructureList({
   loading: boolean
   allStatuses: Map<string, SHMStatus>
   search: string
-  dispatch: React.Dispatch<ProtoAction>
+  dispatch: React.Dispatch<MapPageAction>
   onHighlightSection?: (sectionId: string) => void
   onClearHighlight?: () => void
 }) {

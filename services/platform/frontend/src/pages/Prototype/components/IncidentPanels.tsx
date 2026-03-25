@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { severityColor } from '@/lib/theme'
 import { useIncidentSnapshot } from '@/hooks/useIncidentSnapshot'
-import type { ProtoIncident, ProtoAction, Severity, Section } from '../types'
+import type { DisplayIncident, MapPageAction, Severity, Section } from '../types'
 import { useRealtime } from '@/hooks/useRealtime'
 import { TimeSeriesChart } from './TimeSeriesChart'
 
@@ -20,11 +20,11 @@ export function IncidentList({
   unseenIds,
   onMarkSeen,
 }: {
-  incidents: ProtoIncident[]
+  incidents: DisplayIncident[]
   filterSeverity: Severity | null
   hideResolved: boolean
   sortBy: 'newest' | 'oldest'
-  dispatch: React.Dispatch<ProtoAction>
+  dispatch: React.Dispatch<MapPageAction>
   onHighlightIncident?: (id: string) => void
   onClearHighlight?: () => void
   unseenIds?: Set<string>
@@ -106,9 +106,9 @@ export function IncidentDetail({
   dispatch,
   onBack,
 }: {
-  incident: ProtoIncident
+  incident: DisplayIncident
   sections: Section[]
-  dispatch: React.Dispatch<ProtoAction>
+  dispatch: React.Dispatch<MapPageAction>
   onBack: () => void
 }) {
   const { t } = useTranslation()

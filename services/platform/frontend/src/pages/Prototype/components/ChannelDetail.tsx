@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { findFiber, getFiberColor, getSpeedColor } from '../data'
 import { COLORS } from '@/lib/theme'
-import type { ProtoAction, Section, SelectedChannel } from '../types'
+import type { MapPageAction, Section, SelectedChannel } from '../types'
 import { useRealtime } from '@/hooks/useRealtime'
 import { parseDetections } from '@/lib/parseMessage'
 
@@ -14,7 +14,7 @@ export function ChannelDetail({
 }: {
   channel: SelectedChannel
   sections: Section[]
-  dispatch: React.Dispatch<ProtoAction>
+  dispatch: React.Dispatch<MapPageAction>
   fiberColors: Record<string, string>
 }) {
   const { t } = useTranslation()

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { COLORS, chartColors } from '@/lib/theme'
 import { findFiber, getSpeedColor, getFiberColor } from '../data'
-import type { ProtoAction, Section, LiveSectionStats, SectionDataPoint, MetricKey } from '../types'
+import type { MapPageAction, Section, LiveSectionStats, SectionDataPoint, MetricKey } from '../types'
 import { TimeSeriesChart } from './TimeSeriesChart'
 import { Sparkline } from './Sparkline'
 import { useSectionHistory } from '../hooks/useSectionHistory'
@@ -50,7 +50,7 @@ export function SectionList({
   search,
 }: {
   sections: Section[]
-  dispatch: React.Dispatch<ProtoAction>
+  dispatch: React.Dispatch<MapPageAction>
   liveStats: Map<string, LiveSectionStats>
   liveSeriesData: Map<string, SectionDataPoint[]>
   metric: MetricKey
@@ -170,7 +170,7 @@ export function SectionDetail({
   onBack: () => void
   liveStats: Map<string, LiveSectionStats>
   liveSeriesData: Map<string, SectionDataPoint[]>
-  dispatch: React.Dispatch<ProtoAction>
+  dispatch: React.Dispatch<MapPageAction>
   fiberColors: Record<string, string>
 }) {
   const { t } = useTranslation()

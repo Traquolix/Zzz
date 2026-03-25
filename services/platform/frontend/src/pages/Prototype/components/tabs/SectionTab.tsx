@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { chartColors } from '@/lib/theme'
-import type { ProtoAction, MetricKey, Section, LiveSectionStats, SectionDataPoint } from '../../types'
+import type { MapPageAction, MetricKey, Section, LiveSectionStats, SectionDataPoint } from '../../types'
 import { MAX_SECTIONS_PER_ORG } from '@/api/sections'
 import { MetricIcon } from '../SidebarIcons'
 import { SectionList, SectionDetail } from '../SectionPanels'
@@ -11,7 +11,7 @@ interface SectionTabToolbarProps {
   setSectionSearch: (value: string) => void
   sections: Section[]
   sectionMetric: MetricKey
-  dispatch: React.Dispatch<ProtoAction>
+  dispatch: React.Dispatch<MapPageAction>
 }
 
 export function SectionTabToolbar({
@@ -94,7 +94,7 @@ export function SectionTabToolbar({
 interface SectionTabContentProps {
   sections: Section[]
   selectedSectionId: string | null
-  dispatch: React.Dispatch<ProtoAction>
+  dispatch: React.Dispatch<MapPageAction>
   liveStats: Map<string, LiveSectionStats>
   liveSeriesData: Map<string, SectionDataPoint[]>
   sectionMetric: MetricKey

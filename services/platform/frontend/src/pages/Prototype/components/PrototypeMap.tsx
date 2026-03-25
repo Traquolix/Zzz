@@ -1,6 +1,6 @@
 import { useRef, useMemo, forwardRef, useImperativeHandle, memo } from 'react'
 import { findFiber } from '../data'
-import type { Fiber, Section, PendingPoint, LiveSectionStats, SpeedThresholds, ProtoIncident } from '../types'
+import type { Fiber, Section, PendingPoint, LiveSectionStats, SpeedThresholds, DisplayIncident } from '../types'
 import type { Infrastructure } from '@/types/infrastructure'
 import type { VehiclePosition } from '../hooks/useVehicleSim'
 import { useMapInstance } from './hooks/useMapInstance'
@@ -24,7 +24,7 @@ export interface PrototypeMapHandle {
 }
 
 interface PrototypeMapProps {
-  incidents?: ProtoIncident[]
+  incidents?: DisplayIncident[]
   onIncidentClick?: (id: string) => void
   onMapClick?: () => void
   sectionCreationMode?: boolean

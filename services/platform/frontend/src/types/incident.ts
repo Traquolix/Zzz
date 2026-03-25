@@ -19,7 +19,7 @@ export type Incident = {
 }
 
 /** Enriched incident with display fields computed from fiber geometry. */
-export type ProtoIncident = Incident & {
+export type DisplayIncident = Incident & {
   title: string
   description: string
   location: [number, number]
