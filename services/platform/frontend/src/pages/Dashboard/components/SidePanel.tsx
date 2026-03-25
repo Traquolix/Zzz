@@ -22,7 +22,8 @@ import {
 } from './SidebarIcons'
 import { IncidentTabToolbar, IncidentTabContent } from './tabs/IncidentTab'
 import { SectionTabToolbar, SectionTabContent } from './tabs/SectionTab'
-import { ShmTabToolbar, ShmTabContent, type StructureDataProp } from './tabs/ShmTab'
+import { ShmTabToolbar, ShmTabContent } from './tabs/ShmTab'
+import type { InfrastructureData } from '../hooks/useInfrastructure'
 import { DataHubTabToolbar, DataHubTabContent } from './tabs/DataHubTab'
 import type { DataHubSubTab } from './DataHubPanel'
 
@@ -36,7 +37,7 @@ interface SidePanelProps {
   onHighlightSection?: (sectionId: string) => void
   onHighlightIncident?: (incidentId: string) => void
   onClearHighlight?: () => void
-  structureData?: StructureDataProp
+  infrastructure: InfrastructureData
   unseenIds?: Set<string>
   hasUnseen?: boolean
   onMarkSeen?: (id: string) => void
@@ -78,7 +79,7 @@ export function SidePanel({
   onHighlightSection,
   onHighlightIncident,
   onClearHighlight,
-  structureData,
+  infrastructure,
   unseenIds,
   hasUnseen,
   onMarkSeen,
@@ -370,18 +371,12 @@ export function SidePanel({
               />
             </ErrorBoundary>
           )}
-          {activeTab === 'shm' && structureData && (
+          {activeTab === 'shm' && (
             <ErrorBoundary key="shm" fallback={panelFallback}>
               <ShmTabContent
-                structures={structureData.structures}
-                loading={structureData.loading}
-                allStatuses={structureData.allStatuses}
-                shmStatus={structureData.shmStatus}
-                spectralData={structureData.spectralData}
-                spectralLoading={structureData.spectralLoading}
-                peakData={structureData.peakData}
-                peakLoading={structureData.peakLoading}
-                dataSummary={structureData.dataSummary}
+                structures={infrastructure.structures}
+                loading={infrastructure.loading}
+                allStatuses={infrastructure.allStatuses}
                 selectedStructureId={selectedStructureId}
                 dispatch={dispatch}
                 onHighlightSection={onHighlightSection}

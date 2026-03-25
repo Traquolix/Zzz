@@ -1,14 +1,9 @@
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import type { MapPageAction } from '../../types'
-import type {
-  Infrastructure,
-  SHMStatus,
-  SpectralTimeSeries,
-  PeakFrequencyData,
-  SpectralSummary,
-} from '@/types/infrastructure'
+import type { Infrastructure, SHMStatus } from '@/types/infrastructure'
 import { StructureList, StructureDetail } from '../StructurePanels'
+import { useStructureDetail } from '../../hooks/useStructureDetail'
 
 interface ShmTabToolbarProps {
   shmSearch: string
@@ -109,28 +104,10 @@ export function ShmTabToolbar({
   )
 }
 
-export interface StructureDataProp {
-  structures: Infrastructure[]
-  loading: boolean
-  allStatuses: Map<string, SHMStatus>
-  shmStatus: SHMStatus | null
-  spectralData: SpectralTimeSeries | null
-  spectralLoading: boolean
-  peakData: PeakFrequencyData | null
-  peakLoading: boolean
-  dataSummary: SpectralSummary | null
-}
-
 interface ShmTabContentProps {
   structures: Infrastructure[]
   loading: boolean
   allStatuses: Map<string, SHMStatus>
-  shmStatus: SHMStatus | null
-  spectralData: SpectralTimeSeries | null
-  spectralLoading: boolean
-  peakData: PeakFrequencyData | null
-  peakLoading: boolean
-  dataSummary: SpectralSummary | null
   selectedStructureId: string | null
   dispatch: React.Dispatch<MapPageAction>
   onHighlightSection?: (sectionId: string) => void
@@ -142,28 +119,24 @@ export function ShmTabContent({
   structures,
   loading,
   allStatuses,
-  shmStatus,
-  spectralData,
-  spectralLoading,
-  peakData,
-  peakLoading,
-  dataSummary,
   selectedStructureId,
   dispatch,
   onHighlightSection,
   onClearHighlight,
   search,
 }: ShmTabContentProps) {
+  const detail = useStructureDetail(selectedStructureId, allStatuses)
+
   if (selectedStructureId) {
     return (
       <StructureDetail
         structure={structures.find(s => s.id === selectedStructureId) ?? null}
-        shmStatus={shmStatus}
-        spectralData={spectralData}
-        spectralLoading={spectralLoading}
-        peakData={peakData}
-        peakLoading={peakLoading}
-        dataSummary={dataSummary}
+        shmStatus={detail.shmStatus}
+        spectralData={detail.spectralData}
+        spectralLoading={detail.spectralLoading}
+        peakData={detail.peakData}
+        peakLoading={detail.peakLoading}
+        dataSummary={detail.dataSummary}
         onBack={() => dispatch({ type: 'CLEAR_SELECTION' })}
       />
     )
