@@ -7,12 +7,19 @@ import { RealtimeProvider } from '@/context/RealtimeProvider'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { WS_URL } from '@/constants/api'
 import { logger } from '@/lib/logger'
+import { ApiError } from '@/api/client'
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 30_000,
-      retry: 3,
+      retry: (failureCount, error) => {
+        // Never retry auth or rate-limit errors
+        if (error instanceof ApiError && (error.status === 401 || error.status === 429)) {
+          return false
+        }
+        return failureCount < 3
+      },
       retryDelay: attempt => Math.min(1000 * 2 ** attempt, 15_000),
       refetchOnWindowFocus: false,
     },
