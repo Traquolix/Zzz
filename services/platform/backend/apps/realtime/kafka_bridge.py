@@ -38,9 +38,41 @@ from apps.realtime.broadcast import (
     pubsub_broadcast_detections,
     pubsub_broadcast_shm,
 )
-from apps.shared.constants import MAP_REFRESH_INTERVAL
+from apps.shared.constants import INFRA_REFRESH_INTERVAL, MAP_REFRESH_INTERVAL
 
 logger = logging.getLogger("sequoia.kafka_bridge")
+
+
+def load_infrastructure() -> list[dict]:
+    """Load infrastructure from PostgreSQL (with JSON fallback if DB is empty)."""
+    from apps.monitoring.models import Infrastructure
+
+    items = []
+    for infra in Infrastructure.objects.select_related("organization").all():
+        items.append(
+            {
+                "id": infra.id,
+                "type": infra.type,
+                "name": infra.name,
+                "fiber_id": infra.fiber_id,
+                "start_channel": infra.start_channel,
+                "end_channel": infra.end_channel,
+                "organization_id": str(infra.organization_id),
+            }
+        )
+
+    if not items:
+        from pathlib import Path
+
+        path = Path(settings.DATA_DIR) / "clickhouse" / "cables" / "infrastructure.json"
+        if path.exists():
+            import json
+
+            with open(path) as f:
+                items = json.load(f)
+            logger.info("Loaded %d infrastructure items from JSON fallback", len(items))
+
+    return items
 
 
 def _try_import_confluent_kafka():
@@ -272,6 +304,7 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
     last_shm_broadcast: float = 0
     last_batch_cleanup: float = 0
     last_kafka_flag_refresh: float = time.time()
+    last_infra_refresh: float = time.time()
 
     # Start the replay drain task
     drain_task = asyncio.create_task(replay_buffer.drain(broadcast))
@@ -284,6 +317,25 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
             if loop_start - last_map_refresh > MAP_REFRESH_INTERVAL:
                 fiber_org_map = await load_fiber_org_map()
                 last_map_refresh = loop_start
+
+            # Refresh infrastructure periodically (picks up added/removed sensors)
+            if loop_start - last_infra_refresh > INFRA_REFRESH_INTERVAL:
+                new_infra = await asyncio.to_thread(load_infrastructure)
+                if new_infra:
+                    new_ids = {i["id"] for i in new_infra}
+                    old_ids = {i["id"] for i in infrastructure}
+                    # Prune SHM state for removed infrastructure
+                    for removed_id in old_ids - new_ids:
+                        shm_state.pop(removed_id, None)
+                    if new_ids != old_ids:
+                        logger.info(
+                            "Infrastructure refreshed: %d items (+%d, -%d)",
+                            len(new_infra),
+                            len(new_ids - old_ids),
+                            len(old_ids - new_ids),
+                        )
+                    infrastructure = new_infra
+                last_infra_refresh = loop_start
 
             # Refresh bounded TTL every 5s so the flag expires if we crash
             if loop_start - last_kafka_flag_refresh > 5:
