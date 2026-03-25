@@ -9,7 +9,7 @@ import { SidePanel } from './components/SidePanel'
 import { useDetections } from './hooks/useDetections'
 import { useVehicleSim } from './hooks/useVehicleSim'
 import { useLiveStats } from './hooks/useLiveStats'
-import { useStructures } from './hooks/useStructures'
+import { useInfrastructure } from './hooks/useInfrastructure'
 import { useSections } from './hooks/useSections'
 import { useConfigUpdates } from '@/hooks/useConfigUpdates'
 import { useIncidents } from '@/hooks/useIncidents'
@@ -288,7 +288,7 @@ export function Dashboard() {
   const { buildGeoJSON, connected, lastDetectionTsRef } = useDetections()
   const { tickAndCollect } = useVehicleSim()
   const { stats: liveStats, seriesData: liveSeriesData } = useLiveStats(state.sections)
-  const structureData = useStructures(state.selectedStructureId)
+  const infrastructure = useInfrastructure()
 
   // Real incidents from API + WebSocket
   const { incidents: apiIncidents, loading: incidentsLoading } = useIncidents()
@@ -382,7 +382,7 @@ export function Dashboard() {
   // FlyTo on structure selection
   useEffect(() => {
     if (!state.selectedStructureId) return
-    const structure = structureData.structures.find(s => s.id === state.selectedStructureId)
+    const structure = infrastructure.structures.find(s => s.id === state.selectedStructureId)
     if (!structure) return
     const sFiber = findFiber(structure.fiberId, structure.direction ?? 0)
     const midChannel = Math.floor((structure.startChannel + structure.endChannel) / 2)
@@ -390,7 +390,7 @@ export function Dashboard() {
     if (coord) {
       mapRef.current?.flyTo(coord, 14)
     }
-  }, [state.selectedStructureId, structureData.structures])
+  }, [state.selectedStructureId, infrastructure.structures])
 
   // Highlight selected section/incident/structure/channel on map, clear on deselect
   useEffect(() => {
@@ -399,7 +399,7 @@ export function Dashboard() {
     } else if (state.selectedIncidentId) {
       mapRef.current?.highlightIncident(state.selectedIncidentId)
     } else if (state.selectedStructureId) {
-      mapRef.current?.highlightStructure(state.selectedStructureId, structureData.structures)
+      mapRef.current?.highlightStructure(state.selectedStructureId, infrastructure.structures)
     } else if (state.selectedChannel) {
       mapRef.current?.highlightChannel(state.selectedChannel.lng, state.selectedChannel.lat)
     } else {
@@ -410,7 +410,7 @@ export function Dashboard() {
     state.selectedIncidentId,
     state.selectedStructureId,
     state.selectedChannel,
-    structureData.structures,
+    infrastructure.structures,
   ])
 
   // Keyboard shortcuts
@@ -481,8 +481,8 @@ export function Dashboard() {
             onOverviewChange={setIsOverview}
             thresholdLookup={thresholdLookup}
             fiberColors={state.fiberColors}
-            structures={structureData.structures}
-            structureStatuses={structureData.allStatuses}
+            structures={infrastructure.structures}
+            structureStatuses={infrastructure.allStatuses}
             showStructuresOnMap={state.showStructuresOnMap}
             showStructureLabels={state.showStructureLabels}
             selectedStructureId={state.selectedStructureId}
@@ -560,7 +560,7 @@ export function Dashboard() {
             onHighlightSection={sectionId => mapRef.current?.highlightSection(sectionId)}
             onHighlightIncident={incidentId => mapRef.current?.highlightIncident(incidentId)}
             onClearHighlight={() => mapRef.current?.clearHighlight()}
-            structureData={structureData}
+            infrastructure={infrastructure}
             unseenIds={unseenIds}
             hasUnseen={hasUnseen}
             onMarkSeen={markSeen}
