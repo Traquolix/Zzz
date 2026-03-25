@@ -74,6 +74,17 @@ class Command(BaseCommand):
         if source == "auto":
             source = self._auto_detect()
 
+        # Sync fiber + infrastructure JSON files → PostgreSQL
+        from apps.fibers.management.commands.sync_fiber_data import sync_fibers, sync_infrastructure
+
+        fiber_stats = sync_fibers()
+        infra_stats = sync_infrastructure()
+        self.stdout.write(
+            f"Data sync: fibers ({fiber_stats['added']}+/{fiber_stats['updated']}~), "
+            f"infrastructure ({infra_stats['added']}+/{infra_stats['updated']}~/"
+            f"{infra_stats['deleted']}-)"
+        )
+
         self.stdout.write(f"Data source: {source}")
 
         # Check if using InMemoryChannelLayer - if so, simulation must run inside the server
@@ -233,44 +244,41 @@ class Command(BaseCommand):
         return Path(settings.DATA_DIR) / "clickhouse" / "cables"
 
     def _load_fibers(self) -> list[FiberConfig]:
-        """Load fiber configs from JSON data files with per-road calibration."""
-        from apps.realtime.fiber_calibration import FIBER_CONFIGS
-
-        data_dir = self._get_data_dir()
+        """Load fiber configs from PostgreSQL geometry + simulation calibration."""
+        from apps.fibers.models import FiberCable
+        from apps.realtime.simulation_config import FIBER_SIMULATION_CONFIG
 
         fibers = []
-        for fiber_id, cfg in FIBER_CONFIGS.items():
-            path = data_dir / f"{fiber_id}.json"
-            if not path.exists():
-                self.stderr.write(f"Warning: {path} not found, skipping")
-                continue
+        for cable in FiberCable.objects.all():
+            coords = [c for c in cable.coordinates if c[0] is not None and c[1] is not None]
+            cal = FIBER_SIMULATION_CONFIG.get(cable.id, {})
 
-            with open(path) as f:
-                data = json.load(f)
-
-            coords = [c for c in data["coordinates"] if c[0] is not None and c[1] is not None]
+            max_ch_0 = cal.get("max_channel_dir0") or len(coords)
+            max_ch_1 = cal.get("max_channel_dir1") or len(coords)
 
             fibers.append(
                 FiberConfig(
-                    id=data["id"],
-                    name=data["name"],
-                    color=data.get("color", "#000000"),
+                    id=cable.id,
+                    name=cable.name,
+                    color=cable.color,
                     coordinates=coords,
                     channel_count=len(coords),
-                    lanes=cfg["lanes"],
-                    speed_limit=cfg["speed_limit"],
-                    traffic_density=cfg["traffic_density"],
-                    typical_speed_range=cfg["typical_speed_range"],
-                    max_channel_dir0=cfg["max_channel_dir0"],
-                    max_channel_dir1=cfg["max_channel_dir1"],
+                    lanes=cal.get("lanes", 4),
+                    speed_limit=cal.get("speed_limit", 50),
+                    traffic_density=cal.get("traffic_density", "medium"),
+                    typical_speed_range=(
+                        cal.get("typical_speed_min", 30.0),
+                        cal.get("typical_speed_max", 50.0),
+                    ),
+                    max_channel_dir0=cal.get("max_channel_dir0"),
+                    max_channel_dir1=cal.get("max_channel_dir1"),
                 )
             )
-            max_ch_0 = cfg["max_channel_dir0"] or len(coords)
-            max_ch_1 = cfg["max_channel_dir1"] or len(coords)
             self.stdout.write(
-                f"  Loaded {data['name']} ({len(coords)} channels, "
+                f"  Loaded {cable.name} ({len(coords)} channels, "
                 f"dir0≤{max_ch_0}, dir1≤{max_ch_1}, "
-                f"{cfg['speed_limit']}km/h, {cfg['traffic_density']} density)"
+                f"{cal.get('speed_limit', 50)}km/h, "
+                f"{cal.get('traffic_density', 'medium')} density)"
             )
 
         return fibers

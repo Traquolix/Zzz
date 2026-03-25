@@ -1,5 +1,5 @@
 # Central fiber/section/model configuration
-# Adding a new fiber: add entry here + fiber_cables table + configure DAS hardware
+# Adding a new fiber: add entry here + JSON cable file + configure DAS hardware
 # Config auto-reloads on file change (no restart needed)
 #
 # Naming conventions:

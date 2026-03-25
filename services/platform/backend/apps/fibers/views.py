@@ -1,8 +1,5 @@
 """
-Fiber data views — reads from ClickHouse fiber_cables table.
-
-Falls back to JSON cable files when ClickHouse is unavailable
-(e.g. during local development or simulation-only demo).
+Fiber data views — reads from PostgreSQL FiberCable model.
 
 Data is org-scoped: non-superusers only see fibers assigned to their
 organization via FiberAssignment. Superusers see all fibers.
@@ -12,24 +9,20 @@ before returning to the frontend, so that sections, landmarks, and interactions
 are per-direction.
 """
 
-import json
 import logging
 from collections.abc import Callable
 from functools import wraps
-from pathlib import Path
 from typing import Any
 
-from django.conf import settings
 from django.core.cache import cache
 from drf_spectacular.utils import extend_schema
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.fibers.models import FiberCable
 from apps.fibers.serializers import FiberLineSerializer
 from apps.fibers.utils import get_org_fiber_ids
-from apps.shared.clickhouse import get_client
-from apps.shared.exceptions import ClickHouseUnavailableError
 from apps.shared.permissions import IsActiveUser
 from apps.shared.utils import build_org_cache_key
 
@@ -61,43 +54,6 @@ def _paginate(items: list) -> dict:
 
 logger = logging.getLogger("sequoia")
 
-_CABLE_FILES = [
-    "carros.json",
-    "promenade.json",
-    "mathis.json",
-]
-
-
-def _get_cables_dir() -> Path:
-    return Path(settings.DATA_DIR / "clickhouse" / "cables")
-
-
-def _load_directional_paths() -> dict[str, dict]:
-    """Load directional_paths from JSON cable files.
-
-    Returns {fiber_id: {"0": [...], "1": [...]}}.
-    Cached in Django cache so we don't re-read files on every request.
-    """
-    cache_key = "fibers:directional_paths"
-    cached: dict[str, dict] | None = cache.get(cache_key)
-    if cached is not None:
-        return cached
-
-    cables_dir = _get_cables_dir()
-    result = {}
-    for cable_file in _CABLE_FILES:
-        path = cables_dir / cable_file
-        if not path.exists():
-            continue
-        with open(path) as f:
-            data = json.load(f)
-        dp = data.get("directional_paths", {})
-        if dp:
-            result[data["id"]] = dp
-
-    cache.set(cache_key, result, FIBERS_CACHE_TTL)
-    return result
-
 
 def _expand_to_directional(fiber: dict[str, Any]) -> list[dict[str, Any]]:
     """Expand a single physical fiber into two directional fibers (direction 0 and 1).
@@ -105,12 +61,6 @@ def _expand_to_directional(fiber: dict[str, Any]) -> list[dict[str, Any]]:
     If `directional_paths` is provided in the fiber data with matching channel counts,
     those explicit coordinates are used. Otherwise, the frontend will compute
     perpendicular offsets from the base coordinates.
-
-    Expected structure for explicit paths:
-        "directional_paths": {
-            "0": [[lng, lat], ...],  // path for direction 0
-            "1": [[lng, lat], ...]   // path for direction 1
-        }
     """
     parent_id = fiber["id"]
     base_coords = fiber["coordinates"]
@@ -137,49 +87,12 @@ def _expand_to_directional(fiber: dict[str, Any]) -> list[dict[str, Any]]:
                 "name": fiber["name"],
                 "color": fiber["color"],
                 "coordinates": coords,
-                "baseCoordinates": base_coords,  # Original fiber center-line (for CableLayer)
-                "coordsPrecomputed": coords_precomputed,  # True = don't apply offset on frontend
+                "baseCoordinates": base_coords,
+                "coordsPrecomputed": coords_precomputed,
                 "landmarks": fiber.get("landmarks"),
             }
         )
     return result
-
-
-def _load_fibers_from_json(fiber_ids: list[str] | None = None) -> list[dict[str, Any]]:
-    """Load fiber data from JSON cable files (fallback when ClickHouse is unavailable).
-
-    Returns directional fibers (two per physical cable).
-    """
-    cables_dir = _get_cables_dir()
-    fibers = []
-
-    for cable_file in _CABLE_FILES:
-        path = cables_dir / cable_file
-        if not path.exists():
-            continue
-
-        with open(path) as f:
-            data = json.load(f)
-
-        fid = data["id"]
-        if fiber_ids is not None and fid not in fiber_ids:
-            continue
-
-        # Include all coordinates (valid + null) to preserve channel indexing.
-        physical = {
-            "id": fid,
-            "name": data.get("name", fid),
-            "color": data.get("color", "#888888"),
-            "coordinates": data.get("coordinates", []),
-            "directional_paths": data.get("directional_paths", {}),
-            "landmarks": None,
-        }
-        fibers.extend(_expand_to_directional(physical))
-
-    logger.info(
-        "Loaded %d directional fibers from JSON fallback (ClickHouse unavailable)", len(fibers)
-    )
-    return fibers
 
 
 class FiberListView(APIView):
@@ -188,7 +101,6 @@ class FiberListView(APIView):
 
     Org-scoped: returns only fibers assigned to the user's organization.
     Superusers see all fibers.
-    Falls back to JSON cable files when ClickHouse is unavailable.
     Each physical cable is expanded into two directional fibers.
     """
 
@@ -216,76 +128,27 @@ class FiberListView(APIView):
         else:
             fiber_ids = None  # no filter
 
-        try:
-            client = get_client()
-        except ClickHouseUnavailableError:
-            fibers = _load_fibers_from_json(fiber_ids)
-            result = _paginate(fibers)
-            cache.set(cache_key, result, FIBERS_CACHE_TTL)
-            return Response(result)
+        queryset = FiberCable.objects.all()
+        if fiber_ids is not None:
+            queryset = queryset.filter(id__in=fiber_ids)
 
-        try:
-            if fiber_ids is not None:
-                result = client.query(
-                    """
-                    SELECT
-                        fiber_id,
-                        fiber_name,
-                        channel_coordinates,
-                        color,
-                        landmark_labels
-                    FROM sequoia.fiber_cables
-                    WHERE fiber_id IN {fids:Array(String)}
-                    ORDER BY fiber_id
-                    """,
-                    parameters={"fids": fiber_ids},
-                )
-            else:
-                result = client.query("""
-                    SELECT
-                        fiber_id,
-                        fiber_name,
-                        channel_coordinates,
-                        color,
-                        landmark_labels
-                    FROM sequoia.fiber_cables
-                    ORDER BY fiber_id
-                """)
+        fibers = []
+        for cable in queryset:
+            landmarks = []
+            for idx, label in enumerate(cable.landmark_labels or []):
+                if label:
+                    landmarks.append({"channel": idx, "name": label})
 
-            dir_paths_map = _load_directional_paths()
+            physical = {
+                "id": cable.id,
+                "name": cable.name,
+                "color": cable.color,
+                "coordinates": cable.coordinates,
+                "directional_paths": cable.directional_paths or {},
+                "landmarks": landmarks if landmarks else None,
+            }
+            fibers.extend(_expand_to_directional(physical))
 
-            fibers = []
-            for row in result.named_results():  # type: ignore[attr-defined]  # clickhouse_connect QueryResult lacks stub
-                coords = []
-                for coord in row["channel_coordinates"]:
-                    lng, lat = coord
-                    if lng is not None and lat is not None:
-                        coords.append([lng, lat])
-                    else:
-                        coords.append([None, None])
-
-                landmarks = []
-                for idx, label in enumerate(row["landmark_labels"] or []):
-                    if label:
-                        landmarks.append({"channel": idx, "name": label})
-
-                physical = {
-                    "id": row["fiber_id"],
-                    "name": row["fiber_name"],
-                    "color": row["color"],
-                    "coordinates": coords,
-                    "directional_paths": dir_paths_map.get(row["fiber_id"], {}),
-                    "landmarks": landmarks if landmarks else None,
-                }
-                fibers.extend(_expand_to_directional(physical))
-
-            result = _paginate(fibers)
-            cache.set(cache_key, result, FIBERS_CACHE_TTL)
-            return Response(result)
-
-        except Exception as e:
-            logger.error("Failed to query fibers from ClickHouse: %s", e)
-            fibers = _load_fibers_from_json(fiber_ids)
-            result = _paginate(fibers)
-            cache.set(cache_key, result, FIBERS_CACHE_TTL)
-            return Response(result)
+        result = _paginate(fibers)
+        cache.set(cache_key, result, FIBERS_CACHE_TTL)
+        return Response(result)

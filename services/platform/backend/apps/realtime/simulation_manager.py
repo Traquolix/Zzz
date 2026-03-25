@@ -94,7 +94,7 @@ class SimulationManager:
             from apps.realtime.management.commands.run_realtime import Command
 
             cmd = Command()
-            fibers = cmd._load_fibers()
+            fibers = await sync_to_async(cmd._load_fibers)()
             infrastructure = await sync_to_async(cmd._load_infrastructure)()
 
             if not fibers:

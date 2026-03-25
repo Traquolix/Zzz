@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import numpy as np
+from django.db.models import Sum
 from django.utils.dateparse import parse_datetime
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
@@ -23,6 +24,7 @@ from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.views import APIView
 
 from apps.api_keys.models import APIKey
+from apps.fibers.models import FiberCable
 from apps.fibers.utils import get_org_fiber_ids
 from apps.monitoring.detection_serializers import (
     DetectionListResponseSerializer,
@@ -602,22 +604,12 @@ class PublicFiberListView(APIView):
         if not fiber_ids:
             return Response({"data": []})
 
-        # Get fiber metadata from ClickHouse fiber_cables
-        cables_rows = query(
-            """
-            SELECT fiber_id, fiber_name, length(channel_coordinates) as channel_count
-            FROM sequoia.fiber_cables
-            WHERE fiber_id IN {fids:Array(String)}
-            ORDER BY fiber_id
-            """,
-            parameters={"fids": fiber_ids},
-        )
-
+        # Get fiber metadata from PostgreSQL
         cable_meta: dict[str, dict] = {}
-        for row in cables_rows:
-            cable_meta[row["fiber_id"]] = {
-                "name": row["fiber_name"],
-                "channel_count": row["channel_count"],
+        for cable in FiberCable.objects.filter(id__in=fiber_ids).order_by("id"):
+            cable_meta[cable.id] = {
+                "name": cable.name,
+                "channel_count": cable.channel_count,
             }
 
         # Get data availability from detection_1h (permanent storage)
@@ -1064,23 +1056,9 @@ class StatsAPIView(APIView):
                 }
             )
 
-        fiber_count = (
-            query_scalar(
-                "SELECT count(DISTINCT fiber_id) FROM sequoia.fiber_cables "
-                "WHERE fiber_id IN {fids:Array(String)}",
-                parameters={"fids": fiber_ids},
-            )
-            or 0
-        )
-
-        total_channels = (
-            query_scalar(
-                "SELECT sum(length(channel_coordinates)) FROM sequoia.fiber_cables "
-                "WHERE fiber_id IN {fids:Array(String)}",
-                parameters={"fids": fiber_ids},
-            )
-            or 0
-        )
+        fiber_qs = FiberCable.objects.filter(id__in=fiber_ids)
+        fiber_count = fiber_qs.count()
+        total_channels = fiber_qs.aggregate(total=Sum("channel_count"))["total"] or 0
 
         active_incidents = (
             query_scalar(

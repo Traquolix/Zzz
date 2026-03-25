@@ -519,99 +519,42 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             return []
 
     async def _send_initial_fibers(self) -> None:
-        """Send fiber configuration on subscribe.
-
-        Falls back to JSON cable files when ClickHouse is unavailable
-        (same fallback as FiberListView).
-        """
+        """Send fiber configuration on subscribe (reads from PostgreSQL)."""
         try:
             fibers = await sync_to_async(self._query_initial_fibers)()
             await self.send_json({"channel": "fibers", "data": fibers})
-        except ClickHouseUnavailableError as e:
-            # Expected when ClickHouse is down - fall back to JSON files
-            logger.info("ClickHouse unavailable, falling back to JSON for fibers: %s", e)
-            await self._send_fibers_from_json_fallback()
-        except ObjectDoesNotExist as e:
-            logger.error(
-                "Organization not found for user %s: %s",
-                getattr(self._user, "username", None),
-                e,
-            )
-            await self.send_json({"channel": "fibers", "data": []})
         except Exception as e:
-            # Unexpected error - log and try fallback
-            logger.exception("Unexpected error querying fibers from ClickHouse: %s", e)
-            await self._send_fibers_from_json_fallback()
-
-    async def _send_fibers_from_json_fallback(self) -> None:
-        """Load fibers from JSON cable files as fallback."""
-        try:
-            from apps.fibers.views import _load_fibers_from_json
-
-            fiber_ids = None
-            if self._org_id != "__all__":
-                from apps.fibers.utils import get_org_fiber_ids
-
-                fiber_ids = get_org_fiber_ids(self._org)
-            fibers = await sync_to_async(_load_fibers_from_json)(fiber_ids)
-            await self.send_json({"channel": "fibers", "data": fibers})
-        except FileNotFoundError as e:
-            logger.error("Fiber JSON files not found: %s", e)
-            await self.send_json({"channel": "fibers", "data": []})
-        except ObjectDoesNotExist as e:
-            logger.error("Organization not found in JSON fallback: %s", e)
-            await self.send_json({"channel": "fibers", "data": []})
-        except Exception as e:
-            logger.exception("Failed to load fibers from JSON fallback: %s", e)
+            logger.exception("Failed to load fibers: %s", e)
             await self.send_json({"channel": "fibers", "data": []})
 
     def _query_initial_fibers(self) -> list[dict[str, Any]]:
-        """Synchronous ClickHouse query for fiber configuration (org-scoped)."""
-        from apps.shared.clickhouse import get_client
-
-        client = get_client()
+        """Load fiber configuration from PostgreSQL (org-scoped)."""
+        from apps.fibers.models import FiberCable
+        from apps.fibers.views import _expand_to_directional
 
         if self._org_id == "__all__":
-            result = client.query("""
-                SELECT fiber_id, fiber_name, channel_coordinates, color, landmark_labels
-                FROM sequoia.fiber_cables
-                ORDER BY fiber_id
-            """)
+            queryset = FiberCable.objects.all()
         else:
             from apps.fibers.utils import get_org_fiber_ids
 
             fiber_ids = get_org_fiber_ids(self._org)
             if not fiber_ids:
                 return []
-            result = client.query(
-                """
-                SELECT fiber_id, fiber_name, channel_coordinates, color, landmark_labels
-                FROM sequoia.fiber_cables
-                WHERE fiber_id IN {fids:Array(String)}
-                ORDER BY fiber_id
-                """,
-                parameters={"fids": fiber_ids},
-            )
-
-        from apps.fibers.views import _expand_to_directional
+            queryset = FiberCable.objects.filter(id__in=fiber_ids)
 
         fibers = []
-        for row in result.named_results():
-            coords = []
-            for coord in row["channel_coordinates"]:
-                lng, lat = coord
-                coords.append([lng, lat] if lng is not None and lat is not None else [None, None])
+        for cable in queryset.order_by("id"):
             landmarks = []
-            for idx, label in enumerate(row["landmark_labels"] or []):
+            for idx, label in enumerate(cable.landmark_labels or []):
                 if label:
                     landmarks.append({"channel": idx, "name": label})
             physical = {
-                "id": row["fiber_id"],
-                "name": row["fiber_name"],
-                "color": row["color"],
-                "coordinates": coords,
+                "id": cable.id,
+                "name": cable.name,
+                "color": cable.color,
+                "coordinates": cable.coordinates,
+                "directional_paths": cable.directional_paths or {},
                 "landmarks": landmarks or None,
-                "directional_paths": {},  # ClickHouse doesn't store precomputed paths
             }
             fibers.extend(_expand_to_directional(physical))
         return fibers

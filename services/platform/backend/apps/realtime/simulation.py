@@ -12,7 +12,7 @@ Architecture:
     - The Overseer monitors aggregated speed metrics and declares incidents
       when it detects anomalies — incidents emerge from behavior, not RNG
 
-This runs as a background async loop, started by the `run_simulation` management command.
+This runs as a background async loop, started by the ``run_realtime`` management command.
 
 Org-scoped: broadcasts are sent to org-specific groups via fiber_org_map.
 Superuser clients join the __all__ group which always receives all data.

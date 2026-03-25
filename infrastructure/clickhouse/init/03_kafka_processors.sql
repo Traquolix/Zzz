@@ -7,7 +7,8 @@
 -- Data flow:
 --   das.detections → detection_kafka → detection_hires (48h TTL)
 --
--- Adding a new fiber requires NO changes here - just add to fiber_cables table!
+-- Adding a new fiber requires NO changes here - fiber_cables is synced
+-- from JSON by `manage.py sync_fiber_data` on startup.
 -- ============================================================================
 
 -- ============================================================================
