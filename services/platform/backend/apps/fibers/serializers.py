@@ -1,7 +1,7 @@
 """
 Response serializers for fiber endpoints.
 
-Read-only serializers for ClickHouse fiber_cables data.
+Read-only serializers for FiberCable model data.
 """
 
 from rest_framework import serializers

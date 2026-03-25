@@ -233,44 +233,34 @@ class Command(BaseCommand):
         return Path(settings.DATA_DIR) / "clickhouse" / "cables"
 
     def _load_fibers(self) -> list[FiberConfig]:
-        """Load fiber configs from JSON data files with per-road calibration."""
-        from apps.realtime.fiber_calibration import FIBER_CONFIGS
-
-        data_dir = self._get_data_dir()
+        """Load fiber configs from PostgreSQL FiberCable model."""
+        from apps.fibers.models import FiberCable
 
         fibers = []
-        for fiber_id, cfg in FIBER_CONFIGS.items():
-            path = data_dir / f"{fiber_id}.json"
-            if not path.exists():
-                self.stderr.write(f"Warning: {path} not found, skipping")
-                continue
-
-            with open(path) as f:
-                data = json.load(f)
-
-            coords = [c for c in data["coordinates"] if c[0] is not None and c[1] is not None]
+        for cable in FiberCable.objects.all():
+            coords = [c for c in cable.coordinates if c[0] is not None and c[1] is not None]
 
             fibers.append(
                 FiberConfig(
-                    id=data["id"],
-                    name=data["name"],
-                    color=data.get("color", "#000000"),
+                    id=cable.id,
+                    name=cable.name,
+                    color=cable.color,
                     coordinates=coords,
                     channel_count=len(coords),
-                    lanes=cfg["lanes"],
-                    speed_limit=cfg["speed_limit"],
-                    traffic_density=cfg["traffic_density"],
-                    typical_speed_range=cfg["typical_speed_range"],
-                    max_channel_dir0=cfg["max_channel_dir0"],
-                    max_channel_dir1=cfg["max_channel_dir1"],
+                    lanes=cable.lanes,
+                    speed_limit=cable.speed_limit,
+                    traffic_density=cable.traffic_density,
+                    typical_speed_range=cable.typical_speed_range,
+                    max_channel_dir0=cable.max_channel_dir0,
+                    max_channel_dir1=cable.max_channel_dir1,
                 )
             )
-            max_ch_0 = cfg["max_channel_dir0"] or len(coords)
-            max_ch_1 = cfg["max_channel_dir1"] or len(coords)
+            max_ch_0 = cable.max_channel_dir0 or len(coords)
+            max_ch_1 = cable.max_channel_dir1 or len(coords)
             self.stdout.write(
-                f"  Loaded {data['name']} ({len(coords)} channels, "
+                f"  Loaded {cable.name} ({len(coords)} channels, "
                 f"dir0≤{max_ch_0}, dir1≤{max_ch_1}, "
-                f"{cfg['speed_limit']}km/h, {cfg['traffic_density']} density)"
+                f"{cable.speed_limit}km/h, {cable.traffic_density} density)"
             )
 
         return fibers

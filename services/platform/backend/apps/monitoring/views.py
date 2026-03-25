@@ -571,21 +571,11 @@ class StatsView(FlowAwareMixin, APIView):
                 recent_rows = 0
                 active_vehicles = 0
             else:
-                fiber_count = (
-                    query_scalar(
-                        "SELECT count(DISTINCT fiber_id) FROM sequoia.fiber_cables WHERE fiber_id IN {fids:Array(String)}",
-                        parameters={"fids": fiber_ids},
-                    )
-                    or 0
-                )
+                from apps.fibers.models import FiberCable
 
-                total_channels = (
-                    query_scalar(
-                        "SELECT sum(length(channel_coordinates)) FROM sequoia.fiber_cables WHERE fiber_id IN {fids:Array(String)}",
-                        parameters={"fids": fiber_ids},
-                    )
-                    or 0
-                )
+                qs = FiberCable.objects.filter(id__in=fiber_ids)
+                fiber_count = qs.count()
+                total_channels = sum(c.channel_count for c in qs)
 
                 active_incidents = (
                     query_scalar(
@@ -621,14 +611,10 @@ class StatsView(FlowAwareMixin, APIView):
                     or 0
                 )
         else:
-            fiber_count = (
-                query_scalar("SELECT count(DISTINCT fiber_id) FROM sequoia.fiber_cables") or 0
-            )
+            from apps.fibers.models import FiberCable
 
-            total_channels = (
-                query_scalar("SELECT sum(length(channel_coordinates)) FROM sequoia.fiber_cables")
-                or 0
-            )
+            fiber_count = FiberCable.objects.count()
+            total_channels = sum(c.channel_count for c in FiberCable.objects.all())
 
             active_incidents = (
                 query_scalar(
