@@ -23,15 +23,6 @@ export type FrequencyReading = {
   timestamp: number // Unix ms
 }
 
-export type SelectedInfrastructure = {
-  id: string
-  name: string
-  type: InfrastructureType
-  fiberId: string
-  startChannel: number
-  endChannel: number
-}
-
 /**
  * Full spectral time series data from HDF5.
  * Used for heatmap visualization (time × frequency × power).

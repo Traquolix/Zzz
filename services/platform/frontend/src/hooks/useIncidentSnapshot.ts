@@ -3,7 +3,7 @@ import type { IncidentSnapshot } from '@/types/incident'
 import { fetchIncidentSnapshot } from '@/api/incidents'
 import type { DataFlow } from '@/context/RealtimeContext'
 
-export type SnapshotPoint = {
+type FormattedSnapshotPoint = {
   time: string
   speed?: number
   flow?: number
@@ -11,7 +11,7 @@ export type SnapshotPoint = {
 }
 
 type UseIncidentSnapshotResult = {
-  points: SnapshotPoint[] | null
+  points: FormattedSnapshotPoint[] | null
   loading: boolean
   complete: boolean
 }
@@ -23,7 +23,7 @@ type UseIncidentSnapshotResult = {
  * or when `incidentId`/`flow` changes (stale-request safe).
  */
 export function useIncidentSnapshot(incidentId: string, flow: DataFlow): UseIncidentSnapshotResult {
-  const [points, setPoints] = useState<SnapshotPoint[] | null>(null)
+  const [points, setPoints] = useState<FormattedSnapshotPoint[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [complete, setComplete] = useState(false)
   const cancelledRef = useRef(false)

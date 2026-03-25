@@ -1,6 +1,6 @@
 /**
  * Base type for entities that occupy a range of channels on a fiber.
- * Shared by FiberSection, SpeedLimitZone, and Infrastructure.
+ * Shared by Infrastructure and other channel-range entities.
  */
 export type FiberRange = {
   id: string
