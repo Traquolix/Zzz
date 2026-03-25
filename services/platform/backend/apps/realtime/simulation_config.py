@@ -9,7 +9,7 @@ lanes, speed limits, traffic density, and per-direction channel boundaries.
 """
 
 # Keyed by fiber_id (must match FiberCable.id / JSON file stem).
-FIBER_CONFIG: dict[str, dict] = {
+FIBER_SIMULATION_CONFIG: dict[str, dict] = {
     "carros": {
         "lanes": 6,
         "speed_limit": 110,
