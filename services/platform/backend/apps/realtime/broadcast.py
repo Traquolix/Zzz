@@ -115,6 +115,38 @@ async def broadcast_to_orgs(
                     )
 
 
+async def broadcast_config_updated(
+    channel_layer,
+    config_type: str,
+    fiber_org_map: dict[str, list[str]],
+):
+    """
+    Notify all connected clients that configuration data has changed.
+
+    Args:
+        channel_layer: Django Channels layer.
+        config_type: What changed — ``"fibers"`` or ``"infrastructure"``.
+        fiber_org_map: ``{fiber_id: [org_id, ...]}`` mapping.
+    """
+    message = {
+        "type": "broadcast_message",
+        "channel": "config_updated",
+        "data": {"type": config_type},
+    }
+
+    # Send to both flows, all orgs + superuser group
+    for flow in ("sim", "live"):
+        await channel_layer.group_send(f"realtime_{flow}_config_updated_org___all__", message)
+        sent_orgs: set[str] = set()
+        for org_ids in fiber_org_map.values():
+            for org_id in org_ids:
+                if org_id not in sent_orgs:
+                    sent_orgs.add(org_id)
+                    await channel_layer.group_send(
+                        f"realtime_{flow}_config_updated_org_{org_id}", message
+                    )
+
+
 # ============================================================================
 # PUB/SUB BROADCAST HELPERS (high-frequency channels)
 # ============================================================================

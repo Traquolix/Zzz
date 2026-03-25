@@ -11,6 +11,7 @@ import { useVehicleSim } from './hooks/useVehicleSim'
 import { useLiveStats } from './hooks/useLiveStats'
 import { useStructures } from './hooks/useStructures'
 import { useSections } from './hooks/useSections'
+import { useConfigUpdates } from '@/hooks/useConfigUpdates'
 import { useIncidents } from '@/hooks/useIncidents'
 import { useUnseenIncidents } from './hooks/useUnseenIncidents'
 import { IncidentToastStack } from './components/IncidentToastStack'
@@ -283,6 +284,7 @@ export function Prototype() {
   const [isOverview, setIsOverview] = useState(false)
   const mapRef = useRef<PrototypeMapHandle>(null)
   const sidebarRef = useRef<HTMLDivElement>(null)
+  useConfigUpdates()
   const { buildGeoJSON, connected, lastDetectionTsRef } = useDetections()
   const { tickAndCollect } = useVehicleSim()
   const { stats: liveStats, seriesData: liveSeriesData } = useLiveStats(state.sections)

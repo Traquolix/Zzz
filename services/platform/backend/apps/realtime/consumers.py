@@ -44,6 +44,7 @@ ALLOWED_CHANNELS = frozenset(
         "incidents",
         "shm_readings",
         "fibers",
+        "config_updated",
     }
 )
 
@@ -51,7 +52,7 @@ ALLOWED_CHANNELS = frozenset(
 PUBSUB_CHANNELS = frozenset({"detections", "shm_readings"})
 
 # Low-frequency channels use Django Channels layer (reliable delivery)
-LAYER_CHANNELS = frozenset({"incidents", "fibers"})
+LAYER_CHANNELS = frozenset({"incidents", "fibers", "config_updated"})
 
 # Rate limiting: max messages per window
 RATE_LIMIT_MESSAGES = 100
