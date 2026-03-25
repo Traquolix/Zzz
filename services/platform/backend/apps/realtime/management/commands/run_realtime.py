@@ -80,9 +80,9 @@ class Command(BaseCommand):
         fiber_stats = sync_fibers()
         infra_stats = sync_infrastructure()
         self.stdout.write(
-            f"Data sync: fibers ({fiber_stats['added']}+/{fiber_stats['updated']}~/"
-            f"{fiber_stats['deleted']}-), infrastructure ({infra_stats['added']}+/"
-            f"{infra_stats['updated']}~/{infra_stats['deleted']}-)"
+            f"Data sync: fibers ({fiber_stats['added']}+/{fiber_stats['updated']}~), "
+            f"infrastructure ({infra_stats['added']}+/{infra_stats['updated']}~/"
+            f"{infra_stats['deleted']}-)"
         )
 
         self.stdout.write(f"Data source: {source}")

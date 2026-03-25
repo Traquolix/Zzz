@@ -12,7 +12,8 @@
 --   2. detection_1m     - 1-minute aggregation (90 days TTL)
 --   3. detection_1h     - 1-hour aggregation (forever)
 --
--- Adding a new fiber requires NO changes here - just add to fiber_cables table!
+-- Adding a new fiber requires NO changes here - fiber_cables is synced
+-- from JSON by `manage.py sync_fiber_data` on startup.
 -- ============================================================================
 
 -- ============================================================================

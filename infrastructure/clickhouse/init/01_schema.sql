@@ -15,8 +15,8 @@ CREATE DATABASE IF NOT EXISTS sequoia;
 -- FIBER CABLES CONFIGURATION
 -- ============================================================================
 -- Geographic configuration of fiber optic cables.
--- To add a new fiber: INSERT into this table with fiber_id and coordinates.
--- No other infrastructure changes needed!
+-- Synced from JSON cable files by `manage.py sync_fiber_data` on startup.
+-- Used by detection_kafka_mv to enrich detections with lat/lng coordinates.
 CREATE TABLE IF NOT EXISTS sequoia.fiber_cables
 (
     fiber_id String CODEC(ZSTD(1)),

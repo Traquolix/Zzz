@@ -2,8 +2,10 @@
 Fiber models — cable geometry, calibration, and org assignment.
 
 FiberCable stores the physical fiber data (coordinates, calibration, directional
-paths) in PostgreSQL. This is the single source of truth for fiber data, used by
-both the REST API and the realtime loops.
+paths) in PostgreSQL. The authoritative source is the JSON cable files +
+calibration config; PostgreSQL is a cached copy synced on startup via
+``sync_fiber_data``. All runtime queries (REST API, realtime loops) read from
+PostgreSQL for performance.
 
 FiberAssignment maps fibers to organizations for multi-tenant scoping.
 One fiber can be assigned to multiple orgs (shared infrastructure).
@@ -18,9 +20,9 @@ class FiberCable(models.Model):
     """
     Physical fiber cable with geometry and calibration data.
 
-    Stored in PostgreSQL as the single source of truth. Previously split across
-    ClickHouse (geometry), JSON files (raw coordinates), and a static Python
-    file (calibration).
+    Synced from JSON cable files into PostgreSQL on startup (see ``sync_fiber_data``).
+    Previously split across ClickHouse (geometry), JSON files (raw coordinates),
+    and a static Python file (calibration).
     """
 
     id = models.CharField(max_length=100, primary_key=True)
@@ -48,7 +50,9 @@ class FiberCable(models.Model):
         help_text="Landmark name per channel index (empty string = no landmark).",
     )
 
-    # Calibration fields (previously in fiber_calibration.py)
+    # Simulation-only calibration fields — used exclusively by the simulation
+    # engine (apps.realtime.simulation) to generate realistic traffic.
+    # Not read by the live data path, REST API, or detection pipeline.
     lanes = models.IntegerField(default=4)
     speed_limit = models.IntegerField(
         default=50,
@@ -78,6 +82,13 @@ class FiberCable(models.Model):
         help_text="Last valid channel for direction 1 (null = full fiber).",
     )
 
+    # Denormalized count — set by sync_fiber_data from len(coordinates).
+    # Avoids loading the full coordinates JSON just to count channels.
+    channel_count = models.IntegerField(
+        default=0,
+        help_text="Number of DAS channels (= len(coordinates)).",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -87,10 +98,6 @@ class FiberCable(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.id})"
-
-    @property
-    def channel_count(self) -> int:
-        return len(self.coordinates) if self.coordinates else 0
 
     @property
     def typical_speed_range(self) -> tuple[float, float]:

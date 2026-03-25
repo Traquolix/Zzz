@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 import numpy as np
+from django.db.models import Sum
 from django.utils.dateparse import parse_datetime
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
@@ -23,6 +24,7 @@ from rest_framework.throttling import SimpleRateThrottle
 from rest_framework.views import APIView
 
 from apps.api_keys.models import APIKey
+from apps.fibers.models import FiberCable
 from apps.fibers.utils import get_org_fiber_ids
 from apps.monitoring.detection_serializers import (
     DetectionListResponseSerializer,
@@ -603,8 +605,6 @@ class PublicFiberListView(APIView):
             return Response({"data": []})
 
         # Get fiber metadata from PostgreSQL
-        from apps.fibers.models import FiberCable
-
         cable_meta: dict[str, dict] = {}
         for cable in FiberCable.objects.filter(id__in=fiber_ids).order_by("id"):
             cable_meta[cable.id] = {
@@ -1056,11 +1056,9 @@ class StatsAPIView(APIView):
                 }
             )
 
-        from apps.fibers.models import FiberCable
-
         fiber_qs = FiberCable.objects.filter(id__in=fiber_ids)
         fiber_count = fiber_qs.count()
-        total_channels = sum(c.channel_count for c in fiber_qs)
+        total_channels = fiber_qs.aggregate(total=Sum("channel_count"))["total"] or 0
 
         active_incidents = (
             query_scalar(

@@ -11,6 +11,7 @@ from typing import Any
 
 from django.core.cache import cache as django_cache
 from django.db import IntegrityError
+from django.db.models import Count, Sum
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
 from rest_framework.exceptions import NotFound, ParseError
@@ -19,6 +20,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.fibers.models import FiberCable
 from apps.fibers.utils import fiber_belongs_to_org, get_org_fiber_ids
 from apps.monitoring.incident_service import (
     query_by_id as incident_query_by_id,
@@ -571,11 +573,12 @@ class StatsView(FlowAwareMixin, APIView):
                 recent_rows = 0
                 active_vehicles = 0
             else:
-                from apps.fibers.models import FiberCable
-
-                qs = FiberCable.objects.filter(id__in=fiber_ids)
-                fiber_count = qs.count()
-                total_channels = sum(c.channel_count for c in qs)
+                agg = FiberCable.objects.filter(id__in=fiber_ids).aggregate(
+                    fiber_count=Count("id"),
+                    total_channels=Sum("channel_count"),
+                )
+                fiber_count = agg["fiber_count"]
+                total_channels = agg["total_channels"] or 0
 
                 active_incidents = (
                     query_scalar(
@@ -611,10 +614,8 @@ class StatsView(FlowAwareMixin, APIView):
                     or 0
                 )
         else:
-            from apps.fibers.models import FiberCable
-
             fiber_count = FiberCable.objects.count()
-            total_channels = sum(c.channel_count for c in FiberCable.objects.all())
+            total_channels = FiberCable.objects.aggregate(total=Sum("channel_count"))["total"] or 0
 
             active_incidents = (
                 query_scalar(
