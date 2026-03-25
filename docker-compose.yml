@@ -33,9 +33,8 @@ services:
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       CLUSTER_ID: sequoia-cluster
-      # Retention: 24 hours OR 10GB per partition (whichever comes first)
+      # Retention: 24 hours (time-based only)
       KAFKA_LOG_RETENTION_HOURS: 24
-      KAFKA_LOG_RETENTION_BYTES: 10737418240
       KAFKA_LOG_SEGMENT_BYTES: 536870912
       KAFKA_LOG_CLEANUP_POLICY: delete
       KAFKA_LOG_RETENTION_CHECK_INTERVAL_MS: 60000
@@ -68,12 +67,12 @@ services:
         echo 'Waiting for Kafka to be ready...' &&
         cub kafka-ready -b kafka:29092 1 30 &&
         echo 'Creating Kafka topics (1 partition — DAS streams require strict ordering)...' &&
-        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.raw.carros --partitions 1 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=10737418240 --config compression.type=lz4 --config max.message.bytes=2097152 &&
-        # kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.raw.mathis --partitions 1 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=10737418240 --config compression.type=lz4 --config max.message.bytes=2097152 &&
-        # kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.raw.promenade --partitions 1 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=10737418240 --config compression.type=lz4 --config max.message.bytes=2097152 &&
-        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.processed --partitions 1 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=10737418240 --config compression.type=lz4 --config max.message.bytes=2097152 &&
-        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.detections --partitions 1 --replication-factor 1 --config retention.ms=86400000 --config retention.bytes=10737418240 --config compression.type=lz4 --config max.message.bytes=2097152 &&
-        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.dlq --partitions 1 --replication-factor 1 --config retention.ms=604800000 --config retention.bytes=10737418240 --config compression.type=lz4 --config max.message.bytes=2097152 &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.raw.carros --partitions 1 --replication-factor 1 --config retention.ms=86400000 --config compression.type=lz4 --config max.message.bytes=2097152 &&
+        # kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.raw.mathis --partitions 1 --replication-factor 1 --config retention.ms=86400000 --config compression.type=lz4 --config max.message.bytes=2097152 &&
+        # kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.raw.promenade --partitions 1 --replication-factor 1 --config retention.ms=86400000 --config compression.type=lz4 --config max.message.bytes=2097152 &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.processed --partitions 1 --replication-factor 1 --config retention.ms=86400000 --config compression.type=lz4 --config max.message.bytes=2097152 &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.detections --partitions 1 --replication-factor 1 --config retention.ms=86400000 --config compression.type=lz4 --config max.message.bytes=2097152 &&
+        kafka-topics --create --if-not-exists --bootstrap-server kafka:29092 --topic das.dlq --partitions 1 --replication-factor 1 --config retention.ms=604800000 --config compression.type=lz4 --config max.message.bytes=2097152 &&
         echo 'All Kafka topics created successfully'
       "
     networks:
