@@ -244,12 +244,17 @@ class Command(BaseCommand):
         return Path(settings.DATA_DIR) / "clickhouse" / "cables"
 
     def _load_fibers(self) -> list[FiberConfig]:
-        """Load fiber configs from PostgreSQL FiberCable model."""
+        """Load fiber configs from PostgreSQL geometry + simulation calibration."""
         from apps.fibers.models import FiberCable
+        from apps.realtime.simulation_config import FIBER_CALIBRATION
 
         fibers = []
         for cable in FiberCable.objects.all():
             coords = [c for c in cable.coordinates if c[0] is not None and c[1] is not None]
+            cal = FIBER_CALIBRATION.get(cable.id, {})
+
+            max_ch_0 = cal.get("max_channel_dir0") or len(coords)
+            max_ch_1 = cal.get("max_channel_dir1") or len(coords)
 
             fibers.append(
                 FiberConfig(
@@ -258,20 +263,22 @@ class Command(BaseCommand):
                     color=cable.color,
                     coordinates=coords,
                     channel_count=len(coords),
-                    lanes=cable.lanes,
-                    speed_limit=cable.speed_limit,
-                    traffic_density=cable.traffic_density,
-                    typical_speed_range=cable.typical_speed_range,
-                    max_channel_dir0=cable.max_channel_dir0,
-                    max_channel_dir1=cable.max_channel_dir1,
+                    lanes=cal.get("lanes", 4),
+                    speed_limit=cal.get("speed_limit", 50),
+                    traffic_density=cal.get("traffic_density", "medium"),
+                    typical_speed_range=(
+                        cal.get("typical_speed_min", 30.0),
+                        cal.get("typical_speed_max", 50.0),
+                    ),
+                    max_channel_dir0=cal.get("max_channel_dir0"),
+                    max_channel_dir1=cal.get("max_channel_dir1"),
                 )
             )
-            max_ch_0 = cable.max_channel_dir0 or len(coords)
-            max_ch_1 = cable.max_channel_dir1 or len(coords)
             self.stdout.write(
                 f"  Loaded {cable.name} ({len(coords)} channels, "
                 f"dir0≤{max_ch_0}, dir1≤{max_ch_1}, "
-                f"{cable.speed_limit}km/h, {cable.traffic_density} density)"
+                f"{cal.get('speed_limit', 50)}km/h, "
+                f"{cal.get('traffic_density', 'medium')} density)"
             )
 
         return fibers

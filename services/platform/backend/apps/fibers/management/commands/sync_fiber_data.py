@@ -22,39 +22,6 @@ from django.core.management.base import BaseCommand
 
 logger = logging.getLogger("sequoia.fibers")
 
-# Simulation-only calibration per fiber — merged with JSON geometry data.
-# Used exclusively by the simulation engine to generate realistic traffic.
-# These match the physical road characteristics of each fiber deployment.
-FIBER_CALIBRATION: dict[str, dict] = {
-    "carros": {
-        "lanes": 6,
-        "speed_limit": 110,
-        "traffic_density": "high",
-        "typical_speed_min": 80.0,
-        "typical_speed_max": 110.0,
-        "max_channel_dir0": None,
-        "max_channel_dir1": None,
-    },
-    "promenade": {
-        "lanes": 4,
-        "speed_limit": 50,
-        "traffic_density": "medium",
-        "typical_speed_min": 30.0,
-        "typical_speed_max": 50.0,
-        "max_channel_dir0": 4177,
-        "max_channel_dir1": 4178,
-    },
-    "mathis": {
-        "lanes": 4,
-        "speed_limit": 50,
-        "traffic_density": "low",
-        "typical_speed_min": 35.0,
-        "typical_speed_max": 50.0,
-        "max_channel_dir0": 687,
-        "max_channel_dir1": 687,
-    },
-}
-
 
 def _get_cables_dir() -> Path:
     return Path(settings.DATA_DIR) / "clickhouse" / "cables"
@@ -110,6 +77,27 @@ def _sync_fiber_to_clickhouse(fiber_id: str, fields: dict) -> None:
         logger.warning("ClickHouse unavailable — skipped fiber_cables sync for %s", fiber_id)
 
 
+def _discover_fiber_files(cables_dir: Path) -> dict[str, dict]:
+    """Discover fiber JSON files and return {fiber_id: parsed_data}."""
+    fibers: dict[str, dict] = {}
+    for path in sorted(cables_dir.glob("*.json")):
+        try:
+            with open(path) as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning("Skipping %s: %s", path.name, e)
+            continue
+
+        # Only files with coordinates are fiber cables (skip infrastructure.json etc.)
+        if not isinstance(data, dict) or "coordinates" not in data:
+            continue
+
+        fiber_id = data.get("id", path.stem)
+        fibers[fiber_id] = data
+
+    return fibers
+
+
 def sync_fibers(dry_run: bool = False) -> dict[str, int]:
     """Sync FiberCable rows from JSON cable files. Returns {added, updated}."""
     from apps.fibers.models import FiberCable
@@ -117,17 +105,14 @@ def sync_fibers(dry_run: bool = False) -> dict[str, int]:
     cables_dir = _get_cables_dir()
     stats = {"added": 0, "updated": 0}
 
-    # Build desired state from JSON files
+    fiber_files = _discover_fiber_files(cables_dir)
+    if not fiber_files:
+        logger.warning("No fiber cable JSON files found in %s", cables_dir)
+        return stats
+
+    # Build desired state
     desired: dict[str, dict] = {}
-    for fiber_id, cal in FIBER_CALIBRATION.items():
-        path = cables_dir / f"{fiber_id}.json"
-        if not path.exists():
-            logger.warning("Cable file not found: %s", path)
-            continue
-
-        with open(path) as f:
-            data = json.load(f)
-
+    for fiber_id, data in fiber_files.items():
         coordinates = data.get("coordinates", [])
         desired[fiber_id] = {
             "name": data.get("name", fiber_id),
@@ -136,7 +121,6 @@ def sync_fibers(dry_run: bool = False) -> dict[str, int]:
             "channel_count": len(coordinates),
             "directional_paths": data.get("directional_paths", {}),
             "landmark_labels": data.get("landmark_labels", []),
-            **cal,
         }
 
     if dry_run:

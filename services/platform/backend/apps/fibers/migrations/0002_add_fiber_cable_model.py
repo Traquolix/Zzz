@@ -41,49 +41,11 @@ class Migration(migrations.Migration):
                         help_text="Landmark name per channel index (empty string = no landmark).",
                     ),
                 ),
-                ("lanes", models.IntegerField(default=4)),
                 (
-                    "speed_limit",
+                    "channel_count",
                     models.IntegerField(
-                        default=50, help_text="Road speed limit in km/h."
-                    ),
-                ),
-                (
-                    "traffic_density",
-                    models.CharField(
-                        default="medium",
-                        help_text="Traffic density: low, medium, high.",
-                        max_length=20,
-                    ),
-                ),
-                (
-                    "typical_speed_min",
-                    models.FloatField(
-                        default=30.0,
-                        help_text="Typical free-flow speed range minimum (km/h).",
-                    ),
-                ),
-                (
-                    "typical_speed_max",
-                    models.FloatField(
-                        default=50.0,
-                        help_text="Typical free-flow speed range maximum (km/h).",
-                    ),
-                ),
-                (
-                    "max_channel_dir0",
-                    models.IntegerField(
-                        blank=True,
-                        help_text="Last valid channel for direction 0 (null = full fiber).",
-                        null=True,
-                    ),
-                ),
-                (
-                    "max_channel_dir1",
-                    models.IntegerField(
-                        blank=True,
-                        help_text="Last valid channel for direction 1 (null = full fiber).",
-                        null=True,
+                        default=0,
+                        help_text="Number of DAS channels (= len(coordinates)).",
                     ),
                 ),
                 ("created_at", models.DateTimeField(auto_now_add=True)),
