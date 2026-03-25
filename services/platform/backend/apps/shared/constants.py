@@ -4,6 +4,8 @@ Shared constants and enums for the SequoIA platform.
 
 # Realtime simulation and Kafka bridge
 MAP_REFRESH_INTERVAL = 300  # 5 minutes
+INFRA_REFRESH_INTERVAL = 300  # 5 minutes
+FIBER_REFRESH_INTERVAL = 600  # 10 minutes
 
 # Infrastructure types
 INFRASTRUCTURE_TYPES = [

@@ -189,9 +189,9 @@ class Command(BaseCommand):
         """Run the Kafka bridge in a background thread with auto-restart."""
         import time as _time
 
-        from apps.realtime.kafka_bridge import run_kafka_bridge_loop
+        from apps.realtime.kafka_bridge import load_infrastructure, run_kafka_bridge_loop
 
-        infrastructure = self._load_infrastructure()
+        infrastructure = load_infrastructure()
 
         self.stdout.write(
             self.style.SUCCESS(
