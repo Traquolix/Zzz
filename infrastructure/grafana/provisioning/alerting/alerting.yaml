@@ -39,7 +39,7 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: absent_over_time(messages_processed_total{service_name="das-processor"}[5m]) or absent_over_time(ai_windows_processed_total{service_name="ai-engine"}[5m])
+              expr: absent_over_time(messages_processed_total{service_name=~"das-processor.*"}[5m]) or absent_over_time(ai_windows_processed_total{service_name=~"ai-engine.*"}[5m])
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -62,7 +62,7 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: rate(errors_total{service_name=~"das-processor|ai-engine"}[5m]) > 0.1
+              expr: rate(errors_total{service_name=~"das-processor.*|ai-engine.*"}[5m]) > 0.1
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -85,7 +85,7 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: circuit_breaker_state{service_name=~"das-processor|ai-engine"} == 2
+              expr: circuit_breaker_state{service_name=~"das-processor.*|ai-engine.*"} == 2
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -113,7 +113,7 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: kafka_consumer_lag_messages{service_name=~"das-processor|ai-engine"} > 10000
+              expr: kafka_consumer_lag_messages{service_name=~"das-processor.*|ai-engine.*"} > 10000
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -136,7 +136,7 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: histogram_quantile(0.95, rate(ai_inference_duration_seconds_bucket{service_name="ai-engine"}[5m])) > 5
+              expr: histogram_quantile(0.95, rate(ai_inference_duration_seconds_bucket{service_name=~"ai-engine.*"}[5m])) > 5
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -159,7 +159,7 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: dlq_depth_messages{service_name=~"das-processor|ai-engine"} > 50
+              expr: dlq_depth_messages{service_name=~"das-processor.*|ai-engine.*"} > 50
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -187,7 +187,7 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: rate(messages_processed_total{service_name="das-processor"}[10m]) == 0
+              expr: rate(messages_processed_total{service_name=~"das-processor.*"}[10m]) == 0
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -210,7 +210,7 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: rate(ai_windows_processed_total{service_name="ai-engine"}[10m]) == 0
+              expr: rate(ai_windows_processed_total{service_name=~"ai-engine.*"}[10m]) == 0
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
