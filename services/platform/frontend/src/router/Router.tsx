@@ -4,7 +4,7 @@ import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { Login } from '@/pages/Login'
 
-const Prototype = lazy(() => import('@/pages/Prototype'))
+const Dashboard = lazy(() => import('@/pages/Dashboard'))
 
 export const router = createBrowserRouter([
   {
@@ -19,7 +19,7 @@ export const router = createBrowserRouter([
         element: (
           <ErrorBoundary>
             <Suspense fallback={<div className="w-screen h-screen bg-[#1a1c20]" />}>
-              <Prototype />
+              <Dashboard />
             </Suspense>
           </ErrorBoundary>
         ),

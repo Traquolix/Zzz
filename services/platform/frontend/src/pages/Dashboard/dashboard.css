@@ -1,0 +1,196 @@
+.dashboard {
+  --dash-base: #1a1c20;
+  --dash-surface: #2b2d31;
+  --dash-surface-raised: #313338;
+  --dash-border: rgba(255, 255, 255, 0.08);
+  --dash-text: #e2e8f0;
+  --dash-text-secondary: #94a3b8;
+  --dash-text-muted: #64748b;
+  --dash-accent: #3b82f6;
+
+  --dash-green: #22c55e;
+  --dash-amber: #f59e0b;
+  --dash-red: #ef4444;
+
+  --dash-chart-grid: rgba(255, 255, 255, 0.03);
+
+  font-family:
+    Inter,
+    system-ui,
+    -apple-system,
+    sans-serif;
+  font-size: 14px;
+  color: var(--dash-text);
+  background: var(--dash-base);
+}
+
+/* Analysis view fade in */
+.dash-analysis-enter {
+  animation: dashFadeIn 300ms ease-out forwards;
+}
+
+@keyframes dashFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Creation banner */
+.dash-creation-banner {
+  animation: dashFadeIn 200ms ease-out forwards;
+}
+
+/* Scrollbar styling for panels */
+.dashboard ::-webkit-scrollbar {
+  width: 6px;
+}
+
+.dashboard ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.dashboard ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+}
+
+.dashboard ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Collapsible sidebar
+   The useDebouncedResize timer (250ms) resets on every ResizeObserver event
+   during the transition, so charts re-render only after the animation settles. */
+.dash-sidebar {
+  container-type: inline-size;
+  --sidebar-width: clamp(340px, 28vw, 480px);
+  width: var(--sidebar-width);
+  transition:
+    transform 200ms ease-in-out,
+    width 200ms ease-in-out;
+
+  /* Container-query-based text tiers.
+     Each uses clamp(current-px, cqi-blend, max-px) so text stays
+     the same at the default width and grows gently when expanded. */
+  --text-2xs: clamp(10px, 0.5cqi + 8px, 15px);
+  --text-xxs: clamp(11px, 0.5cqi + 9px, 16px);
+  --text-xs: clamp(12px, 0.5cqi + 10px, 17px);
+  --text-sm: clamp(14px, 0.6cqi + 11.5px, 20px);
+  --text-lg: clamp(18px, 0.8cqi + 14.5px, 26px);
+  --text-xl: clamp(20px, 1cqi + 16px, 30px);
+}
+
+.dash-sidebar.expanded {
+  --sidebar-width: 50vw;
+  transition:
+    transform 400ms ease-in-out,
+    width 400ms ease-in-out;
+}
+
+/* Data Hub: single-column, density increases with width */
+.datahub-layout {
+  display: flex;
+  flex-direction: column;
+}
+
+/* When sidebar is wide: show API key row stats always */
+@container (min-width: 520px) {
+  .datahub-key-stats {
+    display: inline !important;
+  }
+}
+
+/* Mapbox overrides for dark theme */
+.dashboard .mapboxgl-ctrl-attrib {
+  background: rgba(0, 0, 0, 0.5) !important;
+  color: var(--dash-text-muted) !important;
+  font-size: 10px !important;
+}
+
+.dashboard .mapboxgl-ctrl-attrib a {
+  color: var(--dash-text-muted) !important;
+}
+
+/* Vehicle popup */
+.dash-vehicle-popup .mapboxgl-popup-content {
+  background: rgba(30, 32, 36, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 8px 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+}
+
+.dash-vehicle-popup .mapboxgl-popup-tip {
+  border-top-color: rgba(30, 32, 36, 0.92);
+}
+
+.dash-vehicle-popup-body {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--dash-text);
+}
+
+.dash-vehicle-popup-speed {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.dash-vehicle-popup-detail {
+  color: var(--dash-text-secondary);
+}
+
+/* Incident marker pulse on hover */
+@keyframes dash-marker-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 12px 6px rgba(255, 255, 255, 0.6);
+  }
+}
+
+/* Incident marker — pulsing ring.
+   Applied to the inner dot wrapper (not the Mapbox Marker root element)
+   so transform: scale() doesn't clobber Mapbox's transform: translate(). */
+@keyframes dash-incident-ring {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.3);
+  }
+}
+
+/* Toast slide-up animation */
+@keyframes dashToastIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Channel selection blue dot pulse */
+@keyframes dash-channel-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 12px rgba(59, 130, 246, 0);
+  }
+}
