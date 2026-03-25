@@ -74,6 +74,17 @@ class Command(BaseCommand):
         if source == "auto":
             source = self._auto_detect()
 
+        # Sync fiber + infrastructure JSON files → PostgreSQL
+        from apps.fibers.management.commands.sync_fiber_data import sync_fibers, sync_infrastructure
+
+        fiber_stats = sync_fibers()
+        infra_stats = sync_infrastructure()
+        self.stdout.write(
+            f"Data sync: fibers ({fiber_stats['added']}+/{fiber_stats['updated']}~/"
+            f"{fiber_stats['deleted']}-), infrastructure ({infra_stats['added']}+/"
+            f"{infra_stats['updated']}~/{infra_stats['deleted']}-)"
+        )
+
         self.stdout.write(f"Data source: {source}")
 
         # Check if using InMemoryChannelLayer - if so, simulation must run inside the server

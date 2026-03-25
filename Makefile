@@ -215,8 +215,8 @@ dev-backend: ## Start backend dev server (auto-setup on first run)
 	@cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python manage.py migrate --run-syncdb
 	@echo "==> Seeding dev users..."
 	@cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python manage.py seed_users
-	@echo "==> Seeding infrastructure..."
-	@cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python manage.py seed_infrastructure
+	@echo "==> Syncing fiber & infrastructure data..."
+	@cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python manage.py sync_fiber_data
 	@echo "==> Clearing throttle cache..."
 	@cd $(BACKEND_DIR) && DJANGO_SETTINGS_MODULE=sequoia.settings.dev .venv/bin/python -c "from django.core.cache import cache; cache.clear()" 2>/dev/null || true
 	@echo "==> Starting backend on http://localhost:8001"
