@@ -64,9 +64,18 @@ export async function apiRequest<T>(endpoint: string, options: RequestOptions = 
   }
 
   if (requiresAuth) {
-    const token = getAuthToken()
+    let token = getAuthToken()
+    if (!token) {
+      // No token in memory — try to restore via refresh cookie before sending
+      const refreshed = await attemptTokenRefresh()
+      if (refreshed) {
+        token = getAuthToken()
+      }
+    }
     if (token) {
       headers['Authorization'] = `Bearer ${token}`
+    } else {
+      throw new ApiError(401, 'Not authenticated')
     }
   }
 
