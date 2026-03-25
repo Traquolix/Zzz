@@ -23,8 +23,10 @@ type VerifyResponse = AuthData & {
  * (e.g. after page reload), tries to refresh via httpOnly cookie first.
  */
 export async function verifyToken(): Promise<{ valid: boolean; data?: AuthData }> {
-  // If no in-memory token, try to restore via refresh cookie
+  // If no in-memory token, try to restore via refresh cookie.
+  // Skip if no session hint cookie — avoids a blind POST that always 401s.
   if (!getAuthToken()) {
+    if (!document.cookie.includes('has_session=')) return { valid: false }
     const refreshed = await attemptTokenRefresh()
     if (!refreshed) return { valid: false }
   }
@@ -77,6 +79,7 @@ export async function logout(): Promise<void> {
     // Ignore errors - we'll clear token anyway
   } finally {
     clearAuthToken()
+    document.cookie = 'has_session=; path=/; max-age=0'
   }
 }
 

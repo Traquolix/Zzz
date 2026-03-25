@@ -56,6 +56,27 @@ def _delete_refresh_cookie(response: Response) -> None:
     )
 
 
+def _set_session_hint(response: Response) -> None:
+    """Set a JS-readable cookie so the frontend knows a session exists."""
+    response.set_cookie(
+        key=settings.SESSION_HINT_COOKIE_NAME,
+        value="1",
+        httponly=False,
+        secure=getattr(settings, "REFRESH_TOKEN_COOKIE_SECURE", True),
+        samesite=settings.REFRESH_TOKEN_COOKIE_SAMESITE,
+        path="/",
+        max_age=int(settings.SIMPLE_JWT["REFRESH_TOKEN_LIFETIME"].total_seconds()),
+    )
+
+
+def _delete_session_hint(response: Response) -> None:
+    """Delete the session hint cookie."""
+    response.delete_cookie(
+        key=settings.SESSION_HINT_COOKIE_NAME,
+        path="/",
+    )
+
+
 class LoginView(APIView):
     """
     Login endpoint — authenticates with username/password.
@@ -132,6 +153,7 @@ class LoginView(APIView):
                 }
             )
             _set_refresh_cookie(response, str(refresh))
+            _set_session_hint(response)
 
             AuditService.log(
                 request=request,
@@ -266,6 +288,7 @@ class CookieTokenRefreshView(APIView):
             else:
                 _set_refresh_cookie(response, refresh_token_str)
 
+            _set_session_hint(response)
             return response
         except (TokenError, User.DoesNotExist):
             response = Response(
@@ -273,6 +296,7 @@ class CookieTokenRefreshView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED,
             )
             _delete_refresh_cookie(response)
+            _delete_session_hint(response)
             return response
 
 
@@ -294,4 +318,5 @@ class LogoutView(APIView):
                 pass
         response = Response(status=status.HTTP_205_RESET_CONTENT)
         _delete_refresh_cookie(response)
+        _delete_session_hint(response)
         return response

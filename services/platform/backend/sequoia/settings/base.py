@@ -180,6 +180,11 @@ REFRESH_TOKEN_COOKIE_HTTPONLY = True
 REFRESH_TOKEN_COOKIE_SAMESITE = "Lax"
 REFRESH_TOKEN_COOKIE_PATH = "/api/auth/"
 
+# Session hint cookie — JS-readable flag so the frontend knows whether to
+# attempt a token refresh on startup (avoids a blind POST that always 401s
+# when no session exists).
+SESSION_HINT_COOKIE_NAME = "has_session"
+
 # Frontend URL
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
