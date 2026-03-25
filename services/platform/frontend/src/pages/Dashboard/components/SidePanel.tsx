@@ -37,7 +37,7 @@ interface SidePanelProps {
   onHighlightSection?: (sectionId: string) => void
   onHighlightIncident?: (incidentId: string) => void
   onClearHighlight?: () => void
-  infrastructure?: InfrastructureData
+  infrastructure: InfrastructureData
   unseenIds?: Set<string>
   hasUnseen?: boolean
   onMarkSeen?: (id: string) => void
@@ -371,7 +371,7 @@ export function SidePanel({
               />
             </ErrorBoundary>
           )}
-          {activeTab === 'shm' && infrastructure && (
+          {activeTab === 'shm' && (
             <ErrorBoundary key="shm" fallback={panelFallback}>
               <ShmTabContent
                 structures={infrastructure.structures}

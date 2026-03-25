@@ -23,6 +23,7 @@ export function useInfrastructure() {
     staleTime: 60_000,
   })
 
+  // Stable string key for React Query cache identity (same pattern as useLiveStats)
   const structureIds = useMemo(
     () =>
       structures
@@ -32,6 +33,9 @@ export function useInfrastructure() {
     [structures],
   )
 
+  // Stable ref so queryFn always sees the current structures array.
+  // queryKey uses structureIds (a string) for cache identity — a direct
+  // closure would capture a stale copy on the first render.
   const structuresRef = useRef(structures)
   structuresRef.current = structures
 
