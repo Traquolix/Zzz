@@ -2,6 +2,9 @@ import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { findFiber } from '../data'
 import type { MapPageAction } from '../types'
+import { PanelEmptyState } from './PanelEmptyState'
+import { DetailHeader } from './DetailHeader'
+import { MetricCard } from './MetricCard'
 import type {
   Infrastructure,
   SHMStatus,
@@ -35,19 +38,11 @@ function StructureList({
   const { t } = useTranslation()
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-32 text-[var(--dash-text-muted)] text-cq-sm">
-        <span className="animate-pulse">{t('shm.loadingStructures')}</span>
-      </div>
-    )
+    return <PanelEmptyState message={t('shm.loadingStructures')} loading />
   }
 
   if (structures.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-32 text-[var(--dash-text-muted)] text-cq-sm">
-        {t('shm.noInfrastructure')}
-      </div>
-    )
+    return <PanelEmptyState message={t('shm.noInfrastructure')} />
   }
 
   const q = search.toLowerCase()
@@ -172,11 +167,7 @@ function StructureDetail({
   const handleComparisonStats = useCallback((s: ComparisonStats | null) => setComparisonStats(s), [])
 
   if (!structure) {
-    return (
-      <div className="flex items-center justify-center h-32 text-[var(--dash-text-muted)] text-cq-sm">
-        {t('shm.structureNotFound')}
-      </div>
-    )
+    return <PanelEmptyState message={t('shm.structureNotFound')} />
   }
 
   const typeStyle = structureTypeColors[structure.type] ?? structureTypeColors.bridge
@@ -192,17 +183,11 @@ function StructureDetail({
 
   return (
     <div className="dash-analysis-enter flex flex-col">
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-[var(--dash-surface)] border-b border-[var(--dash-border)] px-4 py-3 flex items-center gap-3">
-        <button
-          onClick={onBack}
-          className="text-[var(--dash-text-muted)] hover:text-[var(--dash-text)] transition-colors text-cq-sm cursor-pointer"
-        >
-          &larr; {t('common.back')}
-        </button>
-        <div className="min-w-0">
-          <span className="text-cq-sm font-semibold text-[var(--dash-text)] truncate block">{structure.name}</span>
-          {fiber && (
+      <DetailHeader
+        title={structure.name}
+        onBack={onBack}
+        subtitle={
+          fiber && (
             <span className="text-cq-2xs text-[var(--dash-text-muted)] flex items-center gap-1.5">
               <span
                 className="inline-block w-2 h-2 rounded-full flex-shrink-0"
@@ -210,17 +195,19 @@ function StructureDetail({
               />
               {structure.type} · {fiber.name} · Ch {structure.startChannel}–{structure.endChannel}
             </span>
-          )}
-        </div>
-        {shmStatus && (
-          <span
-            className="text-cq-2xs font-medium px-1.5 py-0.5 rounded capitalize shrink-0"
-            style={{ backgroundColor: `${statusColor}20`, color: statusColor }}
-          >
-            {shmStatus.status}
-          </span>
-        )}
-      </div>
+          )
+        }
+        badge={
+          shmStatus && (
+            <span
+              className="text-cq-2xs font-medium px-1.5 py-0.5 rounded capitalize shrink-0"
+              style={{ backgroundColor: `${statusColor}20`, color: statusColor }}
+            >
+              {shmStatus.status}
+            </span>
+          )
+        }
+      />
 
       <div className="px-4 py-4 flex flex-col gap-3">
         {/* Image */}
@@ -234,23 +221,22 @@ function StructureDetail({
 
         {/* KPI grid */}
         <div className="grid grid-cols-2 gap-3">
-          {kpis.map(kpi => (
-            <div key={kpi.label} className="rounded-lg border border-[var(--dash-border)] p-3">
-              <div className="text-cq-2xs text-[var(--dash-text-muted)] uppercase tracking-wider mb-1">{kpi.label}</div>
-              <div className="flex items-end gap-1">
-                {kpi.isStatus ? (
+          {kpis.map(kpi =>
+            kpi.isStatus ? (
+              <div key={kpi.label} className="rounded-lg border border-[var(--dash-border)] p-3">
+                <div className="text-cq-2xs text-[var(--dash-text-muted)] uppercase tracking-wider mb-1">
+                  {kpi.label}
+                </div>
+                <div className="flex items-end gap-1">
                   <span className="text-cq-sm font-semibold capitalize" style={{ color: statusColor }}>
                     {kpi.value}
                   </span>
-                ) : (
-                  <>
-                    <span className="text-cq-xl font-semibold text-[var(--dash-text)]">{kpi.value}</span>
-                    <span className="text-cq-xs text-[var(--dash-text-muted)]">{kpi.unit}</span>
-                  </>
-                )}
+                </div>
               </div>
-            </div>
-          ))}
+            ) : (
+              <MetricCard key={kpi.label} label={kpi.label} value={kpi.value} unit={kpi.unit} />
+            ),
+          )}
         </div>
 
         {/* Frequency shift banner */}
