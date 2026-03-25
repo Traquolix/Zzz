@@ -246,12 +246,12 @@ class Command(BaseCommand):
     def _load_fibers(self) -> list[FiberConfig]:
         """Load fiber configs from PostgreSQL geometry + simulation calibration."""
         from apps.fibers.models import FiberCable
-        from apps.realtime.simulation_config import FIBER_CALIBRATION
+        from apps.realtime.simulation_config import FIBER_CONFIG
 
         fibers = []
         for cable in FiberCable.objects.all():
             coords = [c for c in cable.coordinates if c[0] is not None and c[1] is not None]
-            cal = FIBER_CALIBRATION.get(cable.id, {})
+            cal = FIBER_CONFIG.get(cable.id, {})
 
             max_ch_0 = cal.get("max_channel_dir0") or len(coords)
             max_ch_1 = cal.get("max_channel_dir1") or len(coords)

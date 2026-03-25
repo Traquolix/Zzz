@@ -1,5 +1,5 @@
 """
-Simulation calibration data per fiber deployment.
+Simulation configuration per fiber deployment.
 
 Used exclusively by the simulation engine to generate physically realistic
 traffic. Not read by the live data path, REST API, or detection pipeline.
@@ -9,7 +9,7 @@ lanes, speed limits, traffic density, and per-direction channel boundaries.
 """
 
 # Keyed by fiber_id (must match FiberCable.id / JSON file stem).
-FIBER_CALIBRATION: dict[str, dict] = {
+FIBER_CONFIG: dict[str, dict] = {
     "carros": {
         "lanes": 6,
         "speed_limit": 110,
