@@ -11,17 +11,17 @@ from .step_registry import (
 )
 
 __all__ = [
-    # Pipeline
-    "ProcessingChain",
     # Steps
     "BandpassFilter",
-    "TemporalDecimation",
+    # Pipeline
+    "ProcessingChain",
     "SpatialDecimation",
+    "TemporalDecimation",
     # Math utilities
     "VectorizedBiquadFilter",
+    "build_pipeline_from_config",
     # Registry
     "create_step",
-    "build_pipeline_from_config",
     "get_available_steps",
     "register_step",
 ]

@@ -1,7 +1,6 @@
 import asyncio
 import time
 from abc import abstractmethod
-from typing import Optional
 
 from shared.message import Message
 
@@ -13,7 +12,7 @@ class Producer(ServiceBase):
     # Implement generate() to create messages, infrastructure handles Kafka/retry/batching
 
     @abstractmethod
-    async def generate(self) -> Optional[Message]:
+    async def generate(self) -> Message | None:
         # Called continuously - return Message to send or None to skip
         pass
 
@@ -46,15 +45,14 @@ class Producer(ServiceBase):
                 if (
                     messages_pending >= self.config.producer_flush_threshold
                     or (now - last_flush) >= self.config.producer_flush_interval
-                ):
-                    if messages_pending > 0:
-                        # Flush in thread pool to avoid blocking event loop
-                        loop = asyncio.get_running_loop()
-                        await loop.run_in_executor(
-                            None, self.producer.flush, self.config.kafka_health_check_timeout
-                        )
-                        messages_pending = 0
-                        last_flush = now
+                ) and messages_pending > 0:
+                    # Flush in thread pool to avoid blocking event loop
+                    loop = asyncio.get_running_loop()
+                    await loop.run_in_executor(
+                        None, self.producer.flush, self.config.kafka_health_check_timeout
+                    )
+                    messages_pending = 0
+                    last_flush = now
 
             except Exception as e:
                 self.logger.error(f"Error in producer loop: {e}")

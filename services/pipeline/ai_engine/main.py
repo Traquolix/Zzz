@@ -10,7 +10,6 @@ import time
 import warnings
 from collections import OrderedDict, deque
 from pathlib import Path
-from typing import Dict, List, Optional
 
 import numpy as np
 from opentelemetry import trace
@@ -73,15 +72,15 @@ class ModelRegistry:
     def __init__(
         self,
         default_model_name: str,
-        calibration_manager: Optional[CalibrationManager] = None,
+        calibration_manager: CalibrationManager | None = None,
         max_models: int = 20,
-        ai_metrics: Optional[AIMetrics] = None,
+        ai_metrics: AIMetrics | None = None,
     ):
         self._calibration_manager = calibration_manager
         self._max_models = max_models
         self._ai_metrics = ai_metrics
         self._loaded_models: OrderedDict[str, VehicleSpeedEstimator] = OrderedDict()
-        self._loaded_counters: Dict[str, VehicleCounter] = {}
+        self._loaded_counters: dict[str, VehicleCounter] = {}
         self._lock = threading.Lock()
 
         # Build default model and counter through the same code path as all others
@@ -119,7 +118,7 @@ class ModelRegistry:
             self._loaded_models[model_hint] = model
             return model
 
-    def get_counter(self, model_hint: str, buffer_key: str = "") -> Optional[VehicleCounter]:
+    def get_counter(self, model_hint: str, buffer_key: str = "") -> VehicleCounter | None:
         """Get vehicle counter by buffer_key (each buffer gets its own stateful counter).
 
         Counters accumulate data across calls, so each fiber:section buffer
@@ -201,7 +200,7 @@ class ModelRegistry:
             logger.error(f"Failed to load model '{model_hint}': {e}. Using default.")
             return self._default_model
 
-    def _load_counter(self, model_hint: str) -> Optional[VehicleCounter]:
+    def _load_counter(self, model_hint: str) -> VehicleCounter | None:
         """Load a vehicle counter from fibers.yaml config."""
         try:
             spec = get_model_spec(model_hint)
@@ -510,7 +509,9 @@ class AIEngineService(RollingBufferedTransformer):
 
                 # Send outputs and record metrics for each section
                 total_outputs = 0
-                for meta, (detections, output_messages) in zip(section_meta, batch_results):
+                for meta, (detections, output_messages) in zip(
+                    section_meta, batch_results, strict=False
+                ):
                     for msg in output_messages:
                         await self._internal_send(msg)
                     total_outputs += len(output_messages)
@@ -572,7 +573,9 @@ class AIEngineService(RollingBufferedTransformer):
             batch_results = speed_processor.process_batch(section_inputs)
 
         results = []
-        for i, (section_results, meta) in enumerate(zip(batch_results, section_meta)):
+        for _i, (section_results, meta) in enumerate(
+            zip(batch_results, section_meta, strict=False)
+        ):
             all_detections = []
             for result in section_results:
                 direction = int(result.direction_mask[0, 0])
@@ -623,7 +626,7 @@ class AIEngineService(RollingBufferedTransformer):
 
         return results
 
-    async def process_buffer(self, messages: List[Message]) -> List[Message]:
+    async def process_buffer(self, messages: list[Message]) -> list[Message]:
         with self.tracer.start_as_current_span("process_buffer") as span:
             try:
                 correlation_id = get_correlation_id()
@@ -769,7 +772,7 @@ class AIEngineService(RollingBufferedTransformer):
             self._processing_contexts[buffer_key] = ProcessingContext()
         return self._processing_contexts[buffer_key]
 
-    def _messages_to_arrays(self, messages: List[Message], ctx: ProcessingContext) -> tuple:
+    def _messages_to_arrays(self, messages: list[Message], ctx: ProcessingContext) -> tuple:
         """Convert list of messages to numpy arrays for inference."""
         return messages_to_arrays(
             messages, ctx, self._model_spec.inference.sampling_rate_hz, log_fn=self.logger.info
@@ -782,8 +785,8 @@ class AIEngineService(RollingBufferedTransformer):
         timestamps_ns: list,
         buffer_key: str,
         ctx: ProcessingContext,
-        speed_processor: Optional[VehicleSpeedEstimator] = None,
-        count_processor: Optional[VehicleCounter] = None,
+        speed_processor: VehicleSpeedEstimator | None = None,
+        count_processor: VehicleCounter | None = None,
     ) -> list[dict]:
         """Run AI inference and return unified detections.
 
@@ -809,7 +812,7 @@ class AIEngineService(RollingBufferedTransformer):
         buffer_key: str,
         ctx: ProcessingContext,
         speed_processor: VehicleSpeedEstimator,
-        count_processor: Optional[VehicleCounter] = None,
+        count_processor: VehicleCounter | None = None,
     ) -> list[dict]:
         timestamps = np.array(timestamp_list)
         timestamps_ns_array = np.array(timestamps_ns)
@@ -904,7 +907,7 @@ class AIEngineService(RollingBufferedTransformer):
         fiber_id: str,
         detections: list[dict],
         ctx: ProcessingContext,
-    ) -> List[Message]:
+    ) -> list[Message]:
         """Create unified detection messages (speed + count + vehicle type)."""
         return create_detection_messages(
             fiber_id=fiber_id,
@@ -917,7 +920,7 @@ class AIEngineService(RollingBufferedTransformer):
     def _should_visualize(self, buffer_key: str) -> bool:
         """Rate-limit visualization to the configured interval per buffer key."""
         if not hasattr(self, "_last_viz_time"):
-            self._last_viz_time: Dict[str, float] = {}
+            self._last_viz_time: dict[str, float] = {}
         now = time.time()
         interval = self._model_spec.visualization.interval_seconds
         if buffer_key not in self._last_viz_time:

@@ -1,6 +1,5 @@
 import os
 from dataclasses import dataclass
-from typing import Dict, Optional
 
 
 @dataclass
@@ -20,8 +19,8 @@ class OutputConfig:
     """
 
     topic: str
-    key_schema_file: Optional[str] = None
-    value_schema_file: Optional[str] = None
+    key_schema_file: str | None = None
+    value_schema_file: str | None = None
 
 
 @dataclass
@@ -84,33 +83,33 @@ class ServiceConfig:
 
     # Kafka settings
     kafka_bootstrap_servers: str = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-    kafka_group_id: Optional[str] = None  # Auto-generated if None
+    kafka_group_id: str | None = None  # Auto-generated if None
     schema_registry_url: str = os.getenv("SCHEMA_REGISTRY_URL", "http://localhost:8081")
 
     # Security settings
     ssl_enabled: bool = False
-    ssl_ca_location: Optional[str] = None
-    ssl_certificate_location: Optional[str] = None
-    ssl_key_location: Optional[str] = None
-    sasl_mechanism: Optional[str] = None  # PLAIN, SCRAM-SHA-256, etc.
-    sasl_username: Optional[str] = None
-    sasl_password: Optional[str] = None
+    ssl_ca_location: str | None = None
+    ssl_certificate_location: str | None = None
+    ssl_key_location: str | None = None
+    sasl_mechanism: str | None = None  # PLAIN, SCRAM-SHA-256, etc.
+    sasl_username: str | None = None
+    sasl_password: str | None = None
 
     # Input configuration (Consumer)
-    input_topic: Optional[str] = None
-    input_topic_pattern: Optional[str] = None  # Regex pattern for multi-topic subscription
-    input_key_schema_file: Optional[str] = None
-    input_value_schema_file: Optional[str] = None
+    input_topic: str | None = None
+    input_topic_pattern: str | None = None  # Regex pattern for multi-topic subscription
+    input_key_schema_file: str | None = None
+    input_value_schema_file: str | None = None
 
     # Output configuration (Producer)
-    output_topic: Optional[str] = None
-    output_key_schema_file: Optional[str] = None
-    output_value_schema_file: Optional[str] = None
+    output_topic: str | None = None
+    output_key_schema_file: str | None = None
+    output_value_schema_file: str | None = None
 
     # Multi-output configuration (Producer)
     # If specified, overrides single output_topic configuration
     # Services automatically migrate single output to outputs['default']
-    outputs: Optional[Dict[str, OutputConfig]] = None
+    outputs: dict[str, OutputConfig] | None = None
 
     # Advanced Kafka Producer Settings
     producer_acks: str = "all"  # 'all', '1', '0'

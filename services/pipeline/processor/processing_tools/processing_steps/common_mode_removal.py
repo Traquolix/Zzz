@@ -5,7 +5,7 @@ the spatial median or mean. Maintains per-fiber state with warmup period.
 """
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 import numpy as np
 
@@ -38,14 +38,14 @@ class CommonModeRemoval(ProcessingStep):
         super().__init__("common_mode_removal")
         self.warmup_seconds = warmup_seconds
         self.method = method
-        self._fiber_states: Dict[str, Dict[str, int]] = {}
+        self._fiber_states: dict[str, dict[str, int]] = {}
 
         if method not in ("median", "mean"):
             raise ValueError(f"Invalid method '{method}'. Must be 'median' or 'mean'.")
 
         logger.info(f"CommonModeRemoval initialized: warmup={warmup_seconds}s, method={method}")
 
-    async def process(self, measurement_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def process(self, measurement_data: dict[str, Any]) -> dict[str, Any] | None:
         """Process a single measurement by removing common mode.
 
         Args:
@@ -96,10 +96,7 @@ class CommonModeRemoval(ProcessingStep):
         # Apply common mode removal
         values_array = np.array(values, dtype=np.float64)
 
-        if self.method == "median":
-            common_mode = np.median(values_array)
-        else:  # mean
-            common_mode = np.mean(values_array)
+        common_mode = np.median(values_array) if self.method == "median" else np.mean(values_array)
 
         corrected_values = values_array - common_mode
 

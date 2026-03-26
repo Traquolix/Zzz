@@ -5,6 +5,7 @@ All ClickHouse queries are org-scoped via FiberAssignment: non-superusers
 only see data from fibers assigned to their organization.
 """
 
+import contextlib
 import logging
 import time
 from typing import Any
@@ -388,7 +389,7 @@ class IncidentActionView(FlowAwareMixin, APIView):
         tags=["incidents"],
     )
     def get(self, request: Request, incident_id: str) -> Response:
-        incident, error_resp = self._get_incident_or_404(incident_id, request)
+        _incident, error_resp = self._get_incident_or_404(incident_id, request)
         if error_resp:
             return error_resp
 
@@ -424,7 +425,7 @@ class IncidentActionView(FlowAwareMixin, APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        incident, error_resp = self._get_incident_or_404(incident_id, request)
+        _incident, error_resp = self._get_incident_or_404(incident_id, request)
         if error_resp:
             return error_resp
 
@@ -796,10 +797,8 @@ class SectionHistoryView(FlowAwareMixin, APIView):
         since_raw = request.query_params.get("since")
         since_ms: int | None = None
         if since_raw is not None:
-            try:
+            with contextlib.suppress(ValueError, TypeError):
                 since_ms = int(since_raw)
-            except (ValueError, TypeError):
-                pass
         if since_ms is not None and since_ms < 0:
             since_ms = None
 

@@ -5,6 +5,7 @@ Implements JWT RS256 login with httpOnly refresh cookie,
 account lockout, token refresh, verify, and logout.
 """
 
+import contextlib
 import logging
 from typing import Any
 
@@ -278,10 +279,8 @@ class CookieTokenRefreshView(APIView):
             # Rotate refresh token if configured
             if settings.SIMPLE_JWT.get("ROTATE_REFRESH_TOKENS", False):
                 if settings.SIMPLE_JWT.get("BLACKLIST_AFTER_ROTATION", False):
-                    try:
+                    with contextlib.suppress(AttributeError):
                         token.blacklist()
-                    except AttributeError:
-                        pass
                 user = User.objects.get(id=token.payload["user_id"])
                 new_token = RefreshToken.for_user(user)
                 _set_refresh_cookie(response, str(new_token))

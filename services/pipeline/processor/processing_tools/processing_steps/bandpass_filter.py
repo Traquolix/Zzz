@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any
 
 import numpy as np
 
@@ -29,7 +29,7 @@ class BandpassFilter(ProcessingStep):
         self.filter = VectorizedBiquadFilter(low_freq, high_freq, sampling_rate)
         self._fiber_states = {}
 
-    async def process(self, measurement_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def process(self, measurement_data: dict[str, Any]) -> dict[str, Any] | None:
         if measurement_data is None:
             return None
 

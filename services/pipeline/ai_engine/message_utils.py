@@ -7,7 +7,6 @@ and can be tested without mocking.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List
 
 import numpy as np
 
@@ -21,7 +20,7 @@ class ProcessingContext:
 
     channel_start: int = 0
     channel_step: int = 1
-    timestamps_ns: List[int] = field(default_factory=list)
+    timestamps_ns: list[int] = field(default_factory=list)
     logged_channel_example: bool = False
 
 
@@ -44,7 +43,7 @@ def validate_sampling_rate(payload: dict, expected_rate: float) -> None:
 
 
 def messages_to_arrays(
-    messages: List, ctx: ProcessingContext, expected_sampling_rate: float, log_fn=None
+    messages: list, ctx: ProcessingContext, expected_sampling_rate: float, log_fn=None
 ) -> tuple:
     """Convert list of messages to numpy arrays for inference."""
     from shared.time_utils import (
@@ -108,7 +107,7 @@ def create_detection_messages(
     ctx: ProcessingContext,
     service_name: str,
     log_fn=None,
-) -> List:
+) -> list:
     """Create a single batched detection message per call.
 
     All detections for a section/window are packed into one Kafka message

@@ -4,7 +4,7 @@ Django test settings for SequoIA platform.
 
 import os
 
-from .base import *  # noqa: F401, F403
+from .base import *  # noqa: F403
 from .base import REST_FRAMEWORK, SIMPLE_JWT
 from .dev import _DEV_JWT_PRIVATE_KEY, _DEV_JWT_PUBLIC_KEY
 

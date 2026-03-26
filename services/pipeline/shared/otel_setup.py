@@ -24,7 +24,6 @@ Example usage:
 import logging
 import os
 import time
-from typing import Optional
 
 from opentelemetry import metrics, trace
 from opentelemetry.baggage import get_baggage, set_baggage
@@ -50,7 +49,7 @@ from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapProp
 logger = logging.getLogger(__name__)
 
 # Global tracer instance (set by setup_otel)
-tracer: Optional[trace.Tracer] = None
+tracer: trace.Tracer | None = None
 
 
 class CorrelationFilter(logging.Filter):
@@ -197,7 +196,7 @@ def set_correlation_id(correlation_id: str) -> None:
     set_baggage("correlation_id", correlation_id)
 
 
-def get_correlation_id() -> Optional[str]:
+def get_correlation_id() -> str | None:
     """Get current correlation ID from baggage.
 
     Returns:

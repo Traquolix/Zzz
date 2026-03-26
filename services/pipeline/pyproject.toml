@@ -50,7 +50,7 @@ target-version = "py310"
 exclude = ["ai_engine/model_vehicle", "experiments", ".venv"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "W"]
+select = ["E", "F", "I", "W", "UP", "B", "SIM", "RUF", "C4"]
 ignore = ["E501"]  # Line too long - handled by formatter
 
 [tool.mypy]

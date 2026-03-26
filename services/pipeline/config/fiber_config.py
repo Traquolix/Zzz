@@ -11,7 +11,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 
@@ -25,7 +25,7 @@ class PipelineStepConfig:
     """Configuration for a single processing step."""
 
     step: str
-    params: Dict[str, Any] = field(default_factory=dict)
+    params: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_dict(cls, data: dict) -> PipelineStepConfig:
@@ -43,7 +43,7 @@ class SectionConfig:
     channel_start: int
     channel_stop: int
     model: str
-    pipeline: List[PipelineStepConfig]
+    pipeline: list[PipelineStepConfig]
 
     @classmethod
     def from_dict(cls, data: dict, defaults: dict) -> SectionConfig:
@@ -151,7 +151,7 @@ class CountingConfig:
     corr_threshold: float = 500.0
 
     @classmethod
-    def from_dict(cls, data: Optional[dict]) -> CountingConfig:
+    def from_dict(cls, data: dict | None) -> CountingConfig:
         if not data:
             return cls(enabled=False)
         return cls(
@@ -180,7 +180,7 @@ class VisualizationConfig:
     output_dir: str = "/app/visualizations"
 
     @classmethod
-    def from_dict(cls, data: Optional[dict]) -> VisualizationConfig:
+    def from_dict(cls, data: dict | None) -> VisualizationConfig:
         if not data:
             return cls(enabled=False)
         return cls(
@@ -206,7 +206,7 @@ class ModelSpec:
     fiber_id: str = ""
 
     @classmethod
-    def from_dict(cls, name: str, data: dict, model_defaults: Optional[dict] = None) -> ModelSpec:
+    def from_dict(cls, name: str, data: dict, model_defaults: dict | None = None) -> ModelSpec:
         """Parse model spec from dict, merging with model_defaults if provided."""
         defaults = model_defaults or {}
 
@@ -250,7 +250,7 @@ class FiberConfig:
     input_topic: str
     total_channels: int
     sampling_rate_hz: float
-    sections: List[SectionConfig]
+    sections: list[SectionConfig]
 
     @classmethod
     def from_dict(cls, fiber_id: str, data: dict, defaults: dict) -> FiberConfig:
@@ -264,7 +264,7 @@ class FiberConfig:
             sections=sections,
         )
 
-    def get_section_for_channel(self, channel: int) -> Optional[SectionConfig]:
+    def get_section_for_channel(self, channel: int) -> SectionConfig | None:
         """Find which section a channel belongs to."""
         for section in self.sections:
             if section.channel_start <= channel < section.channel_stop:
@@ -276,18 +276,18 @@ class FiberConfig:
 class FibersConfig:
     """Complete configuration from fibers.yaml."""
 
-    fibers: Dict[str, FiberConfig]
-    models: Dict[str, ModelSpec]
+    fibers: dict[str, FiberConfig]
+    models: dict[str, ModelSpec]
     defaults: dict
 
 
 class FiberConfigManager:
     """Thread-safe singleton config manager with auto-reload."""
 
-    _instance: Optional[FiberConfigManager] = None
+    _instance: FiberConfigManager | None = None
     _lock = threading.Lock()
 
-    def __new__(cls, config_path: Optional[Path] = None) -> FiberConfigManager:
+    def __new__(cls, config_path: Path | None = None) -> FiberConfigManager:
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
@@ -295,12 +295,12 @@ class FiberConfigManager:
                     cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self, config_path: Optional[Path] = None):
+    def __init__(self, config_path: Path | None = None):
         if self._initialized:
             return
 
         self._path = config_path or Path(os.getenv("FIBER_CONFIG_PATH", str(DEFAULT_CONFIG_PATH)))
-        self._config: Optional[FibersConfig] = None
+        self._config: FibersConfig | None = None
         self._mtime: float = 0
         self._last_mtime_check: float = 0
         self._mtime_check_interval: float = 5.0  # seconds between filesystem polls
@@ -314,7 +314,7 @@ class FiberConfigManager:
     def _reload(self) -> None:
         """Reload config from YAML file."""
         try:
-            with open(self._path, "r") as f:
+            with open(self._path) as f:
                 raw = yaml.safe_load(f)
 
             # Store raw config for service_loader access
@@ -383,22 +383,22 @@ class FiberConfigManager:
             raise KeyError(f"Unknown model '{model_name}'. Available: {available}")
         return self._config.models[model_name]
 
-    def get_all_fibers(self) -> Dict[str, FiberConfig]:
+    def get_all_fibers(self) -> dict[str, FiberConfig]:
         """Get all fiber configurations."""
         self._check_reload()
         return self._config.fibers.copy()
 
-    def get_all_models(self) -> Dict[str, ModelSpec]:
+    def get_all_models(self) -> dict[str, ModelSpec]:
         """Get all model specifications."""
         self._check_reload()
         return self._config.models.copy()
 
-    def get_input_topics(self) -> List[str]:
+    def get_input_topics(self) -> list[str]:
         """Get list of all input topics for subscription."""
         self._check_reload()
         return [f.input_topic for f in self._config.fibers.values()]
 
-    def get_fiber_by_topic(self, topic: str) -> Optional[FiberConfig]:
+    def get_fiber_by_topic(self, topic: str) -> FiberConfig | None:
         """Get fiber config by its input topic."""
         self._check_reload()
         for fiber in self._config.fibers.values():
@@ -439,7 +439,7 @@ class FiberConfigManager:
         _manager = None
 
 
-_manager: Optional[FiberConfigManager] = None
+_manager: FiberConfigManager | None = None
 
 
 def _get_manager() -> FiberConfigManager:
@@ -460,22 +460,22 @@ def get_model_spec(model_name: str) -> ModelSpec:
     return _get_manager().get_model(model_name)
 
 
-def get_all_fiber_configs() -> Dict[str, FiberConfig]:
+def get_all_fiber_configs() -> dict[str, FiberConfig]:
     """Get all fiber configurations."""
     return _get_manager().get_all_fibers()
 
 
-def get_all_model_specs() -> Dict[str, ModelSpec]:
+def get_all_model_specs() -> dict[str, ModelSpec]:
     """Get all model specifications."""
     return _get_manager().get_all_models()
 
 
-def get_input_topics() -> List[str]:
+def get_input_topics() -> list[str]:
     """Get list of all configured input topics."""
     return _get_manager().get_input_topics()
 
 
-def get_fiber_by_topic(topic: str) -> Optional[FiberConfig]:
+def get_fiber_by_topic(topic: str) -> FiberConfig | None:
     """Get fiber config by its Kafka input topic."""
     return _get_manager().get_fiber_by_topic(topic)
 

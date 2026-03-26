@@ -4,8 +4,13 @@ target-version = "py310"
 exclude = [".venv", "migrations", "manage.py"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "W"]
-ignore = ["E501"]
+select = ["E", "F", "I", "W", "UP", "B", "SIM", "RUF", "C4"]
+ignore = [
+    "E501",    # Line too long - handled by formatter
+    "RUF012",  # Mutable class default — false positives on Django model fields
+    "RUF002",  # Ambiguous unicode in docstrings — French text is intentional
+    "RUF003",  # Ambiguous unicode in comments — French text is intentional
+]
 
 [tool.mypy]
 python_version = "3.10"

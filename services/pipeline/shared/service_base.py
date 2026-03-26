@@ -22,7 +22,7 @@ import time
 from abc import ABC
 from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
-from typing import Any, List, Optional
+from typing import Any
 
 from opentelemetry import trace
 
@@ -85,7 +85,7 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
         self._validate_config_for_service_type()
         self._initialize_components()
 
-        self._tasks: List[asyncio.Task] = []
+        self._tasks: list[asyncio.Task] = []
         self._shutdown_event = asyncio.Event()
         self._graceful_shutdown_timeout = self.config.graceful_shutdown_timeout
 
@@ -110,9 +110,7 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
 
         if isinstance(self, Producer):
             return ServiceType.PRODUCER
-        elif isinstance(self, RollingBufferedTransformer):
-            return ServiceType.BUFFERED_TRANSFORMER
-        elif isinstance(self, BufferedTransformer):
+        elif isinstance(self, RollingBufferedTransformer | BufferedTransformer):
             return ServiceType.BUFFERED_TRANSFORMER
         elif isinstance(self, MultiTransformer):
             return ServiceType.MULTI_TRANSFORMER
@@ -232,7 +230,7 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
         """Load and validate a schema file."""
         if not schema_file:
             return None
-        with open(schema_file, "r") as f:
+        with open(schema_file) as f:
             schema_text = f.read()
             json.loads(schema_text)  # Validate JSON
             return schema_text
@@ -436,7 +434,7 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
         """Override in pattern classes to handle a single polled message."""
         raise NotImplementedError
 
-    async def _execute_with_protection(self, func, message: Any, *args) -> Optional[Any]:
+    async def _execute_with_protection(self, func, message: Any, *args) -> Any | None:
         """Shared semaphore + timeout + circuit-breaker + retry + DLQ wrapper."""
         from shared.message import KafkaMessage
 

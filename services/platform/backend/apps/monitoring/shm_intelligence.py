@@ -8,7 +8,6 @@ spectral data pipeline.
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 
@@ -68,7 +67,7 @@ TREND_STABILITY_THRESHOLD = 0.01  # Hz/hr — slopes smaller than this are "stab
 def compute_baseline(
     peak_freqs: np.ndarray,
     robust: bool = False,
-) -> Optional[SHMBaseline]:
+) -> SHMBaseline | None:
     """
     Compute a baseline frequency profile from reference measurements.
 

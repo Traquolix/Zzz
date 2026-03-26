@@ -17,12 +17,14 @@ The drain loop pops due items and flushes at ~10 Hz.
 """
 
 import asyncio
+import contextlib
 import heapq
 import logging
 import time
 from collections import deque
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
-from typing import Any, Callable, Coroutine
+from typing import Any
 
 logger = logging.getLogger("sequoia.replay_buffer")
 
@@ -168,10 +170,8 @@ class ReplayBuffer:
             # Wait for items if queue is empty
             if not self._queue:
                 self._event.clear()
-                try:
+                with contextlib.suppress(asyncio.TimeoutError):
                     await asyncio.wait_for(self._event.wait(), timeout=1.0)
-                except asyncio.TimeoutError:
-                    pass
                 continue
 
             now = time.time()
@@ -181,10 +181,8 @@ class ReplayBuffer:
                 # Sleep until next item is due, but wake on new items
                 delay = min(next_item.replay_time - now, 0.1)
                 self._event.clear()
-                try:
+                with contextlib.suppress(asyncio.TimeoutError):
                     await asyncio.wait_for(self._event.wait(), timeout=delay)
-                except asyncio.TimeoutError:
-                    pass
                 continue
 
             # Pop all items that are currently due

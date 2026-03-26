@@ -373,15 +373,14 @@ class UserDetailView(APIView):
         data = request.data
 
         # Prevent self-modification of role and active status
-        if str(user.pk) == str(request.user.pk):
-            if "role" in data or "isActive" in data:
-                return Response(
-                    {
-                        "detail": "Cannot modify your own role or active status",
-                        "code": "self_modification",
-                    },
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        if str(user.pk) == str(request.user.pk) and ("role" in data or "isActive" in data):
+            return Response(
+                {
+                    "detail": "Cannot modify your own role or active status",
+                    "code": "self_modification",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if "role" in data:
             from apps.shared.constants import USER_ROLES

@@ -8,7 +8,7 @@ Example:
     factor=10: 100Hz -> 10Hz (keep every 10th sample)
 """
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from processor.processing_tools.processing_steps.base_step import ProcessingStep
 
@@ -34,7 +34,7 @@ class TemporalDecimation(ProcessingStep):
         self.factor = factor
         self._counts = {}
 
-    async def process(self, measurement_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def process(self, measurement_data: dict[str, Any]) -> dict[str, Any] | None:
         if measurement_data is None:
             return None
 

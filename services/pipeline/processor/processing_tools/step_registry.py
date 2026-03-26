@@ -21,7 +21,7 @@ Usage:
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Type
+from typing import Any
 
 from processor.processing_tools.processing_chain import ProcessingChain
 from processor.processing_tools.processing_steps.bandpass_filter import BandpassFilter
@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 # Registry mapping step names to (class, param_mapper)
 # param_mapper converts config params to constructor args
-_STEP_REGISTRY: Dict[str, Dict[str, Any]] = {
+_STEP_REGISTRY: dict[str, dict[str, Any]] = {
     "bandpass_filter": {
         "class": BandpassFilter,
         "param_map": {
@@ -99,14 +99,14 @@ _STEP_REGISTRY: Dict[str, Dict[str, Any]] = {
 }
 
 
-def get_available_steps() -> List[str]:
+def get_available_steps() -> list[str]:
     """Get list of available step names."""
     return list(_STEP_REGISTRY.keys())
 
 
 def create_step(
     step_name: str,
-    params: Dict[str, Any],
+    params: dict[str, Any],
     fiber_sampling_rate_hz: float = 50.0,
 ) -> ProcessingStep:
     """Create a processing step from config.
@@ -127,9 +127,9 @@ def create_step(
         raise ValueError(f"Unknown processing step '{step_name}'. Available: {available}")
 
     registry_entry = _STEP_REGISTRY[step_name]
-    step_class: Type[ProcessingStep] = registry_entry["class"]
-    param_map: Dict[str, str] = registry_entry["param_map"]
-    defaults: Dict[str, Any] = registry_entry["defaults"]
+    step_class: type[ProcessingStep] = registry_entry["class"]
+    param_map: dict[str, str] = registry_entry["param_map"]
+    defaults: dict[str, Any] = registry_entry["defaults"]
 
     # Build constructor arguments
     constructor_args = defaults.copy()
@@ -148,9 +148,9 @@ def create_step(
 
 
 def build_pipeline_from_config(
-    pipeline_config: List[Dict[str, Any]],
+    pipeline_config: list[dict[str, Any]],
     fiber_sampling_rate_hz: float = 50.0,
-    section_channels: tuple = None,
+    section_channels: tuple | None = None,
 ) -> ProcessingChain:
     """Build a ProcessingChain from pipeline config.
 
@@ -209,9 +209,9 @@ def build_pipeline_from_config(
 
 def register_step(
     name: str,
-    step_class: Type[ProcessingStep],
-    param_map: Dict[str, str],
-    defaults: Dict[str, Any] = None,
+    step_class: type[ProcessingStep],
+    param_map: dict[str, str],
+    defaults: dict[str, Any] | None = None,
 ) -> None:
     """Register a custom processing step.
 

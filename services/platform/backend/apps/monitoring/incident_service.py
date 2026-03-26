@@ -7,7 +7,6 @@ parameters are defined exactly once.
 """
 
 import logging
-from typing import Optional
 
 from apps.shared.clickhouse import query
 
@@ -125,7 +124,7 @@ _RECENT_SQL_ALL = """
 
 
 def query_active(
-    fiber_ids: Optional[list[str]] = None,
+    fiber_ids: list[str] | None = None,
     limit: int = 200,
 ) -> list[dict]:
     """
@@ -146,7 +145,7 @@ def query_active(
 
 
 def query_recent(
-    fiber_ids: Optional[list[str]] = None,
+    fiber_ids: list[str] | None = None,
     hours: int = 24,
     limit: int = 500,
 ) -> list[dict]:
@@ -199,7 +198,7 @@ def query_by_id(incident_id: str) -> dict | None:
 
 
 def query_active_raw(
-    fiber_ids: Optional[list[str]] = None,
+    fiber_ids: list[str] | None = None,
     limit: int = 200,
 ) -> list[dict]:
     """

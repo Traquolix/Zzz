@@ -74,7 +74,7 @@ class Command(BaseCommand):
                     self.stderr.write(
                         self.style.ERROR(f"  {name} stmt {i} FAILED: {e}\n    SQL: {sql_preview}")
                     )
-                    raise SystemExit(1)
+                    raise SystemExit(1) from e
 
             if not dry_run:
                 self.stdout.write(self.style.SUCCESS(f"  Applied {name}"))

@@ -29,9 +29,7 @@ class IsActiveUser(BasePermission):
         org = getattr(user, "organization", None)
         if org is None:
             return False
-        if not org.is_active:
-            return False
-        return True
+        return org.is_active
 
 
 class IsNotViewer(BasePermission):

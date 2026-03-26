@@ -15,7 +15,7 @@ Work is tracked through GitHub issues. Before starting any task:
 
 ### Task Pattern
 
-1. **Create a branch** from main: `feat/N-description`, `fix/N-description`, `refactor/N-description`, or `perf/N-description` (where N is the issue number)
+1. **Create a branch** from main: `feat/N-description`, `fix/N-description`, `refactor/N-description`, `chore/N-description`, or `perf/N-description` (where N is the issue number)
 2. **Write tests first** when adding features or fixing bugs
 3. **Implement** the change
 4. **Validate**: run `make lint && make typecheck`

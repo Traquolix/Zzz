@@ -21,6 +21,7 @@ Time-shifted replay:
 """
 
 import asyncio
+import contextlib
 import logging
 import math
 import random
@@ -89,7 +90,7 @@ def _try_import_confluent_kafka():
             "Install it with: pip install confluent-kafka[avro]\n"
             "Note: this requires librdkafka C library. "
             "On Debian/Ubuntu: apt-get install librdkafka-dev"
-        )
+        ) from None
 
 
 # ============================================================================
@@ -407,10 +408,8 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
         cache.set("kafka_available", False, timeout=None)
         replay_buffer.stop()
         drain_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await drain_task
-        except asyncio.CancelledError:
-            pass
         consumer.close()
         logger.info("Kafka consumer closed.")
 

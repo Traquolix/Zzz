@@ -8,7 +8,7 @@ import os
 import sentry_sdk
 from django.core.exceptions import ImproperlyConfigured
 
-from .base import *  # noqa: F401, F403
+from .base import *  # noqa: F403
 from .base import CLICKHOUSE_PASSWORD, SIMPLE_JWT
 
 # ---------------------------------------------------------------------------
@@ -25,10 +25,12 @@ def get_secret(env_key, default=None, required=False):
     file_path = os.environ.get(file_key)
     if file_path:
         try:
-            with open(file_path, "r") as f:
+            with open(file_path) as f:
                 return f.read().strip()
-        except (IOError, OSError) as e:
-            raise ImproperlyConfigured(f"Could not read secret from {file_key}={file_path}: {e}")
+        except OSError as e:
+            raise ImproperlyConfigured(
+                f"Could not read secret from {file_key}={file_path}: {e}"
+            ) from e
     value = os.environ.get(env_key, default)
     if required and not value:
         raise ImproperlyConfigured(

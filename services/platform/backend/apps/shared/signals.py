@@ -52,7 +52,7 @@ def _build_changes(instance, created):
             else:
                 value = (
                     str(value)
-                    if not isinstance(value, (str, int, float, bool, list, dict))
+                    if not isinstance(value, str | int | float | bool | list | dict)
                     else value
                 )
             changes[name] = value

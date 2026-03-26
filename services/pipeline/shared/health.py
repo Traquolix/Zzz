@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class HealthMixin:
     """Mixin providing health check endpoints and monitoring."""
 
-    async def _start_health_server(self: "ServiceBase") -> None:
+    async def _start_health_server(self: ServiceBase) -> None:
         """Start HTTP server for health check endpoints."""
         self._health_app = web.Application()
         self._health_app.router.add_get("/healthz", self._liveness_check)
@@ -31,13 +31,13 @@ class HealthMixin:
         await site.start()
         self.logger.info("Health check server started on port 8080")
 
-    async def _liveness_check(self: "ServiceBase", request: web.Request) -> web.Response:
+    async def _liveness_check(self: ServiceBase, request: web.Request) -> web.Response:
         """Liveness probe - is process alive and not deadlocked?"""
         return web.json_response(
             {"status": "ok", "service": self.service_name, "type": self.service_type.value}
         )
 
-    async def _readiness_check(self: "ServiceBase", request: web.Request) -> web.Response:
+    async def _readiness_check(self: ServiceBase, request: web.Request) -> web.Response:
         """Readiness probe - ready to accept traffic?"""
         checks = {
             "service_running": self._running,
@@ -75,7 +75,7 @@ class HealthMixin:
             status=status_code,
         )
 
-    async def _metrics_endpoint(self: "ServiceBase", request: web.Request) -> web.Response:
+    async def _metrics_endpoint(self: ServiceBase, request: web.Request) -> web.Response:
         """Expose metrics in Prometheus-compatible format."""
         metrics_summary = self.metrics.get_summary()
         return web.json_response(
@@ -86,7 +86,7 @@ class HealthMixin:
             }
         )
 
-    async def _health_check_loop(self: "ServiceBase") -> None:
+    async def _health_check_loop(self: ServiceBase) -> None:
         """Periodic health logging with metrics and circuit breaker status."""
         while self._running:
             await asyncio.sleep(self.config.health_check_interval)
@@ -107,7 +107,7 @@ class HealthMixin:
 
             self.logger.info(" | ".join(health_info))
 
-    async def _monitor_consumer_lag(self: "ServiceBase") -> None:
+    async def _monitor_consumer_lag(self: ServiceBase) -> None:
         """Monitor Kafka consumer lag periodically."""
         while self._running:
             await asyncio.sleep(30.0)
@@ -120,7 +120,7 @@ class HealthMixin:
                     if committed is None:
                         continue
 
-                    low, high = self.consumer.get_watermark_offsets(partition)
+                    _low, high = self.consumer.get_watermark_offsets(partition)
                     lag = high - committed.offset
 
                     self.metrics.update_consumer_lag(partition.topic, partition.partition, lag)
@@ -134,7 +134,7 @@ class HealthMixin:
             except Exception as e:
                 self.logger.warning(f"Error monitoring consumer lag: {e}")
 
-    async def _log_final_metrics(self: "ServiceBase") -> None:
+    async def _log_final_metrics(self: ServiceBase) -> None:
         """Log final stats on shutdown."""
         summary = self.metrics.get_summary()
 

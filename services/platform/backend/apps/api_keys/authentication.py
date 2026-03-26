@@ -58,7 +58,7 @@ class APIKeyAuthentication(BaseAuthentication):
                 key_hash=key_hash,
             )
         except APIKey.DoesNotExist:
-            raise AuthenticationFailed("Invalid API key.")
+            raise AuthenticationFailed("Invalid API key.") from None
 
         if not api_key.is_active:
             raise AuthenticationFailed("API key has been revoked.")

@@ -13,6 +13,7 @@ Usage:
 """
 
 import asyncio
+import contextlib
 import logging
 from enum import Enum
 from typing import Optional
@@ -41,9 +42,9 @@ class SimulationManager:
     _instance: Optional["SimulationManager"] = None
 
     def __init__(self) -> None:
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._status: SimulationStatus = SimulationStatus.IDLE
-        self._error: Optional[str] = None
+        self._error: str | None = None
         self._started: bool = False
 
     @classmethod
@@ -62,7 +63,7 @@ class SimulationManager:
         return self._status
 
     @property
-    def error(self) -> Optional[str]:
+    def error(self) -> str | None:
         return self._error
 
     @property
@@ -139,10 +140,8 @@ class SimulationManager:
         """Cancel the simulation task if running."""
         if self._task and not self._task.done():
             self._task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._task
-            except asyncio.CancelledError:
-                pass
         self._status = SimulationStatus.STOPPED
         self._task = None
 

@@ -7,7 +7,7 @@ from pathlib import Path as _Path
 
 from dotenv import load_dotenv
 
-from .base import *  # noqa: F401, F403
+from .base import *  # noqa: F403
 from .base import SIMPLE_JWT
 
 # Load .env.dev from backend root if it exists
