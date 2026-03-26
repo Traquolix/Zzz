@@ -702,8 +702,6 @@
     "direction": "Direction",
     "dirBoth": "Les deux",
     "format": "Format",
-    "estimatedRows": "Lignes estimées",
-    "estimatedRowsValue": "~{{count}} lignes",
     "estimatedSize": "~{{size}}",
     "channelRange": "Plage de canaux",
     "tierInfo": "Résolution : agrégation {{tier}}",
