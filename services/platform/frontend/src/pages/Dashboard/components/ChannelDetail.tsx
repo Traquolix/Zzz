@@ -5,6 +5,9 @@ import { COLORS } from '@/lib/theme'
 import type { MapPageAction, Section, SelectedChannel } from '../types'
 import { useRealtime } from '@/hooks/useRealtime'
 import { parseDetections } from '@/lib/parseMessage'
+import { DetailHeader } from './DetailHeader'
+import { MetricCard } from './MetricCard'
+import { ColorDot } from './ColorDot'
 
 export function ChannelDetail({
   channel,
@@ -178,40 +181,26 @@ export function ChannelDetail({
 
   return (
     <div className="dash-analysis-enter flex flex-col">
-      {/* Header — matching SectionDetail pattern */}
-      <div className="sticky top-0 z-10 bg-[var(--dash-surface)] border-b border-[var(--dash-border)] px-4 py-3">
-        <div className="min-w-0">
-          <span className="text-cq-sm font-semibold text-[var(--dash-text)] truncate block">
-            Channel {channel.channel}
-          </span>
+      <DetailHeader
+        title={`Channel ${channel.channel}`}
+        subtitle={
           <span className="text-cq-2xs text-[var(--dash-text-muted)] flex items-center gap-1.5">
-            <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: fiberColor }} />
+            <ColorDot color={fiberColor} />
             {fiber?.name ?? channel.fiberId} · {directionLabel} · {channel.lat.toFixed(5)}N, {channel.lng.toFixed(5)}E
           </span>
-        </div>
-      </div>
+        }
+      />
 
       <div className="px-4 py-4 flex flex-col gap-3">
         {/* KPI cards — 2-column grid */}
         <div className="grid grid-cols-2 gap-3">
-          <div className="rounded-lg border border-[var(--dash-border)] p-3">
-            <div className="text-cq-2xs text-[var(--dash-text-muted)] uppercase tracking-wider mb-1">Detections</div>
-            <div>
-              <span className="text-cq-xl font-semibold text-[var(--dash-text)]">{liveCount}</span>
-              <span className="text-cq-xs text-[var(--dash-text-muted)] ml-1">
-                {t('channelDetail.detectionsWindow')}
-              </span>
-            </div>
-          </div>
-          <div className="rounded-lg border border-[var(--dash-border)] p-3">
-            <div className="text-cq-2xs text-[var(--dash-text-muted)] uppercase tracking-wider mb-1">Avg Speed</div>
-            <div>
-              <span className="text-cq-xl font-semibold" style={{ color: speedColor ?? 'var(--dash-text)' }}>
-                {liveAvgSpeed != null ? liveAvgSpeed : '\u2014'}
-              </span>
-              <span className="text-cq-xs text-[var(--dash-text-muted)] ml-1">km/h</span>
-            </div>
-          </div>
+          <MetricCard label="Detections" value={liveCount} unit={t('channelDetail.detectionsWindow')} />
+          <MetricCard
+            label="Avg Speed"
+            value={liveAvgSpeed != null ? liveAvgSpeed : '\u2014'}
+            unit="km/h"
+            valueColor={speedColor}
+          />
         </div>
 
         {/* Live speed chart */}
@@ -241,7 +230,7 @@ export function ChannelDetail({
                     onClick={() => dispatch({ type: 'SELECT_SECTION', id: sec.id })}
                     className="flex items-center gap-2.5 w-full text-left rounded-lg border border-[var(--dash-border)] px-3 py-2 hover:bg-[var(--dash-surface-raised)] transition-colors cursor-pointer"
                   >
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: secColor }} />
+                    <ColorDot color={secColor} />
                     <span className="text-cq-sm text-[var(--dash-text)] truncate flex-1">{sec.name}</span>
                     <span className="text-cq-2xs text-[var(--dash-text-muted)] flex-shrink-0 px-1.5 py-0.5 rounded bg-[var(--dash-base)]">
                       Ch {sec.startChannel}–{sec.endChannel}

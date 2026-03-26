@@ -7,6 +7,10 @@ import type { MapPageAction, Section, LiveSectionStats, SectionDataPoint, Metric
 import { TimeSeriesChart } from './TimeSeriesChart'
 import { Sparkline } from './Sparkline'
 import { useSectionHistory } from '../hooks/useSectionHistory'
+import { PanelEmptyState } from './PanelEmptyState'
+import { DetailHeader } from './DetailHeader'
+import { MetricCard } from './MetricCard'
+import { ColorDot } from './ColorDot'
 
 type TimeRange = '1m' | '5m' | '15m' | '1h'
 
@@ -69,13 +73,9 @@ export function SectionList({
   return (
     <>
       {sections.length === 0 ? (
-        <div className="flex items-center justify-center h-32 text-[var(--dash-text-muted)] text-cq-sm">
-          {t('traffic.empty.noSections')}
-        </div>
+        <PanelEmptyState message={t('traffic.empty.noSections')} />
       ) : filtered.length === 0 ? (
-        <div className="flex items-center justify-center h-32 text-[var(--dash-text-muted)] text-cq-sm">
-          {t('sections.noMatchingSections')}
-        </div>
+        <PanelEmptyState message={t('sections.noMatchingSections')} />
       ) : (
         <div className="flex flex-col px-3 py-1">
           {filtered.map(section => {
@@ -110,10 +110,7 @@ export function SectionList({
                   className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-[var(--dash-surface-raised)] transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2 mb-1">
-                    <span
-                      className="shrink-0 w-2 h-2 rounded-full"
-                      style={{ backgroundColor: fiber ? getFiberColor(fiber, fiberColors) : undefined }}
-                    />
+                    <ColorDot color={fiber ? getFiberColor(fiber, fiberColors) : undefined} />
                     <span className="text-cq-sm text-[var(--dash-text)] font-medium truncate">{section.name}</span>
                   </div>
                   <div className="flex items-center justify-between text-cq-xs text-[var(--dash-text-secondary)] pl-4">
@@ -245,47 +242,37 @@ export function SectionDetail({
 
   return (
     <div className="dash-analysis-enter flex flex-col">
-      <div className="sticky top-0 z-10 bg-[var(--dash-surface)] border-b border-[var(--dash-border)] px-4 py-3 flex items-center gap-3">
-        <button
-          onClick={onBack}
-          className="text-[var(--dash-text-muted)] hover:text-[var(--dash-text)] transition-colors text-cq-sm cursor-pointer"
-        >
-          &larr; {t('common.back')}
-        </button>
-        <div className="min-w-0">
-          <span className="text-cq-sm font-semibold text-[var(--dash-text)] truncate block">{section.name}</span>
-          {fiber && (
+      <DetailHeader
+        title={section.name}
+        onBack={onBack}
+        subtitle={
+          fiber && (
             <span className="text-cq-2xs text-[var(--dash-text-muted)] flex items-center gap-1.5">
-              <span
-                className="inline-block w-2 h-2 rounded-full flex-shrink-0"
-                style={{ backgroundColor: fiberColor }}
-              />
+              <ColorDot color={fiberColor} />
               {fiber.name} · {fiber.direction === 0 ? 'Dir A' : 'Dir B'} · Ch {section.startChannel}–
               {section.endChannel}
             </span>
-          )}
-        </div>
-      </div>
+          )
+        }
+      />
 
       <div className="px-4 py-4 flex flex-col gap-3">
         {/* KPI grid */}
         <div className="grid grid-cols-2 gap-3">
           {kpis.map(kpi => (
-            <div key={kpi.label} className="rounded-lg border border-[var(--dash-border)] p-3">
-              <div className="text-cq-2xs text-[var(--dash-text-muted)] uppercase tracking-wider mb-1">
-                {kpi.label}
-                {kpi.trendPct !== undefined && (
+            <MetricCard
+              key={kpi.label}
+              label={kpi.label}
+              value={kpi.value}
+              unit={kpi.unit}
+              labelExtra={
+                kpi.trendPct !== undefined && (
                   <TrendBadge pct={kpi.trendPct} positiveIsGood={kpi.positiveIsGood ?? true} />
-                )}
-              </div>
-              <div className="flex items-end justify-between">
-                <div>
-                  <span className="text-cq-xl font-semibold text-[var(--dash-text)]">{kpi.value}</span>
-                  <span className="text-cq-xs text-[var(--dash-text-muted)] ml-1">{kpi.unit}</span>
-                </div>
-                {kpi.trend && <Sparkline data={kpi.trend} color={kpi.color} width={48} height={20} />}
-              </div>
-            </div>
+                )
+              }
+            >
+              {kpi.trend && <Sparkline data={kpi.trend} color={kpi.color} width={48} height={20} />}
+            </MetricCard>
           ))}
         </div>
 
@@ -326,6 +313,7 @@ export function SectionDetail({
           <h3 className="text-cq-xs font-medium text-[var(--dash-text-muted)] uppercase tracking-wider mb-3">
             {t('sections.recentData')}
           </h3>
+
           <div className="overflow-x-auto">
             <table className="w-full text-cq-xs">
               <thead>

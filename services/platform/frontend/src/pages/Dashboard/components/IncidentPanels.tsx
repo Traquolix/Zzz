@@ -6,6 +6,11 @@ import { useIncidentSnapshot } from '@/hooks/useIncidentSnapshot'
 import type { DisplayIncident, MapPageAction, Severity, Section } from '../types'
 import { useRealtime } from '@/hooks/useRealtime'
 import { TimeSeriesChart } from './TimeSeriesChart'
+import { PanelEmptyState } from './PanelEmptyState'
+import { DetailHeader } from './DetailHeader'
+import { MetricCard } from './MetricCard'
+import { StatusBadge } from './StatusBadge'
+import { ColorDot } from './ColorDot'
 
 // ── Incident list ───────────────────────────────────────────────────────
 
@@ -43,9 +48,7 @@ export function IncidentList({
   return (
     <>
       {sorted.length === 0 ? (
-        <div className="flex items-center justify-center h-32 text-[var(--dash-text-muted)] text-cq-sm">
-          {t('incidents.noMatchingFilter')}
-        </div>
+        <PanelEmptyState message={t('incidents.noMatchingFilter')} />
       ) : (
         <div className="flex flex-col px-3 py-1">
           {sorted.map(inc => (
@@ -60,10 +63,7 @@ export function IncidentList({
               className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-[var(--dash-surface-raised)] transition-colors cursor-pointer"
             >
               <div className="flex items-start gap-2.5 min-w-0">
-                <span
-                  className="shrink-0 w-2 h-2 rounded-full mt-1.5"
-                  style={{ backgroundColor: severityColor[inc.severity] }}
-                />
+                <ColorDot color={severityColor[inc.severity]} className="mt-1.5" />
                 {unseenIds?.has(inc.id) && (
                   <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-[var(--dash-accent)] mt-2 -ml-1.5" />
                 )}
@@ -135,58 +135,41 @@ export function IncidentDetail({
 
   return (
     <div className="dash-analysis-enter flex flex-col">
-      <div className="sticky top-0 z-10 bg-[var(--dash-surface)] border-b border-[var(--dash-border)] px-4 py-3 flex items-center gap-3">
-        <button
-          onClick={onBack}
-          className="text-[var(--dash-text-muted)] hover:text-[var(--dash-text)] transition-colors text-cq-sm cursor-pointer"
-        >
-          &larr; {t('common.back')}
-        </button>
-        <span className="text-cq-sm font-semibold text-[var(--dash-text)] truncate">{incident.title}</span>
-        <span
-          className="text-cq-2xs font-medium px-1.5 py-0.5 rounded capitalize shrink-0"
-          style={{ backgroundColor: `${severityColor[incident.severity]}20`, color: severityColor[incident.severity] }}
-        >
-          {incident.severity}
-        </span>
-      </div>
+      <DetailHeader
+        title={incident.title}
+        onBack={onBack}
+        badge={<StatusBadge label={incident.severity} color={severityColor[incident.severity]} />}
+      />
 
       <div className="px-4 py-4 flex flex-col gap-3">
         {/* Speed metrics when available */}
         {(incident.speedBefore != null || incident.speedDuring != null) && (
           <div className="grid grid-cols-3 gap-2 pb-3 border-b border-[var(--dash-border)]">
             {incident.speedBefore != null && (
-              <div className="rounded-lg border border-[var(--dash-border)] p-2.5">
-                <div className="text-cq-2xs text-[var(--dash-text-muted)] uppercase tracking-wider mb-0.5">
-                  {t('incidents.detail.before')}
-                </div>
-                <span className="text-cq-lg font-semibold text-[var(--dash-text)]">
-                  {Math.round(incident.speedBefore)}
-                </span>
-                <span className="text-cq-2xs text-[var(--dash-text-muted)] ml-0.5">km/h</span>
-              </div>
+              <MetricCard
+                compact
+                label={t('incidents.detail.before')}
+                value={Math.round(incident.speedBefore)}
+                unit="km/h"
+              />
             )}
             {incident.speedDuring != null && (
-              <div className="rounded-lg border border-[var(--dash-border)] p-2.5">
-                <div className="text-cq-2xs text-[var(--dash-text-muted)] uppercase tracking-wider mb-0.5">
-                  {t('incidents.detail.during')}
-                </div>
-                <span className="text-cq-lg font-semibold text-[var(--dash-red)]">
-                  {Math.round(incident.speedDuring)}
-                </span>
-                <span className="text-cq-2xs text-[var(--dash-text-muted)] ml-0.5">km/h</span>
-              </div>
+              <MetricCard
+                compact
+                label={t('incidents.detail.during')}
+                value={Math.round(incident.speedDuring)}
+                unit="km/h"
+                valueColor="var(--dash-red)"
+              />
             )}
             {incident.speedDropPercent != null && (
-              <div className="rounded-lg border border-[var(--dash-border)] p-2.5">
-                <div className="text-cq-2xs text-[var(--dash-text-muted)] uppercase tracking-wider mb-0.5">
-                  {t('incidents.detail.drop')}
-                </div>
-                <span className="text-cq-lg font-semibold text-[var(--dash-red)]">
-                  {Math.round(incident.speedDropPercent)}
-                </span>
-                <span className="text-cq-2xs text-[var(--dash-text-muted)] ml-0.5">%</span>
-              </div>
+              <MetricCard
+                compact
+                label={t('incidents.detail.drop')}
+                value={Math.round(incident.speedDropPercent)}
+                unit="%"
+                valueColor="var(--dash-red)"
+              />
             )}
           </div>
         )}
