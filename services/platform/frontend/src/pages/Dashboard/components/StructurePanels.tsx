@@ -7,6 +7,7 @@ import { DetailHeader } from './DetailHeader'
 import { MetricCard } from './MetricCard'
 import { DetailSection } from './DetailSection'
 import { StatusBadge } from './StatusBadge'
+import { ColorDot } from './ColorDot'
 import type {
   Infrastructure,
   SHMStatus,
@@ -128,7 +129,7 @@ function StructureList({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 min-w-0">
                   <span className="text-cq-sm text-[var(--dash-text)] font-medium truncate">{structure.name}</span>
-                  <span className="shrink-0 w-2 h-2 rounded-full" style={{ backgroundColor: dotColor }} />
+                  <ColorDot color={dotColor} />
                 </div>
                 <span className="text-cq-xs text-[var(--dash-text-muted)] shrink-0">
                   {structure.type.charAt(0).toUpperCase() + structure.type.slice(1)} ·{' '}
@@ -191,10 +192,7 @@ function StructureDetail({
         subtitle={
           fiber && (
             <span className="text-cq-2xs text-[var(--dash-text-muted)] flex items-center gap-1.5">
-              <span
-                className="inline-block w-2 h-2 rounded-full flex-shrink-0"
-                style={{ backgroundColor: typeStyle.dot }}
-              />
+              <ColorDot color={typeStyle.dot} />
               {structure.type} · {fiber.name} · Ch {structure.startChannel}–{structure.endChannel}
             </span>
           )

@@ -10,6 +10,7 @@ import { PanelEmptyState } from './PanelEmptyState'
 import { DetailHeader } from './DetailHeader'
 import { MetricCard } from './MetricCard'
 import { StatusBadge } from './StatusBadge'
+import { ColorDot } from './ColorDot'
 
 // ── Incident list ───────────────────────────────────────────────────────
 
@@ -62,10 +63,7 @@ export function IncidentList({
               className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-[var(--dash-surface-raised)] transition-colors cursor-pointer"
             >
               <div className="flex items-start gap-2.5 min-w-0">
-                <span
-                  className="shrink-0 w-2 h-2 rounded-full mt-1.5"
-                  style={{ backgroundColor: severityColor[inc.severity] }}
-                />
+                <ColorDot color={severityColor[inc.severity]} className="mt-1.5" />
                 {unseenIds?.has(inc.id) && (
                   <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-[var(--dash-accent)] mt-2 -ml-1.5" />
                 )}

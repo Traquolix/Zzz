@@ -7,6 +7,7 @@ import { useRealtime } from '@/hooks/useRealtime'
 import { parseDetections } from '@/lib/parseMessage'
 import { DetailHeader } from './DetailHeader'
 import { MetricCard } from './MetricCard'
+import { ColorDot } from './ColorDot'
 
 export function ChannelDetail({
   channel,
@@ -184,7 +185,7 @@ export function ChannelDetail({
         title={`Channel ${channel.channel}`}
         subtitle={
           <span className="text-cq-2xs text-[var(--dash-text-muted)] flex items-center gap-1.5">
-            <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: fiberColor }} />
+            <ColorDot color={fiberColor} />
             {fiber?.name ?? channel.fiberId} · {directionLabel} · {channel.lat.toFixed(5)}N, {channel.lng.toFixed(5)}E
           </span>
         }
@@ -229,7 +230,7 @@ export function ChannelDetail({
                     onClick={() => dispatch({ type: 'SELECT_SECTION', id: sec.id })}
                     className="flex items-center gap-2.5 w-full text-left rounded-lg border border-[var(--dash-border)] px-3 py-2 hover:bg-[var(--dash-surface-raised)] transition-colors cursor-pointer"
                   >
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: secColor }} />
+                    <ColorDot color={secColor} />
                     <span className="text-cq-sm text-[var(--dash-text)] truncate flex-1">{sec.name}</span>
                     <span className="text-cq-2xs text-[var(--dash-text-muted)] flex-shrink-0 px-1.5 py-0.5 rounded bg-[var(--dash-base)]">
                       Ch {sec.startChannel}–{sec.endChannel}

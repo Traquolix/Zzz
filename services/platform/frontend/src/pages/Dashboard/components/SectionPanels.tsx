@@ -10,6 +10,7 @@ import { useSectionHistory } from '../hooks/useSectionHistory'
 import { PanelEmptyState } from './PanelEmptyState'
 import { DetailHeader } from './DetailHeader'
 import { MetricCard } from './MetricCard'
+import { ColorDot } from './ColorDot'
 
 type TimeRange = '1m' | '5m' | '15m' | '1h'
 
@@ -109,10 +110,7 @@ export function SectionList({
                   className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-[var(--dash-surface-raised)] transition-colors cursor-pointer"
                 >
                   <div className="flex items-center gap-2 mb-1">
-                    <span
-                      className="shrink-0 w-2 h-2 rounded-full"
-                      style={{ backgroundColor: fiber ? getFiberColor(fiber, fiberColors) : undefined }}
-                    />
+                    <ColorDot color={fiber ? getFiberColor(fiber, fiberColors) : undefined} />
                     <span className="text-cq-sm text-[var(--dash-text)] font-medium truncate">{section.name}</span>
                   </div>
                   <div className="flex items-center justify-between text-cq-xs text-[var(--dash-text-secondary)] pl-4">
@@ -250,10 +248,7 @@ export function SectionDetail({
         subtitle={
           fiber && (
             <span className="text-cq-2xs text-[var(--dash-text-muted)] flex items-center gap-1.5">
-              <span
-                className="inline-block w-2 h-2 rounded-full flex-shrink-0"
-                style={{ backgroundColor: fiberColor }}
-              />
+              <ColorDot color={fiberColor} />
               {fiber.name} · {fiber.direction === 0 ? 'Dir A' : 'Dir B'} · Ch {section.startChannel}–
               {section.endChannel}
             </span>
