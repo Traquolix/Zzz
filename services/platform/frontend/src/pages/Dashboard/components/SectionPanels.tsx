@@ -318,6 +318,7 @@ export function SectionDetail({
           <h3 className="text-cq-xs font-medium text-[var(--dash-text-muted)] uppercase tracking-wider mb-3">
             {t('sections.recentData')}
           </h3>
+
           <div className="overflow-x-auto">
             <table className="w-full text-cq-xs">
               <thead>

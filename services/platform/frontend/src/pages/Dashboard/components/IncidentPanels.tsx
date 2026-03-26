@@ -9,6 +9,7 @@ import { TimeSeriesChart } from './TimeSeriesChart'
 import { PanelEmptyState } from './PanelEmptyState'
 import { DetailHeader } from './DetailHeader'
 import { MetricCard } from './MetricCard'
+import { StatusBadge } from './StatusBadge'
 
 // ── Incident list ───────────────────────────────────────────────────────
 
@@ -139,17 +140,7 @@ export function IncidentDetail({
       <DetailHeader
         title={incident.title}
         onBack={onBack}
-        badge={
-          <span
-            className="text-cq-2xs font-medium px-1.5 py-0.5 rounded capitalize shrink-0"
-            style={{
-              backgroundColor: `${severityColor[incident.severity]}20`,
-              color: severityColor[incident.severity],
-            }}
-          >
-            {incident.severity}
-          </span>
-        }
+        badge={<StatusBadge label={incident.severity} color={severityColor[incident.severity]} />}
       />
 
       <div className="px-4 py-4 flex flex-col gap-3">

@@ -5,6 +5,8 @@ import type { MapPageAction } from '../types'
 import { PanelEmptyState } from './PanelEmptyState'
 import { DetailHeader } from './DetailHeader'
 import { MetricCard } from './MetricCard'
+import { DetailSection } from './DetailSection'
+import { StatusBadge } from './StatusBadge'
 import type {
   Infrastructure,
   SHMStatus,
@@ -197,16 +199,7 @@ function StructureDetail({
             </span>
           )
         }
-        badge={
-          shmStatus && (
-            <span
-              className="text-cq-2xs font-medium px-1.5 py-0.5 rounded capitalize shrink-0"
-              style={{ backgroundColor: `${statusColor}20`, color: statusColor }}
-            >
-              {shmStatus.status}
-            </span>
-          )
-        }
+        badge={shmStatus && <StatusBadge label={shmStatus.status} color={statusColor} />}
       />
 
       <div className="px-4 py-4 flex flex-col gap-3">
@@ -281,11 +274,7 @@ function StructureDetail({
             )
           })()}
 
-        {/* Spectral Heatmap */}
-        <div className="border-t border-[var(--dash-border)] pt-3">
-          <h3 className="text-cq-xs font-medium text-[var(--dash-text-muted)] uppercase tracking-wider mb-3">
-            {t('shm.spectralHeatmap')}
-          </h3>
+        <DetailSection title={t('shm.spectralHeatmap')}>
           <div className="rounded-lg bg-[var(--dash-surface-raised)] border border-[var(--dash-border)] p-2">
             {spectralLoading ? (
               <div className="h-[200px] rounded-lg bg-[var(--dash-surface-raised)] animate-pulse" />
@@ -297,13 +286,9 @@ function StructureDetail({
               </div>
             )}
           </div>
-        </div>
+        </DetailSection>
 
-        {/* Peak Scatter */}
-        <div className="border-t border-[var(--dash-border)] pt-3">
-          <h3 className="text-cq-xs font-medium text-[var(--dash-text-muted)] uppercase tracking-wider mb-3">
-            {t('shm.peakFrequencies')}
-          </h3>
+        <DetailSection title={t('shm.peakFrequencies')}>
           <div className="rounded-lg bg-[var(--dash-surface-raised)] border border-[var(--dash-border)] p-2">
             {peakLoading ? (
               <div className="h-[170px] rounded-lg bg-[var(--dash-surface-raised)] animate-pulse" />
@@ -315,9 +300,8 @@ function StructureDetail({
               </div>
             )}
           </div>
-        </div>
+        </DetailSection>
 
-        {/* Comparison overlay */}
         <div className="border-t border-[var(--dash-border)] pt-3">
           <ComparisonSection dataSummary={dataSummary} onStats={handleComparisonStats} />
         </div>
