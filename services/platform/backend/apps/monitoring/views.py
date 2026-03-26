@@ -389,7 +389,7 @@ class IncidentActionView(FlowAwareMixin, APIView):
         tags=["incidents"],
     )
     def get(self, request: Request, incident_id: str) -> Response:
-        incident, error_resp = self._get_incident_or_404(incident_id, request)
+        _incident, error_resp = self._get_incident_or_404(incident_id, request)
         if error_resp:
             return error_resp
 
@@ -425,7 +425,7 @@ class IncidentActionView(FlowAwareMixin, APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        incident, error_resp = self._get_incident_or_404(incident_id, request)
+        _incident, error_resp = self._get_incident_or_404(incident_id, request)
         if error_resp:
             return error_resp
 
