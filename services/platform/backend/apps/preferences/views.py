@@ -52,7 +52,7 @@ def _validate_json_structure(data: Any, depth: int = 0, path: str = "root") -> l
         for i, item in enumerate(data[:MAX_ARRAY_LENGTH]):
             errors.extend(_validate_json_structure(item, depth + 1, f"{path}[{i}]"))
 
-    elif not isinstance(data, (str, int, float, bool, type(None))):
+    elif not isinstance(data, str | int | float | bool | type(None)):
         errors.append(f"{path}: invalid type {type(data).__name__}")
 
     return errors

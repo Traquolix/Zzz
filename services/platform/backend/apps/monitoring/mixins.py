@@ -5,7 +5,8 @@ View mixins for the monitoring app.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from rest_framework.request import Request
 

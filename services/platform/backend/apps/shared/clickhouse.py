@@ -123,7 +123,7 @@ def get_client() -> Any:
         return client
     except Exception as e:
         _record_failure()
-        raise ClickHouseUnavailableError(str(e))
+        raise ClickHouseUnavailableError(str(e)) from e
 
 
 def query(sql: str, parameters: dict[str, Any] | None = None) -> list[dict[str, Any]]:
@@ -148,7 +148,7 @@ def query(sql: str, parameters: dict[str, Any] | None = None) -> list[dict[str, 
         client = get_client()
         result = client.query(sql, parameters=parameters)
         columns = result.column_names
-        rows = [dict(zip(columns, row)) for row in result.result_rows]
+        rows = [dict(zip(columns, row, strict=False)) for row in result.result_rows]
         timer.__exit__(None, None, None)
         CLICKHOUSE_QUERIES.labels(query_type=query_type, status="success").inc()
         return rows
@@ -177,14 +177,14 @@ def query(sql: str, parameters: dict[str, Any] | None = None) -> list[dict[str, 
             sentry_sdk.capture_exception(e)
         except Exception:
             pass
-        raise ClickHouseUnavailableError(str(e))
+        raise ClickHouseUnavailableError(str(e)) from e
 
 
 def query_scalar(sql: str, parameters: dict[str, Any] | None = None) -> Any:
     """Execute a query and return a single scalar value."""
     rows = query(sql, parameters=parameters)
     if rows and rows[0]:
-        return list(rows[0].values())[0]
+        return next(iter(rows[0].values()))
     return None
 
 
@@ -211,7 +211,7 @@ def command(sql: str) -> None:
             sentry_sdk.capture_exception(e)
         except Exception:
             pass
-        raise ClickHouseUnavailableError(str(e))
+        raise ClickHouseUnavailableError(str(e)) from e
 
 
 def health() -> dict[str, Any]:

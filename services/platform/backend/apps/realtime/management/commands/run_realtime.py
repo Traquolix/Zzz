@@ -19,6 +19,7 @@ Auto-detect logic:
 """
 
 import asyncio
+import contextlib
 import json
 import threading
 from pathlib import Path
@@ -234,10 +235,8 @@ class Command(BaseCommand):
             )
         )
 
-        try:
+        with contextlib.suppress(KeyboardInterrupt):
             asyncio.run(run_simulation_loop(fibers, infrastructure))
-        except KeyboardInterrupt:
-            pass
 
     def _get_data_dir(self) -> Path:
         """Get path to fiber cable data (infrastructure/clickhouse/cables/)."""

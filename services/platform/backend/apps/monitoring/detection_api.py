@@ -76,9 +76,7 @@ class IsAPIKeyUser(BasePermission):
         if not user or not user.is_authenticated:
             return False
         # request.auth is set to the APIKey instance by APIKeyAuthentication
-        if not isinstance(getattr(request, "auth", None), APIKey):
-            return False
-        return True
+        return isinstance(getattr(request, "auth", None), APIKey)
 
 
 @dataclass

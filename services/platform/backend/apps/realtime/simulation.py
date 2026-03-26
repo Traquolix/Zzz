@@ -26,7 +26,7 @@ import time
 import uuid
 from collections import deque
 from dataclasses import dataclass
-from typing import Optional, TypedDict
+from typing import TypedDict
 
 from channels.layers import get_channel_layer
 
@@ -300,7 +300,7 @@ class Incident:
     detected_at: str
     detected_at_ms: float  # Wall-clock ms at creation (avoids UTC/local parsing bugs)
     status: str = "active"
-    duration: Optional[float] = None
+    duration: float | None = None
 
 
 @dataclass
@@ -484,7 +484,7 @@ INFRA_BASE_FREQ = {"bridge": 5.0, "tunnel": 15.0}
 def _weighted_choice(items: list[str], weights: list[float]) -> str:
     total = sum(weights)
     r = random.random() * total
-    for item, w in zip(items, weights):
+    for item, w in zip(items, weights, strict=False):
         r -= w
         if r <= 0:
             return item
@@ -527,7 +527,7 @@ def _update_vehicle(
     vehicles: list[Vehicle],
     fiber: FiberConfig,
     delta_s: float,
-) -> Optional[Vehicle]:
+) -> Vehicle | None:
     """Update a single vehicle's speed and position using car-following physics.
 
     Vehicles only see other vehicles — they don't know about incidents.
@@ -878,10 +878,13 @@ class RoadEventManager:
         expired = [e for e in self.events if now - e.created_at > e.duration_s]
         for e in expired:
             for v in vehicles:
-                if v.fiber_line == e.fiber_id and v.forced_speed is not None:
-                    # Only release if this vehicle is near the event
-                    if abs(v.channel - e.channel) < 60:
-                        v.forced_speed = None
+                # Only release if this vehicle is near the event
+                if (
+                    v.fiber_line == e.fiber_id
+                    and v.forced_speed is not None
+                    and abs(v.channel - e.channel) < 60
+                ):
+                    v.forced_speed = None
         self.events = [e for e in self.events if now - e.created_at <= e.duration_s]
 
         # Enforce road events on nearby vehicles.
@@ -1190,7 +1193,7 @@ class SimulationEngine:
         # Prune old resolved — keep ~1 month of history (~360 incidents/day)
         resolved_all = [i for i in self.incidents if i.status == "resolved"]
         if len(resolved_all) > 10_000:
-            to_remove = set(id(i) for i in resolved_all[:-10_000])
+            to_remove = {id(i) for i in resolved_all[:-10_000]}
             removed_ids = {i.id for i in self.incidents if id(i) in to_remove}
             self.incidents = [i for i in self.incidents if id(i) not in to_remove]
             for rid in removed_ids:

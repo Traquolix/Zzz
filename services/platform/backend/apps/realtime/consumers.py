@@ -23,6 +23,7 @@ Superusers join the __all__ channel to receive all data.
 """
 
 import asyncio
+import contextlib
 import json
 import logging
 import time
@@ -244,17 +245,16 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
                 elif channel == "fibers":
                     await self._send_initial_fibers()
 
-        elif action == "unsubscribe":
-            if channel in self.subscriptions:
-                self.subscriptions.discard(channel)
-                if channel in PUBSUB_CHANNELS:
-                    await self._unsubscribe_pubsub(channel)
-                else:
-                    await self.channel_layer.group_discard(
-                        _org_group_name(channel, self._org_id, flow=self._flow),
-                        self.channel_name,
-                    )
-                logger.debug("Client unsubscribed from: %s", channel)
+        elif action == "unsubscribe" and channel in self.subscriptions:
+            self.subscriptions.discard(channel)
+            if channel in PUBSUB_CHANNELS:
+                await self._unsubscribe_pubsub(channel)
+            else:
+                await self.channel_layer.group_discard(
+                    _org_group_name(channel, self._org_id, flow=self._flow),
+                    self.channel_name,
+                )
+            logger.debug("Client unsubscribed from: %s", channel)
 
     async def _handle_authenticate(self, token: str | None) -> None:
         """Handle message-based authentication with rate limiting."""
@@ -420,10 +420,8 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         ps_task = getattr(self, "_pubsub_task", None)
         if ps_task is not None and not ps_task.done():
             ps_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await ps_task
-            except asyncio.CancelledError:
-                pass
         ps = getattr(self, "_pubsub", None)
         if ps is not None:
             await ps.close()

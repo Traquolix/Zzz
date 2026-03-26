@@ -15,17 +15,13 @@ logger = logging.getLogger("sequoia.alerting")
 def _passes_scope_filters(rule: AlertRule, fiber_id: str, channel: int) -> bool:
     """Check if the data point falls within the rule's fiber/channel scope."""
     # Fiber filter
-    if rule.fiber_id_filter:
-        if fiber_id not in rule.fiber_id_filter:
-            return False
+    if rule.fiber_id_filter and fiber_id not in rule.fiber_id_filter:
+        return False
 
     # Channel range filter
     if rule.channel_start is not None and channel < rule.channel_start:
         return False
-    if rule.channel_end is not None and channel > rule.channel_end:
-        return False
-
-    return True
+    return not (rule.channel_end is not None and channel > rule.channel_end)
 
 
 def evaluate_detection(

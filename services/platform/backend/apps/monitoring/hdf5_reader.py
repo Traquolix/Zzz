@@ -13,7 +13,6 @@ import threading
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 import h5py
 import numpy as np
@@ -197,7 +196,7 @@ class SpectralData:
         }
 
 
-def load_spectral_data(filepath: Optional[Path] = None) -> SpectralData:
+def load_spectral_data(filepath: Path | None = None) -> SpectralData:
     """
     Load spectral data from an HDF5 file.
 
@@ -260,7 +259,7 @@ def load_spectral_data(filepath: Optional[Path] = None) -> SpectralData:
     return result
 
 
-def load_peak_frequencies(filepath: Optional[Path] = None) -> tuple[np.ndarray, np.ndarray]:
+def load_peak_frequencies(filepath: Path | None = None) -> tuple[np.ndarray, np.ndarray]:
     """
     Load and cache peak frequencies for the full dataset.
 
@@ -296,7 +295,7 @@ def load_peak_frequencies(filepath: Optional[Path] = None) -> tuple[np.ndarray, 
     return peak_freqs, peak_powers
 
 
-def get_spectral_summary(filepath: Optional[Path] = None) -> dict:
+def get_spectral_summary(filepath: Path | None = None) -> dict:
     """
     Get summary statistics by reusing the cached SpectralData.
 

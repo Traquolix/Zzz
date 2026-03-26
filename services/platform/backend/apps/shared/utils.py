@@ -35,7 +35,7 @@ def paginate_queryset(
     - Computes total = offset + len(items_fetched) if we got exactly limit+1
     - Only calls count() when we fetch fewer than limit+1 items (last page)
     """
-    _search = request.GET.get("search", "").strip()  # noqa: F841 — reserved for future filtering
+    _search = request.GET.get("search", "").strip()
     try:
         offset = max(0, int(request.GET.get("offset", 0)))
     except (ValueError, TypeError):
