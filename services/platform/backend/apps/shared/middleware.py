@@ -76,12 +76,13 @@ class RequestLoggingMiddleware(MiddlewareMixin):
             if safe_params:
                 log_data["params"] = safe_params
 
+        msg = f"{log_data['method']} {log_data['path']} -> {log_data['status']}"
         if response.status_code >= 500:
-            logger.error(self._format_log(log_data))
+            logger.error(msg, extra=log_data)
         elif response.status_code >= 400:
-            logger.warning(self._format_log(log_data))
+            logger.warning(msg, extra=log_data)
         else:
-            logger.info(self._format_log(log_data))
+            logger.info(msg, extra=log_data)
 
         response["X-Request-ID"] = request_id
         return response
@@ -92,19 +93,3 @@ class RequestLoggingMiddleware(MiddlewareMixin):
 
         ip = get_client_ip(request)
         return ip if ip else "-"
-
-    def _format_log(self, data):
-        parts = [
-            f"[{data['request_id']}]",
-            f"{data['method']} {data['path']}",
-            f"-> {data['status']}",
-        ]
-        if data["duration_ms"]:
-            parts.append(f"({data['duration_ms']}ms)")
-        parts.append(f"user={data['user']}")
-        if data["org"]:
-            parts.append(f"org={data['org']}")
-        parts.append(f"ip={data['ip']}")
-        if data.get("params"):
-            parts.append(f"params={data['params']}")
-        return " ".join(parts)

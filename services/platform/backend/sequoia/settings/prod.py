@@ -173,16 +173,22 @@ if sentry_dsn:
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "filters": {
+        "request_id": {
+            "()": "apps.shared.logging_utils.RequestIdFilter",
+        },
+    },
     "formatters": {
         "json": {
             "()": "pythonjsonlogger.json.JsonFormatter",
-            "format": "%(asctime)s %(name)s %(levelname)s %(message)s",
+            "format": "%(asctime)s %(name)s %(levelname)s %(message)s %(request_id)s",
         },
     },
     "handlers": {
         "console": {
             "class": "logging.StreamHandler",
             "formatter": "json",
+            "filters": ["request_id"],
         },
     },
     "root": {
@@ -196,6 +202,11 @@ LOGGING = {
             "propagate": False,
         },
         "sequoia": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "sequoia.requests": {
             "handlers": ["console"],
             "level": "INFO",
             "propagate": False,
