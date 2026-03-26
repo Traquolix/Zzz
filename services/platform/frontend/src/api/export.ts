@@ -3,6 +3,7 @@ import { API_URL } from '@/constants/api'
 
 export type ExportEstimate = {
   estimatedRows: number
+  estimatedSize: number
   tier: string | null
 }
 

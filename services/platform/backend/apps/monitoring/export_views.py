@@ -378,4 +378,15 @@ class ExportEstimateView(APIView):
                 },
             )
 
-        return Response({"estimatedRows": count or 0, "tier": tier})
+        rows = count or 0
+        # Approximate CSV bytes per row (measured from real exports)
+        AVG_BYTES_PER_ROW = {
+            "hires": 100,
+            "1m": 90,
+            "1h": 90,
+            "incidents": 120,
+        }
+        bpr = AVG_BYTES_PER_ROW.get(tier or "incidents", 100)
+        estimated_size = rows * bpr
+
+        return Response({"estimatedRows": rows, "estimatedSize": estimated_size, "tier": tier})

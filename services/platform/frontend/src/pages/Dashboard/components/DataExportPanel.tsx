@@ -14,6 +14,17 @@ type Format = 'csv' | 'json'
 const HIRES_HOURS = 48
 const MEDIUM_DAYS = 90
 
+// JSON is ~35% larger than CSV due to key repetition
+const JSON_OVERHEAD = 1.35
+
+function formatBytes(csvBytes: number, fmt: Format): string {
+  const bytes = fmt === 'json' ? Math.round(csvBytes * JSON_OVERHEAD) : csvBytes
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+}
+
 function getPresetRange(preset: DatePreset): { start: string; end: string } | null {
   if (preset === 'custom') return null
   const end = new Date()
@@ -131,7 +142,7 @@ export function DataExportPanel() {
   const estimateText = estimateQuery.isLoading
     ? '...'
     : estimateQuery.data
-      ? t('export.estimatedRowsValue', { count: estimateQuery.data.estimatedRows })
+      ? t('export.estimatedSize', { size: formatBytes(estimateQuery.data.estimatedSize, format) })
       : null
 
   return (
