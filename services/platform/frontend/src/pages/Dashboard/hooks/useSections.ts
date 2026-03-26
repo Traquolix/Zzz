@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useCallback } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { fetchSections, createSection, deleteSection, type ApiSection } from '@/api/sections'
 import type { Section } from '../types'
 import { defaultSpeedThresholds } from '../data'
@@ -23,40 +24,58 @@ function toDisplaySection(api: ApiSection): Section {
 }
 
 export function useSections() {
-  const [sections, setSections] = useState<Section[]>([])
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
 
-  useEffect(() => {
-    let mounted = true
-    fetchSections()
-      .then(apiSections => {
-        if (mounted) {
-          setSections(apiSections.map(toDisplaySection))
-          setLoading(false)
-        }
-      })
-      .catch(() => {
-        if (mounted) setLoading(false)
-      })
-    return () => {
-      mounted = false
-    }
-  }, [])
+  const { data: sections = [], isLoading: loading } = useQuery({
+    queryKey: ['sections'],
+    queryFn: async () => {
+      const apiSections = await fetchSections()
+      return apiSections.map(toDisplaySection)
+    },
+    staleTime: 60_000,
+  })
+
+  const createMutation = useMutation({
+    mutationFn: (params: {
+      fiberId: string
+      direction: 0 | 1
+      name: string
+      startChannel: number
+      endChannel: number
+    }) =>
+      createSection({
+        fiberId: params.fiberId,
+        direction: params.direction,
+        name: params.name,
+        channelStart: params.startChannel,
+        channelEnd: params.endChannel,
+      }),
+    onSuccess: api => {
+      queryClient.setQueryData<Section[]>(['sections'], prev => [...(prev ?? []), toDisplaySection(api)])
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteSection,
+    onSuccess: (_data, id) => {
+      queryClient.setQueryData<Section[]>(['sections'], prev => (prev ?? []).filter(s => s.id !== id))
+    },
+  })
 
   const addSection = useCallback(
     async (fiberId: string, direction: 0 | 1, name: string, startChannel: number, endChannel: number) => {
-      const api = await createSection({ fiberId, direction, name, channelStart: startChannel, channelEnd: endChannel })
-      const section = toDisplaySection(api)
-      setSections(prev => [...prev, section])
-      return section
+      const api = await createMutation.mutateAsync({ fiberId, direction, name, startChannel, endChannel })
+      return toDisplaySection(api)
     },
-    [],
+    [createMutation],
   )
 
-  const removeSection = useCallback(async (id: string) => {
-    await deleteSection(id)
-    setSections(prev => prev.filter(s => s.id !== id))
-  }, [])
+  const removeSection = useCallback(
+    async (id: string) => {
+      await deleteMutation.mutateAsync(id)
+    },
+    [deleteMutation],
+  )
 
   return { sections, loading, addSection, removeSection }
 }
