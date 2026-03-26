@@ -4,7 +4,7 @@ Used to convert between physical units and ADC counts.
 Example: DAS floatData in rad/(s*m) -> int16-equivalent ADC counts.
 """
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import numpy as np
 
@@ -22,7 +22,7 @@ class Scale(ProcessingStep):
         super().__init__("scale")
         self.factor = factor
 
-    async def process(self, measurement_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def process(self, measurement_data: dict[str, Any]) -> dict[str, Any] | None:
         if measurement_data is None:
             return None
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 from confluent_kafka import KafkaError
 from confluent_kafka.serialization import MessageField, SerializationContext
@@ -24,7 +24,7 @@ tracer = trace.get_tracer(__name__)
 class MessageOpsMixin:
     """Mixin providing message send/receive operations."""
 
-    async def _get_next_message(self: "ServiceBase") -> Optional[Message]:
+    async def _get_next_message(self: ServiceBase) -> Message | None:
         """Poll and deserialize next Kafka message using Avro with OTEL tracing."""
         if not self.consumer:
             return None
@@ -94,7 +94,7 @@ class MessageOpsMixin:
                 self.logger.error(f"Full traceback: {traceback.format_exc()}")
                 return None
 
-    async def _deserialize_key(self: "ServiceBase", raw_message) -> Optional[str]:
+    async def _deserialize_key(self: ServiceBase, raw_message) -> str | None:
         """Deserialize message key."""
         if not raw_message.key():
             return None
@@ -109,7 +109,7 @@ class MessageOpsMixin:
             )
         return str(raw_message.key())
 
-    async def _deserialize_value(self: "ServiceBase", raw_message) -> Any:
+    async def _deserialize_value(self: ServiceBase, raw_message) -> Any:
         """Deserialize message value."""
         if not raw_message.value():
             return None
@@ -125,7 +125,7 @@ class MessageOpsMixin:
             )
         return raw_message.value()
 
-    def _extract_trace_context(self: "ServiceBase", message: Message, span) -> None:
+    def _extract_trace_context(self: ServiceBase, message: Message, span) -> None:
         """Extract OTEL trace context from message headers."""
         if not message.headers:
             return
@@ -133,7 +133,7 @@ class MessageOpsMixin:
         try:
             headers_dict = {}
             for header_item in message.headers:
-                if isinstance(header_item, (tuple, list)) and len(header_item) == 2:
+                if isinstance(header_item, tuple | list) and len(header_item) == 2:
                     key, value = header_item
                     if isinstance(key, bytes):
                         key = key.decode("utf-8")
@@ -145,7 +145,7 @@ class MessageOpsMixin:
         except Exception as header_err:
             self.logger.warning(f"Failed to extract trace context from headers: {header_err}")
 
-    async def _internal_send(self: "ServiceBase", message: Message) -> bool:
+    async def _internal_send(self: ServiceBase, message: Message) -> bool:
         """Send message with circuit breaker and retry protection."""
         if not self.producer:
             self.logger.error("No producer configured")
@@ -178,7 +178,7 @@ class MessageOpsMixin:
             self.logger.error(f"Failed to send message {message.id}: {e}")
             return False
 
-    async def _send_avro_message(self: "ServiceBase", message: Message) -> bool:
+    async def _send_avro_message(self: ServiceBase, message: Message) -> bool:
         """Serialize and send to Kafka (multi-output routing via output_id)."""
         with self.tracer.start_as_current_span("kafka.send") as span:
             try:
@@ -239,7 +239,7 @@ class MessageOpsMixin:
                 self.logger.error(f"Failed to send message to output '{message.output_id}': {e}")
                 return False
 
-    async def _serialize_key(self: "ServiceBase", key, topic: str, serializer) -> Optional[bytes]:
+    async def _serialize_key(self: ServiceBase, key, topic: str, serializer) -> bytes | None:
         """Serialize message key."""
         if not key:
             return None
@@ -250,9 +250,7 @@ class MessageOpsMixin:
             return await loop.run_in_executor(None, serializer, key, ctx)
         return str(key).encode("utf-8")
 
-    async def _serialize_value(
-        self: "ServiceBase", payload, topic: str, serializer
-    ) -> Optional[bytes]:
+    async def _serialize_value(self: ServiceBase, payload, topic: str, serializer) -> bytes | None:
         """Serialize message value."""
         if not payload:
             return None
@@ -263,7 +261,7 @@ class MessageOpsMixin:
             return await loop.run_in_executor(None, serializer, payload, ctx)
         return json.dumps(payload).encode("utf-8")
 
-    async def _handle_batched_flush(self: "ServiceBase") -> None:
+    async def _handle_batched_flush(self: ServiceBase) -> None:
         """Flush when batch size or time interval threshold reached."""
         current_time = time.time()
 
@@ -288,7 +286,7 @@ class MessageOpsMixin:
             except Exception as e:
                 self.logger.warning(f"Failed to flush producer: {e}")
 
-    def _on_delivery(self: "ServiceBase", err, msg) -> None:
+    def _on_delivery(self: ServiceBase, err, msg) -> None:
         """Kafka producer delivery callback."""
         if msg is None:
             return
@@ -330,7 +328,7 @@ class MessageOpsMixin:
         else:
             self.logger.debug(f"Successfully delivered message {message_id}")
 
-    async def _commit_message(self: "ServiceBase", message: KafkaMessage) -> bool:
+    async def _commit_message(self: ServiceBase, message: KafkaMessage) -> bool:
         """Commit with retry and rebalance-aware error handling."""
         with self.tracer.start_as_current_span("kafka.commit") as span:
             correlation_id = get_correlation_id()
@@ -418,7 +416,7 @@ class MessageOpsMixin:
             return False
 
     async def handle_dead_letter(
-        self: "ServiceBase", message: Message, error: str, kafka_message: Optional[Any] = None
+        self: ServiceBase, message: Message, error: str, kafka_message: Any | None = None
     ) -> None:
         """Send failed message to DLQ if enabled."""
         if self.dead_letter_queue:

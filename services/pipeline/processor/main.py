@@ -5,7 +5,6 @@ import hashlib
 import json
 import time
 import uuid
-from typing import Dict, List
 
 import numpy as np
 from opentelemetry import trace
@@ -44,9 +43,9 @@ class DASProcessor(MultiTransformer):
         service_config = load_service_config("processor")
 
         # Pipelines built per-fiber dynamically from fibers.yaml
-        self._fiber_pipelines: Dict[str, Dict[str, ProcessingChain]] = {}
-        self._fiber_config_hashes: Dict[str, str] = {}
-        self._fiber_configs: Dict[str, FiberConfig] = {}
+        self._fiber_pipelines: dict[str, dict[str, ProcessingChain]] = {}
+        self._fiber_config_hashes: dict[str, str] = {}
+        self._fiber_configs: dict[str, FiberConfig] = {}
 
         super().__init__(service_name, service_config)
 
@@ -59,7 +58,7 @@ class DASProcessor(MultiTransformer):
             f"Outputs: {list(service_config.outputs.keys())}"
         )
 
-    def _get_fiber_pipelines(self, fiber_id: str) -> Dict[str, ProcessingChain]:
+    def _get_fiber_pipelines(self, fiber_id: str) -> dict[str, ProcessingChain]:
         """Get or build pipelines for a fiber.
 
         Pipelines are cached per fiber_id. Config is reloaded from fibers.yaml
@@ -88,7 +87,7 @@ class DASProcessor(MultiTransformer):
 
         return self._fiber_pipelines.get(fiber_id, {})
 
-    def _build_fiber_pipelines(self, fiber_cfg: FiberConfig) -> Dict[str, ProcessingChain]:
+    def _build_fiber_pipelines(self, fiber_cfg: FiberConfig) -> dict[str, ProcessingChain]:
         """Build processing pipelines from fiber YAML config.
 
         Each section's pipeline is built from its config using the step registry.
@@ -117,7 +116,7 @@ class DASProcessor(MultiTransformer):
         """Extract fiber_id from topic name: das.raw.carros -> carros"""
         return topic.split(".")[-1]
 
-    async def transform(self, message: Message) -> List[Message]:
+    async def transform(self, message: Message) -> list[Message]:
         with self.tracer.start_as_current_span("transform_measurement") as span:
             try:
                 start_time = time.time()

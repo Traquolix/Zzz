@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Dict, Optional, Tuple
 
 from config.fiber_config import FiberConfigManager
 from shared.service_config import OutputConfig, ServiceConfig
@@ -73,7 +72,7 @@ def load_service_config(service_type: str) -> ServiceConfig:
     return config
 
 
-def _build_outputs(service_type: str, topics: dict, schemas: dict) -> Dict[str, OutputConfig]:
+def _build_outputs(service_type: str, topics: dict, schemas: dict) -> dict[str, OutputConfig]:
     """Build output configuration based on service type."""
     if service_type == "processor":
         return {
@@ -95,7 +94,7 @@ def _build_outputs(service_type: str, topics: dict, schemas: dict) -> Dict[str, 
         raise ValueError(f"Unknown service type: {service_type}")
 
 
-def _get_input_config(service_type: str, topics: dict) -> Tuple[Optional[str], Optional[str]]:
+def _get_input_config(service_type: str, topics: dict) -> tuple[str | None, str | None]:
     """Get input topic or pattern for service type.
 
     For the processor, if FIBER_ID env var is set, subscribes to a single
@@ -113,7 +112,7 @@ def _get_input_config(service_type: str, topics: dict) -> Tuple[Optional[str], O
         raise ValueError(f"Unknown service type: {service_type}")
 
 
-def get_ai_engine_fiber_id() -> Optional[str]:
+def get_ai_engine_fiber_id() -> str | None:
     """Get FIBER_ID for AI engine filtering, if set."""
     return os.getenv("FIBER_ID")
 

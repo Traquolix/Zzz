@@ -1,7 +1,7 @@
 import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any
 
 from opentelemetry import trace
 
@@ -9,7 +9,7 @@ from shared.otel_setup import get_correlation_id
 
 
 class ProcessingStep(ABC):
-    def __init__(self, name: str, config: Optional[Dict[str, Any]] = None):
+    def __init__(self, name: str, config: dict[str, Any] | None = None):
         self.name = name
         self.config = config or {}
         self.logger = logging.getLogger(f"processing.{name}")
@@ -18,13 +18,13 @@ class ProcessingStep(ABC):
         self._total_processing_time_ms = 0.0
 
     @abstractmethod
-    async def process(self, measurement_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def process(self, measurement_data: dict[str, Any]) -> dict[str, Any]:
         pass
 
     def estimate_memory_usage(self) -> float:
         return 10.0  # Conservative default.
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Return step statistics for monitoring."""
         return {
             "call_count": self._call_count,
@@ -36,7 +36,7 @@ class ProcessingStep(ABC):
         self._call_count = 0
         self._total_processing_time_ms = 0.0
 
-    async def process_with_stats(self, measurement_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def process_with_stats(self, measurement_data: dict[str, Any]) -> dict[str, Any]:
         start_time = time.time()
         self._call_count += 1
 

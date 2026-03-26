@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 class KafkaSetupMixin:
     """Mixin providing Kafka client setup functionality."""
 
-    async def _setup_kafka_clients(self: "ServiceBase") -> None:
+    async def _setup_kafka_clients(self: ServiceBase) -> None:
         """Initialize Kafka consumer/producer based on pattern type."""
         from .service_base import _NEEDS_CONSUMER, _NEEDS_PRODUCER
 
@@ -38,7 +38,7 @@ class KafkaSetupMixin:
         if self.service_type in _NEEDS_PRODUCER:
             self._setup_producer(security_config)
 
-    def _setup_consumer(self: "ServiceBase", security_config: dict) -> None:
+    def _setup_consumer(self: ServiceBase, security_config: dict) -> None:
         """Setup Kafka consumer with deserializers."""
         consumer_config = {
             "bootstrap.servers": self.config.kafka_bootstrap_servers,
@@ -74,7 +74,7 @@ class KafkaSetupMixin:
                 self.input_value_schema if self.input_value_schema else None,
             )
 
-    def _setup_producer(self: "ServiceBase", security_config: dict) -> None:
+    def _setup_producer(self: ServiceBase, security_config: dict) -> None:
         """Setup Kafka producer with serializers."""
         producer_config = {
             "bootstrap.servers": self.config.kafka_bootstrap_servers,
@@ -124,7 +124,7 @@ class KafkaSetupMixin:
             self.key_serializer = self.output_serializers["default"]["key"]
             self.value_serializer = self.output_serializers["default"]["value"]
 
-    def _build_security_config(self: "ServiceBase") -> dict:
+    def _build_security_config(self: ServiceBase) -> dict:
         """Build Kafka security config from SSL/SASL settings."""
         security_config = {}
 
@@ -152,7 +152,7 @@ class KafkaSetupMixin:
 
         return security_config
 
-    async def _close_kafka_clients(self: "ServiceBase") -> None:
+    async def _close_kafka_clients(self: ServiceBase) -> None:
         """Close Kafka clients with configurable timeouts."""
         try:
             if self.consumer:

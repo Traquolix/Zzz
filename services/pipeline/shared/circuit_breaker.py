@@ -1,7 +1,7 @@
 import asyncio
 import time
+from collections.abc import Callable
 from enum import Enum
-from typing import Callable
 
 
 class CircuitBreakerState(Enum):
@@ -15,7 +15,7 @@ class CircuitBreaker:
         self,
         failure_threshold: int = 5,
         recovery_timeout: float = 30.0,
-        on_state_change: Callable = None,
+        on_state_change: Callable | None = None,
     ):
         self.failure_threshold = failure_threshold
         self.recovery_timeout = recovery_timeout

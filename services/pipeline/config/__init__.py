@@ -46,10 +46,6 @@ from config.service_loader import (
 )
 
 __all__ = [
-    # Service configuration
-    "load_service_config",
-    "get_service_name",
-    "get_ai_engine_fiber_id",
     # Fiber configuration
     "CountingConfig",
     "FiberConfig",
@@ -60,6 +56,7 @@ __all__ = [
     "SectionConfig",
     "SpeedDetectionConfig",
     "extract_fiber_id",
+    "get_ai_engine_fiber_id",
     "get_all_fiber_configs",
     "get_all_model_specs",
     "get_default_model_name",
@@ -68,4 +65,7 @@ __all__ = [
     "get_input_topics",
     "get_model_spec",
     "get_raw_config",
+    "get_service_name",
+    # Service configuration
+    "load_service_config",
 ]

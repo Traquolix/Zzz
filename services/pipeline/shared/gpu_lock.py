@@ -51,10 +51,12 @@ def gpu_lock(timeout: float = 120.0):
             try:
                 fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 break
-            except (OSError, BlockingIOError):
+            except (OSError, BlockingIOError) as err:
                 elapsed = time.monotonic() - start
                 if elapsed >= timeout:
-                    raise TimeoutError(f"GPU lock acquisition timed out after {timeout:.0f}s")
+                    raise TimeoutError(
+                        f"GPU lock acquisition timed out after {timeout:.0f}s"
+                    ) from err
                 time.sleep(0.05)
 
         wait_time = time.monotonic() - start

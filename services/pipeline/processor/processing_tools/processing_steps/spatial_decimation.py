@@ -8,7 +8,7 @@ Example:
     factor=4: Keep channels 0, 4, 8, 12... (75% reduction)
 """
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 from processor.processing_tools.processing_steps.base_step import ProcessingStep
 
@@ -25,8 +25,8 @@ class SpatialDecimation(ProcessingStep):
     def __init__(
         self,
         factor: int = 1,
-        channel_start: Optional[int] = None,
-        channel_stop: Optional[int] = None,
+        channel_start: int | None = None,
+        channel_stop: int | None = None,
     ):
         super().__init__("spatial_decimation")
         if factor < 1:
@@ -35,7 +35,7 @@ class SpatialDecimation(ProcessingStep):
         self.channel_start = channel_start
         self.channel_stop = channel_stop
 
-    async def process(self, measurement_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    async def process(self, measurement_data: dict[str, Any]) -> dict[str, Any] | None:
         if measurement_data is None:
             return None
 
@@ -50,15 +50,9 @@ class SpatialDecimation(ProcessingStep):
         stop = self.channel_stop
 
         # Convert absolute channel numbers to local indices
-        if start is not None:
-            local_start = max(0, start - msg_channel_start)
-        else:
-            local_start = 0
+        local_start = max(0, start - msg_channel_start) if start is not None else 0
 
-        if stop is not None:
-            local_stop = min(len(values), stop - msg_channel_start)
-        else:
-            local_stop = len(values)
+        local_stop = min(len(values), stop - msg_channel_start) if stop is not None else len(values)
 
         # Apply spatial decimation (select every Nth channel)
         selected_values = values[local_start : local_stop : self.factor]

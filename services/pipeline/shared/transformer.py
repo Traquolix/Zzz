@@ -2,7 +2,7 @@ import asyncio
 import time
 from abc import abstractmethod
 from collections import OrderedDict, deque
-from typing import Generic, List, Optional, TypeVar
+from typing import Generic, TypeVar
 
 from shared.message import KafkaMessage, Message
 
@@ -16,7 +16,7 @@ class Transformer(ServiceBase, Generic[T, U]):
     """1:1 message transformation pattern."""
 
     @abstractmethod
-    async def transform(self, message: T) -> Optional[U]:
+    async def transform(self, message: T) -> U | None:
         """Transform message. Return result to send or None to skip."""
         pass
 
@@ -33,7 +33,7 @@ class MultiTransformer(ServiceBase, Generic[T, U]):
     """1:N message transformation pattern."""
 
     @abstractmethod
-    async def transform(self, message: T) -> List[U]:
+    async def transform(self, message: T) -> list[U]:
         """Transform message to multiple outputs."""
         pass
 
@@ -61,7 +61,7 @@ class BufferedTransformer(ServiceBase, Generic[T, U]):
         pass
 
     @abstractmethod
-    async def process_buffer(self, messages: List[T]) -> List[U]:
+    async def process_buffer(self, messages: list[T]) -> list[U]:
         """Process complete buffer. Return messages to send."""
         pass
 
@@ -173,7 +173,7 @@ class BufferedTransformer(ServiceBase, Generic[T, U]):
             raise
 
     async def _process_complete_buffer(
-        self, messages: List[Message], buffer_key: str, partial: bool
+        self, messages: list[Message], buffer_key: str, partial: bool
     ) -> None:
         async with self._semaphore:
             start_time = time.time()
@@ -262,7 +262,7 @@ class RollingBufferedTransformer(ServiceBase, Generic[T, U]):
         pass
 
     @abstractmethod
-    async def process_buffer(self, messages: List[T]) -> List[U]:
+    async def process_buffer(self, messages: list[T]) -> list[U]:
         """Process window snapshot. Return messages to send."""
         pass
 
@@ -420,7 +420,7 @@ class RollingBufferedTransformer(ServiceBase, Generic[T, U]):
             raise
 
     async def _process_rolling_buffer(
-        self, messages: List[Message], buffer_key: str, partial: bool
+        self, messages: list[Message], buffer_key: str, partial: bool
     ) -> None:
         """Process a snapshot of the rolling buffer."""
         async with self._semaphore:

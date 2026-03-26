@@ -5,7 +5,6 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Optional
 
 from confluent_kafka import Producer
 from confluent_kafka.schema_registry import SchemaRegistryClient
@@ -43,7 +42,7 @@ class PersistentDLQ:
 
         schema_client = SchemaRegistryClient({"url": schema_registry_url})
         schema_path = Path(__file__).parent / "schema" / "das_dlq_message.avsc"
-        with open(schema_path, "r") as f:
+        with open(schema_path) as f:
             schema_str = f.read()
 
         self.value_serializer = AvroSerializer(schema_client, schema_str)
@@ -59,7 +58,7 @@ class PersistentDLQ:
         original_topic: str = "unknown",
         original_partition: int = -1,
         original_offset: int = -1,
-        stack_trace: Optional[str] = None,
+        stack_trace: str | None = None,
     ):
         """Send failed message to DLQ topic."""
         try:
