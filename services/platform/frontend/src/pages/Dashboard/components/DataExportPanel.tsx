@@ -101,6 +101,7 @@ export function DataExportPanel() {
       dateRange?.end,
       dataType,
       direction,
+      format,
       parsedChStart,
       parsedChEnd,
     ],

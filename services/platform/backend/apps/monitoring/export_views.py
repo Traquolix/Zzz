@@ -302,6 +302,15 @@ class ExportDetectionsView(FlowAwareMixin, APIView):
         return response
 
 
+# Approximate CSV bytes per row (measured from real exports)
+AVG_BYTES_PER_ROW: dict[str, int] = {
+    "hires": 100,
+    "1m": 90,
+    "1h": 90,
+    "incidents": 120,
+}
+
+
 class ExportEstimateView(APIView):
     """GET /api/export/estimate — estimate row count before downloading."""
 
@@ -378,15 +387,8 @@ class ExportEstimateView(APIView):
                 },
             )
 
-        rows = count or 0
-        # Approximate CSV bytes per row (measured from real exports)
-        AVG_BYTES_PER_ROW = {
-            "hires": 100,
-            "1m": 90,
-            "1h": 90,
-            "incidents": 120,
-        }
-        bpr = AVG_BYTES_PER_ROW.get(tier or "incidents", 100)
-        estimated_size = rows * bpr
+        rows: int = count or 0
+        bpr: int = AVG_BYTES_PER_ROW.get(tier, 120) if tier else AVG_BYTES_PER_ROW["incidents"]
+        estimated_size: int = rows * bpr
 
         return Response({"estimatedRows": rows, "estimatedSize": estimated_size, "tier": tier})
