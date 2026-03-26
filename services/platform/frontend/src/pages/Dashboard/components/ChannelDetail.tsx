@@ -60,7 +60,7 @@ export function ChannelDetail({
       for (const d of detections) {
         if (d.fiberId !== channel.fiberId || d.direction !== channel.direction) continue
         if (Math.abs(d.channel - channel.channel) > NEIGHBOR_RANGE) continue
-        dotsRef.current.push({ time: d.timestamp, speed: d.speed })
+        dotsRef.current.push({ time: Date.now(), speed: d.speed })
       }
     })
     return unsub
