@@ -48,6 +48,3 @@ opentelemetry-instrumentation-django==0.61b0
 
 # Error monitoring
 sentry-sdk[django]==2.51.0
-
-# Metrics
-prometheus_client==0.22.1

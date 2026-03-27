@@ -164,7 +164,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         if getattr(self, "_authenticated", False):
             from apps.shared.metrics import WEBSOCKET_CONNECTIONS
 
-            WEBSOCKET_CONNECTIONS.dec()
+            WEBSOCKET_CONNECTIONS.add(-1)
         logger.debug("WebSocket client disconnected (code=%s)", close_code)
 
     def _is_rate_limited(self) -> bool:
@@ -281,7 +281,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         if user is None or not user.is_authenticated:
             from apps.shared.metrics import WEBSOCKET_AUTH_FAILURES
 
-            WEBSOCKET_AUTH_FAILURES.inc()
+            WEBSOCKET_AUTH_FAILURES.add(1)
             logger.warning("WebSocket authentication failed: invalid token")
             await self.send_json(
                 {"action": "authenticated", "success": False, "message": "Invalid token"}
@@ -296,7 +296,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             auth_task.cancel()
         from apps.shared.metrics import WEBSOCKET_CONNECTIONS
 
-        WEBSOCKET_CONNECTIONS.inc()
+        WEBSOCKET_CONNECTIONS.add(1)
 
         available_flows = ["sim"]
         if cache.get("kafka_available", False):
@@ -381,9 +381,9 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
                 try:
                     payload = json.loads(message["data"])
                     await asyncio.wait_for(self.send_json(payload), timeout=15.0)
-                    WEBSOCKET_MESSAGES_SENT.labels(channel=payload.get("channel", "")).inc()
+                    WEBSOCKET_MESSAGES_SENT.add(1, {"channel": payload.get("channel", "")})
                 except asyncio.TimeoutError:
-                    WEBSOCKET_SEND_TIMEOUTS.inc()
+                    WEBSOCKET_SEND_TIMEOUTS.add(1)
                     logger.warning("WebSocket send timeout (pub/sub) for user=%s", self._user)
                     await self.close(code=4008)
                     return
@@ -446,11 +446,11 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             )
             from apps.shared.metrics import WEBSOCKET_MESSAGES_SENT
 
-            WEBSOCKET_MESSAGES_SENT.labels(channel=event["channel"]).inc()
+            WEBSOCKET_MESSAGES_SENT.add(1, {"channel": event["channel"]})
         except asyncio.TimeoutError:
             from apps.shared.metrics import WEBSOCKET_SEND_TIMEOUTS
 
-            WEBSOCKET_SEND_TIMEOUTS.inc()
+            WEBSOCKET_SEND_TIMEOUTS.add(1)
             logger.warning(
                 "WebSocket send timeout for user=%s, channel=%s", self._user, event.get("channel")
             )

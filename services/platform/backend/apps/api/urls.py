@@ -20,7 +20,7 @@ urlpatterns = [
     # Health checks & metrics
     path("health", shared_views.HealthCheckView.as_view(), name="health"),
     path("health/ready", shared_views.ReadinessCheckView.as_view(), name="readiness"),
-    path("metrics", shared_views.MetricsView.as_view(), name="metrics"),
+    # Metrics exported via OTel collector (no /metrics endpoint needed)
     # Auth endpoints
     path("auth/login", auth_views.LoginView.as_view(), name="login"),
     path("auth/verify", auth_views.VerifyView.as_view(), name="verify"),
