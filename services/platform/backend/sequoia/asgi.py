@@ -19,6 +19,11 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "sequoia.settings.prod")
 # Initialize Django ASGI application early to populate the app registry
 django_asgi_app = get_asgi_application()
 
+# Initialize OpenTelemetry after Django setup (needs app registry for DjangoInstrumentor)
+from apps.shared.otel_setup import init_otel  # noqa: E402
+
+init_otel()
+
 # Import routing after Django setup
 from apps.realtime.middleware import JWTAuthMiddleware  # noqa: E402
 from apps.realtime.routing import websocket_urlpatterns  # noqa: E402

@@ -39,6 +39,13 @@ scipy==1.15.2
 # Structured logging (production JSON output)
 python-json-logger==3.2.1
 
+# OpenTelemetry (trace context in logs, Django auto-instrumentation)
+opentelemetry-api==1.40.0
+opentelemetry-sdk==1.40.0
+opentelemetry-exporter-otlp==1.40.0
+opentelemetry-instrumentation-logging==0.61b0
+opentelemetry-instrumentation-django==0.61b0
+
 # Error monitoring
 sentry-sdk[django]==2.51.0
 
