@@ -423,12 +423,17 @@ class RollingBufferedTransformer(ServiceBase, Generic[T, U]):
             raise
 
     @staticmethod
-    def _collect_span_links(messages: list[Message], max_links: int = 32) -> list[trace.Link]:
-        """Extract trace contexts from input message headers and return as span links."""
+    def _collect_span_links(messages: list[Message]) -> list[trace.Link]:
+        """Extract unique trace contexts from input message headers as span links.
+
+        Messages in a rolling buffer typically come from a small number of
+        upstream batches (e.g., ~12 DAS acquisition cycles for a 300-message
+        window). This deduplicates by trace_id so each upstream trace is
+        linked exactly once.
+        """
+        seen_traces: set[int] = set()
         links: list[trace.Link] = []
         for msg in messages:
-            if len(links) >= max_links:
-                break
             if not msg.headers:
                 continue
             headers_dict: dict[str, str] = {}
@@ -440,7 +445,8 @@ class RollingBufferedTransformer(ServiceBase, Generic[T, U]):
                 headers_dict[k] = v
             ctx = extract(headers_dict)
             span_ctx = trace.get_current_span(ctx).get_span_context()
-            if span_ctx.is_valid:
+            if span_ctx.is_valid and span_ctx.trace_id not in seen_traces:
+                seen_traces.add(span_ctx.trace_id)
                 links.append(trace.Link(span_ctx))
         return links
 
@@ -463,7 +469,7 @@ class RollingBufferedTransformer(ServiceBase, Generic[T, U]):
                         "buffer.key": buffer_key,
                         "buffer.message_count": len(messages),
                         "buffer.partial": partial,
-                        "buffer.link_count": len(links),
+                        "buffer.upstream_traces": len(links),
                     },
                 ):
                     results = await asyncio.wait_for(
