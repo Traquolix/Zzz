@@ -4,6 +4,9 @@ from abc import abstractmethod
 from collections import OrderedDict, deque
 from typing import Generic, TypeVar
 
+from opentelemetry import trace
+from opentelemetry.propagate import extract
+
 from shared.message import KafkaMessage, Message
 
 from .service_base import ServiceBase
@@ -419,6 +422,34 @@ class RollingBufferedTransformer(ServiceBase, Generic[T, U]):
             self.metrics.record_error("rolling_buffer_management")
             raise
 
+    @staticmethod
+    def _collect_span_links(messages: list[Message]) -> list[trace.Link]:
+        """Extract unique trace contexts from input message headers as span links.
+
+        Messages in a rolling buffer typically come from a small number of
+        upstream batches (e.g., ~12 DAS acquisition cycles for a 300-message
+        window). This deduplicates by trace_id so each upstream trace is
+        linked exactly once.
+        """
+        seen_traces: set[int] = set()
+        links: list[trace.Link] = []
+        for msg in messages:
+            if not msg.headers:
+                continue
+            headers_dict: dict[str, str] = {}
+            for k, v in msg.headers.items() if isinstance(msg.headers, dict) else msg.headers:
+                if isinstance(k, bytes):
+                    k = k.decode("utf-8", errors="replace")
+                if isinstance(v, bytes):
+                    v = v.decode("utf-8", errors="replace")
+                headers_dict[k] = v
+            ctx = extract(headers_dict)
+            span_ctx = trace.get_current_span(ctx).get_span_context()
+            if span_ctx.is_valid and span_ctx.trace_id not in seen_traces:
+                seen_traces.add(span_ctx.trace_id)
+                links.append(trace.Link(span_ctx))
+        return links
+
     async def _process_rolling_buffer(
         self, messages: list[Message], buffer_key: str, partial: bool
     ) -> None:
@@ -427,15 +458,31 @@ class RollingBufferedTransformer(ServiceBase, Generic[T, U]):
             start_time = time.time()
 
             try:
-                results = await asyncio.wait_for(
-                    self.consumer_circuit_breaker.call(
-                        self.retry_handler.retry_with_backoff, self.process_buffer, messages
-                    ),
-                    timeout=self.config.message_timeout,
-                )
+                # Collect span links from input messages for cross-trace navigation
+                links = self._collect_span_links(messages)
 
-                for result in results:
-                    await self._internal_send(result)
+                tracer = trace.get_tracer(__name__)
+                with tracer.start_as_current_span(
+                    "rolling_buffer.process",
+                    links=links,
+                    attributes={
+                        "buffer.key": buffer_key,
+                        "buffer.message_count": len(messages),
+                        "buffer.partial": partial,
+                        "buffer.upstream_traces": len(links),
+                    },
+                ):
+                    results = await asyncio.wait_for(
+                        self.consumer_circuit_breaker.call(
+                            self.retry_handler.retry_with_backoff,
+                            self.process_buffer,
+                            messages,
+                        ),
+                        timeout=self.config.message_timeout,
+                    )
+
+                    for result in results:
+                        await self._internal_send(result)
 
                 processing_time = time.time() - start_time
                 self.metrics.record_message_processed(processing_time)
