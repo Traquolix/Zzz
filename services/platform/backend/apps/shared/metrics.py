@@ -1,106 +1,93 @@
 """
-Prometheus metrics for SequoIA platform.
+OpenTelemetry metrics for the SequoIA platform.
 
-Exposes counters, histograms, and gauges for critical data paths:
-  - ClickHouse query performance and failures
-  - Kafka message consumption
-  - WebSocket connection lifecycle
-  - API request latencies
-  - Incident counts
+All metrics are exported via OTLP to the otel-lgtm collector, which
+forwards them to Prometheus. Histograms observed inside an active span
+automatically carry trace exemplars for metric → trace drill-down in Grafana.
 
-Metrics are collected by prometheus_client's default registry and
-exposed via the /metrics endpoint (MetricsView).
+Metric names use dots (OTel convention); the collector maps them to
+underscores for Prometheus compatibility.
 """
 
-from prometheus_client import Counter, Gauge, Histogram
+from opentelemetry import metrics
+
+meter = metrics.get_meter("sequoia.backend")
 
 # ---------- ClickHouse ----------
 
-CLICKHOUSE_QUERIES = Counter(
-    "sequoia_clickhouse_queries_total",
-    "Total ClickHouse queries executed",
-    ["query_type", "status"],  # status: success, error, circuit_breaker
+CLICKHOUSE_QUERIES = meter.create_counter(
+    "sequoia.clickhouse.queries",
+    description="Total ClickHouse queries executed",
 )
 
-CLICKHOUSE_QUERY_DURATION = Histogram(
-    "sequoia_clickhouse_query_duration_seconds",
-    "ClickHouse query latency",
-    ["query_type"],
-    buckets=(0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 15.0),
+CLICKHOUSE_QUERY_DURATION = meter.create_histogram(
+    "sequoia.clickhouse.query.duration",
+    unit="s",
+    description="ClickHouse query latency",
 )
 
-CLICKHOUSE_CIRCUIT_BREAKER_TRIPS = Counter(
-    "sequoia_clickhouse_circuit_breaker_trips_total",
-    "Times the ClickHouse circuit breaker tripped",
+CLICKHOUSE_CIRCUIT_BREAKER_TRIPS = meter.create_counter(
+    "sequoia.clickhouse.circuit_breaker.trips",
+    description="Times the ClickHouse circuit breaker tripped",
 )
 
 # ---------- Kafka ----------
 
-KAFKA_MESSAGES_CONSUMED = Counter(
-    "sequoia_kafka_messages_consumed_total",
-    "Messages consumed from Kafka",
-    ["topic"],
+KAFKA_MESSAGES_CONSUMED = meter.create_counter(
+    "sequoia.kafka.messages.consumed",
+    description="Messages consumed from Kafka",
 )
 
-KAFKA_CONSUMER_LAG = Gauge(
-    "sequoia_kafka_consumer_lag_seconds",
-    "Estimated consumer lag from message timestamp to processing time",
-    ["topic"],
-)
-
-KAFKA_DESERIALIZATION_ERRORS = Counter(
-    "sequoia_kafka_deserialization_errors_total",
-    "Avro deserialization failures",
-    ["topic"],
+KAFKA_DESERIALIZATION_ERRORS = meter.create_counter(
+    "sequoia.kafka.deserialization.errors",
+    description="Avro deserialization failures",
 )
 
 # ---------- WebSocket ----------
 
-WEBSOCKET_CONNECTIONS = Gauge(
-    "sequoia_websocket_connections_active",
-    "Currently active WebSocket connections",
+WEBSOCKET_CONNECTIONS = meter.create_up_down_counter(
+    "sequoia.websocket.connections",
+    description="Currently active WebSocket connections",
 )
 
-WEBSOCKET_MESSAGES_SENT = Counter(
-    "sequoia_websocket_messages_sent_total",
-    "Messages sent to WebSocket clients",
-    ["channel"],
+WEBSOCKET_MESSAGES_SENT = meter.create_counter(
+    "sequoia.websocket.messages.sent",
+    description="Messages sent to WebSocket clients",
 )
 
-WEBSOCKET_AUTH_FAILURES = Counter(
-    "sequoia_websocket_auth_failures_total",
-    "WebSocket authentication failures",
+WEBSOCKET_AUTH_FAILURES = meter.create_counter(
+    "sequoia.websocket.auth.failures",
+    description="WebSocket authentication failures",
 )
 
-WEBSOCKET_SEND_TIMEOUTS = Counter(
-    "sequoia_websocket_send_timeouts_total",
-    "WebSocket send timeouts (slow clients)",
+WEBSOCKET_SEND_TIMEOUTS = meter.create_counter(
+    "sequoia.websocket.send.timeouts",
+    description="WebSocket send timeouts (slow clients)",
 )
 
 # ---------- Incidents ----------
 
-INCIDENTS_ACTIVE = Gauge(
-    "sequoia_incidents_active",
-    "Currently active incidents",
+INCIDENTS_ACTIVE = meter.create_up_down_counter(
+    "sequoia.incidents.active",
+    description="Currently active incidents",
 )
 
 # ---------- Replay Buffer ----------
 
-REPLAY_BUFFER_SIZE = Gauge(
-    "sequoia_replay_buffer_items",
-    "Items currently queued in the replay buffer",
+REPLAY_BUFFER_SIZE = meter.create_up_down_counter(
+    "sequoia.replay_buffer.items",
+    description="Items currently queued in the replay buffer",
 )
 
-REPLAY_BUFFER_DELAY = Histogram(
-    "sequoia_replay_buffer_delay_seconds",
-    "Replay buffer scheduling delay (wall time - target time)",
-    buckets=(0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0),
+REPLAY_BUFFER_DELAY = meter.create_histogram(
+    "sequoia.replay_buffer.delay",
+    unit="s",
+    description="Replay buffer scheduling delay (wall time - target time)",
 )
 
 # ---------- Redis Pub/Sub ----------
 
-PUBSUB_MESSAGES_PUBLISHED = Counter(
-    "sequoia_pubsub_messages_published_total",
-    "Messages published to Redis pub/sub",
-    ["channel"],
+PUBSUB_MESSAGES_PUBLISHED = meter.create_counter(
+    "sequoia.pubsub.messages.published",
+    description="Messages published to Redis pub/sub",
 )
