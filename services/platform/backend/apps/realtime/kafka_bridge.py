@@ -30,6 +30,8 @@ import time
 from channels.layers import get_channel_layer
 from django.conf import settings
 from django.core.cache import cache
+from opentelemetry import trace
+from opentelemetry.propagate import extract
 
 from apps.alerting.integration import check_alerts_for_detections, check_alerts_for_incident
 from apps.realtime.broadcast import (
@@ -96,6 +98,22 @@ def _try_import_confluent_kafka():
 # ============================================================================
 # MESSAGE TRANSFORMS
 # ============================================================================
+
+
+_tracer = trace.get_tracer(__name__)
+
+
+def _extract_kafka_headers(msg) -> dict[str, str]:
+    """Extract Kafka message headers as a string dict for OTel propagation."""
+    raw = msg.headers()
+    if not raw:
+        return {}
+    result: dict[str, str] = {}
+    for key, value in raw:
+        if isinstance(value, bytes):
+            value = value.decode("utf-8", errors="replace")
+        result[key] = value
+    return result
 
 
 def _parse_detection_message(value: dict | None) -> dict | None:
@@ -371,7 +389,12 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
 
                     KAFKA_MESSAGES_CONSUMED.labels(topic=topic).inc()
                     if topic == "das.detections":
-                        _handle_detection_message(msg.value(), replay_buffer)
+                        # Extract W3C trace context from Kafka headers so
+                        # the detection processing span links to the pipeline trace.
+                        headers = _extract_kafka_headers(msg)
+                        ctx = extract(headers)
+                        with _tracer.start_as_current_span("kafka.consume.detections", context=ctx):
+                            _handle_detection_message(msg.value(), replay_buffer)
 
             now = time.time()
 
