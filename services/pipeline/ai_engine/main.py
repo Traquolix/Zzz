@@ -523,12 +523,23 @@ class AIEngineService(RollingBufferedTransformer):
                         section=meta["section"],
                         num_detections=len(detections),
                     )
-                    for det in detections:
+                    for det_idx, det in enumerate(detections):
                         self.ai_metrics.record_vehicle(
                             fiber_id=meta["fiber_id"],
                             section=meta["section"],
                             direction=det["direction"],
                             speed_kmh=det["speed_kmh"],
+                        )
+                        self.logger.debug(
+                            "detection",
+                            extra={
+                                "fiber_id": meta["fiber_id"],
+                                "section": meta["section"],
+                                "det_index": det_idx,
+                                "channel": det.get("channel"),
+                                "direction": det["direction"],
+                                "speed_kmh": round(det["speed_kmh"], 1),
+                            },
                         )
 
                 self.logger.info(
