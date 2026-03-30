@@ -94,3 +94,25 @@ def invalidate_fiber_org_map() -> None:
     """Invalidate the global fiber→org mapping cache."""
     cache.delete("fiber_org_map")
     logger.debug("Invalidated fiber_org_map cache")
+
+
+def cable_to_physical_dict(cable: Any) -> dict[str, Any]:
+    """Convert a FiberCable model instance to the physical dict used by views and consumers.
+
+    The returned dict is the input for ``_expand_to_directional`` which splits
+    a physical cable into two directional fibers.
+    """
+    landmarks = []
+    for idx, label in enumerate(cable.landmark_labels or []):
+        if label:
+            landmarks.append({"channel": idx, "name": label})
+
+    return {
+        "id": cable.id,
+        "name": cable.name,
+        "color": cable.color,
+        "coordinates": cable.coordinates,
+        "directional_paths": cable.directional_paths or {},
+        "landmarks": landmarks or None,
+        "data_coverage": cable.data_coverage or [],
+    }

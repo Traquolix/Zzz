@@ -4,10 +4,39 @@ Shared utilities for DRF views — pagination, cache keys, org-scoped querysets.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from functools import wraps
 from typing import Any
 
 from django.db.models import QuerySet
 from rest_framework.request import Request
+from rest_framework.response import Response
+
+
+def add_cache_control(max_age: int = 300, public: bool = False) -> Callable[..., Any]:
+    """Decorator to add Cache-Control headers to a DRF view method.
+
+    Args:
+        max_age: Cache duration in seconds (0 means no-store for private).
+        public: If True, set ``public`` directive (CDN/proxy cacheable).
+                If False (default), set ``private`` (browser-only).
+    """
+
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        @wraps(func)
+        def wrapper(self: Any, request: Request, *args: Any, **kwargs: Any) -> Response:
+            response = func(self, request, *args, **kwargs)
+            if public:
+                response["Cache-Control"] = f"public, max-age={max_age}"
+            elif max_age > 0:
+                response["Cache-Control"] = f"private, max-age={max_age}"
+            else:
+                response["Cache-Control"] = "private, no-store"
+            return response
+
+        return wrapper
+
+    return decorator
 
 
 def build_org_cache_key(prefix: str, user: Any) -> str:
