@@ -141,7 +141,7 @@ class DASProcessor(MultiTransformer):
 
                 # Get fiber-specific pipelines and sections from fibers.yaml.
                 pipelines = self._get_fiber_pipelines(fiber_id)
-                fiber_cfg = self._fiber_configs.get(fiber_id)
+                fiber_cfg = self._fiber_configs.get(fiber_id)  # type: ignore[assignment]
 
                 if not pipelines or not fiber_cfg:
                     raise ValueError(f"No config for fiber '{fiber_id}'. Add to fibers.yaml.")

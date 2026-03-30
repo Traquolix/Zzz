@@ -37,4 +37,4 @@ class VectorizedBiquadFilter:
 
             x = y
 
-        return y
+        return x

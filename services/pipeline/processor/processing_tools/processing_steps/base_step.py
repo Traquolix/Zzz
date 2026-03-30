@@ -18,7 +18,7 @@ class ProcessingStep(ABC):
         self._total_processing_time_ms = 0.0
 
     @abstractmethod
-    async def process(self, measurement_data: dict[str, Any]) -> dict[str, Any]:
+    async def process(self, measurement_data: dict[str, Any]) -> dict[str, Any] | None:
         pass
 
     def estimate_memory_usage(self) -> float:
@@ -36,7 +36,7 @@ class ProcessingStep(ABC):
         self._call_count = 0
         self._total_processing_time_ms = 0.0
 
-    async def process_with_stats(self, measurement_data: dict[str, Any]) -> dict[str, Any]:
+    async def process_with_stats(self, measurement_data: dict[str, Any]) -> dict[str, Any] | None:
         start_time = time.time()
         self._call_count += 1
 

@@ -52,7 +52,7 @@ class CircuitBreaker:
             raise
 
     def _should_attempt_reset(self) -> bool:
-        return (
+        return bool(
             self.last_failure_time and time.time() - self.last_failure_time >= self.recovery_timeout
         )
 

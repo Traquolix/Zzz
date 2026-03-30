@@ -49,7 +49,7 @@ warnings.filterwarnings("ignore", message=".*NNPACK.*")
 try:
     import torch
 except ImportError:
-    torch = None
+    torch = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ class ModelRegistry:
         self._max_models = max_models
         self._ai_metrics = ai_metrics
         self._loaded_models: OrderedDict[str, VehicleSpeedEstimator] = OrderedDict()
-        self._loaded_counters: dict[str, VehicleCounter] = {}
+        self._loaded_counters: dict[str, VehicleCounter | None] = {}
         self._lock = threading.Lock()
 
         # Build default model and counter through the same code path as all others
@@ -335,7 +335,7 @@ class AIEngineService(RollingBufferedTransformer):
 
     def get_window_size(self) -> int:
         """Window size for processing (e.g., 300 samples = 30s at 10Hz)."""
-        return self._model_spec.inference.samples_per_window
+        return int(self._model_spec.inference.samples_per_window)
 
     def get_step_size(self) -> int:
         """Step size for rolling buffer (e.g., 250 = valid output per window).
@@ -344,7 +344,7 @@ class AIEngineService(RollingBufferedTransformer):
         The overlap (window_size - step_size = 50) is naturally maintained
         by the rolling FIFO buffer.
         """
-        return self._model_spec.inference.step_size
+        return int(self._model_spec.inference.step_size)
 
     def get_buffer_key(self, message: Message) -> str:
         """Buffer by fiber_id:section for section-aware batching.
@@ -416,7 +416,9 @@ class AIEngineService(RollingBufferedTransformer):
 
             # Mark section as ready if threshold reached
             if (
-                len(buffer_info["deque"]) >= self._window_size
+                self._window_size is not None
+                and self._step_size is not None
+                and len(buffer_info["deque"]) >= self._window_size
                 and buffer_info["new_count"] >= self._step_size
             ):
                 self._pending_ready[buffer_key] = list(buffer_info["deque"])

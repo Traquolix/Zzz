@@ -202,7 +202,8 @@ def get_correlation_id() -> str | None:
     Returns:
         Current correlation ID or None if not set
     """
-    return get_baggage("correlation_id")
+    value = get_baggage("correlation_id")
+    return str(value) if value is not None else None
 
 
 def add_correlation_to_span(span: trace.Span) -> None:

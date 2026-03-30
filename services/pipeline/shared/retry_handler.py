@@ -14,7 +14,7 @@ class RetryHandler:
         self.backoff_multiplier = config.retry_backoff_multiplier
 
     async def retry_with_backoff(self, func: Callable, *args, **kwargs) -> Any:
-        last_exception = None
+        last_exception: Exception | None = None
 
         for attempt in range(self.max_retries + 1):
             try:
@@ -33,4 +33,6 @@ class RetryHandler:
 
                 await asyncio.sleep(total_delay)
 
-        raise last_exception
+        if last_exception is not None:
+            raise last_exception
+        raise RuntimeError("retry_with_backoff exhausted without exception")

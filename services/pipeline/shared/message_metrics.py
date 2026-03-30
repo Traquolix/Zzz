@@ -132,7 +132,7 @@ class MessageMetrics:
         )
 
         # Track last lag values for gauge updates
-        self._last_lag_values = {}
+        self._last_lag_values: dict[str, int] = {}
         self._last_buffer_count = 0
 
     def _setup_local_provider(self):

@@ -8,7 +8,7 @@ class ProcessingChain:
         self.steps = steps
 
     async def process(self, measurement_data: dict[str, Any]) -> dict[str, Any] | None:
-        current_data = measurement_data
+        current_data: dict[str, Any] | None = measurement_data
         for step in self.steps:
             if current_data is None:
                 break

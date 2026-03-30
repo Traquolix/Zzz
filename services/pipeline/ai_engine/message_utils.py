@@ -66,8 +66,8 @@ def messages_to_arrays(
     if log_fn:
         log_fn(f"Channel mapping: start={channel_start}, step={channel_step}")
 
-    data_list = []
-    timestamp_ns_list = []
+    data_list: list[list] = []
+    timestamp_ns_list: list[int] = []
 
     for message in messages:
         payload = message.payload

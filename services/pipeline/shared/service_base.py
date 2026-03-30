@@ -24,6 +24,7 @@ from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 from typing import Any
 
+from aiohttp import web
 from opentelemetry import trace
 
 from shared.circuit_breaker import CircuitBreaker
@@ -73,7 +74,7 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
     and add their specific abstract methods for business logic.
     """
 
-    def __init__(self, service_name: str, config: ServiceConfig = None):
+    def __init__(self, service_name: str, config: ServiceConfig | None = None):
         self.service_name = service_name
         self._running = False
         self.config = config or ServiceConfig()
@@ -89,8 +90,8 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
         self._shutdown_event = asyncio.Event()
         self._graceful_shutdown_timeout = self.config.graceful_shutdown_timeout
 
-        self._health_app = None
-        self._health_runner = None
+        self._health_app: web.Application | None = None
+        self._health_runner: web.AppRunner | None = None
 
         self._load_required_schemas()
         self._initialize_service_infrastructure()
@@ -171,6 +172,7 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
 
         # Retry handler and DLQ
         self.retry_handler = RetryHandler(self.config)
+        self.dead_letter_queue: PersistentDLQ | None = None
         if self.config.enable_dlq:
             self.dead_letter_queue = PersistentDLQ(
                 kafka_bootstrap_servers=self.config.kafka_bootstrap_servers,
@@ -179,8 +181,6 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
                 dlq_topic=self.config.dlq_topic,
             )
             self.logger.info(f"DLQ enabled → {self.config.dlq_topic}")
-        else:
-            self.dead_letter_queue = None
 
         # Concurrency control and metrics
         self._semaphore = asyncio.Semaphore(self.config.max_concurrent_messages)
@@ -198,16 +198,16 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
         self.logger.info(f"Thread pools initialized: Kafka=4, Serialization={cpu_count * 2}")
 
         # Kafka clients placeholders
-        self.consumer = None
-        self.producer = None
+        self.consumer: Any = None
+        self.producer: Any = None
 
     def _load_required_schemas(self) -> None:
         """Load Avro schemas for inputs/outputs."""
-        self.input_key_schema = None
-        self.input_value_schema = None
-        self.output_key_schema = None
-        self.output_value_schema = None
-        self.outputs_config = {}
+        self.input_key_schema: str | None = None
+        self.input_value_schema: str | None = None
+        self.output_key_schema: str | None = None
+        self.output_value_schema: str | None = None
+        self.outputs_config: dict[str, dict[str, Any]] = {}
 
         try:
             # Load input schemas
@@ -226,7 +226,7 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
         except Exception as e:
             raise ValueError(f"Failed to load Avro schema: {e}") from e
 
-    def _load_schema(self, schema_file: str) -> str | None:
+    def _load_schema(self, schema_file: str | None) -> str | None:
         """Load and validate a schema file."""
         if not schema_file:
             return None
@@ -274,11 +274,9 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
 
     def _initialize_service_infrastructure(self) -> None:
         """Initialize pattern-specific infrastructure."""
-        if self.service_type in _NEEDS_PRODUCER:
-            self._message_batch = []
-            self._last_flush_time = time.time()
-
-        self._pending_deliveries = {}
+        self._message_batch: list[Any] = []
+        self._last_flush_time: float = time.time()
+        self._pending_deliveries: dict[str | None, Any] = {}
 
     def _setup_signal_handlers(self) -> None:
         """Register SIGTERM/SIGINT for graceful shutdown."""

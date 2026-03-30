@@ -2,7 +2,7 @@ import asyncio
 import time
 from abc import abstractmethod
 from collections import OrderedDict, deque
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 from opentelemetry import trace
 from opentelemetry.propagate import extract
@@ -59,7 +59,7 @@ class BufferedTransformer(ServiceBase, Generic[T, U]):
         pass
 
     @abstractmethod
-    def get_buffer_key(self, message: T) -> str:
+    def get_buffer_key(self, message: Message) -> str:
         """Key for grouping messages into separate buffers."""
         pass
 
@@ -74,9 +74,9 @@ class BufferedTransformer(ServiceBase, Generic[T, U]):
 
     def __init__(self, service_name: str, config):
         super().__init__(service_name, config)
-        self._buffers = OrderedDict()
-        self._buffer_size = None
-        self._buffer_timeout = None
+        self._buffers: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        self._buffer_size: int | None = None
+        self._buffer_timeout: float | None = None
         self._max_active_buffers = config.max_active_buffers
         self._buffers_evicted = 0
 
@@ -164,7 +164,7 @@ class BufferedTransformer(ServiceBase, Generic[T, U]):
                 f"Buffered message for key '{buffer_key}': {buffer_size}/{self._buffer_size}"
             )
 
-            if buffer_size >= self._buffer_size:
+            if self._buffer_size is not None and buffer_size >= self._buffer_size:
                 buffer_info = self._buffers.pop(buffer_key)
                 messages = buffer_info["messages"]
                 self.metrics.update_buffer_count(len(self._buffers))
@@ -260,7 +260,7 @@ class RollingBufferedTransformer(ServiceBase, Generic[T, U]):
         pass
 
     @abstractmethod
-    def get_buffer_key(self, message: T) -> str:
+    def get_buffer_key(self, message: Message) -> str:
         """Key for grouping messages into separate buffers."""
         pass
 
@@ -276,10 +276,10 @@ class RollingBufferedTransformer(ServiceBase, Generic[T, U]):
     def __init__(self, service_name: str, config):
         super().__init__(service_name, config)
         # Rolling buffers: key -> {"deque": deque, "new_count": int, "last_update": float}
-        self._rolling_buffers = OrderedDict()
-        self._window_size = None
-        self._step_size = None
-        self._buffer_timeout = None
+        self._rolling_buffers: OrderedDict[str, dict[str, Any]] = OrderedDict()
+        self._window_size: int | None = None
+        self._step_size: int | None = None
+        self._buffer_timeout: float | None = None
         self._max_active_buffers = config.max_active_buffers
         self._buffers_evicted = 0
 
@@ -403,7 +403,12 @@ class RollingBufferedTransformer(ServiceBase, Generic[T, U]):
             buffer_len = len(buffer_info["deque"])
 
             # Process when: buffer is full AND we've received step_size new messages
-            if buffer_len >= self._window_size and buffer_info["new_count"] >= self._step_size:
+            if (
+                self._window_size is not None
+                and self._step_size is not None
+                and buffer_len >= self._window_size
+                and buffer_info["new_count"] >= self._step_size
+            ):
                 # Snapshot current window (don't pop - keep for overlap)
                 messages = list(buffer_info["deque"])
                 buffer_info["new_count"] = 0  # Reset counter

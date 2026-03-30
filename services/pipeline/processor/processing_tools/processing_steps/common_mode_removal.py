@@ -108,7 +108,7 @@ class CommonModeRemoval(ProcessingStep):
 
         return result
 
-    def estimate_memory_usage(self, num_channels: int, buffer_size: int) -> float:
+    def estimate_memory_usage(self, num_channels: int = 0, buffer_size: int = 0) -> float:
         """Estimate memory usage for this step.
 
         Args:

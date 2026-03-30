@@ -27,7 +27,7 @@ class BandpassFilter(ProcessingStep):
             )
 
         self.filter = VectorizedBiquadFilter(low_freq, high_freq, sampling_rate)
-        self._fiber_states = {}
+        self._fiber_states: dict[str, dict[str, Any]] = {}
 
     async def process(self, measurement_data: dict[str, Any]) -> dict[str, Any] | None:
         if measurement_data is None:
