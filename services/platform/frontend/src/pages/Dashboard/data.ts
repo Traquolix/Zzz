@@ -1,4 +1,5 @@
 import type { Fiber, Section, SpeedThresholds } from './types'
+import type { CoverageRange } from '@/api/fibers'
 import { getFiberOffsetCoords } from '@/lib/geoUtils'
 import { COLORS } from '@/lib/theme'
 import carrosJson from '../../../../../../infrastructure/clickhouse/cables/carros.json'
@@ -114,6 +115,30 @@ export const fiberRenderCache = new Map<string, [number, number][]>(
     return [f.id, simplifyCoords(full, SIMPLIFY_TOLERANCE)]
   }),
 )
+
+/**
+ * Build a render cache that contains only the data-covered portions of each fiber.
+ * Returns Map<fiberId, segments[]> where each segment is a simplified coordinate array.
+ * Disjoint coverage ranges produce separate segments (rendered as MultiLineString).
+ */
+export function buildCoverageRenderCache(coverageMap: Map<string, CoverageRange[]>): Map<string, [number, number][][]> {
+  const cache = new Map<string, [number, number][][]>()
+  for (const fiber of fibers) {
+    const ranges = coverageMap.get(fiber.parentCableId)
+    if (!ranges || ranges.length === 0) continue
+    const segments: [number, number][][] = []
+    for (const range of ranges) {
+      const coords = getSectionCoords(fiber, range.start, range.end)
+      if (coords.length >= 2) {
+        segments.push(simplifyCoords(coords, SIMPLIFY_TOLERANCE))
+      }
+    }
+    if (segments.length > 0) {
+      cache.set(fiber.id, segments)
+    }
+  }
+  return cache
+}
 
 // ── Helpers ─────────────────────────────────────────────────────────────
 

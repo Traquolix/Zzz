@@ -124,6 +124,7 @@ function SettingsPanel({
   onClearHighlight,
   show3DBuildings,
   showChannelHelper,
+  showFullCable,
   flow,
   switchingFlow,
   availableFlows,
@@ -136,6 +137,7 @@ function SettingsPanel({
   onClearHighlight?: () => void
   show3DBuildings: boolean
   showChannelHelper: boolean
+  showFullCable: boolean
   flow: DataFlow
   switchingFlow: boolean
   availableFlows: DataFlow[]
@@ -190,6 +192,17 @@ function SettingsPanel({
           >
             <span
               className={`absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform ${showChannelHelper ? 'translate-x-[14px]' : ''}`}
+            />
+          </button>
+        </label>
+        <label className="flex items-center justify-between cursor-pointer group">
+          <span className="text-cq-sm text-[var(--dash-text)]">Show Full Cable</span>
+          <button
+            onClick={() => dispatch({ type: 'TOGGLE_SHOW_FULL_CABLE' })}
+            className={`relative w-8 h-[18px] rounded-full transition-colors ${showFullCable ? 'bg-[var(--dash-accent)]' : 'bg-[var(--dash-border)]'}`}
+          >
+            <span
+              className={`absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform ${showFullCable ? 'translate-x-[14px]' : ''}`}
             />
           </button>
         </label>

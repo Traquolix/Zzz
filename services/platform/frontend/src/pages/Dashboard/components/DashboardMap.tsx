@@ -50,6 +50,8 @@ interface DashboardMapProps {
   hideFibersInOverview?: boolean
   show3DBuildings?: boolean
   showChannelHelper?: boolean
+  showFullCable?: boolean
+  coverageMap?: Map<string, import('@/api/fibers').CoverageRange[]>
 }
 
 export const DashboardMap = memo(
@@ -81,6 +83,8 @@ export const DashboardMap = memo(
       hideFibersInOverview,
       show3DBuildings,
       showChannelHelper,
+      showFullCable,
+      coverageMap,
     },
     ref,
   ) {
@@ -216,6 +220,8 @@ export const DashboardMap = memo(
       hideFibersInOverview,
       show3DBuildings,
       showChannelHelper,
+      showFullCable,
+      coverageMap,
       sectionCreationMode,
       sectionFibersRef,
       fiberColorsRef,

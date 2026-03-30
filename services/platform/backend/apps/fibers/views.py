@@ -90,6 +90,7 @@ def _expand_to_directional(fiber: dict[str, Any]) -> list[dict[str, Any]]:
                 "baseCoordinates": base_coords,
                 "coordsPrecomputed": coords_precomputed,
                 "landmarks": fiber.get("landmarks"),
+                "dataCoverage": fiber.get("data_coverage", []),
             }
         )
     return result
@@ -146,6 +147,7 @@ class FiberListView(APIView):
                 "coordinates": cable.coordinates,
                 "directional_paths": cable.directional_paths or {},
                 "landmarks": landmarks if landmarks else None,
+                "data_coverage": cable.data_coverage or [],
             }
             fibers.extend(_expand_to_directional(physical))
 

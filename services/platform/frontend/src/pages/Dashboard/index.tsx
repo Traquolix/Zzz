@@ -14,6 +14,7 @@ import { useSections } from './hooks/useSections'
 import { useConfigUpdates } from '@/hooks/useConfigUpdates'
 import { useIncidents } from '@/hooks/useIncidents'
 import { useUnseenIncidents } from './hooks/useUnseenIncidents'
+import { useFiberCoverage } from './hooks/useFiberCoverage'
 import { IncidentToastStack } from './components/IncidentToastStack'
 import { UserMenu } from './components/UserMenu'
 import { ConnectionBanner } from './components/ConnectionBanner'
@@ -68,6 +69,7 @@ const initialState: MapPageState = {
   hideFibersInOverview: false,
   show3DBuildings: false,
   showChannelHelper: false,
+  showFullCable: false,
   selectedChannel: null,
 }
 
@@ -262,6 +264,8 @@ function reducer(state: MapPageState, action: MapPageAction): MapPageState {
       return { ...state, show3DBuildings: !state.show3DBuildings }
     case 'TOGGLE_CHANNEL_HELPER':
       return { ...state, showChannelHelper: !state.showChannelHelper }
+    case 'TOGGLE_SHOW_FULL_CABLE':
+      return { ...state, showFullCable: !state.showFullCable }
     case 'TOGGLE_SIDEBAR_EXPANDED':
       return { ...state, sidebarExpanded: !state.sidebarExpanded }
     case 'OPEN_PANEL':
@@ -289,6 +293,9 @@ export function Dashboard() {
   const { tickAndCollect } = useVehicleSim()
   const { stats: liveStats, seriesData: liveSeriesData } = useLiveStats(state.sections)
   const infrastructure = useInfrastructure()
+
+  // Data coverage from pipeline config (which channel ranges have data)
+  const coverageMap = useFiberCoverage()
 
   // Real incidents from API + WebSocket
   const { incidents: apiIncidents, loading: incidentsLoading } = useIncidents()
@@ -492,6 +499,8 @@ export function Dashboard() {
             hideFibersInOverview={state.hideFibersInOverview}
             show3DBuildings={state.show3DBuildings}
             showChannelHelper={state.showChannelHelper}
+            showFullCable={state.showFullCable}
+            coverageMap={coverageMap}
           />
 
           {/* Section creation banner */}

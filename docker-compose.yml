@@ -481,6 +481,7 @@ services:
       NO_PROXY: localhost,127.0.0.1,kafka,schema-registry,postgres,clickhouse,redis,otel-lgtm
     volumes:
       - ./infrastructure:/infrastructure:ro
+      - ./services/pipeline/config/fibers.yaml:/infrastructure/pipeline_config/fibers.yaml:ro
       - ./services/platform/backend/data/shm:/app/data/shm:ro
       - ./services/platform/backend/media:/app/media:ro
     networks:

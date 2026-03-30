@@ -12,6 +12,11 @@ class LandmarkSerializer(serializers.Serializer):
     name = serializers.CharField()
 
 
+class DataCoverageRangeSerializer(serializers.Serializer):
+    start = serializers.IntegerField()
+    end = serializers.IntegerField()
+
+
 class FiberLineSerializer(serializers.Serializer):
     id = serializers.CharField()
     parentFiberId = serializers.CharField()
@@ -21,3 +26,4 @@ class FiberLineSerializer(serializers.Serializer):
     coordinates = serializers.ListField()
     coordsPrecomputed = serializers.BooleanField(default=False)
     landmarks = LandmarkSerializer(many=True, allow_null=True)
+    dataCoverage = DataCoverageRangeSerializer(many=True, default=list)
