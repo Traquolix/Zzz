@@ -7,12 +7,8 @@ import { useRealtime } from './useRealtime'
  * the relevant React Query caches when configuration data changes
  * on the server.
  *
- * Currently handles infrastructure updates. Fiber geometry is statically
- * imported at build time — runtime fiber updates will require migrating
- * the frontend to fetch fibers from the API.
- *
- * Mount once near the app root (inside both RealtimeProvider and
- * QueryClientProvider).
+ * Handles infrastructure and fiber updates. Mount once near the app root
+ * (inside both RealtimeProvider and QueryClientProvider).
  */
 export function useConfigUpdates() {
   const { subscribe } = useRealtime()
@@ -23,9 +19,9 @@ export function useConfigUpdates() {
       const update = data as { type?: string }
       if (update.type === 'infrastructure') {
         queryClient.invalidateQueries({ queryKey: ['infrastructure'] })
+      } else if (update.type === 'fibers') {
+        queryClient.invalidateQueries({ queryKey: ['fibers'] })
       }
-      // TODO: handle 'fibers' once frontend fetches fibers from API
-      // instead of static JSON import
     })
   }, [subscribe, queryClient])
 }

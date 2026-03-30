@@ -2,8 +2,9 @@
 Fiber models — cable geometry and org assignment.
 
 FiberCable stores the physical fiber data (coordinates, directional paths,
-landmarks) in PostgreSQL. The authoritative source is the JSON cable files;
-PostgreSQL is a cached copy synced on startup via ``sync_fiber_data``.
+landmarks) in PostgreSQL. The authoritative sources are the JSON cable files
+(geometry) and ``fibers.yaml`` (data coverage ranges); PostgreSQL is a cached
+copy synced on startup via ``sync_fiber_data``.
 All runtime queries (REST API, realtime loops) read from PostgreSQL.
 
 FiberAssignment maps fibers to organizations for multi-tenant scoping.
@@ -19,7 +20,8 @@ class FiberCable(models.Model):
     """
     Physical fiber cable with geometry data.
 
-    Synced from JSON cable files into PostgreSQL on startup (see ``sync_fiber_data``).
+    Synced from JSON cable files and ``fibers.yaml`` into PostgreSQL on startup
+    (see ``sync_fiber_data``).
     Simulation-specific calibration (lanes, speed limits, etc.) lives separately
     in ``apps.realtime.simulation_config``.
     """

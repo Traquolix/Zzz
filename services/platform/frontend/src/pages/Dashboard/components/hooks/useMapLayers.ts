@@ -1,20 +1,54 @@
-import { useEffect } from 'react'
-import type { Map as MapboxMap } from 'mapbox-gl'
+import { useEffect, useState } from 'react'
+import type { Map as MapboxMap, GeoJSONSource } from 'mapbox-gl'
 import { COLORS } from '@/lib/theme'
 import type { Fiber } from '../../types'
+import type { CoverageRange } from '@/api/fibers'
 import { onMapReady } from '../mapUtils'
 import { MAP_SOURCES, MAP_LAYERS } from './mapTypes'
+
+function buildChannelHelperFeatures(
+  fibers: Fiber[],
+  fiberOffsetCache: Map<string, [number, number][]>,
+  coverageMap: Map<string, CoverageRange[]>,
+  offsetIndexToChannel: Map<string, number[]>,
+  showFullCable: boolean,
+): GeoJSON.Feature[] {
+  const features: GeoJSON.Feature[] = []
+  for (const fiber of fibers) {
+    const coords = fiberOffsetCache.get(fiber.id)
+    if (!coords) continue
+    const ranges = !showFullCable ? coverageMap.get(fiber.parentCableId) : undefined
+    const reverseMap = offsetIndexToChannel.get(fiber.id)
+    for (let i = 0; i < coords.length; i++) {
+      const c = coords[i]
+      if (c[0] == null || c[1] == null) continue
+      const channel = reverseMap ? reverseMap[i] : i
+      if (ranges && !ranges.some(r => channel >= r.start && channel <= r.end)) continue
+      features.push({
+        type: 'Feature',
+        properties: { color: fiber.color },
+        geometry: { type: 'Point', coordinates: [c[0], c[1]] },
+      })
+    }
+  }
+  return features
+}
 
 export function useMapLayers(
   mapRef: React.RefObject<MapboxMap | null>,
   fibers: Fiber[],
   fiberOffsetCache: Map<string, [number, number][]>,
+  coverageMap: Map<string, CoverageRange[]>,
+  offsetIndexToChannel: Map<string, number[]>,
+  showFullCable: boolean,
 ) {
+  // Signals that map sources/layers have been registered.
+  const [sourcesReady, setSourcesReady] = useState(false)
+
+  // One-time source/layer registration — runs once when the map style loads.
   useEffect(() => {
     return onMapReady(mapRef, map => {
       // ── Fiber route layers ──
-      // Start with empty features — useMapToggles effect #3 populates
-      // the source with coverage-aware or full-cable data once ready.
       map.addSource(MAP_SOURCES.fibers, {
         type: 'geojson',
         data: { type: 'FeatureCollection', features: [] },
@@ -30,24 +64,10 @@ export function useMapLayers(
         },
       })
 
-      // ── Channel helper dots ──
-      const channelFeatures: GeoJSON.Feature[] = []
-      for (const fiber of fibers) {
-        const coords = fiberOffsetCache.get(fiber.id)
-        if (!coords) continue
-        for (let ch = 0; ch < coords.length; ch++) {
-          const c = coords[ch]
-          if (c[0] == null || c[1] == null) continue
-          channelFeatures.push({
-            type: 'Feature',
-            properties: { color: fiber.color },
-            geometry: { type: 'Point', coordinates: [c[0], c[1]] },
-          })
-        }
-      }
+      // ── Channel helper dots (starts empty, populated by the data effect) ──
       map.addSource(MAP_SOURCES.channelHelper, {
         type: 'geojson',
-        data: { type: 'FeatureCollection', features: channelFeatures },
+        data: { type: 'FeatureCollection', features: [] },
       })
       map.addLayer({
         id: MAP_LAYERS.channelHelperDots,
@@ -56,8 +76,10 @@ export function useMapLayers(
         layout: { visibility: 'none' },
         paint: {
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 1, 14, 2.5, 17, 4],
-          'circle-color': ['get', 'color'],
+          'circle-color': COLORS.map.channelDotBorder,
           'circle-opacity': 0.6,
+          'circle-stroke-color': ['get', 'color'],
+          'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 10, 0, 14, 0.5, 17, 1],
         },
       })
 
@@ -227,6 +249,20 @@ export function useMapLayers(
         },
         labelLayerId,
       )
+
+      setSourcesReady(true)
     })
-  }, [mapRef, fibers, fiberOffsetCache])
+  }, [mapRef])
+
+  // Populate/update channel helper dots when fiber data or settings change.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !sourcesReady || fibers.length === 0) return
+    const src = map.getSource(MAP_SOURCES.channelHelper) as GeoJSONSource | undefined
+    if (!src) return
+    src.setData({
+      type: 'FeatureCollection',
+      features: buildChannelHelperFeatures(fibers, fiberOffsetCache, coverageMap, offsetIndexToChannel, showFullCable),
+    })
+  }, [sourcesReady, mapRef, fibers, fiberOffsetCache, coverageMap, offsetIndexToChannel, showFullCable])
 }

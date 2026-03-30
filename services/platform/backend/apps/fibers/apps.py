@@ -54,13 +54,17 @@ def _on_fiber_cable_change(sender, instance, **kwargs):
     from apps.fibers.models import FiberAssignment
     from apps.fibers.utils import invalidate_org_fiber_cache
 
-    # Invalidate REST cache for all orgs — FiberCable is shared across orgs
-    cache.delete("fibers:all")
-    # Invalidate per-org caches for every org assigned to this fiber
-    for org_id in FiberAssignment.objects.filter(fiber_id=instance.id).values_list(
-        "organization_id", flat=True
-    ):
+    org_ids = list(
+        FiberAssignment.objects.filter(fiber_id=instance.id).values_list(
+            "organization_id", flat=True
+        )
+    )
+    for org_id in org_ids:
         invalidate_org_fiber_cache(org_id)
+
+    # If no orgs are assigned, still clear the superuser cache
+    if not org_ids:
+        cache.delete("fibers:all")
 
     _broadcast_config_update("fibers")
 

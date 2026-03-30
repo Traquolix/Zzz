@@ -1,9 +1,10 @@
 """
-Sync fiber and infrastructure data from JSON files into PostgreSQL and ClickHouse.
+Sync fiber and infrastructure data into PostgreSQL and ClickHouse.
 
-JSON files are the authoritative source. This command upserts PostgreSQL rows
-to match and mirrors fiber geometry into the ClickHouse ``fiber_cables`` table
-(used by the detection materialized view for coordinate enrichment).
+JSON cable files (geometry) and ``fibers.yaml`` (data coverage ranges) are the
+authoritative sources. This command upserts PostgreSQL rows to match and mirrors
+fiber geometry into the ClickHouse ``fiber_cables`` table (used by the detection
+materialized view for coordinate enrichment).
 
 Fibers are add/update only (no deletes); infrastructure deletes are org-scoped.
 Safe to run on every startup.
@@ -264,7 +265,7 @@ def sync_infrastructure(dry_run: bool = False, org_slug: str = "sequoia") -> dic
 
 
 class Command(BaseCommand):
-    help = "Sync fiber and infrastructure data from JSON files into PostgreSQL."
+    help = "Sync fiber and infrastructure data from JSON/YAML sources into PostgreSQL."
 
     def add_arguments(self, parser):
         parser.add_argument("--dry-run", action="store_true", help="Show what would change.")
