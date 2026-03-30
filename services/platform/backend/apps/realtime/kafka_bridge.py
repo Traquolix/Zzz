@@ -47,7 +47,7 @@ logger = logging.getLogger("sequoia.realtime.kafka_bridge")
 
 
 def load_infrastructure() -> list[dict]:
-    """Load infrastructure from PostgreSQL (with JSON fallback if DB is empty)."""
+    """Load infrastructure from PostgreSQL."""
     from apps.monitoring.models import Infrastructure
 
     items = []
@@ -65,15 +65,7 @@ def load_infrastructure() -> list[dict]:
         )
 
     if not items:
-        from pathlib import Path
-
-        path = Path(settings.DATA_DIR) / "clickhouse" / "cables" / "infrastructure.json"
-        if path.exists():
-            import json
-
-            with open(path) as f:
-                items = json.load(f)
-            logger.info("Loaded %d infrastructure items from JSON fallback", len(items))
+        logger.warning("No infrastructure in DB — SHM features will be disabled")
 
     return items
 
