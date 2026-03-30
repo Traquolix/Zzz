@@ -74,6 +74,11 @@ class FiberCable(models.Model):
         ordering = ["name"]
         verbose_name_plural = "Fiber cables"
 
+    def save(self, *args, **kwargs):
+        if self.coordinates:
+            self.channel_count = len(self.coordinates)
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.name} ({self.id})"
 
