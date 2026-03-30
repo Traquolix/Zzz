@@ -271,6 +271,7 @@
   },
   "settings": {
     "title": "Parametres",
+    "showFullCable": "Afficher le cable complet",
     "speedLimits": "Limites de vitesse",
     "speed": {
       "loadingFibers": "Chargement des fibres...",

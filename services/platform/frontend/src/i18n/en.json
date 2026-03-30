@@ -271,6 +271,7 @@
   },
   "settings": {
     "title": "Settings",
+    "showFullCable": "Show Full Cable",
     "speedLimits": "Speed Limits",
     "speed": {
       "loadingFibers": "Loading fibers...",
