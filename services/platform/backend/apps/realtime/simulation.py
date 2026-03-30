@@ -1289,7 +1289,7 @@ class SimulationEngine:
             buckets[s] = {"speed_sum": 0.0, "speed_count": 0, "vehicle_count": 0}
 
         # Seed from rolling buffer: detections near this incident's channel and direction
-        ring = self._detection_ring.get(inc.fiber_line, [])
+        ring: deque[dict] | list[dict] = self._detection_ring.get(inc.fiber_line, [])
         for det in ring:
             if det["direction"] != inc.direction:
                 continue

@@ -286,6 +286,7 @@ class FiberConfigManager:
 
     _instance: FiberConfigManager | None = None
     _lock = threading.Lock()
+    _initialized: bool = False
 
     def __new__(cls, config_path: Path | None = None) -> FiberConfigManager:
         if cls._instance is None:
@@ -370,6 +371,8 @@ class FiberConfigManager:
     def get_fiber(self, fiber_id: str) -> FiberConfig:
         """Get fiber configuration by ID."""
         self._check_reload()
+        if self._config is None:
+            raise RuntimeError("FiberConfigManager: config not loaded")
         if fiber_id not in self._config.fibers:
             available = list(self._config.fibers.keys())
             raise KeyError(f"Unknown fiber_id '{fiber_id}'. Available: {available}")
@@ -378,6 +381,8 @@ class FiberConfigManager:
     def get_model(self, model_name: str) -> ModelSpec:
         """Get model specification by name."""
         self._check_reload()
+        if self._config is None:
+            raise RuntimeError("FiberConfigManager: config not loaded")
         if model_name not in self._config.models:
             available = list(self._config.models.keys())
             raise KeyError(f"Unknown model '{model_name}'. Available: {available}")
@@ -386,21 +391,29 @@ class FiberConfigManager:
     def get_all_fibers(self) -> dict[str, FiberConfig]:
         """Get all fiber configurations."""
         self._check_reload()
+        if self._config is None:
+            raise RuntimeError("FiberConfigManager: config not loaded")
         return self._config.fibers.copy()
 
     def get_all_models(self) -> dict[str, ModelSpec]:
         """Get all model specifications."""
         self._check_reload()
+        if self._config is None:
+            raise RuntimeError("FiberConfigManager: config not loaded")
         return self._config.models.copy()
 
     def get_input_topics(self) -> list[str]:
         """Get list of all input topics for subscription."""
         self._check_reload()
+        if self._config is None:
+            raise RuntimeError("FiberConfigManager: config not loaded")
         return [f.input_topic for f in self._config.fibers.values()]
 
     def get_fiber_by_topic(self, topic: str) -> FiberConfig | None:
         """Get fiber config by its input topic."""
         self._check_reload()
+        if self._config is None:
+            raise RuntimeError("FiberConfigManager: config not loaded")
         for fiber in self._config.fibers.values():
             if fiber.input_topic == topic:
                 return fiber
@@ -410,7 +423,7 @@ class FiberConfigManager:
         """Extract fiber_id from topic name: das.raw.carros -> carros"""
         return topic.split(".")[-1]
 
-    def get_raw_config(self) -> dict:
+    def get_raw_config(self) -> dict[str, Any]:
         """Get raw YAML config dict for service_defaults access.
 
         Used by service_loader to access infrastructure settings
@@ -418,12 +431,14 @@ class FiberConfigManager:
         use typed methods like get_fiber() and get_model().
         """
         self._check_reload()
-        return self._raw_config
+        return dict(self._raw_config)
 
     def get_default_model_name(self) -> str:
         """Get the default model name from config defaults."""
         self._check_reload()
-        return self._config.defaults.get("model", "dtan_unified")
+        if self._config is None:
+            raise RuntimeError("FiberConfigManager: config not loaded")
+        return str(self._config.defaults.get("model", "dtan_unified"))
 
     @classmethod
     def reset(cls) -> None:

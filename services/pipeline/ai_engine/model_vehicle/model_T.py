@@ -41,7 +41,7 @@ class Args_NN_model_all_channels:
     def __init__(
         self,
         data_window_length: int,
-        gauge: int,
+        gauge: float,
         Nch: int,
         N_channels: int,
         fs: float,

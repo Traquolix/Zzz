@@ -32,7 +32,7 @@ class TemporalDecimation(ProcessingStep):
         if factor < 1:
             raise ValueError(f"factor must be >= 1, got {factor}")
         self.factor = factor
-        self._counts = {}
+        self._counts: dict[str, int] = {}
 
     async def process(self, measurement_data: dict[str, Any]) -> dict[str, Any] | None:
         if measurement_data is None:

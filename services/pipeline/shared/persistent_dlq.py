@@ -99,10 +99,12 @@ class PersistentDLQ:
 
             key_context = SerializationContext(self.dlq_topic, MessageField.KEY)
             serialized_key = self.key_serializer(self.service_name, key_context)
+            if serialized_key is None:
+                raise ValueError("Key serializer returned None")
 
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(
-                None, self._produce_message, serialized_key, serialized_value
+                None, lambda: self._produce_message(serialized_key, serialized_value)
             )
 
             self._messages_written += 1

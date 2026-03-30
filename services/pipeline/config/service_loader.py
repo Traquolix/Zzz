@@ -133,7 +133,7 @@ def get_service_name(service_type: str) -> str:
         "ai_engine": "ai-engine",
     }
 
-    name = service_cfg.get("name", defaults.get(service_type, service_type))
+    name: str = service_cfg.get("name", defaults.get(service_type, service_type))
 
     if service_type in ("processor", "ai_engine"):
         fiber_id = os.getenv("FIBER_ID")

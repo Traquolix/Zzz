@@ -17,17 +17,22 @@ logger = logging.getLogger(__name__)
 class HealthMixin:
     """Mixin providing health check endpoints and monitoring."""
 
+    _health_app: web.Application | None
+    _health_runner: web.AppRunner | None
+
     async def _start_health_server(self: ServiceBase) -> None:
         """Start HTTP server for health check endpoints."""
-        self._health_app = web.Application()
-        self._health_app.router.add_get("/healthz", self._liveness_check)
-        self._health_app.router.add_get("/readyz", self._readiness_check)
-        self._health_app.router.add_get("/metrics", self._metrics_endpoint)
+        app = web.Application()
+        app.router.add_get("/healthz", self._liveness_check)
+        app.router.add_get("/readyz", self._readiness_check)
+        app.router.add_get("/metrics", self._metrics_endpoint)
+        self._health_app = app
 
-        self._health_runner = web.AppRunner(self._health_app)
-        await self._health_runner.setup()
+        runner = web.AppRunner(app)
+        await runner.setup()
+        self._health_runner = runner
 
-        site = web.TCPSite(self._health_runner, "0.0.0.0", 8080)  # nosec B104
+        site = web.TCPSite(runner, "0.0.0.0", 8080)  # nosec B104
         await site.start()
         self.logger.info("Health check server started on port 8080")
 

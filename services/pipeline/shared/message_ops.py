@@ -67,7 +67,7 @@ class MessageOpsMixin:
                 value = await self._deserialize_value(raw_message)
 
                 message = KafkaMessage(
-                    id=key,
+                    id=key if key is not None else "",
                     payload=value,
                     headers=dict(raw_message.headers()) if raw_message.headers() else None,
                     timestamp=(
@@ -101,7 +101,7 @@ class MessageOpsMixin:
 
         if hasattr(self, "key_deserializer"):
             # Use actual message topic (not config.input_topic which may be None for patterns)
-            topic = raw_message.topic() or self.config.input_topic
+            topic: str = raw_message.topic() or self.config.input_topic or ""
             ctx = SerializationContext(topic, MessageField.KEY)
             loop = asyncio.get_running_loop()
             return await loop.run_in_executor(
@@ -116,7 +116,7 @@ class MessageOpsMixin:
 
         if hasattr(self, "value_deserializer"):
             # Use actual message topic (not config.input_topic which may be None for patterns)
-            topic = raw_message.topic() or self.config.input_topic
+            topic: str = raw_message.topic() or self.config.input_topic or ""
             ctx = SerializationContext(topic, MessageField.VALUE)
             loop = asyncio.get_running_loop()
             return await loop.run_in_executor(
@@ -131,7 +131,7 @@ class MessageOpsMixin:
             return
 
         try:
-            headers_dict = {}
+            headers_dict: dict[str, str] = {}
             for header_item in message.headers:
                 if isinstance(header_item, tuple | list) and len(header_item) == 2:
                     key, value = header_item
@@ -156,7 +156,7 @@ class MessageOpsMixin:
         start_time = time.time()
 
         try:
-            success = await self.producer_circuit_breaker.call(
+            success: bool = await self.producer_circuit_breaker.call(
                 self.retry_handler.retry_with_backoff, self._send_avro_message, message
             )
 
@@ -304,7 +304,7 @@ class MessageOpsMixin:
             pass
 
         original_message = None
-        if message_id and message_id in self._pending_deliveries:
+        if message_id is not None and message_id in self._pending_deliveries:
             original_message = self._pending_deliveries.pop(message_id)
 
         if err is not None:

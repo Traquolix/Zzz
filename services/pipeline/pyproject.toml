@@ -32,6 +32,7 @@ dev = [
     "pytest-asyncio>=0.21.0",
     "ruff",
     "mypy",
+    "types-PyYAML",
     "tqdm",
     "pip-audit",
     "bandit",
@@ -60,6 +61,23 @@ warn_unused_configs = true
 ignore_missing_imports = true
 explicit_package_bases = true
 exclude = ["ai_engine/model_vehicle", "experiments", ".venv", "tests"]
+
+# model_vehicle is excluded above, but mypy still follows imports into it.
+# Per-module override silences those errors properly.
+[[tool.mypy.overrides]]
+module = "ai_engine.model_vehicle.*"
+ignore_errors = true
+
+# Mixin classes use `self: ServiceBase` for type checking, which mypy
+# flags as [misc] because the mixin isn't a subclass of ServiceBase.
+# This is a known mypy limitation with the mixin pattern.
+[[tool.mypy.overrides]]
+module = [
+    "shared.health",
+    "shared.message_ops",
+    "shared.kafka_setup",
+]
+disable_error_code = ["misc"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
