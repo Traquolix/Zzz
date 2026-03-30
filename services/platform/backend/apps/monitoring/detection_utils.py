@@ -18,12 +18,15 @@ MAX_AGGREGATE_DAYS = 365
 HIRES_THRESHOLD = timedelta(hours=48)
 MEDIUM_THRESHOLD = timedelta(days=90)
 
-# Tier → ClickHouse table name (whitelist prevents SQL injection via f-string)
+# ClickHouse table names — single source of truth.
+# The CH client already connects to the correct database, so no prefix needed.
 TIER_TABLES: dict[str, str] = {
     "hires": "detection_hires",
     "1m": "detection_1m",
     "1h": "detection_1h",
 }
+
+CH_INCIDENTS = "fiber_incidents"
 
 
 def check_fiber_access(user: Any, fiber_id: str) -> bool:

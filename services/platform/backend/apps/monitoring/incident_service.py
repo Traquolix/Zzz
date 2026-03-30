@@ -8,9 +8,10 @@ parameters are defined exactly once.
 
 import logging
 
+from apps.monitoring.detection_utils import CH_INCIDENTS
 from apps.shared.clickhouse import query
 
-logger = logging.getLogger("sequoia.incidents")
+logger = logging.getLogger("sequoia.monitoring.incident_service")
 
 
 # ---------------------------------------------------------------------------
@@ -76,50 +77,50 @@ def transform_simulation_incident(incident) -> dict:
 # Queries — parameterized, org-scoped, consistent limits
 # ---------------------------------------------------------------------------
 
-_ACTIVE_SQL_SCOPED = """
+_ACTIVE_SQL_SCOPED = f"""
     SELECT incident_id, incident_type, severity, fiber_id, direction,
            channel_start, channel_end, timestamp, status, duration_seconds,
            speed_before_kmh, speed_during_kmh, speed_drop_percent
-    FROM sequoia.fiber_incidents
+    FROM {CH_INCIDENTS}
     FINAL
     WHERE status = 'active'
-      AND fiber_id IN {fids:Array(String)}
+      AND fiber_id IN {{fids:Array(String)}}
     ORDER BY timestamp DESC
-    LIMIT {lim:UInt32}
+    LIMIT {{lim:UInt32}}
 """
 
-_ACTIVE_SQL_ALL = """
+_ACTIVE_SQL_ALL = f"""
     SELECT incident_id, incident_type, severity, fiber_id, direction,
            channel_start, channel_end, timestamp, status, duration_seconds,
            speed_before_kmh, speed_during_kmh, speed_drop_percent
-    FROM sequoia.fiber_incidents
+    FROM {CH_INCIDENTS}
     FINAL
     WHERE status = 'active'
     ORDER BY timestamp DESC
-    LIMIT {lim:UInt32}
+    LIMIT {{lim:UInt32}}
 """
 
-_RECENT_SQL_SCOPED = """
+_RECENT_SQL_SCOPED = f"""
     SELECT incident_id, incident_type, severity, fiber_id, direction,
            channel_start, channel_end, timestamp, status, duration_seconds,
            speed_before_kmh, speed_during_kmh, speed_drop_percent
-    FROM sequoia.fiber_incidents
+    FROM {CH_INCIDENTS}
     FINAL
-    WHERE timestamp >= now() - INTERVAL {hours:UInt32} HOUR
-      AND fiber_id IN {fids:Array(String)}
+    WHERE timestamp >= now() - INTERVAL {{hours:UInt32}} HOUR
+      AND fiber_id IN {{fids:Array(String)}}
     ORDER BY timestamp DESC
-    LIMIT {lim:UInt32}
+    LIMIT {{lim:UInt32}}
 """
 
-_RECENT_SQL_ALL = """
+_RECENT_SQL_ALL = f"""
     SELECT incident_id, incident_type, severity, fiber_id, direction,
            channel_start, channel_end, timestamp, status, duration_seconds,
            speed_before_kmh, speed_during_kmh, speed_drop_percent
-    FROM sequoia.fiber_incidents
+    FROM {CH_INCIDENTS}
     FINAL
-    WHERE timestamp >= now() - INTERVAL {hours:UInt32} HOUR
+    WHERE timestamp >= now() - INTERVAL {{hours:UInt32}} HOUR
     ORDER BY timestamp DESC
-    LIMIT {lim:UInt32}
+    LIMIT {{lim:UInt32}}
 """
 
 
@@ -176,12 +177,12 @@ def query_by_id(incident_id: str) -> dict | None:
     Returns a minimal dict with incident_id, fiber_id, direction, status — or None.
     """
     rows = query(
-        """
+        f"""
         SELECT incident_id, incident_type, severity, fiber_id, direction,
                channel_start, timestamp, status, duration_seconds
-        FROM sequoia.fiber_incidents
+        FROM {CH_INCIDENTS}
         FINAL
-        WHERE incident_id = {iid:String}
+        WHERE incident_id = {{iid:String}}
         LIMIT 1
         """,
         parameters={"iid": incident_id},

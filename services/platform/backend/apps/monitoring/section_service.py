@@ -12,12 +12,13 @@ import math
 import uuid
 from typing import TYPE_CHECKING
 
+from apps.monitoring.detection_utils import TIER_TABLES
 from apps.shared.clickhouse import query
 
 if TYPE_CHECKING:
     from apps.monitoring.models import Section
 
-logger = logging.getLogger("sequoia.sections")
+logger = logging.getLogger("sequoia.monitoring.section_service")
 
 
 def query_sections(
@@ -157,18 +158,18 @@ def _query_section_history_hires(
     """
     total_channels = max(1, channel_end - channel_start + 1)
     rows = query(
-        """
+        f"""
         SELECT
             toUnixTimestamp(toStartOfSecond(ts)) * 1000 AS time_ms,
             avg(speed) AS speed_avg,
             max(speed) AS speed_max,
-            count() / {n_ch:Float64} AS samples
-        FROM sequoia.detection_hires
-        WHERE fiber_id = {fid:String}
-          AND direction = {dir:UInt8}
-          AND ch BETWEEN {cs:UInt16} AND {ce:UInt16}
-          AND ts >= now() - INTERVAL {mins:UInt32} MINUTE
-          AND ({since:UInt64} = 0 OR ts > fromUnixTimestamp64Milli({since:UInt64}))
+            count() / {{n_ch:Float64}} AS samples
+        FROM {TIER_TABLES["hires"]}
+        WHERE fiber_id = {{fid:String}}
+          AND direction = {{dir:UInt8}}
+          AND ch BETWEEN {{cs:UInt16}} AND {{ce:UInt16}}
+          AND ts >= now() - INTERVAL {{mins:UInt32}} MINUTE
+          AND ({{since:UInt64}} = 0 OR ts > fromUnixTimestamp64Milli({{since:UInt64}}))
         GROUP BY toStartOfSecond(ts)
         ORDER BY toStartOfSecond(ts)
         """,
@@ -200,18 +201,18 @@ def _query_section_history_1m(
     """
     total_channels = max(1, channel_end - channel_start + 1)
     rows = query(
-        """
+        f"""
         SELECT
             toUnixTimestamp(ts) * 1000 AS time_ms,
             avgMerge(speed_avg_state) AS speed_avg,
             maxMerge(speed_max_state) AS speed_max,
-            sumMerge(samples_state) / {n_ch:Float64} AS samples
-        FROM sequoia.detection_1m
-        WHERE fiber_id = {fid:String}
-          AND direction = {dir:UInt8}
-          AND ch BETWEEN {cs:UInt16} AND {ce:UInt16}
-          AND ts >= now() - INTERVAL {mins:UInt32} MINUTE
-          AND ({since:UInt64} = 0 OR ts > fromUnixTimestamp64Milli({since:UInt64}))
+            sumMerge(samples_state) / {{n_ch:Float64}} AS samples
+        FROM {TIER_TABLES["1m"]}
+        WHERE fiber_id = {{fid:String}}
+          AND direction = {{dir:UInt8}}
+          AND ch BETWEEN {{cs:UInt16}} AND {{ce:UInt16}}
+          AND ts >= now() - INTERVAL {{mins:UInt32}} MINUTE
+          AND ({{since:UInt64}} = 0 OR ts > fromUnixTimestamp64Milli({{since:UInt64}}))
         GROUP BY ts
         ORDER BY ts
         """,
@@ -334,7 +335,7 @@ def _query_batch_hires(
                 avg(speed) AS speed_avg,
                 max(speed) AS speed_max,
                 count() / {{nch{s}:Float64}} AS samples
-            FROM sequoia.detection_hires
+            FROM {TIER_TABLES["hires"]}
             WHERE fiber_id = {{fid{s}:String}}
               AND direction = {{dir{s}:UInt8}}
               AND ch BETWEEN {{cs{s}:UInt16}} AND {{ce{s}:UInt16}}
@@ -372,7 +373,7 @@ def _query_batch_1m(
                 avgMerge(speed_avg_state) AS speed_avg,
                 maxMerge(speed_max_state) AS speed_max,
                 sumMerge(samples_state) / {{nch{s}:Float64}} AS samples
-            FROM sequoia.detection_1m
+            FROM {TIER_TABLES["1m"]}
             WHERE fiber_id = {{fid{s}:String}}
               AND direction = {{dir{s}:UInt8}}
               AND ch BETWEEN {{cs{s}:UInt16}} AND {{ce{s}:UInt16}}
