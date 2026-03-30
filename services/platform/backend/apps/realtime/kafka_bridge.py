@@ -387,7 +387,7 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
                     topic = msg.topic()
                     from apps.shared.metrics import KAFKA_MESSAGES_CONSUMED
 
-                    KAFKA_MESSAGES_CONSUMED.labels(topic=topic).inc()
+                    KAFKA_MESSAGES_CONSUMED.add(1, {"topic": topic})
                     if topic == "das.detections":
                         # Extract W3C trace context from Kafka headers so
                         # the detection processing span links to the pipeline trace.

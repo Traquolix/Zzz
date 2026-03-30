@@ -97,7 +97,7 @@ def get_client() -> Any:
     if _is_in_cooldown():
         from apps.shared.metrics import CLICKHOUSE_CIRCUIT_BREAKER_TRIPS
 
-        CLICKHOUSE_CIRCUIT_BREAKER_TRIPS.inc()
+        CLICKHOUSE_CIRCUIT_BREAKER_TRIPS.add(1)
         raise ClickHouseUnavailableError("ClickHouse unavailable (circuit breaker)")
 
     try:
@@ -137,26 +137,30 @@ def query(sql: str, parameters: dict[str, Any] | None = None) -> list[dict[str, 
     Returns:
         List of dicts, one per row.
     """
+    import time
+
     from apps.shared.metrics import CLICKHOUSE_QUERIES, CLICKHOUSE_QUERY_DURATION
 
     # Infer query type from SQL for metric labels
     sql_upper = (sql or "").strip().upper()
     query_type = "select" if sql_upper.startswith("SELECT") else "other"
-    timer = CLICKHOUSE_QUERY_DURATION.labels(query_type=query_type).time()
+    attrs = {"query_type": query_type}
+    start = time.monotonic()
     try:
-        timer.__enter__()
         client = get_client()
         result = client.query(sql, parameters=parameters)
         columns = result.column_names
         rows = [dict(zip(columns, row, strict=False)) for row in result.result_rows]
-        timer.__exit__(None, None, None)
-        CLICKHOUSE_QUERIES.labels(query_type=query_type, status="success").inc()
+        CLICKHOUSE_QUERY_DURATION.record(time.monotonic() - start, attrs)
+        CLICKHOUSE_QUERIES.add(1, {**attrs, "status": "success"})
         return rows
     except ClickHouseUnavailableError:
-        timer.__exit__(None, None, None)
-        CLICKHOUSE_QUERIES.labels(query_type=query_type, status="circuit_breaker").inc()
+        CLICKHOUSE_QUERY_DURATION.record(time.monotonic() - start, attrs)
+        CLICKHOUSE_QUERIES.add(1, {**attrs, "status": "circuit_breaker"})
         raise
     except Exception as e:
+        CLICKHOUSE_QUERY_DURATION.record(time.monotonic() - start, attrs)
+        CLICKHOUSE_QUERIES.add(1, {**attrs, "status": "error"})
         # Reset thread-local client so next call reconnects (connection may be stale)
         _local.client = None
         _record_failure()
@@ -168,8 +172,6 @@ def query(sql: str, parameters: dict[str, Any] | None = None) -> list[dict[str, 
             sql_preview,
             parameters,
         )
-        timer.__exit__(None, None, None)
-        CLICKHOUSE_QUERIES.labels(query_type=query_type, status="error").inc()
         # Report to Sentry (noop if not configured)
         try:
             import sentry_sdk
@@ -195,16 +197,16 @@ def command(sql: str) -> None:
     try:
         client = get_client()
         client.command(sql)
-        CLICKHOUSE_QUERIES.labels(query_type="command", status="success").inc()
+        CLICKHOUSE_QUERIES.add(1, {"query_type": "command", "status": "success"})
     except ClickHouseUnavailableError:
-        CLICKHOUSE_QUERIES.labels(query_type="command", status="circuit_breaker").inc()
+        CLICKHOUSE_QUERIES.add(1, {"query_type": "command", "status": "circuit_breaker"})
         raise
     except Exception as e:
         _local.client = None
         _record_failure()
         sql_preview = (sql or "").strip()[:500]
         logger.error("ClickHouse command failed: %s | SQL: %s", e, sql_preview)
-        CLICKHOUSE_QUERIES.labels(query_type="command", status="error").inc()
+        CLICKHOUSE_QUERIES.add(1, {"query_type": "command", "status": "error"})
         try:
             import sentry_sdk
 

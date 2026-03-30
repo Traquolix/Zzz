@@ -93,7 +93,7 @@ async def pubsub_publish_per_org(
     all_channel = pubsub_channel_name(flow, channel, "__all__")
     try:
         await client.publish(all_channel, payload)
-        PUBSUB_MESSAGES_PUBLISHED.labels(channel=channel).inc()
+        PUBSUB_MESSAGES_PUBLISHED.add(1, {"channel": channel})
     except Exception:
         logger.warning("Pub/sub publish failed for %s", all_channel, exc_info=True)
 
@@ -103,7 +103,7 @@ async def pubsub_publish_per_org(
         org_envelope = {"channel": channel, "data": org_items}
         try:
             await client.publish(org_channel, json.dumps(org_envelope))
-            PUBSUB_MESSAGES_PUBLISHED.labels(channel=channel).inc()
+            PUBSUB_MESSAGES_PUBLISHED.add(1, {"channel": channel})
         except Exception:
             logger.warning("Pub/sub publish failed for %s", org_channel, exc_info=True)
 
@@ -128,7 +128,7 @@ async def pubsub_publish_shm(
     all_channel = pubsub_channel_name(flow, channel, "__all__")
     try:
         await client.publish(all_channel, payload)
-        PUBSUB_MESSAGES_PUBLISHED.labels(channel=channel).inc()
+        PUBSUB_MESSAGES_PUBLISHED.add(1, {"channel": channel})
     except Exception:
         logger.warning("Pub/sub publish failed for %s", all_channel, exc_info=True)
 
@@ -137,6 +137,6 @@ async def pubsub_publish_shm(
         org_envelope = {"channel": channel, "data": org_items}
         try:
             await client.publish(org_channel, json.dumps(org_envelope))
-            PUBSUB_MESSAGES_PUBLISHED.labels(channel=channel).inc()
+            PUBSUB_MESSAGES_PUBLISHED.add(1, {"channel": channel})
         except Exception:
             logger.warning("Pub/sub publish failed for %s", org_channel, exc_info=True)

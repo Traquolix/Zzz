@@ -1,11 +1,10 @@
 """
-Shared views: health checks and Prometheus metrics.
+Shared views: health checks.
 """
 
 import os
 from typing import Any
 
-from django.http import HttpResponse
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers as s
 from rest_framework import status
@@ -141,21 +140,3 @@ class ReadinessCheckView(APIView):
             },
             status=status.HTTP_200_OK if all_critical_ok else status.HTTP_503_SERVICE_UNAVAILABLE,
         )
-
-
-class MetricsView(APIView):
-    """Prometheus metrics endpoint — scraped by monitoring infrastructure."""
-
-    permission_classes = [AllowAny]
-    authentication_classes: list[Any] = []
-    throttle_classes: list[Any] = []
-
-    @extend_schema(exclude=True)  # Not part of the public API docs
-    def get(self, request: Request) -> HttpResponse:
-        from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
-
-        # Import metrics module to ensure all collectors are registered
-        import apps.shared.metrics  # noqa: F401
-
-        body = generate_latest()
-        return HttpResponse(body, content_type=CONTENT_TYPE_LATEST)
