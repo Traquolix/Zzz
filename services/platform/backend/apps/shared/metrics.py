@@ -14,7 +14,7 @@ all instruments fall back to silent no-ops so the app still starts.
 
 import logging
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("sequoia.shared.metrics")
 
 try:
     from opentelemetry import metrics

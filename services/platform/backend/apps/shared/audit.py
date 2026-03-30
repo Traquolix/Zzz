@@ -13,7 +13,7 @@ from django.conf import settings
 
 from apps.shared.models import AuditLog
 
-logger = logging.getLogger("sequoia.audit")
+logger = logging.getLogger("sequoia.shared.audit")
 
 # IP address validation regex
 _IP_PATTERN = re.compile(r"^[\d.:a-fA-F]+$")

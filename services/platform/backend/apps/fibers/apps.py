@@ -2,7 +2,7 @@ import logging
 
 from django.apps import AppConfig
 
-logger = logging.getLogger("sequoia.fibers")
+logger = logging.getLogger("sequoia.fibers.apps")
 
 
 def _get_channel_layer():

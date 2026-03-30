@@ -20,7 +20,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from rest_framework_simplejwt.tokens import AccessToken
 
-logger = logging.getLogger("sequoia.realtime")
+logger = logging.getLogger("sequoia.realtime.middleware")
 User = get_user_model()
 
 

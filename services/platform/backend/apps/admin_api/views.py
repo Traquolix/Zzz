@@ -25,7 +25,7 @@ from apps.organizations.models import Organization, OrganizationSettings
 from apps.shared.admin_permissions import IsAdminOrSuperuser, IsSuperuser
 from apps.shared.utils import add_cache_control, org_filter_queryset, paginate_queryset
 
-logger = logging.getLogger("sequoia.admin")
+logger = logging.getLogger("sequoia.admin_api.views")
 
 
 # ---------------------------------------------------------------------------

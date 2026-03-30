@@ -10,7 +10,7 @@ from typing import Any
 
 from rest_framework.request import Request
 
-logger = logging.getLogger("sequoia")
+logger = logging.getLogger("sequoia.monitoring.mixins")
 
 
 class FlowAwareMixin:

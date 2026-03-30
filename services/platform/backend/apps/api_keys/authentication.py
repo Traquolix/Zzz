@@ -18,7 +18,7 @@ from rest_framework.request import Request
 
 from apps.api_keys.models import APIKey
 
-logger = logging.getLogger("sequoia.api_keys")
+logger = logging.getLogger("sequoia.api_keys.authentication")
 
 
 class APIKeyAuthenticationScheme(OpenApiAuthenticationExtension):

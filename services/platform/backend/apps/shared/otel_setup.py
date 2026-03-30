@@ -10,7 +10,7 @@ Call ``init_otel()`` once at ASGI startup (before Django processes requests).
 import logging
 import os
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("sequoia.shared.otel_setup")
 
 _HAS_OTEL = True
 try:

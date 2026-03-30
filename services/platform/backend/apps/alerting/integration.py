@@ -13,7 +13,7 @@ from apps.alerting.dispatch import dispatch_alert
 from apps.alerting.evaluator import evaluate_detection, evaluate_incident
 from apps.alerting.models import AlertRule
 
-logger = logging.getLogger("sequoia.alerting")
+logger = logging.getLogger("sequoia.alerting.integration")
 
 
 async def check_alerts_for_detections(detection_dicts: list[dict], org_id: str) -> int:

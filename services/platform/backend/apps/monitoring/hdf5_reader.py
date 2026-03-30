@@ -17,7 +17,7 @@ from pathlib import Path
 import h5py
 import numpy as np
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("sequoia.monitoring.hdf5_reader")
 
 # Default sample data path
 DATA_DIR = Path(__file__).parent.parent.parent / "data" / "shm"

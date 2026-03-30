@@ -22,7 +22,7 @@ import yaml
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-logger = logging.getLogger("sequoia.fibers")
+logger = logging.getLogger("sequoia.fibers.sync_fiber_data")
 
 
 def _get_cables_dir() -> Path:
