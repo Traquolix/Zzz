@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { COLORS, chartColors } from '@/lib/theme'
-import { findFiber, getSpeedColor, getFiberColor } from '../data'
+import { getSpeedColor, getFiberColor } from '../data'
+import { useFiberData } from '../context/FiberContext'
 import type { MapPageAction, Section, LiveSectionStats, SectionDataPoint, MetricKey } from '../types'
 import { TimeSeriesChart } from './TimeSeriesChart'
 import { Sparkline } from './Sparkline'
@@ -64,6 +65,7 @@ export function SectionList({
   search?: string
 }) {
   const { t } = useTranslation()
+  const { findFiber } = useFiberData()
   const metricConfig = chartColors[metric]
   const query = search?.trim().toLowerCase() ?? ''
   const filtered = query
@@ -171,6 +173,7 @@ export function SectionDetail({
   fiberColors: Record<string, string>
 }) {
   const { t } = useTranslation()
+  const { findFiber } = useFiberData()
   const fiber = findFiber(section.fiberId, section.direction)
   const fiberColor = fiber ? getFiberColor(fiber, fiberColors) : COLORS.chart.speed
 

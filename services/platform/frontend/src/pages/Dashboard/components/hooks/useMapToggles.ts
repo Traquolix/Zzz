@@ -1,7 +1,8 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import type { Map as MapboxMap, GeoJSONSource } from 'mapbox-gl'
-import { fibers, fiberRenderCache, getFiberColor } from '../../data'
+import { getFiberColor } from '../../data'
 import type { Fiber, Section, PendingPoint } from '../../types'
+import type { CoverageRange } from '@/api/fibers'
 import { buildSectionHighlightData } from '../mapUtils'
 import { MAP_SOURCES, MAP_LAYERS } from './mapTypes'
 
@@ -13,10 +14,59 @@ interface UseMapTogglesParams {
   hideFibersInOverview?: boolean
   show3DBuildings?: boolean
   showChannelHelper?: boolean
+  showFullCable?: boolean
+  coverageMap?: Map<string, CoverageRange[]>
   sectionCreationMode?: boolean
   sectionFibersRef: React.RefObject<Map<string, Fiber>>
   fiberColorsRef: React.RefObject<Record<string, string> | undefined>
   overviewRef: React.RefObject<boolean>
+  fibers: Fiber[]
+  fiberRenderCache: Map<string, [number, number][]>
+  buildCoverageRenderCache: (cm: Map<string, CoverageRange[]>) => Map<string, [number, number][][]>
+  getSectionCoordsRef: React.RefObject<(fiber: Fiber, startChannel: number, endChannel: number) => [number, number][]>
+}
+
+/** Build GeoJSON features for fiber lines, optionally clipped to data coverage. */
+function buildFiberFeatures(
+  fibers: Fiber[],
+  fiberRenderCache: Map<string, [number, number][]>,
+  fiberColors: Record<string, string> | undefined,
+  showFullCable: boolean,
+  coverageRenderCache: Map<string, [number, number][][]>,
+): GeoJSON.Feature[] {
+  const features: GeoJSON.Feature[] = []
+  for (const fiber of fibers) {
+    const color = fiberColors ? getFiberColor(fiber, fiberColors) : fiber.color
+    const props = { id: fiber.id, name: fiber.name, color }
+
+    if (!showFullCable && coverageRenderCache.has(fiber.id)) {
+      // Render only the data-covered segments
+      const segments = coverageRenderCache.get(fiber.id)!
+      if (segments.length === 1) {
+        features.push({
+          type: 'Feature' as const,
+          properties: props,
+          geometry: { type: 'LineString' as const, coordinates: segments[0] },
+        })
+      } else {
+        features.push({
+          type: 'Feature' as const,
+          properties: props,
+          geometry: { type: 'MultiLineString' as const, coordinates: segments },
+        })
+      }
+    } else {
+      // Full cable rendering (no coverage data, or toggle is on)
+      const coords = fiberRenderCache.get(fiber.id)
+      if (!coords) continue
+      features.push({
+        type: 'Feature' as const,
+        properties: props,
+        geometry: { type: 'LineString' as const, coordinates: coords },
+      })
+    }
+  }
+  return features
 }
 
 export function useMapToggles({
@@ -27,11 +77,23 @@ export function useMapToggles({
   hideFibersInOverview,
   show3DBuildings,
   showChannelHelper,
+  showFullCable,
+  coverageMap,
   sectionCreationMode,
   sectionFibersRef,
   fiberColorsRef,
   overviewRef,
+  fibers,
+  fiberRenderCache,
+  buildCoverageRenderCache,
+  getSectionCoordsRef,
 }: UseMapTogglesParams) {
+  // Memoize coverage render cache so it's only rebuilt when coverageMap changes
+  const coverageRenderCache = useMemo(
+    () => (coverageMap && coverageMap.size > 0 ? buildCoverageRenderCache(coverageMap) : new Map()),
+    [coverageMap, buildCoverageRenderCache],
+  )
+
   // 1. Section highlights
   useEffect(() => {
     const map = mapRef.current
@@ -40,7 +102,14 @@ export function useMapToggles({
     const apply = () => {
       const source = map.getSource(MAP_SOURCES.sectionHighlights) as GeoJSONSource | undefined
       if (!source) return
-      source.setData(buildSectionHighlightData(sections ?? [], sectionFibersRef.current, fiberColorsRef.current))
+      source.setData(
+        buildSectionHighlightData(
+          sections ?? [],
+          sectionFibersRef.current,
+          fiberColorsRef.current,
+          getSectionCoordsRef.current,
+        ),
+      )
     }
 
     if (map.isStyleLoaded()) {
@@ -53,7 +122,7 @@ export function useMapToggles({
     return () => {
       map.off('idle', onIdle)
     }
-  }, [mapRef, sections, fiberColors, sectionFibersRef, fiberColorsRef])
+  }, [mapRef, sections, fiberColors, sectionFibersRef, fiberColorsRef, getSectionCoordsRef])
 
   // 2. Pending point marker
   useEffect(() => {
@@ -95,24 +164,33 @@ export function useMapToggles({
     }
   }, [mapRef, pendingPoint])
 
-  // 3. Fiber line colors
+  // 3. Fiber line rendering (colors + coverage toggle)
   useEffect(() => {
     const map = mapRef.current
     if (!map || !fiberColors) return
-    const src = map.getSource(MAP_SOURCES.fibers) as GeoJSONSource | undefined
-    if (!src) return
-    const features: GeoJSON.Feature[] = []
-    for (const fiber of fibers) {
-      const coords = fiberRenderCache.get(fiber.id)
-      if (!coords) continue
-      features.push({
-        type: 'Feature' as const,
-        properties: { id: fiber.id, name: fiber.name, color: getFiberColor(fiber, fiberColors) },
-        geometry: { type: 'LineString' as const, coordinates: coords },
-      })
+
+    const apply = () => {
+      const src = map.getSource(MAP_SOURCES.fibers) as GeoJSONSource | undefined
+      if (!src) return
+      const features = buildFiberFeatures(
+        fibers,
+        fiberRenderCache,
+        fiberColors,
+        showFullCable ?? false,
+        coverageRenderCache,
+      )
+      src.setData({ type: 'FeatureCollection', features })
     }
-    src.setData({ type: 'FeatureCollection', features })
-  }, [mapRef, fiberColors])
+
+    if (map.isStyleLoaded()) {
+      apply()
+    }
+    const onIdle = () => apply()
+    map.once('idle', onIdle)
+    return () => {
+      map.off('idle', onIdle)
+    }
+  }, [mapRef, fiberColors, showFullCable, coverageRenderCache, fibers, fiberRenderCache])
 
   // 4. Fiber visibility in overview
   useEffect(() => {

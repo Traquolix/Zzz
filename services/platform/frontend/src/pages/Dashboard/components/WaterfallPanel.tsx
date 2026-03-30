@@ -1,14 +1,13 @@
 import { useState, type RefObject } from 'react'
 import { COLORS } from '@/lib/theme'
 import { cn } from '@/lib/utils'
-import { fibers } from '../data'
+import { useFiberData } from '../context/FiberContext'
 import { useWaterfallBuffer } from '../hooks/useWaterfallBuffer'
 import type { WaterfallDot } from '../hooks/useWaterfallBuffer'
 import { WaterfallCanvas } from './WaterfallCanvas'
 
 export function WaterfallPanel() {
-  // NOTE: index-based selection assumes `fibers` is a static array.
-  // If fibers become dynamic (TTL/hot-reload), switch to keying by fiber ID.
+  const { fibers } = useFiberData()
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [windowMs, setWindowMs] = useState(120_000)
 

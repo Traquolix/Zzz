@@ -49,6 +49,15 @@ class FiberCable(models.Model):
         help_text="Landmark name per channel index (empty string = no landmark).",
     )
 
+    # Channel ranges with active pipeline data processing.
+    # Populated from fibers.yaml sections by sync_fiber_data.
+    # Example: [{"start": 1200, "end": 1716}, {"start": 1716, "end": 2232}]
+    data_coverage = models.JSONField(
+        default=list,
+        blank=True,
+        help_text='Active channel ranges: [{"start": 1200, "end": 1716}, ...]',
+    )
+
     # Denormalized count — set by sync_fiber_data from len(coordinates).
     # Avoids loading the full coordinates JSON just to count channels.
     channel_count = models.IntegerField(

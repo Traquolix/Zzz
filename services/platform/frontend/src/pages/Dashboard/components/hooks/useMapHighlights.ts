@@ -1,8 +1,8 @@
 import { useRef, useCallback, useContext, useEffect, useMemo } from 'react'
 import mapboxgl from 'mapbox-gl'
 import { COLORS } from '@/lib/theme'
-import { findFiber, getSectionCoords, getFiberColor } from '../../data'
-import type { Section } from '../../types'
+import { getFiberColor } from '../../data'
+import type { Fiber, Section } from '../../types'
 import type { Infrastructure } from '@/types/infrastructure'
 import { getSidebarWidth, SidebarRefContext } from '../../hooks/useSidebarWidth'
 import { FIBER_WIDTH_EXPR, FIBER_OPACITY_EXPR } from '../mapUtils'
@@ -14,6 +14,8 @@ interface UseMapHighlightsParams {
   sectionsRef: React.RefObject<Section[] | undefined>
   fiberColorsRef: React.RefObject<Record<string, string> | undefined>
   sidebarOpenRef: React.RefObject<boolean | undefined>
+  findFiberRef: React.RefObject<(cableId: string, direction: number) => Fiber | undefined>
+  getSectionCoordsRef: React.RefObject<(fiber: Fiber, startChannel: number, endChannel: number) => [number, number][]>
 }
 
 export function useMapHighlights({
@@ -22,6 +24,8 @@ export function useMapHighlights({
   sectionsRef,
   fiberColorsRef,
   sidebarOpenRef,
+  findFiberRef,
+  getSectionCoordsRef,
 }: UseMapHighlightsParams) {
   const sidebarRef = useContext(SidebarRefContext)
   const highlightTimerRef = useRef<number | null>(null)
@@ -110,9 +114,9 @@ export function useMapHighlights({
       clearHighlight()
       const sec = sectionsRef.current?.find(s => s.id === sectionId)
       if (!sec) return
-      const secFiber = findFiber(sec.fiberId, sec.direction)
+      const secFiber = findFiberRef.current(sec.fiberId, sec.direction)
       if (!secFiber) return
-      const coords = getSectionCoords(secFiber, sec.startChannel, sec.endChannel)
+      const coords = getSectionCoordsRef.current(secFiber, sec.startChannel, sec.endChannel)
       if (coords.length < 2) return
       const color = fiberColorsRef.current ? getFiberColor(secFiber, fiberColorsRef.current) : COLORS.fiber.default
       const src = map.getSource(MAP_SOURCES.hoverHighlight) as mapboxgl.GeoJSONSource | undefined
@@ -138,7 +142,7 @@ export function useMapHighlights({
         tick++
       }, 200)
     },
-    [mapRef, clearHighlight, sectionsRef, fiberColorsRef],
+    [mapRef, clearHighlight, sectionsRef, fiberColorsRef, findFiberRef, getSectionCoordsRef],
   )
 
   const highlightIncident = useCallback(
@@ -161,8 +165,8 @@ export function useMapHighlights({
       clearHighlight()
       const structure = structures.find(s => s.id === structureId)
       if (!structure) return
-      const sFiber = findFiber(structure.fiberId, structure.direction ?? 0)
-      const coords = sFiber ? getSectionCoords(sFiber, structure.startChannel, structure.endChannel) : []
+      const sFiber = findFiberRef.current(structure.fiberId, structure.direction ?? 0)
+      const coords = sFiber ? getSectionCoordsRef.current(sFiber, structure.startChannel, structure.endChannel) : []
       if (coords.length < 2) return
       const typeColor = COLORS.structure[structure.type].dot
       const src = map.getSource(MAP_SOURCES.hoverHighlight) as mapboxgl.GeoJSONSource | undefined
@@ -188,7 +192,7 @@ export function useMapHighlights({
         tick++
       }, 200)
     },
-    [mapRef, clearHighlight],
+    [mapRef, clearHighlight, findFiberRef, getSectionCoordsRef],
   )
 
   const highlightChannel = useCallback(

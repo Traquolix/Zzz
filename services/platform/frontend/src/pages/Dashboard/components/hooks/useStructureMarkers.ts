@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import mapboxgl from 'mapbox-gl'
 import { COLORS, shmStatusColors } from '@/lib/theme'
-import { findFiber, getSectionCoords, channelToCoord } from '../../data'
+import type { Fiber } from '../../types'
 import type { Infrastructure, SHMStatus } from '@/types/infrastructure'
 import { MAP_SOURCES } from './mapTypes'
 
@@ -13,6 +13,8 @@ interface UseStructureMarkersParams {
   showStructureLabels?: boolean
   selectedStructureId?: string | null
   onStructureClickRef: React.RefObject<((id: string) => void) | undefined>
+  findFiberRef: React.RefObject<(cableId: string, direction: number) => Fiber | undefined>
+  getSectionCoordsRef: React.RefObject<(fiber: Fiber, startChannel: number, endChannel: number) => [number, number][]>
 }
 
 export function useStructureMarkers({
@@ -23,8 +25,13 @@ export function useStructureMarkers({
   showStructureLabels,
   selectedStructureId,
   onStructureClickRef,
+  findFiberRef,
+  getSectionCoordsRef,
 }: UseStructureMarkersParams) {
   const structureMarkersRef = useRef<Map<string, mapboxgl.Marker>>(new Map())
+
+  // Also capture channelToCoord from findFiberRef context — we use fiber coords directly
+  // via getSectionCoordsRef for lines and compute mid-channel coord inline for labels.
 
   // Update structure line source
   // NOTE: switched from onMapReady (fires once on load) to isStyleLoaded + idle
@@ -44,8 +51,8 @@ export function useStructureMarkers({
 
       const features = structures
         .map(s => {
-          const sFiber = findFiber(s.fiberId, s.direction ?? 0)
-          const coords = sFiber ? getSectionCoords(sFiber, s.startChannel, s.endChannel) : []
+          const sFiber = findFiberRef.current(s.fiberId, s.direction ?? 0)
+          const coords = sFiber ? getSectionCoordsRef.current(sFiber, s.startChannel, s.endChannel) : []
           if (coords.length < 2) return null
           const color = COLORS.structure[s.type].dot
           return {
@@ -69,7 +76,7 @@ export function useStructureMarkers({
     return () => {
       map.off('idle', onIdle)
     }
-  }, [mapRef, structures, showStructuresOnMap])
+  }, [mapRef, structures, showStructuresOnMap, findFiberRef, getSectionCoordsRef])
 
   // Update structure label markers
   useEffect(() => {
@@ -83,9 +90,13 @@ export function useStructureMarkers({
     if (!showStructureLabels || !structures?.length) return
 
     for (const s of structures) {
-      const sFiber = findFiber(s.fiberId, s.direction ?? 0)
+      const sFiber = findFiberRef.current(s.fiberId, s.direction ?? 0)
+      if (!sFiber) continue
+      // Compute mid-channel coordinate for label placement
       const midChannel = Math.floor((s.startChannel + s.endChannel) / 2)
-      const coord = sFiber ? channelToCoord(sFiber, midChannel) : null
+      // Use section coords to find mid-point (more robust than channelToCoord for non-precomputed)
+      const sectionCoords = getSectionCoordsRef.current(sFiber, midChannel, midChannel)
+      const coord: [number, number] | null = sectionCoords.length > 0 ? sectionCoords[0] : null
       if (!coord) continue
 
       const status = structureStatuses?.get(s.id)
@@ -132,5 +143,14 @@ export function useStructureMarkers({
       markers.forEach(m => m.remove())
       markers.clear()
     }
-  }, [mapRef, structures, structureStatuses, showStructureLabels, selectedStructureId, onStructureClickRef])
+  }, [
+    mapRef,
+    structures,
+    structureStatuses,
+    showStructureLabels,
+    selectedStructureId,
+    onStructureClickRef,
+    findFiberRef,
+    getSectionCoordsRef,
+  ])
 }

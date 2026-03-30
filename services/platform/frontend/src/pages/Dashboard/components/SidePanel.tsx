@@ -354,6 +354,7 @@ export function SidePanel({
                 onClearHighlight={onClearHighlight}
                 show3DBuildings={state.show3DBuildings}
                 showChannelHelper={state.showChannelHelper}
+                showFullCable={state.showFullCable}
                 flow={realtimeCtx.flow}
                 switchingFlow={realtimeCtx.switchingFlow}
                 availableFlows={realtimeCtx.availableFlows}

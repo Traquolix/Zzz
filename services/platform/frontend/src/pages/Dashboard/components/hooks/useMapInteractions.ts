@@ -1,10 +1,10 @@
 import { useEffect } from 'react'
 import type { Map as MapboxMap, GeoJSONSource, MapMouseEvent } from 'mapbox-gl'
 import type { MapboxOverlay } from '@deck.gl/mapbox'
-import { findFiber, getSectionCoords } from '../../data'
-import type { PendingPoint } from '../../types'
+import type { Fiber, PendingPoint } from '../../types'
+import type { CoverageRange } from '@/api/fibers'
 import { MAP_SOURCES, MAP_LAYERS, type MapHandlers } from './mapTypes'
-import { findNearestFiberPoint, onMapReady } from '../mapUtils'
+import { onMapReady } from '../mapUtils'
 
 interface UseMapInteractionsParams {
   mapRef: React.RefObject<MapboxMap | null>
@@ -16,7 +16,17 @@ interface UseMapInteractionsParams {
   overviewRef: React.MutableRefObject<boolean>
   hideFibersRef: React.RefObject<boolean | undefined>
   deckOverlayRef: React.RefObject<MapboxOverlay | null>
+  coverageFilterRef: React.RefObject<Map<string, CoverageRange[]> | undefined>
   dismissVehiclePopup: () => void
+  findNearestFiberPointRef: React.RefObject<
+    (
+      lngLat: [number, number],
+      maxDistDeg?: number,
+      coverageFilter?: Map<string, CoverageRange[]>,
+    ) => { fiberId: string; direction: 0 | 1; channel: number; lng: number; lat: number } | null
+  >
+  findFiberRef: React.RefObject<(cableId: string, direction: number) => Fiber | undefined>
+  getSectionCoordsRef: React.RefObject<(fiber: Fiber, startChannel: number, endChannel: number) => [number, number][]>
 }
 
 export function useMapInteractions({
@@ -29,7 +39,11 @@ export function useMapInteractions({
   overviewRef,
   hideFibersRef,
   deckOverlayRef,
+  coverageFilterRef,
   dismissVehiclePopup,
+  findNearestFiberPointRef,
+  findFiberRef,
+  getSectionCoordsRef,
 }: UseMapInteractionsParams) {
   useEffect(() => {
     return onMapReady(mapRef, map => {
@@ -78,8 +92,9 @@ export function useMapInteractions({
           return
         }
         dismissVehiclePopup()
+        const coverage = coverageFilterRef.current
         if (!sectionCreationRef.current) {
-          const hit = findNearestFiberPoint([e.lngLat.lng, e.lngLat.lat])
+          const hit = findNearestFiberPointRef.current([e.lngLat.lng, e.lngLat.lat], undefined, coverage)
           if (hit) {
             handlersRef.current.onChannelClick?.(hit)
           } else {
@@ -88,7 +103,7 @@ export function useMapInteractions({
           return
         }
 
-        const hit = findNearestFiberPoint([e.lngLat.lng, e.lngLat.lat])
+        const hit = findNearestFiberPointRef.current([e.lngLat.lng, e.lngLat.lat], undefined, coverage)
         if (!hit) return
 
         const pending = pendingPointRef.current
@@ -109,7 +124,7 @@ export function useMapInteractions({
         const pending = pendingPointRef.current
         if (!pending) return
 
-        const hit = findNearestFiberPoint([e.lngLat.lng, e.lngLat.lat])
+        const hit = findNearestFiberPointRef.current([e.lngLat.lng, e.lngLat.lat], undefined, coverageFilterRef.current)
         const sectionSource = map.getSource(MAP_SOURCES.pendingSection) as GeoJSONSource | undefined
         if (!sectionSource) return
 
@@ -118,11 +133,11 @@ export function useMapInteractions({
           return
         }
 
-        const pendingFiber = findFiber(pending.fiberId, pending.direction)
+        const pendingFiber = findFiberRef.current(pending.fiberId, pending.direction)
         if (!pendingFiber) return
         const start = Math.min(pending.channel, hit.channel)
         const end = Math.max(pending.channel, hit.channel)
-        const coords = getSectionCoords(pendingFiber, start, end)
+        const coords = getSectionCoordsRef.current(pendingFiber, start, end)
         if (coords.length < 2) {
           sectionSource.setData({ type: 'FeatureCollection', features: [] })
           return
@@ -154,6 +169,10 @@ export function useMapInteractions({
     overviewRef,
     hideFibersRef,
     deckOverlayRef,
+    coverageFilterRef,
     dismissVehiclePopup,
+    findNearestFiberPointRef,
+    findFiberRef,
+    getSectionCoordsRef,
   ])
 }

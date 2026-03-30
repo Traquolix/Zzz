@@ -1,5 +1,5 @@
 import { useRef, useMemo, forwardRef, useImperativeHandle, memo } from 'react'
-import { findFiber } from '../data'
+import { useFiberData } from '../context/FiberContext'
 import type { Fiber, Section, PendingPoint, LiveSectionStats, SpeedThresholds, DisplayIncident } from '../types'
 import type { Infrastructure } from '@/types/infrastructure'
 import type { VehiclePosition } from '../hooks/useVehicleSim'
@@ -50,6 +50,7 @@ interface DashboardMapProps {
   hideFibersInOverview?: boolean
   show3DBuildings?: boolean
   showChannelHelper?: boolean
+  showFullCable?: boolean
 }
 
 export const DashboardMap = memo(
@@ -81,9 +82,32 @@ export const DashboardMap = memo(
       hideFibersInOverview,
       show3DBuildings,
       showChannelHelper,
+      showFullCable,
     },
     ref,
   ) {
+    // ── Fiber context data ──
+    const {
+      fibers: fiberList,
+      fiberOffsetCache,
+      fiberRenderCache,
+      coverageMap,
+      findFiber,
+      getSectionCoords,
+      findNearestFiberPoint,
+      buildCoverageRenderCache,
+    } = useFiberData()
+
+    // ── Fiber function refs (bridge context closures → stable refs for effects) ──
+    const findFiberRef = useRef(findFiber)
+    findFiberRef.current = findFiber
+
+    const getSectionCoordsRef = useRef(getSectionCoords)
+    getSectionCoordsRef.current = getSectionCoords
+
+    const findNearestFiberPointRef = useRef(findNearestFiberPoint)
+    findNearestFiberPointRef.current = findNearestFiberPoint
+
     // ── Closure-capture refs (bridge props → stable refs for effects) ──
     const incidentClickedRef = useRef(false)
     const handlersRef = useRef({
@@ -132,7 +156,7 @@ export const DashboardMap = memo(
         if (f) m.set(sec.id, f)
       }
       return m
-    }, [sections])
+    }, [sections, findFiber])
     sectionFibersRef.current = sectionFibers
 
     const thresholdLookupRef = useRef(thresholdLookup)
@@ -148,12 +172,16 @@ export const DashboardMap = memo(
     const hideFibersRef = useRef(hideFibersInOverview)
     hideFibersRef.current = hideFibersInOverview
 
+    // Coverage filter for click interaction — only active when not showing full cable
+    const coverageFilterRef = useRef(!showFullCable && coverageMap && coverageMap.size > 0 ? coverageMap : undefined)
+    coverageFilterRef.current = !showFullCable && coverageMap && coverageMap.size > 0 ? coverageMap : undefined
+
     const onStructureClickRef = useRef(onStructureClick)
     onStructureClickRef.current = onStructureClick
 
     // ── Hooks (order matters: layers before render loop; interactions after for vehicleClickedRef) ──
     const { containerRef, mapRef } = useMapInstance()
-    useMapLayers(mapRef)
+    useMapLayers(mapRef, fiberList, fiberOffsetCache)
 
     const { markersRef } = useIncidentMarkers({
       mapRef,
@@ -170,6 +198,8 @@ export const DashboardMap = memo(
       showStructureLabels,
       selectedStructureId,
       onStructureClickRef,
+      findFiberRef,
+      getSectionCoordsRef,
     })
 
     const highlights = useMapHighlights({
@@ -178,9 +208,11 @@ export const DashboardMap = memo(
       sectionsRef,
       fiberColorsRef,
       sidebarOpenRef,
+      findFiberRef,
+      getSectionCoordsRef,
     })
 
-    const vehiclePopup = useVehiclePopup({ mapRef, thresholdLookupRef })
+    const vehiclePopup = useVehiclePopup({ mapRef, thresholdLookupRef, findFiberRef })
 
     const { vehicleClickedRef, deckOverlayRef } = useRenderLoop({
       mapRef,
@@ -193,6 +225,7 @@ export const DashboardMap = memo(
       sectionFibersRef,
       thresholdLookupRef,
       vehiclePopup,
+      getSectionCoordsRef,
     })
 
     useMapInteractions({
@@ -205,7 +238,11 @@ export const DashboardMap = memo(
       overviewRef,
       hideFibersRef,
       deckOverlayRef,
+      coverageFilterRef,
       dismissVehiclePopup: vehiclePopup.dismiss,
+      findNearestFiberPointRef,
+      findFiberRef,
+      getSectionCoordsRef,
     })
 
     useMapToggles({
@@ -216,10 +253,16 @@ export const DashboardMap = memo(
       hideFibersInOverview,
       show3DBuildings,
       showChannelHelper,
+      showFullCable,
+      coverageMap,
       sectionCreationMode,
       sectionFibersRef,
       fiberColorsRef,
       overviewRef,
+      fibers: fiberList,
+      fiberRenderCache,
+      buildCoverageRenderCache,
+      getSectionCoordsRef,
     })
 
     useImperativeHandle(ref, () => highlights, [highlights])

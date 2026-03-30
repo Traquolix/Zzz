@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { findFiber } from '../data'
+import { useFiberData } from '../context/FiberContext'
 import type { MapPageAction } from '../types'
 import { PanelEmptyState } from './PanelEmptyState'
 import { DetailHeader } from './DetailHeader'
@@ -39,6 +39,7 @@ function StructureList({
   onClearHighlight?: () => void
 }) {
   const { t } = useTranslation()
+  const { findFiber } = useFiberData()
 
   if (loading) {
     return <PanelEmptyState message={t('shm.loadingStructures')} loading />
@@ -166,6 +167,7 @@ function StructureDetail({
   onBack: () => void
 }) {
   const { t } = useTranslation()
+  const { findFiber } = useFiberData()
   const [comparisonStats, setComparisonStats] = useState<ComparisonStats | null>(null)
   const handleComparisonStats = useCallback((s: ComparisonStats | null) => setComparisonStats(s), [])
 

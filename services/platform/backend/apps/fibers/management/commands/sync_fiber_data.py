@@ -17,6 +17,7 @@ import json
 import logging
 from pathlib import Path
 
+import yaml
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
@@ -98,6 +99,51 @@ def _discover_fiber_files(cables_dir: Path) -> dict[str, dict]:
     return fibers
 
 
+def _load_data_coverage() -> dict[str, list[dict[str, int]]]:
+    """Load per-fiber data coverage from the pipeline's fibers.yaml.
+
+    Returns a dict mapping fiber_id → sorted list of channel ranges, e.g.
+    ``{"carros": [{"start": 1200, "end": 1716}, ...]}``.
+
+    Searches two locations:
+    1. ``DATA_DIR/pipeline_config/fibers.yaml`` — Docker mount
+    2. ``<repo>/services/pipeline/config/fibers.yaml`` — local dev
+    """
+    candidates = [
+        Path(settings.DATA_DIR) / "pipeline_config" / "fibers.yaml",
+        Path(settings.BASE_DIR).parent.parent.parent
+        / "services"
+        / "pipeline"
+        / "config"
+        / "fibers.yaml",
+    ]
+    config_path = None
+    for candidate in candidates:
+        if candidate.exists():
+            config_path = candidate
+            break
+
+    if config_path is None:
+        logger.info("Pipeline fibers.yaml not found, skipping data coverage")
+        return {}
+
+    with open(config_path) as f:
+        config = yaml.safe_load(f)
+
+    coverage: dict[str, list[dict[str, int]]] = {}
+    fibers_conf = config.get("fibers") or {}
+    for fiber_id, fiber_conf in fibers_conf.items():
+        sections = fiber_conf.get("sections", [])
+        ranges = [
+            {"start": s["channels"][0], "end": s["channels"][1]}
+            for s in sections
+            if "channels" in s and len(s["channels"]) >= 2
+        ]
+        if ranges:
+            coverage[fiber_id] = sorted(ranges, key=lambda r: r["start"])
+    return coverage
+
+
 def sync_fibers(dry_run: bool = False) -> dict[str, int]:
     """Sync FiberCable rows from JSON cable files. Returns {added, updated}."""
     from apps.fibers.models import FiberCable
@@ -110,6 +156,9 @@ def sync_fibers(dry_run: bool = False) -> dict[str, int]:
         logger.warning("No fiber cable JSON files found in %s", cables_dir)
         return stats
 
+    # Load data coverage from pipeline config
+    data_coverage = _load_data_coverage()
+
     # Build desired state
     desired: dict[str, dict] = {}
     for fiber_id, data in fiber_files.items():
@@ -121,6 +170,7 @@ def sync_fibers(dry_run: bool = False) -> dict[str, int]:
             "channel_count": len(coordinates),
             "directional_paths": data.get("directional_paths", {}),
             "landmark_labels": data.get("landmark_labels", []),
+            "data_coverage": data_coverage.get(fiber_id, []),
         }
 
     if dry_run:

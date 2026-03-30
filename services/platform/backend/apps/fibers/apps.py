@@ -49,6 +49,19 @@ def _on_fiber_assignment_change(sender, instance, **kwargs):
 
 
 def _on_fiber_cable_change(sender, instance, **kwargs):
+    from django.core.cache import cache
+
+    from apps.fibers.models import FiberAssignment
+    from apps.fibers.utils import invalidate_org_fiber_cache
+
+    # Invalidate REST cache for all orgs — FiberCable is shared across orgs
+    cache.delete("fibers:all")
+    # Invalidate per-org caches for every org assigned to this fiber
+    for org_id in FiberAssignment.objects.filter(fiber_id=instance.id).values_list(
+        "organization_id", flat=True
+    ):
+        invalidate_org_fiber_cache(org_id)
+
     _broadcast_config_update("fibers")
 
 

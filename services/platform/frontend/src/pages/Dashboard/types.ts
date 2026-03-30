@@ -119,6 +119,7 @@ export interface MapPageState {
   hideFibersInOverview: boolean
   show3DBuildings: boolean
   showChannelHelper: boolean
+  showFullCable: boolean
   selectedChannel: SelectedChannel | null
 }
 
@@ -154,6 +155,8 @@ export type MapPageAction =
   | { type: 'TOGGLE_HIDE_FIBERS_OVERVIEW' }
   | { type: 'TOGGLE_3D_BUILDINGS' }
   | { type: 'TOGGLE_CHANNEL_HELPER' }
+  | { type: 'TOGGLE_SHOW_FULL_CABLE' }
   | { type: 'TOGGLE_SIDEBAR_EXPANDED' }
   | { type: 'RESET_SIDEBAR_EXPANDED' }
   | { type: 'OPEN_PANEL'; tab: SidebarTab }
+  | { type: 'INIT_FIBER_DEFAULTS'; fibers: Fiber[] }

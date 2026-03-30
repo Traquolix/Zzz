@@ -1,27 +1,23 @@
 import { useEffect } from 'react'
 import type { Map as MapboxMap } from 'mapbox-gl'
 import { COLORS } from '@/lib/theme'
-import { fibers, fiberOffsetCache, fiberRenderCache } from '../../data'
+import type { Fiber } from '../../types'
 import { onMapReady } from '../mapUtils'
 import { MAP_SOURCES, MAP_LAYERS } from './mapTypes'
 
-export function useMapLayers(mapRef: React.RefObject<MapboxMap | null>) {
+export function useMapLayers(
+  mapRef: React.RefObject<MapboxMap | null>,
+  fibers: Fiber[],
+  fiberOffsetCache: Map<string, [number, number][]>,
+) {
   useEffect(() => {
     return onMapReady(mapRef, map => {
       // ── Fiber route layers ──
-      const fiberFeatures: GeoJSON.Feature[] = []
-      for (const fiber of fibers) {
-        const coords = fiberRenderCache.get(fiber.id)
-        if (!coords) continue
-        fiberFeatures.push({
-          type: 'Feature' as const,
-          properties: { id: fiber.id, name: fiber.name, color: fiber.color },
-          geometry: { type: 'LineString' as const, coordinates: coords },
-        })
-      }
+      // Start with empty features — useMapToggles effect #3 populates
+      // the source with coverage-aware or full-cable data once ready.
       map.addSource(MAP_SOURCES.fibers, {
         type: 'geojson',
-        data: { type: 'FeatureCollection', features: fiberFeatures },
+        data: { type: 'FeatureCollection', features: [] },
       })
       map.addLayer({
         id: MAP_LAYERS.fiberLines,
@@ -232,5 +228,5 @@ export function useMapLayers(mapRef: React.RefObject<MapboxMap | null>) {
         labelLayerId,
       )
     })
-  }, [mapRef])
+  }, [mapRef, fibers, fiberOffsetCache])
 }
