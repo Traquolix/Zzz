@@ -1,7 +1,8 @@
 import { useReducer, useEffect, useCallback, useRef, useState, useMemo } from 'react'
 import { toast } from 'sonner'
-import type { MapPageState, MapPageAction, DisplayIncident, PendingPoint } from './types'
-import { fibers, defaultSpeedThresholds, buildThresholdLookup, findFiber, channelToCoord } from './data'
+import type { MapPageState, MapPageAction, Fiber, DisplayIncident, PendingPoint } from './types'
+import { defaultSpeedThresholds, buildThresholdLookup } from './data'
+import { FiberProvider, useFiberData } from './context/FiberContext'
 import { DashboardMap, type DashboardMapHandle } from './components/DashboardMap'
 import { StatusBar } from './components/StatusBar'
 import { Legend } from './components/Legend'
@@ -14,35 +15,12 @@ import { useSections } from './hooks/useSections'
 import { useConfigUpdates } from '@/hooks/useConfigUpdates'
 import { useIncidents } from '@/hooks/useIncidents'
 import { useUnseenIncidents } from './hooks/useUnseenIncidents'
-import { useFiberCoverage } from './hooks/useFiberCoverage'
 import { IncidentToastStack } from './components/IncidentToastStack'
 import { UserMenu } from './components/UserMenu'
 import { ConnectionBanner } from './components/ConnectionBanner'
 import { SidebarRefContext } from './hooks/useSidebarWidth'
 import type { Incident as ApiIncident } from '@/types/incident'
 import './dashboard.css'
-
-/** Enrich an API incident with display fields computed from fiber geometry. */
-function toDisplayIncident(api: ApiIncident): DisplayIncident {
-  const fiber = findFiber(api.fiberId, api.direction)
-  const loc = fiber ? channelToCoord(fiber, api.channel) : null
-  const fiberName = fiber?.name ?? api.fiberId
-  const typeLabel = api.type.charAt(0).toUpperCase() + api.type.slice(1)
-  const title = `${typeLabel} — ${fiberName}`
-
-  let description = `${typeLabel} detected on ${fiberName} at channel ${api.channel}.`
-  if (api.speedBefore != null && api.speedDuring != null) {
-    description += ` Speed dropped from ${Math.round(api.speedBefore)} to ${Math.round(api.speedDuring)} km/h.`
-  }
-
-  return {
-    ...api,
-    title,
-    description,
-    location: loc ?? [7.24, 43.72],
-    resolved: api.status !== 'active',
-  }
-}
 
 const initialState: MapPageState = {
   activeTab: 'sections',
@@ -60,8 +38,8 @@ const initialState: MapPageState = {
   sidebarOpen: false,
   sidebarExpanded: false,
   displayMode: 'dots',
-  fiberThresholds: Object.fromEntries(fibers.map(f => [f.id, { ...defaultSpeedThresholds }])),
-  fiberColors: Object.fromEntries(fibers.map(f => [f.id, f.color])),
+  fiberThresholds: {},
+  fiberColors: {},
   selectedStructureId: null,
   showStructuresOnMap: false,
   showStructureLabels: false,
@@ -278,28 +256,79 @@ function reducer(state: MapPageState, action: MapPageAction): MapPageState {
         selectedStructureId: null,
         selectedChannel: null,
       }
+    case 'INIT_FIBER_DEFAULTS': {
+      // Only set defaults if they're empty (first load)
+      if (Object.keys(state.fiberThresholds).length > 0) return state
+      return {
+        ...state,
+        fiberThresholds: Object.fromEntries(action.fibers.map(f => [f.id, { ...defaultSpeedThresholds }])),
+        fiberColors: Object.fromEntries(action.fibers.map(f => [f.id, f.color])),
+      }
+    }
     default:
       return state
   }
 }
 
+/** Wrapper that places FiberProvider above the inner Dashboard. */
 export function Dashboard() {
+  return (
+    <FiberProvider>
+      <DashboardInner />
+    </FiberProvider>
+  )
+}
+
+function DashboardInner() {
   const [state, dispatch] = useReducer(reducer, initialState)
   const [isOverview, setIsOverview] = useState(false)
   const mapRef = useRef<DashboardMapHandle>(null)
   const sidebarRef = useRef<HTMLDivElement>(null)
   useConfigUpdates()
-  const { buildGeoJSON, connected, lastDetectionTsRef } = useDetections()
-  const { tickAndCollect } = useVehicleSim()
+
+  // Fiber context
+  const { findFiber, channelToCoord, fibers: fiberList } = useFiberData()
+
+  // Initialize fiber defaults when fibers load
+  useEffect(() => {
+    if (fiberList.length > 0) {
+      dispatch({ type: 'INIT_FIBER_DEFAULTS', fibers: fiberList })
+    }
+  }, [fiberList])
+
+  /** Enrich an API incident with display fields computed from fiber geometry. */
+  const toDisplayIncident = useCallback(
+    (api: ApiIncident): DisplayIncident => {
+      const fiber = findFiber(api.fiberId, api.direction)
+      const loc = fiber ? channelToCoord(fiber, api.channel) : null
+      const fiberName = fiber?.name ?? api.fiberId
+      const typeLabel = api.type.charAt(0).toUpperCase() + api.type.slice(1)
+      const title = `${typeLabel} \u2014 ${fiberName}`
+
+      let description = `${typeLabel} detected on ${fiberName} at channel ${api.channel}.`
+      if (api.speedBefore != null && api.speedDuring != null) {
+        description += ` Speed dropped from ${Math.round(api.speedBefore)} to ${Math.round(api.speedDuring)} km/h.`
+      }
+
+      return {
+        ...api,
+        title,
+        description,
+        location: loc ?? [7.24, 43.72],
+        resolved: api.status !== 'active',
+      }
+    },
+    [findFiber, channelToCoord],
+  )
+
+  const { buildGeoJSON, connected, lastDetectionTsRef } = useDetections(findFiber, channelToCoord)
+  const { tickAndCollect } = useVehicleSim(fiberList)
   const { stats: liveStats, seriesData: liveSeriesData } = useLiveStats(state.sections)
   const infrastructure = useInfrastructure()
 
-  // Data coverage from pipeline config (which channel ranges have data)
-  const coverageMap = useFiberCoverage()
-
   // Real incidents from API + WebSocket
   const { incidents: apiIncidents, loading: incidentsLoading } = useIncidents()
-  const displayIncidents = useMemo(() => apiIncidents.map(toDisplayIncident), [apiIncidents])
+  const displayIncidents = useMemo(() => apiIncidents.map(toDisplayIncident), [apiIncidents, toDisplayIncident])
   const { unseenIds, hasUnseen, markSeen, markAllSeen, toasts, dismissToast } = useUnseenIncidents(
     displayIncidents,
     incidentsLoading,
@@ -316,8 +345,8 @@ export function Dashboard() {
   }, [apiSections])
 
   const thresholdLookup = useMemo(
-    () => buildThresholdLookup(state.sections, state.fiberThresholds),
-    [state.sections, state.fiberThresholds],
+    () => buildThresholdLookup(state.sections, state.fiberThresholds, findFiber),
+    [state.sections, state.fiberThresholds, findFiber],
   )
 
   // Wrapped dispatch that intercepts DELETE_SECTION to also call the API
@@ -384,7 +413,7 @@ export function Dashboard() {
     if (coord) {
       mapRef.current?.flyTo(coord, 13)
     }
-  }, [state.selectedSectionId, state.sections])
+  }, [state.selectedSectionId, state.sections, findFiber, channelToCoord])
 
   // FlyTo on structure selection
   useEffect(() => {
@@ -397,7 +426,7 @@ export function Dashboard() {
     if (coord) {
       mapRef.current?.flyTo(coord, 14)
     }
-  }, [state.selectedStructureId, infrastructure.structures])
+  }, [state.selectedStructureId, infrastructure.structures, findFiber, channelToCoord])
 
   // Highlight selected section/incident/structure/channel on map, clear on deselect
   useEffect(() => {
@@ -469,7 +498,7 @@ export function Dashboard() {
   return (
     <SidebarRefContext.Provider value={sidebarRef}>
       <div className="dashboard w-screen h-screen relative overflow-hidden">
-        {/* Map area — full screen */}
+        {/* Map area -- full screen */}
         <div className="absolute inset-0">
           <DashboardMap
             ref={mapRef}
@@ -500,7 +529,6 @@ export function Dashboard() {
             show3DBuildings={state.show3DBuildings}
             showChannelHelper={state.showChannelHelper}
             showFullCable={state.showFullCable}
-            coverageMap={coverageMap}
           />
 
           {/* Section creation banner */}
@@ -522,7 +550,7 @@ export function Dashboard() {
 
           <ConnectionBanner />
 
-          {/* Map overlays — user button + status bar */}
+          {/* Map overlays -- user button + status bar */}
           <div className="absolute top-4 left-4 z-10 flex items-center gap-2.5">
             <UserMenu dispatch={wrappedDispatch} />
             <StatusBar
@@ -534,7 +562,7 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* Legend — top-right, moves with sidebar */}
+        {/* Legend -- top-right, moves with sidebar */}
         <Legend
           displayMode={state.displayMode}
           onToggleDisplayMode={() =>
@@ -557,7 +585,7 @@ export function Dashboard() {
           }}
         />
 
-        {/* Sidebar — overlays the map from the right */}
+        {/* Sidebar -- overlays the map from the right */}
         <div className="absolute top-0 right-0 h-full z-20 pointer-events-none">
           <SidePanel
             state={state}
@@ -577,11 +605,12 @@ export function Dashboard() {
           />
         </div>
 
-        {/* Bottom panel — detail views and user/platform features */}
+        {/* Bottom panel -- detail views and user/platform features */}
         {/* Naming dialog overlay */}
         {state.showNamingDialog && state.pendingSection && (
           <NamingDialog
             pendingSection={state.pendingSection}
+            findFiber={findFiber}
             onSave={async name => {
               const ps = state.pendingSection!
               dispatch({ type: 'CLOSE_NAMING_DIALOG' })
@@ -602,10 +631,12 @@ export function Dashboard() {
 
 function NamingDialog({
   pendingSection,
+  findFiber,
   onSave,
   onCancel,
 }: {
   pendingSection: { fiberId: string; direction: 0 | 1; startChannel: number; endChannel: number }
+  findFiber: (cableId: string, direction: number) => Fiber | undefined
   onSave: (name: string) => void
   onCancel: () => void
 }) {

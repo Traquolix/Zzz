@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
-import { findFiber, getFiberColor, getSpeedColor } from '../data'
+import { getFiberColor, getSpeedColor } from '../data'
+import { useFiberData } from '../context/FiberContext'
 import { COLORS } from '@/lib/theme'
 import type { MapPageAction, Section, SelectedChannel } from '../types'
 import { useRealtime } from '@/hooks/useRealtime'
@@ -21,6 +22,7 @@ export function ChannelDetail({
   fiberColors: Record<string, string>
 }) {
   const { t } = useTranslation()
+  const { findFiber } = useFiberData()
   const fiber = findFiber(channel.fiberId, channel.direction)
   const fiberColor = fiber ? getFiberColor(fiber, fiberColors) : COLORS.chart.speed
   const directionLabel = fiber?.direction === 0 ? 'Dir A' : 'Dir B'

@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { fibers } from '../data'
+import { useFiberData } from '../context/FiberContext'
 import { fetchExportEstimate, downloadExport, type ExportParams } from '@/api/export'
 
 type DatePreset = '5m' | '1h' | '24h' | '7d' | '30d' | 'custom'
@@ -52,6 +52,7 @@ function getTierInfo(dateRange: { start: string; end: string } | null): {
 
 export function DataExportPanel() {
   const { t } = useTranslation()
+  const { fibers } = useFiberData()
 
   const uniqueCables = useMemo(() => {
     const seen = new Set<string>()
@@ -60,7 +61,7 @@ export function DataExportPanel() {
       seen.add(f.parentCableId)
       return true
     })
-  }, [])
+  }, [fibers])
 
   const [fiberId, setFiberId] = useState(uniqueCables[0]?.parentCableId ?? '')
   const [preset, setPreset] = useState<DatePreset>('24h')
@@ -86,7 +87,7 @@ export function DataExportPanel() {
   const maxChannels = useMemo(() => {
     const fiber = fibers.find(f => f.parentCableId === fiberId)
     return fiber?.totalChannels ?? 0
-  }, [fiberId])
+  }, [fiberId, fibers])
 
   const parsedChStart = channelStart ? parseInt(channelStart, 10) : undefined
   const parsedChEnd = channelEnd ? parseInt(channelEnd, 10) : undefined

@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { COLORS } from '@/lib/theme'
-import { fibers, defaultSpeedThresholds, getFiberColor } from '../data'
+import { defaultSpeedThresholds, getFiberColor } from '../data'
+import { useFiberData } from '../context/FiberContext'
 import type { Fiber, MapPageAction, SpeedThresholds } from '../types'
 import { FlowToggle } from './FlowToggle'
 import { ThresholdEditor } from './ThresholdEditor'
@@ -144,6 +145,7 @@ function SettingsPanel({
   onFlowToggle: (flow: DataFlow) => void
 }) {
   const { t } = useTranslation()
+  const { fibers } = useFiberData()
   const [colorPickerOpen, setColorPickerOpen] = useState<string | null>(null)
 
   // Group fibers by cable
@@ -158,7 +160,7 @@ function SettingsPanel({
       group.fibers.push(f)
     }
     return [...map.entries()]
-  }, [])
+  }, [fibers])
 
   return (
     <div className="px-4 py-4 flex flex-col gap-5">
@@ -196,7 +198,7 @@ function SettingsPanel({
           </button>
         </label>
         <label className="flex items-center justify-between cursor-pointer group">
-          <span className="text-cq-sm text-[var(--dash-text)]">Show Full Cable</span>
+          <span className="text-cq-sm text-[var(--dash-text)]">{t('settings.showFullCable')}</span>
           <button
             onClick={() => dispatch({ type: 'TOGGLE_SHOW_FULL_CABLE' })}
             className={`relative w-8 h-[18px] rounded-full transition-colors ${showFullCable ? 'bg-[var(--dash-accent)]' : 'bg-[var(--dash-border)]'}`}

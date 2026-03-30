@@ -5,7 +5,7 @@ import { parseDetections } from '@/lib/parseMessage'
 import { getFiberOffsetCoords } from '@/lib/geoUtils'
 import { useRealtime } from '@/hooks/useRealtime'
 import { useFlowReset } from '@/hooks/useFlowReset'
-import { fibers } from '../data'
+import type { Fiber } from '../types'
 
 export interface VehiclePosition {
   id: string
@@ -51,7 +51,7 @@ function interpCoord(coords: [number, number][], index: number): [number, number
   return [coords[i][0] + (coords[j][0] - coords[i][0]) * t, coords[i][1] + (coords[j][1] - coords[i][1]) * t]
 }
 
-export function useVehicleSim(): {
+export function useVehicleSim(fibers: Fiber[]): {
   tickAndCollect: (now: number, deltaMs: number) => VehiclePosition[]
 } {
   const { subscribe } = useRealtime()
@@ -64,8 +64,9 @@ export function useVehicleSim(): {
     }
   })
 
-  // Initialize engines once
-  if (enginesRef.current.length === 0) {
+  // Initialize engines when fibers change
+  useEffect(() => {
+    if (fibers.length === 0) return
     enginesRef.current = fibers.map(fiber => {
       const engine = new VehicleSimEngine({
         totalChannels: fiber.totalChannels,
@@ -80,7 +81,11 @@ export function useVehicleSim(): {
         step: 1,
       }
     })
-  }
+    return () => {
+      for (const fe of enginesRef.current) fe.engine.reset()
+      enginesRef.current = []
+    }
+  }, [fibers])
 
   // Subscribe to detections
   useEffect(() => {

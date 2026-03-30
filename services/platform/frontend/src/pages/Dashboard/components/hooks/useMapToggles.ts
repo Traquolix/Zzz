@@ -1,6 +1,6 @@
 import { useEffect, useMemo } from 'react'
 import type { Map as MapboxMap, GeoJSONSource } from 'mapbox-gl'
-import { fibers, fiberRenderCache, getFiberColor, buildCoverageRenderCache } from '../../data'
+import { getFiberColor } from '../../data'
 import type { Fiber, Section, PendingPoint } from '../../types'
 import type { CoverageRange } from '@/api/fibers'
 import { buildSectionHighlightData } from '../mapUtils'
@@ -20,10 +20,16 @@ interface UseMapTogglesParams {
   sectionFibersRef: React.RefObject<Map<string, Fiber>>
   fiberColorsRef: React.RefObject<Record<string, string> | undefined>
   overviewRef: React.RefObject<boolean>
+  fibers: Fiber[]
+  fiberRenderCache: Map<string, [number, number][]>
+  buildCoverageRenderCache: (cm: Map<string, CoverageRange[]>) => Map<string, [number, number][][]>
+  getSectionCoordsRef: React.RefObject<(fiber: Fiber, startChannel: number, endChannel: number) => [number, number][]>
 }
 
 /** Build GeoJSON features for fiber lines, optionally clipped to data coverage. */
 function buildFiberFeatures(
+  fibers: Fiber[],
+  fiberRenderCache: Map<string, [number, number][]>,
   fiberColors: Record<string, string> | undefined,
   showFullCable: boolean,
   coverageRenderCache: Map<string, [number, number][][]>,
@@ -77,11 +83,15 @@ export function useMapToggles({
   sectionFibersRef,
   fiberColorsRef,
   overviewRef,
+  fibers,
+  fiberRenderCache,
+  buildCoverageRenderCache,
+  getSectionCoordsRef,
 }: UseMapTogglesParams) {
   // Memoize coverage render cache so it's only rebuilt when coverageMap changes
   const coverageRenderCache = useMemo(
     () => (coverageMap && coverageMap.size > 0 ? buildCoverageRenderCache(coverageMap) : new Map()),
-    [coverageMap],
+    [coverageMap, buildCoverageRenderCache],
   )
 
   // 1. Section highlights
@@ -92,7 +102,14 @@ export function useMapToggles({
     const apply = () => {
       const source = map.getSource(MAP_SOURCES.sectionHighlights) as GeoJSONSource | undefined
       if (!source) return
-      source.setData(buildSectionHighlightData(sections ?? [], sectionFibersRef.current, fiberColorsRef.current))
+      source.setData(
+        buildSectionHighlightData(
+          sections ?? [],
+          sectionFibersRef.current,
+          fiberColorsRef.current,
+          getSectionCoordsRef.current,
+        ),
+      )
     }
 
     if (map.isStyleLoaded()) {
@@ -105,7 +122,7 @@ export function useMapToggles({
     return () => {
       map.off('idle', onIdle)
     }
-  }, [mapRef, sections, fiberColors, sectionFibersRef, fiberColorsRef])
+  }, [mapRef, sections, fiberColors, sectionFibersRef, fiberColorsRef, getSectionCoordsRef])
 
   // 2. Pending point marker
   useEffect(() => {
@@ -150,12 +167,30 @@ export function useMapToggles({
   // 3. Fiber line rendering (colors + coverage toggle)
   useEffect(() => {
     const map = mapRef.current
-    if (!map) return
-    const src = map.getSource(MAP_SOURCES.fibers) as GeoJSONSource | undefined
-    if (!src) return
-    const features = buildFiberFeatures(fiberColors, showFullCable ?? false, coverageRenderCache)
-    src.setData({ type: 'FeatureCollection', features })
-  }, [mapRef, fiberColors, showFullCable, coverageRenderCache])
+    if (!map || !fiberColors) return
+
+    const apply = () => {
+      const src = map.getSource(MAP_SOURCES.fibers) as GeoJSONSource | undefined
+      if (!src) return
+      const features = buildFiberFeatures(
+        fibers,
+        fiberRenderCache,
+        fiberColors,
+        showFullCable ?? false,
+        coverageRenderCache,
+      )
+      src.setData({ type: 'FeatureCollection', features })
+    }
+
+    if (map.isStyleLoaded()) {
+      apply()
+    }
+    const onIdle = () => apply()
+    map.once('idle', onIdle)
+    return () => {
+      map.off('idle', onIdle)
+    }
+  }, [mapRef, fiberColors, showFullCable, coverageRenderCache, fibers, fiberRenderCache])
 
   // 4. Fiber visibility in overview
   useEffect(() => {

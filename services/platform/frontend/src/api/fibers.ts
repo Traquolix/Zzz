@@ -5,30 +5,27 @@ export interface CoverageRange {
   end: number
 }
 
-interface ApiFiberLine {
-  id: string
-  parentFiberId: string
+export interface ApiFiber {
+  id: string // "carros:0"
+  parentFiberId: string // "carros"
   direction: number
+  name: string
+  color: string
+  coordinates: ([number, number] | [null, null])[]
+  coordsPrecomputed: boolean
+  landmarks: { channel: number; name: string }[] | null
   dataCoverage: CoverageRange[]
 }
 
 interface FibersResponse {
-  results: ApiFiberLine[]
+  results: ApiFiber[]
 }
 
 /**
- * Fetch fiber lines from the API and extract data coverage per cable.
- * Returns a Map keyed by parentFiberId (e.g. "carros") → coverage ranges.
- * Direction 0 is used as representative (coverage is per-cable, not per-direction).
+ * Fetch all directional fibers from the API.
+ * Returns the raw API fiber objects for transformation by the FiberContext.
  */
-export async function fetchFiberCoverage(): Promise<Map<string, CoverageRange[]>> {
+export async function fetchFibers(): Promise<ApiFiber[]> {
   const data = await apiRequest<FibersResponse>('/api/fibers')
-  const coverage = new Map<string, CoverageRange[]>()
-  for (const fiber of data.results) {
-    // Only take direction 0 — coverage is the same for both directions
-    if (fiber.direction === 0 && fiber.dataCoverage.length > 0) {
-      coverage.set(fiber.parentFiberId, fiber.dataCoverage)
-    }
-  }
-  return coverage
+  return data.results
 }

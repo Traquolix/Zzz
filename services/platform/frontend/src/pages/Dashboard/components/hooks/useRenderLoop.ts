@@ -3,7 +3,7 @@ import type { Map as MapboxMap, IControl, GeoJSONSource } from 'mapbox-gl'
 import { MapboxOverlay } from '@deck.gl/mapbox'
 import { SimpleMeshLayer } from '@deck.gl/mesh-layers'
 import { CubeGeometry } from '@luma.gl/engine'
-import { getSpeedColor, getSectionCoords, getSpeedColorRGBA } from '../../data'
+import { getSpeedColor, getSpeedColorRGBA } from '../../data'
 import type { Fiber, Section, LiveSectionStats, SpeedThresholds } from '../../types'
 import type { VehiclePosition } from '../../hooks/useVehicleSim'
 import { getPosition, getOrientation, getScale, onMapReady } from '../mapUtils'
@@ -28,6 +28,7 @@ interface UseRenderLoopParams {
     dismiss: () => void
     cleanup: () => void
   }
+  getSectionCoordsRef: React.RefObject<(fiber: Fiber, startChannel: number, endChannel: number) => [number, number][]>
 }
 
 export function useRenderLoop({
@@ -41,6 +42,7 @@ export function useRenderLoop({
   sectionFibersRef,
   thresholdLookupRef,
   vehiclePopup,
+  getSectionCoordsRef,
 }: UseRenderLoopParams) {
   const vehicleClickedRef = useRef(false)
   const deckOverlayRef = useRef<MapboxOverlay | null>(null)
@@ -133,7 +135,7 @@ export function useRenderLoop({
           .map(sec => {
             const secFiber = fiberMap.get(sec.id)
             if (!secFiber) return null
-            const coords = getSectionCoords(secFiber, sec.startChannel, sec.endChannel)
+            const coords = getSectionCoordsRef.current(secFiber, sec.startChannel, sec.endChannel)
             if (coords.length < 2) return null
             const live = stats?.get(sec.id)
             const speed = live?.avgSpeed != null ? live.avgSpeed : sec.avgSpeed
@@ -305,6 +307,7 @@ export function useRenderLoop({
     sectionsRef,
     sectionFibersRef,
     thresholdLookupRef,
+    getSectionCoordsRef,
   ])
 
   return {

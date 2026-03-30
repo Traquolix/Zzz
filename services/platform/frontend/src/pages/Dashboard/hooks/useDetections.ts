@@ -2,7 +2,7 @@ import { useRef, useEffect, useCallback } from 'react'
 import { useRealtime } from '@/hooks/useRealtime'
 import { useFlowReset } from '@/hooks/useFlowReset'
 import { parseDetections } from '@/lib/parseMessage'
-import { channelToCoord, findFiber } from '../data'
+import type { Fiber } from '../types'
 
 interface LiveDot {
   lng: number
@@ -17,7 +17,10 @@ interface LiveDot {
 const DOT_TTL = 1000 // ms
 const GEOJSON_THROTTLE_MS = 100 // rebuild GeoJSON at most 10Hz (not 60fps)
 
-export function useDetections() {
+export function useDetections(
+  findFiber: (cableId: string, direction: number) => Fiber | undefined,
+  channelToCoord: (fiber: Fiber, channel: number) => [number, number] | null,
+) {
   const { connected, subscribe } = useRealtime()
   const dotsRef = useRef(new Map<string, LiveDot>())
   const dirtyRef = useRef(false)
@@ -27,6 +30,12 @@ export function useDetections() {
   })
   const lastBuildRef = useRef(0)
   const lastDetectionTsRef = useRef(0)
+
+  // Stable refs for fiber functions (avoid re-subscribing on every context update)
+  const findFiberRef = useRef(findFiber)
+  findFiberRef.current = findFiber
+  const channelToCoordRef = useRef(channelToCoord)
+  channelToCoordRef.current = channelToCoord
 
   // Clear accumulated state on flow switch
   useFlowReset(() => {
@@ -49,9 +58,9 @@ export function useDetections() {
         if (d.timestamp > lastDetectionTsRef.current) {
           lastDetectionTsRef.current = d.timestamp
         }
-        const fiber = findFiber(d.fiberId, d.direction)
+        const fiber = findFiberRef.current(d.fiberId, d.direction)
         if (!fiber) continue
-        const coord = channelToCoord(fiber, d.channel)
+        const coord = channelToCoordRef.current(fiber, d.channel)
         if (!coord) continue
 
         keyParts[0] = fiber.id

@@ -159,3 +159,4 @@ export type MapPageAction =
   | { type: 'TOGGLE_SIDEBAR_EXPANDED' }
   | { type: 'RESET_SIDEBAR_EXPANDED' }
   | { type: 'OPEN_PANEL'; tab: SidebarTab }
+  | { type: 'INIT_FIBER_DEFAULTS'; fibers: Fiber[] }
