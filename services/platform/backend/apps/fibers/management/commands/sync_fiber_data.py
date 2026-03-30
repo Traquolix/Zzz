@@ -107,11 +107,11 @@ def _load_data_coverage() -> dict[str, list[dict[str, int]]]:
     ``{"carros": [{"start": 1200, "end": 1716}, ...]}``.
 
     Searches two locations:
-    1. ``DATA_DIR/pipeline_config/fibers.yaml`` — Docker mount
+    1. ``BASE_DIR/pipeline_config/fibers.yaml`` — Docker mount (at /app/pipeline_config/)
     2. ``<repo>/services/pipeline/config/fibers.yaml`` — local dev
     """
     candidates = [
-        Path(settings.DATA_DIR) / "pipeline_config" / "fibers.yaml",
+        Path(settings.BASE_DIR) / "pipeline_config" / "fibers.yaml",
         Path(settings.BASE_DIR).parent.parent.parent
         / "services"
         / "pipeline"
