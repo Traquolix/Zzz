@@ -12,11 +12,11 @@ import logging
 from django.template.loader import render_to_string
 from django.utils.translation import gettext as _
 
-from apps.monitoring.detection_utils import select_tier
+from apps.monitoring.detection_utils import CH_INCIDENTS, TIER_TABLES, select_tier
 from apps.shared.clickhouse import query
 from apps.shared.exceptions import ClickHouseUnavailableError
 
-logger = logging.getLogger("sequoia.reporting")
+logger = logging.getLogger("sequoia.reporting.report_builder")
 
 
 def build_report_html(report) -> str:
@@ -62,14 +62,14 @@ def _query_incidents(report) -> list[dict]:
     """Incident summary grouped by type and severity."""
     try:
         rows = query(
-            """
+            f"""
             SELECT
                 incident_type,
                 severity,
                 count() AS total
-            FROM sequoia.fiber_incidents
-            WHERE fiber_id IN {fids:Array(String)}
-              AND timestamp BETWEEN {start:DateTime64(3)} AND {end:DateTime64(3)}
+            FROM {CH_INCIDENTS}
+            WHERE fiber_id IN {{fids:Array(String)}}
+              AND timestamp BETWEEN {{start:DateTime64(3)}} AND {{end:DateTime64(3)}}
             GROUP BY incident_type, severity
             ORDER BY total DESC
             """,
@@ -102,7 +102,7 @@ def _query_speed_stats(report) -> list[dict]:
     try:
         if tier == "hires":
             rows = query(
-                """
+                f"""
                 SELECT
                     fiber_id,
                     direction,
@@ -110,9 +110,9 @@ def _query_speed_stats(report) -> list[dict]:
                     round(min(abs(speed)), 1) AS min_speed,
                     round(max(abs(speed)), 1) AS max_speed,
                     count() AS sample_count
-                FROM sequoia.detection_hires
-                WHERE fiber_id IN {fids:Array(String)}
-                  AND ts BETWEEN {start:DateTime64(3)} AND {end:DateTime64(3)}
+                FROM {TIER_TABLES["hires"]}
+                WHERE fiber_id IN {{fids:Array(String)}}
+                  AND ts BETWEEN {{start:DateTime64(3)}} AND {{end:DateTime64(3)}}
                 GROUP BY fiber_id, direction
                 ORDER BY fiber_id, direction
                 """,
@@ -123,7 +123,7 @@ def _query_speed_stats(report) -> list[dict]:
                 },
             )
         else:
-            table = "detection_1m" if tier == "1m" else "detection_1h"
+            table = TIER_TABLES[tier]
             rows = query(
                 f"""
                 SELECT
@@ -133,7 +133,7 @@ def _query_speed_stats(report) -> list[dict]:
                     round(minMerge(speed_min_state), 1) AS min_speed,
                     round(maxMerge(speed_max_state), 1) AS max_speed,
                     sumMerge(samples_state) AS sample_count
-                FROM sequoia.{table}
+                FROM {table}
                 WHERE fiber_id IN {{fids:Array(String)}}
                   AND ts BETWEEN {{start:DateTime64(3)}} AND {{end:DateTime64(3)}}
                 GROUP BY fiber_id, direction
@@ -171,15 +171,15 @@ def _query_volume(report) -> list[dict]:
     try:
         if tier == "hires":
             rows = query(
-                """
+                f"""
                 SELECT
                     fiber_id,
                     direction,
                     toStartOfHour(ts) AS hour,
                     sum(vehicle_count) AS total_vehicles
-                FROM sequoia.detection_hires
-                WHERE fiber_id IN {fids:Array(String)}
-                  AND ts BETWEEN {start:DateTime64(3)} AND {end:DateTime64(3)}
+                FROM {TIER_TABLES["hires"]}
+                WHERE fiber_id IN {{fids:Array(String)}}
+                  AND ts BETWEEN {{start:DateTime64(3)}} AND {{end:DateTime64(3)}}
                 GROUP BY fiber_id, direction, hour
                 ORDER BY fiber_id, direction, hour
                 """,
@@ -190,7 +190,7 @@ def _query_volume(report) -> list[dict]:
                 },
             )
         else:
-            table = "detection_1m" if tier == "1m" else "detection_1h"
+            table = TIER_TABLES[tier]
             rows = query(
                 f"""
                 SELECT
@@ -198,7 +198,7 @@ def _query_volume(report) -> list[dict]:
                     direction,
                     toStartOfHour(ts) AS hour,
                     sumMerge(count_sum_state) AS total_vehicles
-                FROM sequoia.{table}
+                FROM {table}
                 WHERE fiber_id IN {{fids:Array(String)}}
                   AND ts BETWEEN {{start:DateTime64(3)}} AND {{end:DateTime64(3)}}
                 GROUP BY fiber_id, direction, hour

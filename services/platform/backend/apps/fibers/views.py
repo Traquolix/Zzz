@@ -31,7 +31,7 @@ def _paginate(items: list) -> dict:
     return {"results": items, "hasMore": False, "limit": len(items)}
 
 
-logger = logging.getLogger("sequoia")
+logger = logging.getLogger("sequoia.fibers.views")
 
 
 class FiberListView(APIView):

@@ -21,7 +21,7 @@ from django.conf import settings
 
 from apps.realtime.broadcast import group_by_org
 
-logger = logging.getLogger("sequoia.pubsub")
+logger = logging.getLogger("sequoia.realtime.redis_pubsub")
 
 # One Redis publish client per event loop, keyed by loop id.
 # Avoids "Future attached to a different loop" when multiple

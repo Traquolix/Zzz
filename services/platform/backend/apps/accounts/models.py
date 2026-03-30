@@ -11,7 +11,7 @@ from django.db import models
 
 from apps.shared.constants import ALL_LAYERS, ALL_WIDGETS, USER_ROLES
 
-logger = logging.getLogger("sequoia.accounts")
+logger = logging.getLogger("sequoia.accounts.models")
 
 
 class User(AbstractUser):

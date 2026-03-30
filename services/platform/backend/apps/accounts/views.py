@@ -27,7 +27,7 @@ from apps.accounts.serializers import LoginSerializer
 from apps.shared.audit import AuditService
 from apps.shared.models import AuditLog
 
-logger = logging.getLogger("sequoia")
+logger = logging.getLogger("sequoia.accounts.views")
 User = get_user_model()
 
 # Account lockout settings

@@ -18,7 +18,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import exception_handler
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("sequoia.shared.exception_handlers")
 
 
 def _normalize_error_response(exc, http_status, error_code, detail_msg):

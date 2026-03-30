@@ -10,7 +10,7 @@ from django.utils.deprecation import MiddlewareMixin
 
 from apps.shared.logging_utils import set_request_id
 
-logger = logging.getLogger("sequoia.requests")
+logger = logging.getLogger("sequoia.shared.middleware")
 
 
 class RequestLoggingMiddleware(MiddlewareMixin):

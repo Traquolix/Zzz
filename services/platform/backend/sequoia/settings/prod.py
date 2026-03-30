@@ -206,7 +206,7 @@ LOGGING = {
             "level": "INFO",
             "propagate": False,
         },
-        "sequoia.requests": {
+        "sequoia.shared.middleware": {
             "handlers": ["console"],
             "level": "INFO",
             "propagate": False,

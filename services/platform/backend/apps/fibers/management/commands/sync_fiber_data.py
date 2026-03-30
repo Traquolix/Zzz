@@ -22,7 +22,9 @@ import yaml
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-logger = logging.getLogger("sequoia.fibers")
+from apps.monitoring.detection_utils import CH_FIBER_CABLES
+
+logger = logging.getLogger("sequoia.fibers.sync_fiber_data")
 
 
 def _get_cables_dir() -> Path:
@@ -67,7 +69,7 @@ def _sync_fiber_to_clickhouse(fiber_id: str, fields: dict) -> None:
         labels_str = ", ".join("NULL" for _ in coordinates)
 
     stmt = (
-        "INSERT INTO sequoia.fiber_cables"
+        f"INSERT INTO {CH_FIBER_CABLES}"
         " (fiber_id, fiber_name, channel_coordinates, landmark_labels, color)"
         f" VALUES ('{_ch_escape(fiber_id)}', '{name}', [{coord_str}],"
         f" [{labels_str}], '{color}')"

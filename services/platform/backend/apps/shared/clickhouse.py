@@ -26,7 +26,7 @@ from rest_framework.response import Response
 
 from apps.shared.exceptions import ClickHouseUnavailableError
 
-logger = logging.getLogger("sequoia.clickhouse")
+logger = logging.getLogger("sequoia.shared.clickhouse")
 
 _local = threading.local()
 

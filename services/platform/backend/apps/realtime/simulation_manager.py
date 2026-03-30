@@ -18,7 +18,7 @@ import logging
 from enum import Enum
 from typing import Optional
 
-logger = logging.getLogger("sequoia.simulation")
+logger = logging.getLogger("sequoia.realtime.simulation_manager")
 
 
 class SimulationStatus(str, Enum):

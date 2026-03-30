@@ -19,7 +19,7 @@ from django.db.models.signals import post_delete, post_save
 
 from apps.shared.models import AuditLog
 
-logger = logging.getLogger("sequoia.audit")
+logger = logging.getLogger("sequoia.shared.signals")
 
 
 def _get_org(instance):

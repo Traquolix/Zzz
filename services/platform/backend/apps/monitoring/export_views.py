@@ -24,12 +24,17 @@ from rest_framework.response import Response
 from rest_framework.throttling import UserRateThrottle
 from rest_framework.views import APIView
 
-from apps.monitoring.detection_utils import TIER_TABLES, check_fiber_access, select_tier
+from apps.monitoring.detection_utils import (
+    CH_INCIDENTS,
+    TIER_TABLES,
+    check_fiber_access,
+    select_tier,
+)
 from apps.monitoring.mixins import FlowAwareMixin
 from apps.shared.clickhouse import clickhouse_fallback, query, query_scalar
 from apps.shared.permissions import IsActiveUser
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("sequoia.monitoring.export_views")
 
 
 class ExportThrottle(UserRateThrottle):
@@ -174,7 +179,7 @@ class ExportIncidentsView(FlowAwareMixin, APIView):
             SELECT incident_id, fiber_id, type, severity, direction,
                    toString(detected_at) as detected_at,
                    channel_start, channel_end, speed_kmh, duration_s
-            FROM sequoia.fiber_incidents
+            FROM {CH_INCIDENTS}
             WHERE fiber_id = {{fid:String}}
               AND detected_at >= {{start:DateTime64(3)}}
               AND detected_at <= {{end:DateTime64(3)}}
@@ -257,7 +262,7 @@ class ExportDetectionsView(FlowAwareMixin, APIView):
                 SELECT toString(ts) as timestamp, fiber_id, ch as channel,
                        direction, speed, vehicle_count, n_cars, n_trucks,
                        lng, lat
-                FROM sequoia.detection_hires
+                FROM {TIER_TABLES["hires"]}
                 WHERE fiber_id = {{fid:String}}
                   AND ts >= {{start:DateTime64(3)}}
                   AND ts <= {{end:DateTime64(3)}}
@@ -279,7 +284,7 @@ class ExportDetectionsView(FlowAwareMixin, APIView):
                        sumMerge(cars_sum_state) as n_cars,
                        sumMerge(trucks_sum_state) as n_trucks,
                        sumMerge(samples_state) as sample_count
-                FROM sequoia.{table}
+                FROM {table}
                 WHERE fiber_id = {{fid:String}}
                   AND ts >= {{start:DateTime64(3)}}
                   AND ts <= {{end:DateTime64(3)}}
@@ -350,7 +355,7 @@ class ExportEstimateView(APIView):
             count = query_scalar(
                 f"""
                 SELECT count() as cnt
-                FROM sequoia.fiber_incidents
+                FROM {CH_INCIDENTS}
                 WHERE fiber_id = {{fid:String}}
                   AND detected_at >= {{start:DateTime64(3)}}
                   AND detected_at <= {{end:DateTime64(3)}}
@@ -377,7 +382,7 @@ class ExportEstimateView(APIView):
             count = query_scalar(
                 f"""
                 SELECT count() as cnt
-                FROM sequoia.{table}
+                FROM {table}
                 WHERE fiber_id = {{fid:String}}
                   AND ts >= {{start:DateTime64(3)}}
                   AND ts <= {{end:DateTime64(3)}}

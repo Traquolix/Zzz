@@ -26,7 +26,7 @@ from django.utils import timezone
 
 from apps.alerting.models import AlertLog, AlertRule
 
-logger = logging.getLogger("sequoia.alerting")
+logger = logging.getLogger("sequoia.alerting.dispatch")
 
 _executor = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 

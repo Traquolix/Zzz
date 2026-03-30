@@ -36,7 +36,7 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from apps.shared.exceptions import ClickHouseUnavailableError
 
-logger = logging.getLogger("sequoia.realtime")
+logger = logging.getLogger("sequoia.realtime.consumers")
 
 # Whitelist of channels clients can subscribe to
 ALLOWED_CHANNELS = frozenset(

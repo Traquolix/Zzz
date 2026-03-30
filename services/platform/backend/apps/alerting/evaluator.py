@@ -9,7 +9,7 @@ import logging
 
 from apps.alerting.models import AlertRule
 
-logger = logging.getLogger("sequoia.alerting")
+logger = logging.getLogger("sequoia.alerting.evaluator")
 
 
 def _passes_scope_filters(rule: AlertRule, fiber_id: str, channel: int) -> bool:

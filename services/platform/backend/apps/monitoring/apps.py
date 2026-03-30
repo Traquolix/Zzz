@@ -4,7 +4,7 @@ import threading
 
 from django.apps import AppConfig
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("sequoia.monitoring.apps")
 
 # Management commands where cache warm-up is pointless (no server running).
 _SKIP_WARMUP_COMMANDS = {"collectstatic", "migrate", "makemigrations", "check", "shell"}

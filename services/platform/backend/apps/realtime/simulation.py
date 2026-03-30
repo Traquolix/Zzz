@@ -41,7 +41,7 @@ from apps.realtime.broadcast import (
 )
 from apps.shared.constants import MAP_REFRESH_INTERVAL
 
-logger = logging.getLogger("sequoia.simulation")
+logger = logging.getLogger("sequoia.realtime.simulation")
 
 # Global cache for simulation incidents (used by REST API fallback).
 # Written by the async simulation loop, read by sync REST views.

@@ -23,6 +23,7 @@ from rest_framework.views import APIView
 
 from apps.fibers.models import FiberCable
 from apps.fibers.utils import fiber_belongs_to_org, get_org_fiber_ids
+from apps.monitoring.detection_utils import CH_INCIDENTS, TIER_TABLES
 from apps.monitoring.incident_service import (
     query_by_id as incident_query_by_id,
 )
@@ -63,7 +64,7 @@ from apps.shared.exceptions import ClickHouseUnavailableError
 from apps.shared.permissions import IsActiveUser, IsNotViewer
 from apps.shared.utils import build_org_cache_key
 
-logger = logging.getLogger("sequoia")
+logger = logging.getLogger("sequoia.monitoring.views")
 
 _PROCESS_START_TIME = time.time()
 
@@ -227,11 +228,11 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
         """Live flow: return snapshot from ClickHouse only."""
         try:
             incident_rows = query(
-                """
+                f"""
                 SELECT fiber_id, direction, channel_start, channel_end, timestamp_ns
-                FROM sequoia.fiber_incidents
+                FROM {CH_INCIDENTS}
                 FINAL
-                WHERE incident_id = {id:String}
+                WHERE incident_id = {{id:String}}
                 LIMIT 1
                 """,
                 parameters={"id": incident_id},
@@ -262,19 +263,19 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
         window_end_ns = ts_ns + 60_000_000_000
         try:
             agg_rows = query(
-                """
+                f"""
                 SELECT
                     toUnixTimestamp64Milli(
                         toStartOfInterval(ts, INTERVAL 1 second)
                     ) AS bucket_ms,
                     avg(abs(speed)) AS avg_speed,
                     sum(vehicle_count) AS total_count
-                FROM sequoia.detection_hires
-                WHERE fiber_id = {fid:String}
-                  AND direction = {dir:UInt8}
-                  AND ch BETWEEN {ch_min:UInt16} AND {ch_max:UInt16}
-                  AND ts BETWEEN fromUnixTimestamp64Nano({ts_start:UInt64})
-                              AND fromUnixTimestamp64Nano({ts_end:UInt64})
+                FROM {TIER_TABLES["hires"]}
+                WHERE fiber_id = {{fid:String}}
+                  AND direction = {{dir:UInt8}}
+                  AND ch BETWEEN {{ch_min:UInt16}} AND {{ch_max:UInt16}}
+                  AND ts BETWEEN fromUnixTimestamp64Nano({{ts_start:UInt64}})
+                              AND fromUnixTimestamp64Nano({{ts_end:UInt64}})
                 GROUP BY bucket_ms
                 ORDER BY bucket_ms
                 """,
@@ -582,7 +583,7 @@ class StatsView(FlowAwareMixin, APIView):
 
                 active_incidents = (
                     query_scalar(
-                        "SELECT count() FROM sequoia.fiber_incidents FINAL WHERE status = 'active' AND fiber_id IN {fids:Array(String)}",
+                        f"SELECT count() FROM {CH_INCIDENTS} FINAL WHERE status = 'active' AND fiber_id IN {{fids:Array(String)}}",
                         parameters={"fids": fiber_ids},
                     )
                     or 0
@@ -590,11 +591,11 @@ class StatsView(FlowAwareMixin, APIView):
 
                 recent_rows = (
                     query_scalar(
-                        """
+                        f"""
                     SELECT count() / 10
-                    FROM sequoia.detection_hires
+                    FROM {TIER_TABLES["hires"]}
                     WHERE ts >= now() - INTERVAL 10 SECOND
-                      AND fiber_id IN {fids:Array(String)}
+                      AND fiber_id IN {{fids:Array(String)}}
                     """,
                         parameters={"fids": fiber_ids},
                     )
@@ -603,11 +604,11 @@ class StatsView(FlowAwareMixin, APIView):
 
                 active_vehicles = (
                     query_scalar(
-                        """
+                        f"""
                     SELECT coalesce(sum(vehicle_count), 0)
-                    FROM sequoia.detection_hires
+                    FROM {TIER_TABLES["hires"]}
                     WHERE ts >= (now() - toIntervalSecond(30))
-                      AND fiber_id IN {fids:Array(String)}
+                      AND fiber_id IN {{fids:Array(String)}}
                     """,
                         parameters={"fids": fiber_ids},
                     )
@@ -618,25 +619,23 @@ class StatsView(FlowAwareMixin, APIView):
             total_channels = FiberCable.objects.aggregate(total=Sum("channel_count"))["total"] or 0
 
             active_incidents = (
-                query_scalar(
-                    "SELECT count() FROM sequoia.fiber_incidents FINAL WHERE status = 'active'"
-                )
+                query_scalar(f"SELECT count() FROM {CH_INCIDENTS} FINAL WHERE status = 'active'")
                 or 0
             )
 
             recent_rows = (
-                query_scalar("""
+                query_scalar(f"""
                 SELECT count() / 10
-                FROM sequoia.detection_hires
+                FROM {TIER_TABLES["hires"]}
                 WHERE ts >= now() - INTERVAL 10 SECOND
             """)
                 or 0
             )
 
             active_vehicles = (
-                query_scalar("""
+                query_scalar(f"""
                 SELECT coalesce(sum(vehicle_count), 0)
-                FROM sequoia.detection_hires
+                FROM {TIER_TABLES["hires"]}
                 WHERE ts >= (now() - toIntervalSecond(30))
             """)
                 or 0

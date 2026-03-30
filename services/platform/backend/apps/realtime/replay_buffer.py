@@ -26,7 +26,7 @@ from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from typing import Any
 
-logger = logging.getLogger("sequoia.replay_buffer")
+logger = logging.getLogger("sequoia.realtime.replay_buffer")
 
 # Safety margin above observed pipeline delay
 SAFETY_MARGIN_S = 15.0

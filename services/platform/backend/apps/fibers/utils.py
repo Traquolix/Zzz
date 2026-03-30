@@ -10,7 +10,7 @@ from typing import Any
 
 from django.core.cache import cache
 
-logger = logging.getLogger("sequoia.fibers")
+logger = logging.getLogger("sequoia.fibers.utils")
 
 # Cache TTLs
 _ORG_FIBER_TTL = 300  # 5 minutes

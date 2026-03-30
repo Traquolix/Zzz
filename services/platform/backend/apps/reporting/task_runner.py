@@ -11,7 +11,7 @@ from datetime import timedelta
 
 from django.utils import timezone
 
-logger = logging.getLogger("sequoia.reporting")
+logger = logging.getLogger("sequoia.reporting.task_runner")
 
 
 def generate_report_async(report_id) -> None:

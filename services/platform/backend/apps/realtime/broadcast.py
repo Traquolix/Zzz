@@ -11,7 +11,7 @@ Used by both the Kafka bridge (live flow) and the simulation engine (sim flow).
 
 import logging
 
-logger = logging.getLogger("sequoia.broadcast")
+logger = logging.getLogger("sequoia.realtime.broadcast")
 
 
 # ============================================================================

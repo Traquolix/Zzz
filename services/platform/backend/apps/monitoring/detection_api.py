@@ -38,12 +38,17 @@ from apps.monitoring.detection_serializers import (
     SectionHistoryResponseSerializer,
     SectionListResponseSerializer,
 )
-from apps.monitoring.detection_utils import TIER_TABLES, check_fiber_access, select_tier
+from apps.monitoring.detection_utils import (
+    CH_INCIDENTS,
+    TIER_TABLES,
+    check_fiber_access,
+    select_tier,
+)
 from apps.monitoring.models import Infrastructure, Section
 from apps.monitoring.shm_intelligence import compute_baseline, detect_frequency_shift
 from apps.shared.clickhouse import clickhouse_fallback, query, query_scalar
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("sequoia.monitoring.detection_api")
 
 MAX_LIMIT = 5000
 DEFAULT_LIMIT = 1000
@@ -240,7 +245,7 @@ def _build_hires_query(params: DetectionParams) -> tuple[str, dict]:
         SELECT toString(ts) as timestamp, fiber_id, ch as channel,
                direction, speed, vehicle_count, n_cars, n_trucks,
                lng as longitude, lat as latitude
-        FROM sequoia.detection_hires
+        FROM {TIER_TABLES["hires"]}
         WHERE fiber_id = {{fid:String}}
           AND ts >= {{start:DateTime64(3)}}
           AND ts <= {{end:DateTime64(3)}}
@@ -281,7 +286,7 @@ def _build_aggregate_query(params: DetectionParams, table: str) -> tuple[str, di
                sumMerge(cars_sum_state) as n_cars,
                sumMerge(trucks_sum_state) as n_trucks,
                sumMerge(samples_state) as sample_count
-        FROM sequoia.{table}
+        FROM {table}
         WHERE fiber_id = {{fid:String}}
           AND ts >= {{start:DateTime64(3)}}
           AND ts <= {{end:DateTime64(3)}}
@@ -506,7 +511,7 @@ class DetectionSummaryView(APIView):
                     max(speed) as max_speed,
                     uniqExact(ch) as channel_count,
                     count() as record_count
-                FROM sequoia.detection_hires
+                FROM {TIER_TABLES["hires"]}
                 WHERE fiber_id = {{fid:String}}
                   AND ts >= {{start:DateTime64(3)}}
                   AND ts <= {{end:DateTime64(3)}}
@@ -530,7 +535,7 @@ class DetectionSummaryView(APIView):
                            sumMerge(count_sum_state) as vehicle_count,
                            sumMerge(cars_sum_state) as n_cars,
                            sumMerge(trucks_sum_state) as n_trucks
-                    FROM sequoia.{table}
+                    FROM {table}
                     WHERE fiber_id = {{fid:String}}
                       AND ts >= {{start:DateTime64(3)}}
                       AND ts <= {{end:DateTime64(3)}}
@@ -612,12 +617,12 @@ class PublicFiberListView(APIView):
 
         # Get data availability from detection_1h (permanent storage)
         avail_rows = query(
-            """
+            f"""
             SELECT fiber_id,
                    min(ts) as earliest,
                    max(ts) as latest
-            FROM sequoia.detection_1h
-            WHERE fiber_id IN {fids:Array(String)}
+            FROM {TIER_TABLES["1h"]}
+            WHERE fiber_id IN {{fids:Array(String)}}
             GROUP BY fiber_id
             """,
             parameters={"fids": fiber_ids},
@@ -761,7 +766,7 @@ class IncidentListAPIView(APIView):
             SELECT incident_id, fiber_id, type, severity, status,
                    toString(detected_at) as detected_at,
                    channel_start, channel_end, speed_kmh, duration_s
-            FROM sequoia.fiber_incidents FINAL
+            FROM {CH_INCIDENTS} FINAL
             WHERE fiber_id = {{fid:String}}
               AND detected_at >= {{start:DateTime64(3)}}
               AND detected_at <= {{end:DateTime64(3)}}
@@ -839,13 +844,13 @@ class IncidentDetailAPIView(APIView):
         fiber_ids = get_org_fiber_ids(org)
 
         rows = query(
-            """
+            f"""
             SELECT incident_id, fiber_id, type, severity, status,
                    toString(detected_at) as detected_at,
                    channel_start, channel_end, speed_kmh, duration_s
-            FROM sequoia.fiber_incidents FINAL
-            WHERE incident_id = {iid:String}
-              AND fiber_id IN {fids:Array(String)}
+            FROM {CH_INCIDENTS} FINAL
+            WHERE incident_id = {{iid:String}}
+              AND fiber_id IN {{fids:Array(String)}}
             LIMIT 1
             """,
             parameters={"iid": incident_id, "fids": fiber_ids},
@@ -967,18 +972,18 @@ class SectionHistoryAPIView(APIView):
         total_channels = max(1, section.channel_end - section.channel_start + 1)
 
         if tier == "hires":
-            sql = """
+            sql = f"""
                 SELECT
                     toString(toStartOfSecond(ts)) AS timestamp,
                     avg(speed) AS speed,
-                    count() / {n_ch:Float64} AS flow,
-                    uniqExact(ch) / {n_ch:Float64} AS occupancy
-                FROM sequoia.detection_hires
-                WHERE fiber_id = {fid:String}
-                  AND direction = {dir:UInt8}
-                  AND ch BETWEEN {cs:UInt32} AND {ce:UInt32}
-                  AND ts >= {start:DateTime64(3)}
-                  AND ts <= {end:DateTime64(3)}
+                    count() / {{n_ch:Float64}} AS flow,
+                    uniqExact(ch) / {{n_ch:Float64}} AS occupancy
+                FROM {TIER_TABLES["hires"]}
+                WHERE fiber_id = {{fid:String}}
+                  AND direction = {{dir:UInt8}}
+                  AND ch BETWEEN {{cs:UInt32}} AND {{ce:UInt32}}
+                  AND ts >= {{start:DateTime64(3)}}
+                  AND ts <= {{end:DateTime64(3)}}
                 GROUP BY toStartOfSecond(ts)
                 ORDER BY toStartOfSecond(ts)
             """
@@ -990,7 +995,7 @@ class SectionHistoryAPIView(APIView):
                     avgMerge(speed_avg_state) AS speed,
                     sumMerge(count_sum_state) / {{n_ch:Float64}} AS flow,
                     uniqExact(ch) / {{n_ch:Float64}} AS occupancy
-                FROM sequoia.{table}
+                FROM {table}
                 WHERE fiber_id = {{fid:String}}
                   AND direction = {{dir:UInt8}}
                   AND ch BETWEEN {{cs:UInt32}} AND {{ce:UInt32}}
@@ -1060,7 +1065,7 @@ class StatsAPIView(APIView):
 
         active_incidents = (
             query_scalar(
-                "SELECT count() FROM sequoia.fiber_incidents FINAL "
+                f"SELECT count() FROM {CH_INCIDENTS} FINAL "
                 "WHERE status = 'active' AND fiber_id IN {fids:Array(String)}",
                 parameters={"fids": fiber_ids},
             )
@@ -1069,7 +1074,7 @@ class StatsAPIView(APIView):
 
         recent_rows = (
             query_scalar(
-                "SELECT count() / 10 FROM sequoia.detection_hires "
+                f"SELECT count() / 10 FROM {TIER_TABLES['hires']} "
                 "WHERE ts >= now() - INTERVAL 10 SECOND "
                 "AND fiber_id IN {fids:Array(String)}",
                 parameters={"fids": fiber_ids},

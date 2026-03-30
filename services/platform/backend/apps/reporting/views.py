@@ -30,7 +30,7 @@ from apps.reporting.task_runner import enqueue_report_generation
 from apps.shared.permissions import IsActiveUser, IsNotViewer
 from apps.shared.utils import org_filter_queryset
 
-logger = logging.getLogger("sequoia.reporting")
+logger = logging.getLogger("sequoia.reporting.views")
 
 
 class ReportListView(APIView):

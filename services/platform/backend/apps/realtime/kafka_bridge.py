@@ -43,7 +43,7 @@ from apps.realtime.broadcast import (
 )
 from apps.shared.constants import INFRA_REFRESH_INTERVAL, MAP_REFRESH_INTERVAL
 
-logger = logging.getLogger("sequoia.kafka_bridge")
+logger = logging.getLogger("sequoia.realtime.kafka_bridge")
 
 
 def load_infrastructure() -> list[dict]:
