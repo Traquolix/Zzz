@@ -96,10 +96,51 @@ def invalidate_fiber_org_map() -> None:
     logger.debug("Invalidated fiber_org_map cache")
 
 
+def expand_to_directional(fiber: dict[str, Any]) -> list[dict[str, Any]]:
+    """Expand a single physical fiber into two directional fibers (direction 0 and 1).
+
+    If ``directional_paths`` is provided in the fiber data with matching channel counts,
+    those explicit coordinates are used. Otherwise, the frontend will compute
+    perpendicular offsets from the base coordinates.
+    """
+    parent_id = fiber["id"]
+    base_coords = fiber["coordinates"]
+    directional_paths = fiber.get("directional_paths", {})
+    result = []
+
+    for direction in (0, 1):
+        dir_key = str(direction)
+        explicit_path = directional_paths.get(dir_key)
+
+        # Use explicit path if provided and has matching channel count
+        if explicit_path and len(explicit_path) == len(base_coords):
+            coords = explicit_path
+            coords_precomputed = True
+        else:
+            coords = base_coords
+            coords_precomputed = False
+
+        result.append(
+            {
+                "id": f"{parent_id}:{direction}",
+                "parentFiberId": parent_id,
+                "direction": direction,
+                "name": fiber["name"],
+                "color": fiber["color"],
+                "coordinates": coords,
+                "baseCoordinates": base_coords,
+                "coordsPrecomputed": coords_precomputed,
+                "landmarks": fiber.get("landmarks"),
+                "dataCoverage": fiber.get("data_coverage", []),
+            }
+        )
+    return result
+
+
 def cable_to_physical_dict(cable: Any) -> dict[str, Any]:
     """Convert a FiberCable model instance to the physical dict used by views and consumers.
 
-    The returned dict is the input for ``_expand_to_directional`` which splits
+    The returned dict is the input for ``expand_to_directional`` which splits
     a physical cable into two directional fibers.
     """
     landmarks = []

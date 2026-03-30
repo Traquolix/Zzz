@@ -10,7 +10,6 @@ are per-direction.
 """
 
 import logging
-from typing import Any
 
 from django.core.cache import cache
 from drf_spectacular.utils import extend_schema
@@ -20,7 +19,7 @@ from rest_framework.views import APIView
 
 from apps.fibers.models import FiberCable
 from apps.fibers.serializers import FiberLineSerializer
-from apps.fibers.utils import cable_to_physical_dict, get_org_fiber_ids
+from apps.fibers.utils import cable_to_physical_dict, expand_to_directional, get_org_fiber_ids
 from apps.shared.permissions import IsActiveUser
 from apps.shared.utils import add_cache_control, build_org_cache_key
 
@@ -33,47 +32,6 @@ def _paginate(items: list) -> dict:
 
 
 logger = logging.getLogger("sequoia")
-
-
-def _expand_to_directional(fiber: dict[str, Any]) -> list[dict[str, Any]]:
-    """Expand a single physical fiber into two directional fibers (direction 0 and 1).
-
-    If `directional_paths` is provided in the fiber data with matching channel counts,
-    those explicit coordinates are used. Otherwise, the frontend will compute
-    perpendicular offsets from the base coordinates.
-    """
-    parent_id = fiber["id"]
-    base_coords = fiber["coordinates"]
-    directional_paths = fiber.get("directional_paths", {})
-    result = []
-
-    for direction in (0, 1):
-        dir_key = str(direction)
-        explicit_path = directional_paths.get(dir_key)
-
-        # Use explicit path if provided and has matching channel count
-        if explicit_path and len(explicit_path) == len(base_coords):
-            coords = explicit_path
-            coords_precomputed = True
-        else:
-            coords = base_coords
-            coords_precomputed = False
-
-        result.append(
-            {
-                "id": f"{parent_id}:{direction}",
-                "parentFiberId": parent_id,
-                "direction": direction,
-                "name": fiber["name"],
-                "color": fiber["color"],
-                "coordinates": coords,
-                "baseCoordinates": base_coords,
-                "coordsPrecomputed": coords_precomputed,
-                "landmarks": fiber.get("landmarks"),
-                "dataCoverage": fiber.get("data_coverage", []),
-            }
-        )
-    return result
 
 
 class FiberListView(APIView):
@@ -115,7 +73,7 @@ class FiberListView(APIView):
 
         fibers = []
         for cable in queryset:
-            fibers.extend(_expand_to_directional(cable_to_physical_dict(cable)))
+            fibers.extend(expand_to_directional(cable_to_physical_dict(cable)))
 
         result = _paginate(fibers)
         cache.set(cache_key, result, FIBERS_CACHE_TTL)

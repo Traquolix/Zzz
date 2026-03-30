@@ -94,7 +94,10 @@ def _query_incidents(report) -> list[dict]:
 
 def _query_speed_stats(report) -> list[dict]:
     """Average speed per fiber, using the appropriate detection tier."""
-    tier, _ = select_tier(report.start_time, report.end_time)
+    tier, error = select_tier(report.start_time, report.end_time)
+    if tier is None:
+        logger.warning("select_tier failed for speed stats: %s", error)
+        return []
 
     try:
         if tier == "hires":
@@ -160,7 +163,10 @@ def _query_speed_stats(report) -> list[dict]:
 
 def _query_volume(report) -> list[dict]:
     """Hourly vehicle count per fiber, using the appropriate detection tier."""
-    tier, _ = select_tier(report.start_time, report.end_time)
+    tier, error = select_tier(report.start_time, report.end_time)
+    if tier is None:
+        logger.warning("select_tier failed for volume query: %s", error)
+        return []
 
     try:
         if tier == "hires":
