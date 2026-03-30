@@ -7,11 +7,43 @@ automatically carry trace exemplars for metric → trace drill-down in Grafana.
 
 Metric names use dots (OTel convention); the collector maps them to
 underscores for Prometheus compatibility.
+
+When opentelemetry is not installed (local dev without full deps),
+all instruments fall back to silent no-ops so the app still starts.
 """
 
-from opentelemetry import metrics
+import logging
 
-meter = metrics.get_meter("sequoia.backend")
+logger = logging.getLogger(__name__)
+
+try:
+    from opentelemetry import metrics
+
+    meter = metrics.get_meter("sequoia.backend")
+except ImportError:
+    logger.warning("opentelemetry not installed — metrics disabled (run `make setup` to fix)")
+
+    class _NoOpInstrument:
+        """No-op stand-in for any OTel instrument (counter, histogram, etc.)."""
+
+        def add(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def record(self, *args: object, **kwargs: object) -> None:
+            pass
+
+    class _NoOpMeter:
+        """No-op stand-in for an OTel Meter."""
+
+        @staticmethod
+        def _noop(*args: object, **kwargs: object) -> _NoOpInstrument:
+            return _NoOpInstrument()
+
+        create_counter = _noop
+        create_histogram = _noop
+        create_up_down_counter = _noop
+
+    meter = _NoOpMeter()  # type: ignore[assignment]
 
 # ---------- ClickHouse ----------
 

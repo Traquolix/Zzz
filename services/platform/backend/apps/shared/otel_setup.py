@@ -10,22 +10,30 @@ Call ``init_otel()`` once at ASGI startup (before Django processes requests).
 import logging
 import os
 
-from opentelemetry import metrics, trace
-from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.instrumentation.django import DjangoInstrumentor
-from opentelemetry.instrumentation.logging import LoggingInstrumentor
-from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-from opentelemetry.sdk.resources import DEPLOYMENT_ENVIRONMENT, SERVICE_NAME, Resource
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import BatchSpanProcessor
-
 logger = logging.getLogger(__name__)
+
+_HAS_OTEL = True
+try:
+    from opentelemetry import metrics, trace
+    from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+    from opentelemetry.instrumentation.django import DjangoInstrumentor
+    from opentelemetry.instrumentation.logging import LoggingInstrumentor
+    from opentelemetry.sdk.metrics import MeterProvider
+    from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+    from opentelemetry.sdk.resources import DEPLOYMENT_ENVIRONMENT, SERVICE_NAME, Resource
+    from opentelemetry.sdk.trace import TracerProvider
+    from opentelemetry.sdk.trace.export import BatchSpanProcessor
+except ImportError:
+    _HAS_OTEL = False
 
 
 def init_otel() -> None:
     """Initialize OpenTelemetry tracing, metrics, and log correlation."""
+    if not _HAS_OTEL:
+        logger.warning("opentelemetry not installed — skipping OTel init (run `make setup` to fix)")
+        return
+
     otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-lgtm:4317")
     otlp_insecure = os.getenv("OTEL_EXPORTER_OTLP_INSECURE", "true").lower() == "true"
     environment = os.getenv("ENVIRONMENT", "production")
