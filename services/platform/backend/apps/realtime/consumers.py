@@ -529,8 +529,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
     def _query_initial_fibers(self) -> list[dict[str, Any]]:
         """Load fiber configuration from PostgreSQL (org-scoped)."""
         from apps.fibers.models import FiberCable
-        from apps.fibers.utils import cable_to_physical_dict
-        from apps.fibers.views import _expand_to_directional
+        from apps.fibers.utils import cable_to_physical_dict, expand_to_directional
 
         if self._org_id == "__all__":
             queryset = FiberCable.objects.all()
@@ -544,5 +543,5 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
 
         fibers = []
         for cable in queryset:
-            fibers.extend(_expand_to_directional(cable_to_physical_dict(cable)))
+            fibers.extend(expand_to_directional(cable_to_physical_dict(cable)))
         return fibers
