@@ -20,7 +20,6 @@ Auto-detect logic:
 
 import asyncio
 import contextlib
-import json
 import threading
 from pathlib import Path
 
@@ -238,10 +237,6 @@ class Command(BaseCommand):
         with contextlib.suppress(KeyboardInterrupt):
             asyncio.run(run_simulation_loop(fibers, infrastructure))
 
-    def _get_data_dir(self) -> Path:
-        """Get path to fiber cable data (infrastructure/clickhouse/cables/)."""
-        return Path(settings.DATA_DIR) / "clickhouse" / "cables"
-
     def _load_fibers(self) -> list[FiberConfig]:
         """Load fiber configs from PostgreSQL geometry + simulation calibration."""
         from apps.fibers.models import FiberCable
@@ -303,13 +298,9 @@ class Command(BaseCommand):
         if items:
             self.stdout.write(f"  Loaded {len(items)} infrastructure items from DB")
         else:
-            # Fallback to JSON file if DB is empty
-            path = self._get_data_dir() / "infrastructure.json"
-            if path.exists():
-                with open(path) as f:
-                    items = json.load(f)
-                self.stdout.write(
-                    f"  Loaded {len(items)} infrastructure items from JSON (no org_id)"
-                )
+            self.stderr.write(
+                "  WARNING: no infrastructure in DB — SHM features will be disabled. "
+                "Run 'python manage.py sync_fiber_data' to populate."
+            )
 
         return items
