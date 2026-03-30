@@ -276,7 +276,7 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
         """Initialize pattern-specific infrastructure."""
         self._message_batch: list[Any] = []
         self._last_flush_time: float = time.time()
-        self._pending_deliveries: dict[str | None, Any] = {}
+        self._pending_deliveries: dict[str, Any] = {}
 
     def _setup_signal_handlers(self) -> None:
         """Register SIGTERM/SIGINT for graceful shutdown."""

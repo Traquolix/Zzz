@@ -355,7 +355,7 @@ class DetectionListView(APIView):
     @clickhouse_fallback()
     def get(self, request: Request) -> Response:
         params, error = _parse_detection_params(request)
-        if error:
+        if error or params is None:
             return Response({"detail": error}, status=status.HTTP_400_BAD_REQUEST)
 
         if not check_fiber_access(request.user, params.fiber_id):
@@ -365,7 +365,7 @@ class DetectionListView(APIView):
             )
 
         tier, tier_error = select_tier(params.start, params.end, params.resolution)
-        if tier_error:
+        if tier_error or tier is None:
             return Response({"detail": tier_error}, status=status.HTTP_400_BAD_REQUEST)
 
         if tier == "hires":
@@ -476,7 +476,7 @@ class DetectionSummaryView(APIView):
 
         resolution = request.GET.get("resolution", "auto")
         tier, tier_error = select_tier(start, end, resolution)
-        if tier_error:
+        if tier_error or tier is None:
             return Response({"detail": tier_error}, status=status.HTTP_400_BAD_REQUEST)
 
         direction = None
@@ -961,7 +961,7 @@ class SectionHistoryAPIView(APIView):
 
         resolution = request.GET.get("resolution", "auto")
         tier, tier_error = select_tier(start, end, resolution)
-        if tier_error:
+        if tier_error or tier is None:
             return Response({"detail": tier_error}, status=status.HTTP_400_BAD_REQUEST)
 
         total_channels = max(1, section.channel_end - section.channel_start + 1)

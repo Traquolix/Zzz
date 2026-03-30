@@ -67,7 +67,7 @@ class MessageOpsMixin:
                 value = await self._deserialize_value(raw_message)
 
                 message = KafkaMessage(
-                    id=key or "",
+                    id=key if key is not None else "",
                     payload=value,
                     headers=dict(raw_message.headers()) if raw_message.headers() else None,
                     timestamp=(
@@ -304,7 +304,7 @@ class MessageOpsMixin:
             pass
 
         original_message = None
-        if message_id and message_id in self._pending_deliveries:
+        if message_id is not None and message_id in self._pending_deliveries:
             original_message = self._pending_deliveries.pop(message_id)
 
         if err is not None:

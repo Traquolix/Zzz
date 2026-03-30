@@ -158,6 +158,8 @@ class ExportIncidentsView(FlowAwareMixin, APIView):
         fiber_id, start, end, fmt, errors = _parse_params(request)
         if errors:
             return Response({"detail": "; ".join(errors)}, status=status.HTTP_400_BAD_REQUEST)
+        if fiber_id is None or start is None or end is None:
+            return Response({"detail": "Missing parameters"}, status=status.HTTP_400_BAD_REQUEST)
 
         if not check_fiber_access(request.user, fiber_id):
             return Response(
@@ -225,6 +227,8 @@ class ExportDetectionsView(FlowAwareMixin, APIView):
         fiber_id, start, end, fmt, errors = _parse_params(request)
         if errors:
             return Response({"detail": "; ".join(errors)}, status=status.HTTP_400_BAD_REQUEST)
+        if fiber_id is None or start is None or end is None:
+            return Response({"detail": "Missing parameters"}, status=status.HTTP_400_BAD_REQUEST)
 
         if not check_fiber_access(request.user, fiber_id):
             return Response(
@@ -233,7 +237,7 @@ class ExportDetectionsView(FlowAwareMixin, APIView):
 
         explicit_tier = request.GET.get("tier")
         tier, tier_error = select_tier(start, end, explicit_tier)
-        if tier_error:
+        if tier_error or tier is None:
             return Response({"detail": tier_error}, status=status.HTTP_400_BAD_REQUEST)
 
         dir_clause, dir_params = _build_direction_clause(request)
@@ -322,6 +326,8 @@ class ExportEstimateView(APIView):
         fiber_id, start, end, _, errors = _parse_params(request)
         if errors:
             return Response({"detail": "; ".join(errors)}, status=status.HTTP_400_BAD_REQUEST)
+        if fiber_id is None or start is None or end is None:
+            return Response({"detail": "Missing parameters"}, status=status.HTTP_400_BAD_REQUEST)
 
         if not check_fiber_access(request.user, fiber_id):
             return Response(
@@ -363,7 +369,7 @@ class ExportEstimateView(APIView):
         else:
             explicit_tier = request.GET.get("tier")
             tier, tier_error = select_tier(start, end, explicit_tier)
-            if tier_error:
+            if tier_error or tier is None:
                 return Response({"detail": tier_error}, status=status.HTTP_400_BAD_REQUEST)
 
             table = TIER_TABLES[tier]
