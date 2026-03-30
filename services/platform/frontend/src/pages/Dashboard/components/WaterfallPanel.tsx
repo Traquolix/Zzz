@@ -8,10 +8,10 @@ import { WaterfallCanvas } from './WaterfallCanvas'
 
 export function WaterfallPanel() {
   const { fibers } = useFiberData()
-  const [selectedIndex, setSelectedIndex] = useState(0)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [windowMs, setWindowMs] = useState(120_000)
 
-  const fiber = fibers[selectedIndex] ?? fibers[0]
+  const fiber = fibers.find(f => f.id === selectedId) ?? fibers[0]
   const minChannel = 0
   const maxChannel = (fiber?.totalChannels ?? 500) - 1
 
@@ -26,12 +26,12 @@ export function WaterfallPanel() {
       {/* Controls */}
       <div className="flex items-center gap-2 px-4 py-2 border-b border-[var(--dash-border)]">
         <select
-          value={selectedIndex}
-          onChange={e => setSelectedIndex(Number(e.target.value))}
+          value={fiber?.id ?? ''}
+          onChange={e => setSelectedId(e.target.value)}
           className="text-cq-xs px-2 py-1 rounded bg-[var(--dash-base)] border border-[var(--dash-border)] text-[var(--dash-text)] outline-none"
         >
-          {fibers.map((f, i) => (
-            <option key={f.id} value={i}>
+          {fibers.map(f => (
+            <option key={f.id} value={f.id}>
               {f.name}:{f.direction}
             </option>
           ))}

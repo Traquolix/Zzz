@@ -173,7 +173,7 @@ export function FiberProvider({ children }: { children: React.ReactNode }) {
         getSectionCoords: () => [],
         findNearestFiberPoint: () => null,
         buildCoverageRenderCache: () => new Map(),
-        isLoading,
+        isLoading: true,
       }
     }
 
@@ -304,11 +304,14 @@ export function FiberProvider({ children }: { children: React.ReactNode }) {
       getSectionCoords,
       findNearestFiberPoint,
       buildCoverageRenderCache: buildCoverageRenderCacheFn,
-      isLoading,
+      isLoading: false,
     }
-  }, [apiFibers, isLoading])
+  }, [apiFibers])
 
-  return <FiberContext.Provider value={value}>{children}</FiberContext.Provider>
+  // Derive isLoading separately so it doesn't trigger cache rebuilds
+  const contextValue = useMemo(() => ({ ...value, isLoading }), [value, isLoading])
+
+  return <FiberContext.Provider value={contextValue}>{children}</FiberContext.Provider>
 }
 
 // ── Hook ─────────────────────────────────────────────────────────────────

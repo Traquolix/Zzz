@@ -92,7 +92,9 @@ export const DashboardMap = memo(
       fiberOffsetCache,
       fiberRenderCache,
       coverageMap,
+      offsetIndexToChannel,
       findFiber,
+      channelToCoord,
       getSectionCoords,
       findNearestFiberPoint,
       buildCoverageRenderCache,
@@ -107,6 +109,9 @@ export const DashboardMap = memo(
 
     const findNearestFiberPointRef = useRef(findNearestFiberPoint)
     findNearestFiberPointRef.current = findNearestFiberPoint
+
+    const channelToCoordRef = useRef(channelToCoord)
+    channelToCoordRef.current = channelToCoord
 
     // ── Closure-capture refs (bridge props → stable refs for effects) ──
     const incidentClickedRef = useRef(false)
@@ -181,7 +186,7 @@ export const DashboardMap = memo(
 
     // ── Hooks (order matters: layers before render loop; interactions after for vehicleClickedRef) ──
     const { containerRef, mapRef } = useMapInstance()
-    useMapLayers(mapRef, fiberList, fiberOffsetCache)
+    useMapLayers(mapRef, fiberList, fiberOffsetCache, coverageMap, offsetIndexToChannel, !!showFullCable)
 
     const { markersRef } = useIncidentMarkers({
       mapRef,
@@ -200,6 +205,7 @@ export const DashboardMap = memo(
       onStructureClickRef,
       findFiberRef,
       getSectionCoordsRef,
+      channelToCoordRef,
     })
 
     const highlights = useMapHighlights({

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -64,6 +64,14 @@ export function DataExportPanel() {
   }, [fibers])
 
   const [fiberId, setFiberId] = useState(uniqueCables[0]?.parentCableId ?? '')
+
+  // Sync fiberId when fibers load (useState initializer only runs once)
+  useEffect(() => {
+    if (!fiberId && uniqueCables.length > 0) {
+      setFiberId(uniqueCables[0].parentCableId)
+    }
+  }, [uniqueCables, fiberId])
+
   const [preset, setPreset] = useState<DatePreset>('24h')
   const [customStart, setCustomStart] = useState('')
   const [customEnd, setCustomEnd] = useState('')
