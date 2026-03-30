@@ -58,6 +58,7 @@ from apps.monitoring.workflow import (
     validate_transition,
 )
 from apps.shared.clickhouse import clickhouse_fallback, query, query_scalar
+from apps.shared.constants import MAX_SECTIONS_PER_ORG
 from apps.shared.exceptions import ClickHouseUnavailableError
 from apps.shared.permissions import IsActiveUser, IsNotViewer
 from apps.shared.utils import build_org_cache_key
@@ -68,8 +69,6 @@ _PROCESS_START_TIME = time.time()
 
 INCIDENTS_CACHE_TTL = 10  # 10 seconds
 STATS_CACHE_TTL = 5  # 5 seconds
-# Keep in sync with frontend: services/platform/frontend/src/api/sections.ts
-MAX_SECTIONS_PER_ORG = 50
 
 
 def _get_fiber_ids_or_none(user: Any) -> list[str] | None:

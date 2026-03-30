@@ -37,3 +37,7 @@ ALL_LAYERS = [
 
 VIEWER_WIDGETS = ["map", "incidents", "shm"]
 VIEWER_LAYERS = ["cables", "fibers", "landmarks", "incidents", "infrastructure"]
+
+# Business limits
+# Keep in sync with frontend: services/platform/frontend/src/api/sections.ts
+MAX_SECTIONS_PER_ORG = 50

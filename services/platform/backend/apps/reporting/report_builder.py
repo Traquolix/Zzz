@@ -8,28 +8,15 @@ Automatically selects the appropriate detection tier based on time range:
 """
 
 import logging
-from datetime import timedelta
 
 from django.template.loader import render_to_string
 from django.utils.translation import gettext as _
 
+from apps.monitoring.detection_utils import select_tier
 from apps.shared.clickhouse import query
 from apps.shared.exceptions import ClickHouseUnavailableError
 
 logger = logging.getLogger("sequoia.reporting")
-
-_HIRES_THRESHOLD = timedelta(hours=48)
-_MEDIUM_THRESHOLD = timedelta(days=90)
-
-
-def _select_tier(start, end) -> str:
-    """Select the appropriate data tier based on time range."""
-    duration = end - start
-    if duration <= _HIRES_THRESHOLD:
-        return "hires"
-    elif duration <= _MEDIUM_THRESHOLD:
-        return "1m"
-    return "1h"
 
 
 def build_report_html(report) -> str:
@@ -107,7 +94,7 @@ def _query_incidents(report) -> list[dict]:
 
 def _query_speed_stats(report) -> list[dict]:
     """Average speed per fiber, using the appropriate detection tier."""
-    tier = _select_tier(report.start_time, report.end_time)
+    tier, _ = select_tier(report.start_time, report.end_time)
 
     try:
         if tier == "hires":
@@ -173,7 +160,7 @@ def _query_speed_stats(report) -> list[dict]:
 
 def _query_volume(report) -> list[dict]:
     """Hourly vehicle count per fiber, using the appropriate detection tier."""
-    tier = _select_tier(report.start_time, report.end_time)
+    tier, _ = select_tier(report.start_time, report.end_time)
 
     try:
         if tier == "hires":

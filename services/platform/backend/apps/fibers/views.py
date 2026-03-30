@@ -10,8 +10,6 @@ are per-direction.
 """
 
 import logging
-from collections.abc import Callable
-from functools import wraps
 from typing import Any
 
 from django.core.cache import cache
@@ -22,29 +20,11 @@ from rest_framework.views import APIView
 
 from apps.fibers.models import FiberCable
 from apps.fibers.serializers import FiberLineSerializer
-from apps.fibers.utils import get_org_fiber_ids
+from apps.fibers.utils import cable_to_physical_dict, get_org_fiber_ids
 from apps.shared.permissions import IsActiveUser
-from apps.shared.utils import build_org_cache_key
+from apps.shared.utils import add_cache_control, build_org_cache_key
 
 FIBERS_CACHE_TTL = 5 * 60  # 5 minutes
-
-
-def add_cache_control(max_age: int = 300, public: bool = True) -> Callable[..., Any]:
-    """Decorator to add Cache-Control headers to response."""
-
-    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-        @wraps(func)
-        def wrapper(self: Any, request: Request, *args: Any, **kwargs: Any) -> Response:
-            response = func(self, request, *args, **kwargs)
-            cache_control_value = f"max-age={max_age}"
-            if public:
-                cache_control_value += ", public"
-            response["Cache-Control"] = cache_control_value
-            return response
-
-        return wrapper
-
-    return decorator
 
 
 def _paginate(items: list) -> dict:
@@ -135,21 +115,7 @@ class FiberListView(APIView):
 
         fibers = []
         for cable in queryset:
-            landmarks = []
-            for idx, label in enumerate(cable.landmark_labels or []):
-                if label:
-                    landmarks.append({"channel": idx, "name": label})
-
-            physical = {
-                "id": cable.id,
-                "name": cable.name,
-                "color": cable.color,
-                "coordinates": cable.coordinates,
-                "directional_paths": cable.directional_paths or {},
-                "landmarks": landmarks if landmarks else None,
-                "data_coverage": cable.data_coverage or [],
-            }
-            fibers.extend(_expand_to_directional(physical))
+            fibers.extend(_expand_to_directional(cable_to_physical_dict(cable)))
 
         result = _paginate(fibers)
         cache.set(cache_key, result, FIBERS_CACHE_TTL)

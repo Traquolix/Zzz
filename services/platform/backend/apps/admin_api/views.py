@@ -7,9 +7,6 @@ Permission model:
 """
 
 import logging
-from collections.abc import Callable
-from functools import wraps
-from typing import Any
 
 from django.db.models import Q
 from rest_framework import status
@@ -26,31 +23,9 @@ from apps.fibers.utils import invalidate_fiber_org_map, invalidate_org_fiber_cac
 from apps.monitoring.models import Infrastructure
 from apps.organizations.models import Organization, OrganizationSettings
 from apps.shared.admin_permissions import IsAdminOrSuperuser, IsSuperuser
-from apps.shared.utils import org_filter_queryset, paginate_queryset
+from apps.shared.utils import add_cache_control, org_filter_queryset, paginate_queryset
 
 logger = logging.getLogger("sequoia.admin")
-
-
-def add_cache_control(max_age: int = 300) -> Callable[..., Any]:
-    """Decorator to add Cache-Control headers to response.
-
-    Admin endpoints serve private org-scoped data, so always use
-    'private' to prevent CDN/proxy caching.
-    """
-
-    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
-        @wraps(func)
-        def wrapper(self: Any, request: Request, *args: Any, **kwargs: Any) -> Response:
-            response = func(self, request, *args, **kwargs)
-            if max_age > 0:
-                response["Cache-Control"] = f"private, max-age={max_age}"
-            else:
-                response["Cache-Control"] = "private, no-store"
-            return response
-
-        return wrapper
-
-    return decorator
 
 
 # ---------------------------------------------------------------------------
