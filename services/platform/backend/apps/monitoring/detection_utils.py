@@ -27,6 +27,7 @@ TIER_TABLES: dict[str, str] = {
 }
 
 CH_INCIDENTS = "fiber_incidents"
+CH_FIBER_CABLES = "fiber_cables"
 
 
 def check_fiber_access(user: Any, fiber_id: str) -> bool:
