@@ -148,7 +148,14 @@ def _load_data_coverage() -> dict[str, list[dict[str, int]]]:
 
 
 def sync_fibers(dry_run: bool = False) -> dict[str, int]:
-    """Sync FiberCable rows from JSON cable files. Returns {added, updated}."""
+    """Sync FiberCable rows from JSON cable files. Returns {added, updated}.
+
+    Dual-write: each fiber is upserted into PostgreSQL (FiberCable model) and
+    then mirrored to ClickHouse (fiber_cables ReplacingMergeTree table) so the
+    detection materialized view can JOIN on coordinates.  If ClickHouse is
+    unreachable the PostgreSQL write still succeeds — the CH sync is best-effort
+    and logged at WARNING level per fiber.
+    """
     from apps.fibers.models import FiberCable
 
     cables_dir = _get_cables_dir()

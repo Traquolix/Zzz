@@ -7,6 +7,9 @@ import type { VehiclePosition } from '../../hooks/useVehicleSim'
 import { getPosition, getOrientation, getScale, onMapReady } from '../mapUtils'
 import { MAP_SOURCES } from './mapTypes'
 
+// MapboxOverlay implements IControl at runtime, but @deck.gl/mapbox types don't declare it.
+const asControl = (overlay: MapboxOverlay) => overlay as unknown as IControl
+
 // Lazy-loaded deck.gl/luma.gl modules — only fetched when vehicles mode is first activated.
 type DeckModules = {
   MapboxOverlay: typeof import('@deck.gl/mapbox').MapboxOverlay
@@ -115,7 +118,7 @@ export function useRenderLoop({
           deckOverlayRef.current = deckOverlay
         }
         if (!deckAdded) {
-          map.addControl(deckOverlay as unknown as IControl)
+          map.addControl(asControl(deckOverlay))
           deckAdded = true
         }
       }
@@ -128,7 +131,7 @@ export function useRenderLoop({
           } catch {
             /* not ready */
           }
-          map.removeControl(deckOverlay as unknown as IControl)
+          map.removeControl(asControl(deckOverlay))
           deckAdded = false
         }
       }
@@ -320,7 +323,7 @@ export function useRenderLoop({
         vehiclePopupRef.current.cleanup()
         if (deckOverlay && deckAdded) {
           try {
-            map.removeControl(deckOverlay as unknown as IControl)
+            map.removeControl(asControl(deckOverlay))
           } catch {
             /* map may already be removed */
           }

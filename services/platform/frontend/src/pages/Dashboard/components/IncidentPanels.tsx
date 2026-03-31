@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+import { formatTime, formatTimeShort, formatDateShort } from '@/lib/formatters'
 import { severityColor } from '@/lib/theme'
 import { useIncidentSnapshot } from '@/hooks/useIncidentSnapshot'
 import type { DisplayIncident, Severity, Section } from '../types'
@@ -71,7 +72,7 @@ export function IncidentList({
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-cq-sm text-[var(--dash-text)] font-medium truncate">{inc.title}</span>
                     <span className="shrink-0 text-cq-xs tabular-nums text-[var(--dash-text-secondary)]">
-                      {new Date(inc.detectedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {formatTimeShort(inc.detectedAt)}
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 text-cq-xxs text-[var(--dash-text-muted)] mt-0.5">
@@ -80,7 +81,7 @@ export function IncidentList({
                       {inc.channelEnd && inc.channelEnd !== inc.channel ? `–${inc.channelEnd}` : ''}
                     </span>
                     <span className="opacity-40">·</span>
-                    <span>{new Date(inc.detectedAt).toLocaleDateString([], { day: 'numeric', month: 'short' })}</span>
+                    <span>{formatDateShort(inc.detectedAt)}</span>
                     {inc.resolved && (
                       <>
                         <span className="opacity-40">·</span>
@@ -230,8 +231,7 @@ export function IncidentDetail({
               {t('incidents.detail.type')} <span className="capitalize">{incident.type}</span>
             </span>
             <span>
-              {t('incidents.detail.time')}{' '}
-              {new Date(incident.detectedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              {t('incidents.detail.time')} {formatTimeShort(incident.detectedAt)}
             </span>
             <span>
               {t('incidents.detail.location')} {incident.location[1].toFixed(4)}N, {incident.location[0].toFixed(4)}E
@@ -278,15 +278,7 @@ export function IncidentDetail({
               <span className="text-cq-xs text-[var(--dash-text-muted)]">{t('incidents.loadingSnapshot')}</span>
             </div>
           ) : snapshotData ? (
-            <TimeSeriesChart
-              data={snapshotData}
-              incidentTime={new Date(incident.detectedAt).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: false,
-              })}
-            />
+            <TimeSeriesChart data={snapshotData} incidentTime={formatTime(incident.detectedAt)} />
           ) : (
             <div className="text-cq-xs text-[var(--dash-text-muted)] italic py-4 text-center">
               {t('common.noSnapshot')}

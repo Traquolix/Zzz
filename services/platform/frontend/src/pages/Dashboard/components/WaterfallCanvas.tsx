@@ -1,5 +1,6 @@
 import { useRef, useEffect, useCallback } from 'react'
 import { COLORS } from '@/lib/theme'
+import { formatTime } from '@/lib/formatters'
 import { getSpeedColor } from '../data'
 import type { WaterfallDot } from '../hooks/useWaterfallBuffer'
 
@@ -134,7 +135,7 @@ export function WaterfallCanvas({
     for (let ago = 0; ago <= windowMs; ago += timeStep) {
       const y = margin.top + (ago / windowMs) * plotH
       const t = new Date(topTime.getTime() - ago)
-      const label = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}:${String(t.getSeconds()).padStart(2, '0')}`
+      const label = formatTime(t)
       ctx.fillText(label, margin.left - 4, y)
     }
 

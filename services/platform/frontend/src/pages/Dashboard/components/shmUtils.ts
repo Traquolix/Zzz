@@ -3,6 +3,8 @@
  * between ShmCharts.tsx (barrel) and its split-out components.
  */
 
+import { formatHour } from '@/lib/formatters'
+
 /** Compute hour-aligned tick positions for a time range. Returns {frac, label} tuples. */
 export function computeHourTicks(tMin: number, tMax: number): { frac: number; label: string }[] {
   const ticks: { frac: number; label: string }[] = []
@@ -25,7 +27,7 @@ export function computeHourTicks(tMin: number, tMax: number): { frac: number; la
     if (ts >= tMin) {
       ticks.push({
         frac: (ts - tMin) / (tMax - tMin || 1),
-        label: `${new Date(ts).getHours().toString().padStart(2, '0')}:00`,
+        label: formatHour(ts),
       })
     }
     ts += intervalMs

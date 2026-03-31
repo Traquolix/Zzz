@@ -1,9 +1,8 @@
-import { useState, type RefObject } from 'react'
+import { useState } from 'react'
 import { COLORS } from '@/lib/theme'
 import { cn } from '@/lib/utils'
 import { useFiberData } from '../context/FiberContext'
 import { useWaterfallBuffer } from '../hooks/useWaterfallBuffer'
-import type { WaterfallDot } from '../hooks/useWaterfallBuffer'
 import { WaterfallCanvas } from './WaterfallCanvas'
 
 export function WaterfallPanel() {
@@ -57,9 +56,9 @@ export function WaterfallPanel() {
       {/* Canvas */}
       <div className="flex-1 min-h-0 p-2">
         <WaterfallCanvas
-          dotsRef={dotsRef as unknown as RefObject<WaterfallDot[]>}
+          dotsRef={dotsRef}
           dirtyRef={dirtyRef}
-          lastTsRef={lastTsRef as unknown as RefObject<number>}
+          lastTsRef={lastTsRef}
           prune={prune}
           windowMs={windowMs}
           minChannel={minChannel}

@@ -8,7 +8,13 @@
 
 ### In Progress
 
-1. [ ] **Codebase hygiene sweep** [#201] — code smells from PR #198 review
+1. [ ] **Codebase hygiene sweep** [#201] — remaining items:
+   - [ ] Circular `realtime` ↔ `monitoring` imports (deferred imports hiding coupling)
+   - [ ] `shared` imports from domain apps (`shared/signals.py`, `shared/views.py` → inverted deps)
+   - [ ] `sync_fibers` dual-write undocumented (PG + ClickHouse, CH failure swallowed)
+   - [ ] Dead Zustand mirroring in `RealtimeProvider` (writes to store nothing reads)
+   - [ ] Duplicated UI patterns (sticky headers 3×, KPI cards 4×, toggle groups 2×, date formatting 3×)
+   - [ ] Unsafe type assertions (`as DataFlow`, double-cast `as unknown as RefObject`, JSON casts)
 
 ### Open
 
