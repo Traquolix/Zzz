@@ -46,6 +46,7 @@ class SimulationManager:
         self._status: SimulationStatus = SimulationStatus.IDLE
         self._error: str | None = None
         self._started: bool = False
+        self._publish_health()
 
     @classmethod
     def instance(cls) -> "SimulationManager":
@@ -69,7 +70,7 @@ class SimulationManager:
                 timeout=None,
             )
         except Exception:
-            pass  # Cache unavailable — readiness endpoint will report "unknown"
+            logger.debug("Could not write simulation health to cache", exc_info=True)
 
     @property
     def status(self) -> SimulationStatus:

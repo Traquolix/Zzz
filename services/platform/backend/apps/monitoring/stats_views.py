@@ -15,7 +15,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.fibers.models import FiberCable
-from apps.monitoring.detection_utils import CH_INCIDENTS, TIER_TABLES
+from apps.monitoring.detection_utils import TIER_TABLES
 from apps.monitoring.mixins import FlowAwareMixin
 from apps.monitoring.models import Infrastructure
 from apps.monitoring.serializers import InfrastructureSerializer, StatsSerializer
@@ -25,6 +25,7 @@ from apps.monitoring.view_helpers import (
     _get_fiber_ids_or_none,
 )
 from apps.shared.clickhouse import clickhouse_fallback, query_scalar
+from apps.shared.constants import CH_INCIDENTS
 from apps.shared.permissions import IsActiveUser
 from apps.shared.utils import build_org_cache_key
 

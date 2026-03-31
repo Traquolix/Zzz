@@ -9,7 +9,10 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from apps.fibers.utils import get_org_fiber_ids
-from apps.shared.constants import CH_INCIDENTS  # noqa: F401 — re-exported for backward compat
+from apps.shared.constants import (
+    CH_FIBER_CABLES,  # noqa: F401 — re-exported for backward compat
+    CH_INCIDENTS,  # noqa: F401 — re-exported for backward compat
+)
 
 # Maximum time ranges per tier
 MAX_HIRES_DAYS = 7
@@ -19,15 +22,13 @@ MAX_AGGREGATE_DAYS = 365
 HIRES_THRESHOLD = timedelta(hours=48)
 MEDIUM_THRESHOLD = timedelta(days=90)
 
-# ClickHouse table names — single source of truth.
+# ClickHouse tier tables — tier selection for time-range queries.
 # The CH client already connects to the correct database, so no prefix needed.
 TIER_TABLES: dict[str, str] = {
     "hires": "detection_hires",
     "1m": "detection_1m",
     "1h": "detection_1h",
 }
-
-CH_FIBER_CABLES = "fiber_cables"
 
 
 def check_fiber_access(user: Any, fiber_id: str) -> bool:

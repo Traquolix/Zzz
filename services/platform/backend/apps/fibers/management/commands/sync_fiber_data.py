@@ -22,7 +22,7 @@ import yaml
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from apps.monitoring.detection_utils import CH_FIBER_CABLES
+from apps.shared.constants import CH_FIBER_CABLES
 
 logger = logging.getLogger("sequoia.fibers.sync_fiber_data")
 

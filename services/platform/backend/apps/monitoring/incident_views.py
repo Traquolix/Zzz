@@ -19,7 +19,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.fibers.utils import fiber_belongs_to_org
-from apps.monitoring.detection_utils import CH_INCIDENTS, TIER_TABLES
+from apps.monitoring.detection_utils import TIER_TABLES
 from apps.monitoring.incident_service import (
     query_by_id as incident_query_by_id,
 )
@@ -41,6 +41,7 @@ from apps.monitoring.workflow import (
     validate_transition,
 )
 from apps.shared.clickhouse import query
+from apps.shared.constants import CH_INCIDENTS
 from apps.shared.exceptions import ClickHouseUnavailableError
 from apps.shared.permissions import IsActiveUser, IsNotViewer
 from apps.shared.utils import build_org_cache_key

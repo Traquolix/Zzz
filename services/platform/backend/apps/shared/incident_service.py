@@ -14,7 +14,7 @@ import logging
 from apps.shared.clickhouse import query
 from apps.shared.constants import CH_INCIDENTS
 
-logger = logging.getLogger("sequoia.monitoring.incident_service")
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------

@@ -12,8 +12,9 @@ import logging
 from django.template.loader import render_to_string
 from django.utils.translation import gettext as _
 
-from apps.monitoring.detection_utils import CH_INCIDENTS, TIER_TABLES, select_tier
+from apps.monitoring.detection_utils import TIER_TABLES, select_tier
 from apps.shared.clickhouse import query
+from apps.shared.constants import CH_INCIDENTS
 from apps.shared.exceptions import ClickHouseUnavailableError
 
 logger = logging.getLogger("sequoia.reporting.report_builder")

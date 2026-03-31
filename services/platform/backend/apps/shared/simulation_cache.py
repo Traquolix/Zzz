@@ -12,11 +12,9 @@ simulation state without importing from ``apps.realtime``.
 import time
 from collections import deque
 
+from apps.shared.constants import SNAPSHOT_CHANNEL_RADIUS, SNAPSHOT_WINDOW_S
+from apps.shared.incident_service import transform_simulation_incident
 from apps.shared.traffic_utils import compute_occupancy
-
-# Snapshot constants (duplicated from simulation constants to keep shared leaf-level)
-SNAPSHOT_CHANNEL_RADIUS = 30  # ±30 channels (~300m) around incident center
-SNAPSHOT_WINDOW_S = 60  # Record ±60s around incident detected_at
 
 # Global cache for simulation incidents (used by REST API fallback).
 _simulation_incidents_cache: list = []
@@ -37,35 +35,6 @@ _simulation_per_second_buffer: dict[tuple[str, int, int], deque[dict]] = {}
 _simulation_per_minute_buffer: dict[tuple[str, int, int], deque[dict]] = {}
 _SEC_BUFFER_MAXLEN = 400  # 5 min + headroom
 _MIN_BUFFER_MAXLEN = 70  # 60 min + headroom
-
-
-# ---------------------------------------------------------------------------
-# transform_simulation_incident
-# ---------------------------------------------------------------------------
-
-
-def transform_simulation_incident(incident) -> dict:
-    """
-    Transform a simulation ``Incident`` dataclass into the frontend incident shape.
-
-    The simulation engine uses ``fiber_line`` for the plain fiber ID
-    and ``direction`` for the direction (0 or 1).
-    """
-    return {
-        "id": incident.id,
-        "type": incident.type,
-        "severity": incident.severity,
-        "fiberId": incident.fiber_line,
-        "direction": incident.direction,
-        "channel": incident.channel,
-        "channelEnd": incident.channel,
-        "detectedAt": incident.detected_at,
-        "status": incident.status,
-        "duration": incident.duration,
-        "speedBefore": None,
-        "speedDuring": None,
-        "speedDropPercent": None,
-    }
 
 
 # ---------------------------------------------------------------------------
