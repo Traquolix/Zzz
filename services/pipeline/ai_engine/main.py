@@ -454,6 +454,7 @@ class AIEngineService(RollingBufferedTransformer):
 
             try:
                 # Prepare data arrays for each section
+                t_deser = time.time()
                 section_inputs = []
                 section_meta = []
                 for buffer_key, messages in ready_sections.items():
@@ -494,18 +495,21 @@ class AIEngineService(RollingBufferedTransformer):
 
                 if not section_inputs:
                     return
+                t_deser = (time.time() - t_deser) * 1000
 
                 speed_processor = self.model_registry.get_speed_estimator(
                     section_meta[0]["model_hint"]
                 )
 
                 # Run batched inference
+                t_infer = time.time()
                 batch_results = await asyncio.to_thread(
                     self._sync_batch_inference,
                     section_inputs,
                     section_meta,
                     speed_processor,
                 )
+                t_infer = (time.time() - t_infer) * 1000
 
                 processing_time = (time.time() - start_time) * 1000
 
@@ -544,9 +548,11 @@ class AIEngineService(RollingBufferedTransformer):
                             },
                         )
 
+                t_send = processing_time - t_deser - t_infer
                 self.logger.info(
                     f"Batched analysis complete: {len(section_meta)} sections, "
-                    f"{total_outputs} total outputs in {processing_time:.1f}ms"
+                    f"{total_outputs} total outputs in {processing_time:.1f}ms "
+                    f"(deser={t_deser:.0f}ms, infer={t_infer:.0f}ms, send={t_send:.0f}ms)"
                 )
 
                 processing_time_s = processing_time / 1000.0
@@ -582,9 +588,12 @@ class AIEngineService(RollingBufferedTransformer):
         classify_threshold_factor = self._model_spec.counting.truck_ratio_for_split
 
         # Use process_batch for batched GPU pass (exclusive GPU access)
+        t_gpu = time.time()
         with gpu_lock():
             batch_results = speed_processor.process_batch(section_inputs)
+        t_gpu = (time.time() - t_gpu) * 1000
 
+        t_post = time.time()
         results = []
         for _i, (section_results, meta) in enumerate(
             zip(batch_results, section_meta, strict=False)
@@ -636,6 +645,9 @@ class AIEngineService(RollingBufferedTransformer):
                 ctx,
             )
             results.append((all_detections, output_messages))
+        t_post = (time.time() - t_post) * 1000
+
+        self.logger.info(f"Inference breakdown: gpu={t_gpu:.0f}ms, post={t_post:.0f}ms")
 
         return results
 
