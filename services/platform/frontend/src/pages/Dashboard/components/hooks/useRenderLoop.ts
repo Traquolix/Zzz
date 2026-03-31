@@ -1,13 +1,33 @@
 import { useEffect, useRef } from 'react'
 import type { Map as MapboxMap, IControl, GeoJSONSource } from 'mapbox-gl'
-import { MapboxOverlay } from '@deck.gl/mapbox'
-import { SimpleMeshLayer } from '@deck.gl/mesh-layers'
-import { CubeGeometry } from '@luma.gl/engine'
+import type { MapboxOverlay } from '@deck.gl/mapbox'
 import { getSpeedColor, getSpeedColorRGBA } from '../../data'
 import type { Fiber, Section, LiveSectionStats, SpeedThresholds } from '../../types'
 import type { VehiclePosition } from '../../hooks/useVehicleSim'
 import { getPosition, getOrientation, getScale, onMapReady } from '../mapUtils'
 import { MAP_SOURCES } from './mapTypes'
+
+// Lazy-loaded deck.gl/luma.gl modules — only fetched when vehicles mode is first activated.
+type DeckModules = {
+  MapboxOverlay: typeof import('@deck.gl/mapbox').MapboxOverlay
+  SimpleMeshLayer: typeof import('@deck.gl/mesh-layers').SimpleMeshLayer
+  CubeGeometry: typeof import('@luma.gl/engine').CubeGeometry
+}
+let deckModulesPromise: Promise<DeckModules> | null = null
+function loadDeckModules(): Promise<DeckModules> {
+  if (!deckModulesPromise) {
+    deckModulesPromise = Promise.all([
+      import('@deck.gl/mapbox'),
+      import('@deck.gl/mesh-layers'),
+      import('@luma.gl/engine'),
+    ]).then(([mapbox, mesh, luma]) => ({
+      MapboxOverlay: mapbox.MapboxOverlay,
+      SimpleMeshLayer: mesh.SimpleMeshLayer,
+      CubeGeometry: luma.CubeGeometry,
+    }))
+  }
+  return deckModulesPromise
+}
 
 interface UseRenderLoopParams {
   mapRef: React.RefObject<MapboxMap | null>
@@ -46,7 +66,6 @@ export function useRenderLoop({
 }: UseRenderLoopParams) {
   const vehicleClickedRef = useRef(false)
   const deckOverlayRef = useRef<MapboxOverlay | null>(null)
-  const cubeRef = useRef<CubeGeometry | null>(null)
   const vehiclePopupRef = useRef(vehiclePopup)
   vehiclePopupRef.current = vehiclePopup
 
@@ -60,13 +79,27 @@ export function useRenderLoop({
         return getSpeedColorRGBA(d.detectionSpeed, d.opacity, thresholds)
       }
 
-      // ── deck.gl overlay (lazily added only in vehicles mode) ──
+      // ── deck.gl modules (lazy-loaded on first vehicles mode activation) ──
+      let deck: DeckModules | null = null
+      let deckLoading = false
       let deckOverlay: MapboxOverlay | null = null
       let deckAdded = false
+      let cubeGeometry: InstanceType<DeckModules['CubeGeometry']> | null = null
+
+      function ensureDeckModules() {
+        if (deck || deckLoading) return
+        deckLoading = true
+        loadDeckModules().then(modules => {
+          if (loopStopped) return
+          deck = modules
+          cubeGeometry = new modules.CubeGeometry()
+        })
+      }
 
       function ensureDeckOverlay() {
+        if (!deck) return
         if (!deckOverlay) {
-          deckOverlay = new MapboxOverlay({
+          deckOverlay = new deck.MapboxOverlay({
             interleaved: true,
             layers: [],
             onClick: info => {
@@ -98,11 +131,6 @@ export function useRenderLoop({
           map.removeControl(deckOverlay as unknown as IControl)
           deckAdded = false
         }
-      }
-
-      // Create cube geometry once
-      if (!cubeRef.current) {
-        cubeRef.current = new CubeGeometry()
       }
 
       // ── Render loop state ──
@@ -201,6 +229,9 @@ export function useRenderLoop({
             deckHasLayers = false
           }
         } else {
+          // Start loading deck.gl modules as soon as vehicles mode is entered
+          ensureDeckModules()
+
           if (!vehiclesCleared) {
             const source = map.getSource(MAP_SOURCES.vehicles) as GeoJSONSource | undefined
             source?.setData({ type: 'FeatureCollection', features: [] })
@@ -209,16 +240,16 @@ export function useRenderLoop({
           }
 
           const tick = tickAndCollectRef.current
-          if (tick && cubeRef.current) {
+          if (tick && deck && cubeGeometry) {
             const positions = tick(now, deltaMs)
             vehiclePopupRef.current.update(positions)
             if (positions.length === 0 && !deckHasLayers) {
               // Nothing to render
             } else {
-              const layer = new SimpleMeshLayer({
+              const layer = new deck.SimpleMeshLayer({
                 id: 'dash-vehicle-3d',
                 data: positions,
-                mesh: cubeRef.current,
+                mesh: cubeGeometry,
                 getPosition,
                 getColor: getVehicleColor,
                 getOrientation,
