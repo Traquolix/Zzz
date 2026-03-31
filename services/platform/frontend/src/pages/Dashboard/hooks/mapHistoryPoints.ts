@@ -1,14 +1,11 @@
 import type { SectionHistoryPoint } from '@/api/sections'
+import { formatTime } from '@/lib/formatters'
 import type { SectionDataPoint } from '../types'
 
 /** Map API history points to frontend SectionDataPoint shape. */
 export function mapHistoryPoints(points: SectionHistoryPoint[]): SectionDataPoint[] {
   return points.map(p => ({
-    time: new Date(p.time).toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    }),
+    time: formatTime(p.time),
     timestamp: p.time,
     speed: Math.round(p.speed),
     flow: p.flow,

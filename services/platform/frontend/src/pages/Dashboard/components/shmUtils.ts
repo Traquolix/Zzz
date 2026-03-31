@@ -3,6 +3,8 @@
  * between ShmCharts.tsx (barrel) and its split-out components.
  */
 
+import { formatHour, getHourInTz } from '@/lib/formatters'
+
 /** Compute hour-aligned tick positions for a time range. Returns {frac, label} tuples. */
 export function computeHourTicks(tMin: number, tMax: number): { frac: number; label: string }[] {
   const ticks: { frac: number; label: string }[] = []
@@ -12,20 +14,21 @@ export function computeHourTicks(tMin: number, tMax: number): { frac: number; la
   else if (durH > 24) interval = 6
   else if (durH > 12) interval = 3
   else if (durH > 6) interval = 2
-  // Align to the first interval-boundary hour at or after tMin.
-  // Use local time only for alignment, then advance by fixed ms to avoid DST skips.
+  // Align to the first interval-boundary hour at or after tMin (Europe/Paris),
+  // then advance by fixed ms to avoid DST skips.
   const d = new Date(tMin)
   d.setMinutes(0, 0, 0)
   if (d.getTime() < tMin) d.setHours(d.getHours() + 1)
-  const aligned = Math.ceil(d.getHours() / interval) * interval
-  d.setHours(aligned)
+  const tzHour = getHourInTz(d)
+  const aligned = Math.ceil(tzHour / interval) * interval
+  d.setHours(d.getHours() + (aligned - tzHour))
   const intervalMs = interval * 3600_000
   let ts = d.getTime()
   while (ts <= tMax) {
     if (ts >= tMin) {
       ticks.push({
         frac: (ts - tMin) / (tMax - tMin || 1),
-        label: `${new Date(ts).getHours().toString().padStart(2, '0')}:00`,
+        label: formatHour(ts),
       })
     }
     ts += intervalMs

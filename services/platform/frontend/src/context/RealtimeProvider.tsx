@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type ReactNode, useCallback } from 'react'
 import { getAuthToken } from '@/api/client'
 import { logger } from '@/lib/logger'
 import { RealtimeContext, type RealtimeContextType, type DataFlow } from './RealtimeContext'
-import { useAppStore } from '@/stores/appStore'
 import { showToast } from '@/lib/toast'
 
 const PING_INTERVAL_MS = 30_000
@@ -222,7 +221,8 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
               clearTimeout(flowSwitchTimeoutRef.current)
               flowSwitchTimeoutRef.current = null
             }
-            const confirmedFlow = parsed.flow as DataFlow
+            const confirmedFlow: DataFlow =
+              parsed.flow === 'live' || parsed.flow === 'sim' ? parsed.flow : flowRef.current
             flowRef.current = confirmedFlow
             setFlowState(confirmedFlow)
             switchingFlowRef.current = false
@@ -278,20 +278,6 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
       socketRef.current = null
     }
   }, [url, clearTimers, startPingPong])
-
-  // Sync connection state to Zustand store for cross-cutting consumers
-  useEffect(() => {
-    useAppStore.getState().setConnected(connected)
-  }, [connected])
-
-  useEffect(() => {
-    useAppStore.getState().setAuthFailed(authFailed)
-  }, [authFailed])
-
-  // Sync flow state to Zustand store
-  useEffect(() => {
-    useAppStore.getState().setFlow(flow)
-  }, [flow])
 
   const subscribe = useCallback((channel: string, callback: (data: unknown) => void) => {
     if (!subscriptionsRef.current.has(channel)) {

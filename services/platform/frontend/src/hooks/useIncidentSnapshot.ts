@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import type { IncidentSnapshot } from '@/types/incident'
 import { fetchIncidentSnapshot } from '@/api/incidents'
+import { formatTime } from '@/lib/formatters'
 import type { DataFlow } from '@/context/RealtimeContext'
 
 type FormattedSnapshotPoint = {
@@ -15,9 +16,6 @@ type UseIncidentSnapshotResult = {
   loading: boolean
   complete: boolean
 }
-
-const formatTime = (d: Date) =>
-  d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
 
 function formatSnapshot(snapshot: IncidentSnapshot): FormattedSnapshotPoint[] {
   return snapshot.points.map(p => ({

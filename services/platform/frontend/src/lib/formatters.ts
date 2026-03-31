@@ -13,6 +13,13 @@ const SECONDS_PER_DAY = 86400
 
 const _timezone = 'Europe/Paris'
 
+type DateInput = string | number | Date
+
+/** Normalize any date input to a Date object. */
+function toDate(input: DateInput): Date {
+  return input instanceof Date ? input : new Date(input)
+}
+
 // --- Duration formatting (timezone-independent) ---
 
 /**
@@ -57,8 +64,8 @@ export function formatDurationMs(ms: number): string {
 /**
  * Format a timestamp to time string (HH:MM:SS) in configured timezone.
  */
-export function formatTime(dateStr: string): string {
-  const date = new Date(dateStr)
+export function formatTime(input: DateInput): string {
+  const date = toDate(input)
   if (isNaN(date.getTime())) return '--:--:--'
   return date.toLocaleTimeString('en-GB', {
     hour: '2-digit',
@@ -69,10 +76,23 @@ export function formatTime(dateStr: string): string {
 }
 
 /**
+ * Format a timestamp to short time string (HH:MM) in configured timezone.
+ */
+export function formatTimeShort(input: DateInput): string {
+  const date = toDate(input)
+  if (isNaN(date.getTime())) return '--:--'
+  return date.toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: _timezone,
+  })
+}
+
+/**
  * Format a timestamp to date string (locale-appropriate) in configured timezone.
  */
-export function formatDate(dateStr: string): string {
-  const date = new Date(dateStr)
+export function formatDate(input: DateInput): string {
+  const date = toDate(input)
   if (isNaN(date.getTime())) return '---'
   return date.toLocaleDateString(undefined, {
     weekday: 'short',
@@ -83,10 +103,23 @@ export function formatDate(dateStr: string): string {
 }
 
 /**
+ * Format a timestamp to short date string (e.g. "Mar 31") in configured timezone.
+ */
+export function formatDateShort(input: DateInput): string {
+  const date = toDate(input)
+  if (isNaN(date.getTime())) return '---'
+  return date.toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    timeZone: _timezone,
+  })
+}
+
+/**
  * Format a timestamp to combined date + time string in configured timezone.
  */
-export function formatDateTime(dateStr: string): string {
-  const date = new Date(dateStr)
+export function formatDateTime(input: DateInput): string {
+  const date = toDate(input)
   if (isNaN(date.getTime())) return '---'
   const datePart = date.toLocaleDateString(undefined, {
     day: 'numeric',
@@ -100,4 +133,29 @@ export function formatDateTime(dateStr: string): string {
     timeZone: _timezone,
   })
   return `${datePart} ${timePart}`
+}
+
+/**
+ * Format a timestamp to hour-only label (e.g. "14:00") in configured timezone.
+ * Useful for chart axis labels.
+ */
+export function formatHour(input: DateInput): string {
+  const date = toDate(input)
+  if (isNaN(date.getTime())) return '--:--'
+  return date.toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: _timezone,
+  })
+}
+
+const _hourFormat = new Intl.DateTimeFormat('en-GB', {
+  hour: 'numeric',
+  hour12: false,
+  timeZone: _timezone,
+})
+
+/** Return the numeric hour (0–23) in the configured timezone. */
+export function getHourInTz(input: DateInput): number {
+  return Number(_hourFormat.format(toDate(input)))
 }

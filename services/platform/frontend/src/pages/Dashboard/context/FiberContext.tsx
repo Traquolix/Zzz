@@ -145,7 +145,10 @@ interface FiberContextType {
 }
 
 const EMPTY_FIBERS: Fiber[] = []
-const EMPTY_MAP = new Map<string, never>()
+// Stable empty-state maps — one per field type to avoid unsafe casts.
+const EMPTY_OFFSET_MAP = new Map<string, [number, number][]>()
+const EMPTY_CHANNEL_MAP = new Map<string, number[]>()
+const EMPTY_COVERAGE_MAP = new Map<string, CoverageRange[]>()
 
 const FiberContext = createContext<FiberContextType | null>(null)
 
@@ -164,10 +167,10 @@ export function FiberProvider({ children }: { children: React.ReactNode }) {
       const noop = () => undefined
       return {
         fibers: EMPTY_FIBERS,
-        fiberOffsetCache: EMPTY_MAP as Map<string, [number, number][]>,
-        fiberRenderCache: EMPTY_MAP as Map<string, [number, number][]>,
-        offsetIndexToChannel: EMPTY_MAP as Map<string, number[]>,
-        coverageMap: EMPTY_MAP as Map<string, CoverageRange[]>,
+        fiberOffsetCache: EMPTY_OFFSET_MAP,
+        fiberRenderCache: EMPTY_OFFSET_MAP,
+        offsetIndexToChannel: EMPTY_CHANNEL_MAP,
+        coverageMap: EMPTY_COVERAGE_MAP,
         findFiber: noop,
         channelToCoord: () => null,
         getSectionCoords: () => [],

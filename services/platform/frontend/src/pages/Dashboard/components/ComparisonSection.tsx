@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
+import { formatDateShort } from '@/lib/formatters'
 import type { PeakFrequencyData, SpectralSummary } from '@/types/infrastructure'
 import { fetchPeakFrequencies } from '@/api/infrastructure'
 import { useDebouncedResize } from '../hooks/useDebouncedResize'
@@ -49,8 +50,8 @@ export function ComparisonSection({
       return {
         rangeA: { from: latestDay, to: endA },
         rangeB: { from: prevDay, to: endB },
-        labelA: latestDay.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
-        labelB: prevDay.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+        labelA: formatDateShort(latestDay),
+        labelB: formatDateShort(prevDay),
       }
     }
     // week mode
@@ -66,7 +67,7 @@ export function ComparisonSection({
     const lastSunday = new Date(lastMonday)
     lastSunday.setDate(lastSunday.getDate() + 6)
     lastSunday.setHours(23, 59, 59, 999)
-    const fmt = (d: Date) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    const fmt = formatDateShort
     return {
       rangeA: { from: thisMonday, to: thisSunday },
       rangeB: { from: lastMonday, to: lastSunday },
