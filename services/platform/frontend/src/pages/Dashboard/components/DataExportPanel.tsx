@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
+import { ToggleGroup } from '@/components/ui/toggle-group'
 import { useFiberData } from '../context/FiberContext'
 import { fetchExportEstimate, downloadExport, type ExportParams } from '@/api/export'
 
@@ -301,38 +302,6 @@ function FieldRow({ label, children }: { label: string; children: React.ReactNod
     <div className="flex flex-col gap-1.5">
       <label className="text-cq-xxs text-[var(--dash-text-muted)]/60 uppercase tracking-wider">{label}</label>
       {children}
-    </div>
-  )
-}
-
-// ── Shared toggle group ──────────────────────────────────────────
-
-function ToggleGroup<T extends string>({
-  options,
-  value,
-  onChange,
-  labels,
-}: {
-  options: T[]
-  value: T
-  onChange: (v: T) => void
-  labels: Record<T, string>
-}) {
-  return (
-    <div className="inline-flex rounded-md bg-[var(--dash-surface)] border border-[var(--dash-border)] p-0.5 gap-0.5">
-      {options.map(opt => (
-        <button
-          key={opt}
-          onClick={() => onChange(opt)}
-          className={`px-2.5 py-1 rounded text-cq-xxs font-medium transition-colors cursor-pointer whitespace-nowrap ${
-            value === opt
-              ? 'bg-[var(--dash-surface-raised)] text-[var(--dash-text)]'
-              : 'text-[var(--dash-text-secondary)] hover:text-[var(--dash-text)]'
-          }`}
-        >
-          {labels[opt]}
-        </button>
-      ))}
     </div>
   )
 }

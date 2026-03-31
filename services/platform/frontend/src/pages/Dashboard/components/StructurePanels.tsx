@@ -213,22 +213,15 @@ function StructureDetail({
 
         {/* KPI grid */}
         <div className="grid grid-cols-2 gap-3">
-          {kpis.map(kpi =>
-            kpi.isStatus ? (
-              <div key={kpi.label} className="rounded-lg border border-[var(--dash-border)] p-3">
-                <div className="text-cq-2xs text-[var(--dash-text-muted)] uppercase tracking-wider mb-1">
-                  {kpi.label}
-                </div>
-                <div className="flex items-end gap-1">
-                  <span className="text-cq-sm font-semibold capitalize" style={{ color: statusColor }}>
-                    {kpi.value}
-                  </span>
-                </div>
-              </div>
-            ) : (
-              <MetricCard key={kpi.label} label={kpi.label} value={kpi.value} unit={kpi.unit} />
-            ),
-          )}
+          {kpis.map(kpi => (
+            <MetricCard
+              key={kpi.label}
+              label={kpi.label}
+              value={kpi.value}
+              unit={kpi.unit}
+              valueColor={kpi.isStatus ? statusColor : undefined}
+            />
+          ))}
         </div>
 
         {/* Frequency shift banner */}

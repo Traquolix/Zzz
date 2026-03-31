@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18next from 'i18next'
+import { ToggleGroup } from '@/components/ui/toggle-group'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
 import type { LiveSectionStats, SectionDataPoint } from '../types'
@@ -238,24 +239,18 @@ export function SidePanel({
                   : activeTab}
             </span>
             {activeTab === 'dataHub' && isAdmin && (
-              <div className="flex items-center gap-0.5">
-                {(['export', 'apiKeys'] as const).map(tab => (
-                  <button
-                    key={tab}
-                    onClick={() => {
-                      setDataHubSubTab(tab)
-                      if (tab !== 'apiKeys') setShowCreateKey(false)
-                    }}
-                    className={`relative px-2 py-1 text-cq-xxs font-medium transition-colors cursor-pointer rounded ${
-                      dataHubSubTab === tab
-                        ? 'text-[var(--dash-text)] bg-[var(--dash-surface-raised)]'
-                        : 'text-[var(--dash-text-muted)] hover:text-[var(--dash-text-secondary)]'
-                    }`}
-                  >
-                    {t(tab === 'export' ? 'export.sectionTitle' : 'apiKeys.sectionTitle')}
-                  </button>
-                ))}
-              </div>
+              <ToggleGroup
+                options={['export', 'apiKeys'] as ('export' | 'apiKeys')[]}
+                value={dataHubSubTab}
+                onChange={tab => {
+                  setDataHubSubTab(tab)
+                  if (tab !== 'apiKeys') setShowCreateKey(false)
+                }}
+                labels={{
+                  export: t('export.sectionTitle'),
+                  apiKeys: t('apiKeys.sectionTitle'),
+                }}
+              />
             )}
           </div>
           <div className="flex items-center gap-2">
