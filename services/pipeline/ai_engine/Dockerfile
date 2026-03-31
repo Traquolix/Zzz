@@ -10,13 +10,16 @@ ARG HTTPS_PROXY
 ARG NO_PROXY
 ENV http_proxy=${HTTP_PROXY} https_proxy=${HTTPS_PROXY} no_proxy=${NO_PROXY}
 
-# Install Python 3.10 (default in Ubuntu 22.04) and system dependencies
+# Install Python 3.10 (default in Ubuntu 22.04), system dependencies,
+# and CUDA compiler toolchain for JIT-compiling CPAB C++/CUDA extensions
 RUN apt-get update && apt-get install -y \
     python3 \
     python3-dev \
     python3-pip \
     curl \
     libgomp1 \
+    ninja-build \
+    cuda-nvcc-12-4 \
     && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/bin/python3 /usr/bin/python
 
