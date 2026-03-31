@@ -17,6 +17,7 @@ import hmac
 import ipaddress
 import json
 import logging
+import smtplib
 import socket
 import time
 from urllib.parse import urlparse
@@ -45,7 +46,7 @@ def validate_webhook_url(url: str) -> str | None:
     """
     try:
         parsed = urlparse(url)
-    except Exception:
+    except (ValueError, AttributeError):
         return "Invalid URL format"
 
     if parsed.scheme not in ("http", "https"):
@@ -273,7 +274,7 @@ def _dispatch_email(
         if log_entry:
             log_entry.delivery_status = "success"
             log_entry.save(update_fields=["delivery_status"])
-    except Exception as e:
+    except (smtplib.SMTPException, ValueError, OSError) as e:
         logger.error("Email dispatch error for rule %s: %s", rule.name, e)
         if log_entry:
             log_entry.delivery_status = "failed"

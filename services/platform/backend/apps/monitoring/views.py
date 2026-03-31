@@ -1020,7 +1020,7 @@ class SpectralDataView(APIView):
 
         try:
             data = load_spectral_data()
-        except Exception as e:
+        except (OSError, KeyError, ValueError) as e:
             logger.error("Failed to load spectral data: %s", e)
             return Response(
                 {"detail": "Failed to load spectral data", "code": "shm_load_error"},
@@ -1134,7 +1134,7 @@ class SpectralPeaksView(APIView):
             data = load_spectral_data()
             # Use cached peak frequencies instead of recomputing find_peaks
             all_peak_freqs, all_peak_powers = load_peak_frequencies()
-        except Exception as e:
+        except (OSError, KeyError, ValueError) as e:
             logger.error("Failed to load spectral data: %s", e)
             return Response(
                 {"detail": "Failed to load spectral data", "code": "shm_load_error"},
@@ -1268,7 +1268,7 @@ class SpectralSummaryView(APIView):
 
         try:
             summary = get_spectral_summary()
-        except Exception as e:
+        except (OSError, KeyError, ValueError) as e:
             logger.error("Failed to get spectral summary: %s", e)
             return Response(
                 {"detail": "Failed to load spectral data", "code": "shm_load_error"},

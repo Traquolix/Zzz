@@ -5,6 +5,7 @@ All endpoints are org-scoped: non-superusers only see their org's reports.
 """
 
 import logging
+import smtplib
 
 from django.conf import settings
 from django.core.mail import send_mail
@@ -213,7 +214,7 @@ class ReportSendView(APIView):
             report.sent_at = timezone.now()
             report.save(update_fields=["sent_at"])
             logger.info("Report %s sent to %s", report.id, recipients)
-        except Exception as e:
+        except (smtplib.SMTPException, ValueError) as e:
             logger.error("Failed to send report %s: %s", report.id, e)
             return Response(
                 {"detail": "Email sending failed", "code": "email_failed"},
