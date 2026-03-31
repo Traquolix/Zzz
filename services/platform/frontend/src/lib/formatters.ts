@@ -148,3 +148,14 @@ export function formatHour(input: DateInput): string {
     timeZone: _timezone,
   })
 }
+
+const _hourFormat = new Intl.DateTimeFormat('en-GB', {
+  hour: 'numeric',
+  hour12: false,
+  timeZone: _timezone,
+})
+
+/** Return the numeric hour (0–23) in the configured timezone. */
+export function getHourInTz(input: DateInput): number {
+  return Number(_hourFormat.format(toDate(input)))
+}
