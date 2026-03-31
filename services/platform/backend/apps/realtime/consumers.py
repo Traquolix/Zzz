@@ -34,6 +34,7 @@ from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.core.cache import cache
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import DatabaseError
+from uvicorn.protocols.utils import ClientDisconnected
 
 from apps.shared.exceptions import ClickHouseUnavailableError
 
@@ -390,6 +391,8 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
                     return
         except asyncio.CancelledError:
             pass
+        except ClientDisconnected:
+            logger.debug("WebSocket gone during pub/sub send for user=%s", self._user)
         except Exception:
             logger.warning("Pub/sub listener error for user=%s", self._user, exc_info=True)
             # Restart listener after a brief delay if we still have subscriptions
