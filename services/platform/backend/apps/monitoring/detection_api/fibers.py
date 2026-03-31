@@ -22,6 +22,9 @@ class PublicFiberListView(APIView):
     """
     GET /api/v1/fibers — list fibers accessible to the API key's organization,
     with data availability metadata.
+
+    Returns fiber IDs, names, directions, channel ranges, and the time range
+    of available detection data per fiber.
     """
 
     permission_classes = [IsAPIKeyUser]
@@ -45,6 +48,7 @@ class PublicFiberListView(APIView):
         if not fiber_ids:
             return Response({"data": []})
 
+        # Get fiber metadata from PostgreSQL
         cable_meta: dict[str, dict] = {}
         for cable in FiberCable.objects.filter(id__in=fiber_ids).order_by("id"):
             cable_meta[cable.id] = {
@@ -52,6 +56,7 @@ class PublicFiberListView(APIView):
                 "channel_count": cable.channel_count,
             }
 
+        # Get data availability from detection_1h (permanent storage)
         avail_rows = query(
             f"""
             SELECT fiber_id,
@@ -71,6 +76,7 @@ class PublicFiberListView(APIView):
                 "latest": row["latest"],
             }
 
+        # Build response — include all assigned fibers, even without cable metadata
         data = []
         for fid in sorted(fiber_ids):
             meta = cable_meta.get(fid, {})

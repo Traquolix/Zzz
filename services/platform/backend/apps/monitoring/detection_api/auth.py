@@ -19,10 +19,12 @@ class PublicAPIThrottle(SimpleRateThrottle):
     scope = "public_api"
 
     def get_cache_key(self, request: Request, view: APIView) -> str | None:
+        # Key by the API key hash, not the user
         api_key = getattr(request, "auth", None)
         if isinstance(api_key, APIKey):
             key: str = self.cache_format % {"scope": self.scope, "ident": api_key.key_hash[:16]}
             return key
+        # Fallback: shouldn't happen since IsAPIKeyUser rejects non-API-key requests
         return None
 
 
@@ -37,4 +39,5 @@ class IsAPIKeyUser(BasePermission):
         user = request.user
         if not user or not user.is_authenticated:
             return False
+        # request.auth is set to the APIKey instance by APIKeyAuthentication
         return isinstance(getattr(request, "auth", None), APIKey)

@@ -2,8 +2,6 @@
 Public detection list and summary endpoints.
 """
 
-import logging
-
 from django.utils.dateparse import parse_datetime
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
@@ -26,8 +24,6 @@ from .params import (
     encode_cursor,
     parse_detection_params,
 )
-
-logger = logging.getLogger(__name__)
 
 
 class DetectionListView(APIView):

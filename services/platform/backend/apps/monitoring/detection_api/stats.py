@@ -12,7 +12,7 @@ from apps.fibers.models import FiberCable
 from apps.fibers.utils import get_org_fiber_ids
 from apps.monitoring.detection_serializers import PublicStatsResponseSerializer
 from apps.monitoring.detection_utils import TIER_TABLES
-from apps.shared.clickhouse import clickhouse_fallback, query_scalar
+from apps.shared.clickhouse import clickhouse_fallback, query_scalar_concurrent
 from apps.shared.constants import CH_INCIDENTS
 
 from .auth import IsAPIKeyUser, PublicAPIThrottle
@@ -52,24 +52,24 @@ class StatsAPIView(APIView):
         fiber_count = fiber_qs.count()
         total_channels = fiber_qs.aggregate(total=Sum("channel_count"))["total"] or 0
 
-        active_incidents = (
-            query_scalar(
-                f"SELECT count() FROM {CH_INCIDENTS} FINAL "
-                "WHERE status = 'active' AND fiber_id IN {fids:Array(String)}",
-                parameters={"fids": fiber_ids},
+        active_incidents, recent_rows = [
+            v or 0
+            for v in query_scalar_concurrent(
+                [
+                    (
+                        f"SELECT count() FROM {CH_INCIDENTS} FINAL "
+                        "WHERE status = 'active' AND fiber_id IN {fids:Array(String)}",
+                        {"fids": fiber_ids},
+                    ),
+                    (
+                        f"SELECT count() / 10 FROM {TIER_TABLES['hires']} "
+                        "WHERE ts >= now() - INTERVAL 10 SECOND "
+                        "AND fiber_id IN {fids:Array(String)}",
+                        {"fids": fiber_ids},
+                    ),
+                ]
             )
-            or 0
-        )
-
-        recent_rows = (
-            query_scalar(
-                f"SELECT count() / 10 FROM {TIER_TABLES['hires']} "
-                "WHERE ts >= now() - INTERVAL 10 SECOND "
-                "AND fiber_id IN {fids:Array(String)}",
-                parameters={"fids": fiber_ids},
-            )
-            or 0
-        )
+        ]
 
         return Response(
             {
