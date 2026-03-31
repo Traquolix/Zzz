@@ -8,12 +8,12 @@ Sections are config data stored in PostgreSQL. Time-series history
 from __future__ import annotations
 
 import logging
-import math
 import uuid
 from typing import TYPE_CHECKING
 
 from apps.monitoring.detection_utils import TIER_TABLES
 from apps.shared.clickhouse import query
+from apps.shared.traffic_utils import compute_occupancy
 
 if TYPE_CHECKING:
     from apps.monitoring.models import Section
@@ -228,25 +228,6 @@ def _query_section_history_1m(
     )
 
     return _transform_history_rows(rows, bucket_seconds=60)
-
-
-_AVG_VEHICLE_LENGTH_M = 6  # meters, for occupancy estimation
-
-
-def compute_occupancy(speed_kmh: float, flow_vph: float) -> int:
-    """Compute road occupancy percentage.
-
-    Args:
-        speed_kmh: Average speed in km/h.
-        flow_vph: Flow in vehicles per hour.
-
-    Uses: occupancy = (flow_vph * vehicle_length) / (speed_m_s * 1000)
-    """
-    if speed_kmh < 1.0:
-        # Below 1 km/h treat as stationary — occupancy is 100% if vehicles present
-        return 100 if flow_vph > 0 else 0
-    speed_ms = speed_kmh * (1000 / 3600)
-    return min(100, math.ceil((flow_vph * _AVG_VEHICLE_LENGTH_M) / (speed_ms * 1000)))
 
 
 def _transform_history_rows(rows: list[dict], bucket_seconds: int = 60) -> list[dict]:
