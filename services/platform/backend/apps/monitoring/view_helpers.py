@@ -8,7 +8,6 @@ without creating circular dependencies.
 import time
 from typing import Any
 
-from asgiref.sync import sync_to_async
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -26,13 +25,6 @@ def _get_fiber_ids_or_none(user: Any) -> list[str] | None:
     if user.is_superuser:
         return None
     return get_org_fiber_ids(user.organization)
-
-
-async def _async_get_fiber_ids_or_none(user: Any) -> list[str] | None:
-    """Async version — wraps ORM call for use in async views."""
-    if user.is_superuser:
-        return None
-    return await sync_to_async(get_org_fiber_ids)(user.organization)
 
 
 def _verify_infrastructure_access(user: Any, infrastructure_id: str | None) -> Response | None:

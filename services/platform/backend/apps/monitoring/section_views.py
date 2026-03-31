@@ -7,7 +7,6 @@ All queries are org-scoped via Section.organization FK.
 import contextlib
 import logging
 
-from asgiref.sync import sync_to_async
 from django.core.cache import cache as django_cache
 from django.db import IntegrityError
 from drf_spectacular.utils import OpenApiParameter, extend_schema
@@ -176,7 +175,7 @@ class SectionHistoryView(FlowAwareMixin, APIView):
         tags=["sections"],
     )
     @clickhouse_fallback()
-    async def get(self, request: Request, section_id: str) -> Response:
+    def get(self, request: Request, section_id: str) -> Response:
         try:
             minutes = min(int(request.query_params.get("minutes", 60)), 1440)
         except (ValueError, TypeError):
@@ -197,7 +196,7 @@ class SectionHistoryView(FlowAwareMixin, APIView):
             minutes = min(minutes, 60)
 
         org_id = None if request.user.is_superuser else request.user.organization_id
-        section = await sync_to_async(get_section)(section_id, organization_id=org_id)
+        section = get_section(section_id, organization_id=org_id)
         if not section:
             return Response(
                 {"detail": "Section not found", "code": "not_found"},
@@ -207,7 +206,7 @@ class SectionHistoryView(FlowAwareMixin, APIView):
         if self._is_sim(request):
             history = self._get_sim_history(section, minutes, since_ms)
         else:
-            history = await sync_to_async(query_section_history)(
+            history = query_section_history(
                 fiber_id=section["fiberId"],
                 direction=section["direction"],
                 channel_start=section["channelStart"],
@@ -260,7 +259,7 @@ class BatchSectionHistoryView(FlowAwareMixin, APIView):
     permission_classes = [IsActiveUser]
 
     @clickhouse_fallback()
-    async def post(self, request: Request) -> Response:
+    def post(self, request: Request) -> Response:
         section_ids = request.data.get("sectionIds")
         if not isinstance(section_ids, list) or not section_ids:
             return Response(
@@ -313,10 +312,10 @@ class BatchSectionHistoryView(FlowAwareMixin, APIView):
         # Fetch sections from DB, org-scoped (cached — sections rarely change)
         org_id = None if request.user.is_superuser else request.user.organization_id
         cache_key = build_org_cache_key("batch_sections", request.user)
-        sections = await sync_to_async(django_cache.get)(cache_key)
+        sections = django_cache.get(cache_key)
         if sections is None:
-            sections = await sync_to_async(query_sections)(organization_id=org_id)
-            await sync_to_async(django_cache.set)(cache_key, sections, 30)
+            sections = query_sections(organization_id=org_id)
+            django_cache.set(cache_key, sections, 30)
 
         # Filter to requested IDs only
         sections_by_id = {s["id"]: s for s in sections}
@@ -328,9 +327,7 @@ class BatchSectionHistoryView(FlowAwareMixin, APIView):
         if self._is_sim(request):
             results = self._get_sim_batch(requested, minutes, since_map)
         else:
-            results = await sync_to_async(query_batch_section_history)(
-                requested, minutes, since_map
-            )
+            results = query_batch_section_history(requested, minutes, since_map)
 
         return Response({"results": results})
 

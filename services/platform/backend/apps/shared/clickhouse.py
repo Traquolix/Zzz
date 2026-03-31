@@ -257,6 +257,24 @@ async def async_query_scalar(sql: str, parameters: dict[str, Any] | None = None)
     return await loop.run_in_executor(ch_executor, functools.partial(query_scalar, sql, parameters))
 
 
+def query_scalar_concurrent(
+    queries: list[tuple[str, dict[str, Any] | None]],
+) -> list[Any]:
+    """Run multiple query_scalar calls concurrently in the ClickHouse thread pool.
+
+    Args:
+        queries: List of (sql, parameters) tuples.
+
+    Returns:
+        List of scalar results in the same order as the input queries.
+
+    Raises:
+        ClickHouseUnavailableError if any query fails.
+    """
+    futures = [ch_executor.submit(query_scalar, sql, params) for sql, params in queries]
+    return [f.result() for f in futures]
+
+
 # ---------------------------------------------------------------------------
 # clickhouse_fallback decorator (sync + async compatible)
 # ---------------------------------------------------------------------------
@@ -280,42 +298,33 @@ def clickhouse_fallback(fallback_fn: Any | None = None) -> Any:
             def get(self, request): ...
     """
 
-    _503_body = {
-        "detail": "Analytics temporarily unavailable",
-        "code": "analytics_unavailable",
-    }
-
-    def _handle_unavailable(self, request, *args, **kwargs):
-        logger.warning("ClickHouse unavailable for %s %s", request.method, request.path)
-        if fallback_fn is not None:
-            try:
-                return fallback_fn(self, request, *args, **kwargs)
-            except Exception:
-                logger.exception(
-                    "ClickHouse fallback also failed for %s %s",
-                    request.method,
-                    request.path,
-                )
-        return Response(_503_body, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-
     def decorator(method):
-        if asyncio.iscoroutinefunction(method):
-
-            @functools.wraps(method)
-            async def async_wrapper(self, request, *args, **kwargs):
-                try:
-                    return await method(self, request, *args, **kwargs)
-                except ClickHouseUnavailableError:
-                    return _handle_unavailable(self, request, *args, **kwargs)
-
-            return async_wrapper
-
         @functools.wraps(method)
         def wrapper(self, request, *args, **kwargs):
             try:
                 return method(self, request, *args, **kwargs)
             except ClickHouseUnavailableError:
-                return _handle_unavailable(self, request, *args, **kwargs)
+                logger.warning(
+                    "ClickHouse unavailable for %s %s",
+                    request.method,
+                    request.path,
+                )
+                if fallback_fn is not None:
+                    try:
+                        return fallback_fn(self, request, *args, **kwargs)
+                    except Exception:
+                        logger.exception(
+                            "ClickHouse fallback also failed for %s %s",
+                            request.method,
+                            request.path,
+                        )
+                return Response(
+                    {
+                        "detail": "Analytics temporarily unavailable",
+                        "code": "analytics_unavailable",
+                    },
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
 
         return wrapper
 
