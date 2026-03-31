@@ -9,6 +9,7 @@ import logging
 import threading
 from datetime import timedelta
 
+from django.template.exceptions import TemplateDoesNotExist, TemplateSyntaxError
 from django.utils import timezone
 
 logger = logging.getLogger("sequoia.reporting.task_runner")
@@ -40,7 +41,7 @@ def generate_report_async(report_id) -> None:
         report.html_content = build_report_html(report)
         report.status = "completed"
         logger.info("Report %s generated successfully", report_id)
-    except Exception as e:
+    except (OSError, TemplateDoesNotExist, TemplateSyntaxError) as e:
         report.status = "failed"
         logger.error("Report %s generation failed: %s", report_id, e)
 

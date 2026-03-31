@@ -33,6 +33,7 @@ from asgiref.sync import sync_to_async
 from channels.generic.websocket import AsyncJsonWebsocketConsumer
 from django.core.cache import cache
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import DatabaseError
 
 from apps.shared.exceptions import ClickHouseUnavailableError
 
@@ -471,7 +472,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
                 e,
             )
             await self.send_json({"channel": "incidents", "data": []})
-        except Exception as e:
+        except (DatabaseError, OSError) as e:
             # Unexpected error - log at error level with stack trace
             logger.exception("Unexpected error sending initial incidents: %s", e)
             await self.send_json({"channel": "incidents", "data": []})
@@ -522,7 +523,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
         try:
             fibers = await sync_to_async(self._query_initial_fibers)()
             await self.send_json({"channel": "fibers", "data": fibers})
-        except Exception as e:
+        except (DatabaseError, OSError) as e:
             logger.exception("Failed to load fibers: %s", e)
             await self.send_json({"channel": "fibers", "data": []})
 

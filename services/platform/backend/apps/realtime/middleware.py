@@ -18,6 +18,8 @@ from channels.db import database_sync_to_async
 from channels.middleware import BaseMiddleware
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
+from django.core.exceptions import ObjectDoesNotExist
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import AccessToken
 
 logger = logging.getLogger("sequoia.realtime.middleware")
@@ -41,7 +43,7 @@ def get_user_from_token(token_str: str) -> Any:
             if org is None or not org.is_active:
                 return AnonymousUser()
         return user
-    except Exception:
+    except (TokenError, ObjectDoesNotExist):
         return AnonymousUser()
 
 
