@@ -4,9 +4,11 @@ Stats and infrastructure list views.
 All queries are org-scoped via fiber assignments / Organization FK.
 """
 
+import asyncio
 import logging
 import time
 
+from asgiref.sync import sync_to_async
 from django.core.cache import cache as django_cache
 from django.db.models import Count, Sum
 from drf_spectacular.utils import extend_schema
@@ -22,9 +24,9 @@ from apps.monitoring.serializers import InfrastructureSerializer, StatsSerialize
 from apps.monitoring.view_helpers import (
     _PROCESS_START_TIME,
     STATS_CACHE_TTL,
-    _get_fiber_ids_or_none,
+    _async_get_fiber_ids_or_none,
 )
-from apps.shared.clickhouse import clickhouse_fallback, query_scalar
+from apps.shared.clickhouse import async_query_scalar, clickhouse_fallback
 from apps.shared.constants import CH_INCIDENTS
 from apps.shared.permissions import IsActiveUser
 from apps.shared.utils import build_org_cache_key
@@ -51,26 +53,26 @@ class StatsView(FlowAwareMixin, APIView):
         tags=["stats"],
     )
     @clickhouse_fallback()
-    def get(self, request: Request) -> Response:
+    async def get(self, request: Request) -> Response:
         flow = self._get_flow(request)
         cache_key = f"{build_org_cache_key('stats', request.user)}:{flow}"
-        cached = django_cache.get(cache_key)
+        cached = await sync_to_async(django_cache.get)(cache_key)
         if cached is not None:
             return Response(cached)
 
         if self._is_sim(request):
-            data = self._get_sim_stats(request)
+            data = await self._async_get_sim_stats(request)
         else:
-            data = self._get_live_stats(request)
+            data = await self._async_get_live_stats(request)
 
-        django_cache.set(cache_key, data, STATS_CACHE_TTL)
+        await sync_to_async(django_cache.set)(cache_key, data, STATS_CACHE_TTL)
         return Response(data)
 
-    def _get_sim_stats(self, request: Request) -> dict:
+    async def _async_get_sim_stats(self, request: Request) -> dict:
         """Sim flow: derive stats from simulation caches."""
         from apps.shared.simulation_cache import get_simulation_incidents, get_simulation_stats
 
-        sim_incidents = self._get_sim_data(request, get_simulation_incidents)
+        sim_incidents = await self._async_get_sim_data(request, get_simulation_incidents)
         active_incidents = sum(1 for i in sim_incidents if i.get("status") == "active")
         stats = get_simulation_stats()
 
@@ -83,91 +85,85 @@ class StatsView(FlowAwareMixin, APIView):
             "systemUptime": int(time.time() - _PROCESS_START_TIME),
         }
 
-    def _get_live_stats(self, request: Request) -> dict:
-        """Live flow: query ClickHouse for real stats."""
-        fiber_ids = _get_fiber_ids_or_none(request.user)
+    async def _async_get_live_stats(self, request: Request) -> dict:
+        """Live flow: query ClickHouse for real stats (concurrent queries)."""
+        fiber_ids = await _async_get_fiber_ids_or_none(request.user)
 
         if fiber_ids is not None:
             if not fiber_ids:
-                fiber_count = 0
-                total_channels = 0
-                active_incidents = 0
-                recent_rows = 0
-                active_vehicles = 0
-            else:
-                agg = FiberCable.objects.filter(id__in=fiber_ids).aggregate(
+                return {
+                    "fiberCount": 0,
+                    "totalChannels": 0,
+                    "activeVehicles": 0,
+                    "detectionsPerSecond": 0,
+                    "activeIncidents": 0,
+                    "systemUptime": int(time.time() - _PROCESS_START_TIME),
+                }
+
+            # Run all 3 ClickHouse queries concurrently + ORM aggregation
+            incidents_coro = async_query_scalar(
+                f"SELECT count() FROM {CH_INCIDENTS} FINAL"
+                " WHERE status = 'active' AND fiber_id IN {fids:Array(String)}",
+                parameters={"fids": fiber_ids},
+            )
+            recent_coro = async_query_scalar(
+                f"SELECT count() / 10 FROM {TIER_TABLES['hires']}"
+                " WHERE ts >= now() - INTERVAL 10 SECOND"
+                " AND fiber_id IN {fids:Array(String)}",
+                parameters={"fids": fiber_ids},
+            )
+            vehicles_coro = async_query_scalar(
+                f"SELECT coalesce(sum(vehicle_count), 0) FROM {TIER_TABLES['hires']}"
+                " WHERE ts >= (now() - toIntervalSecond(30))"
+                " AND fiber_id IN {fids:Array(String)}",
+                parameters={"fids": fiber_ids},
+            )
+            orm_coro = sync_to_async(
+                lambda: FiberCable.objects.filter(id__in=fiber_ids).aggregate(
                     fiber_count=Count("id"),
                     total_channels=Sum("channel_count"),
                 )
-                fiber_count = agg["fiber_count"]
-                total_channels = agg["total_channels"] or 0
+            )()
 
-                active_incidents = (
-                    query_scalar(
-                        f"SELECT count() FROM {CH_INCIDENTS} FINAL WHERE status = 'active' AND fiber_id IN {{fids:Array(String)}}",
-                        parameters={"fids": fiber_ids},
-                    )
-                    or 0
-                )
-
-                recent_rows = (
-                    query_scalar(
-                        f"""
-                    SELECT count() / 10
-                    FROM {TIER_TABLES["hires"]}
-                    WHERE ts >= now() - INTERVAL 10 SECOND
-                      AND fiber_id IN {{fids:Array(String)}}
-                    """,
-                        parameters={"fids": fiber_ids},
-                    )
-                    or 0
-                )
-
-                active_vehicles = (
-                    query_scalar(
-                        f"""
-                    SELECT coalesce(sum(vehicle_count), 0)
-                    FROM {TIER_TABLES["hires"]}
-                    WHERE ts >= (now() - toIntervalSecond(30))
-                      AND fiber_id IN {{fids:Array(String)}}
-                    """,
-                        parameters={"fids": fiber_ids},
-                    )
-                    or 0
-                )
+            active_incidents, recent_rows, active_vehicles, agg = await asyncio.gather(
+                incidents_coro, recent_coro, vehicles_coro, orm_coro
+            )
+            fiber_count = agg["fiber_count"]
+            total_channels = agg["total_channels"] or 0
         else:
-            fiber_count = FiberCable.objects.count()
-            total_channels = FiberCable.objects.aggregate(total=Sum("channel_count"))["total"] or 0
-
-            active_incidents = (
-                query_scalar(f"SELECT count() FROM {CH_INCIDENTS} FINAL WHERE status = 'active'")
-                or 0
+            # Superuser: unscoped queries
+            incidents_coro = async_query_scalar(
+                f"SELECT count() FROM {CH_INCIDENTS} FINAL WHERE status = 'active'"
             )
-
-            recent_rows = (
-                query_scalar(f"""
-                SELECT count() / 10
-                FROM {TIER_TABLES["hires"]}
-                WHERE ts >= now() - INTERVAL 10 SECOND
-            """)
-                or 0
+            recent_coro = async_query_scalar(
+                f"SELECT count() / 10 FROM {TIER_TABLES['hires']}"
+                " WHERE ts >= now() - INTERVAL 10 SECOND"
             )
+            vehicles_coro = async_query_scalar(
+                f"SELECT coalesce(sum(vehicle_count), 0) FROM {TIER_TABLES['hires']}"
+                " WHERE ts >= (now() - toIntervalSecond(30))"
+            )
+            orm_count = sync_to_async(FiberCable.objects.count)()
+            orm_total = sync_to_async(
+                lambda: FiberCable.objects.aggregate(total=Sum("channel_count"))["total"] or 0
+            )()
 
-            active_vehicles = (
-                query_scalar(f"""
-                SELECT coalesce(sum(vehicle_count), 0)
-                FROM {TIER_TABLES["hires"]}
-                WHERE ts >= (now() - toIntervalSecond(30))
-            """)
-                or 0
+            (
+                active_incidents,
+                recent_rows,
+                active_vehicles,
+                fiber_count,
+                total_channels,
+            ) = await asyncio.gather(
+                incidents_coro, recent_coro, vehicles_coro, orm_count, orm_total
             )
 
         return {
             "fiberCount": fiber_count,
             "totalChannels": total_channels,
-            "activeVehicles": int(active_vehicles),
-            "detectionsPerSecond": round(float(recent_rows), 1),
-            "activeIncidents": active_incidents,
+            "activeVehicles": int(active_vehicles or 0),
+            "detectionsPerSecond": round(float(recent_rows or 0), 1),
+            "activeIncidents": active_incidents or 0,
             "systemUptime": int(time.time() - _PROCESS_START_TIME),
         }
 

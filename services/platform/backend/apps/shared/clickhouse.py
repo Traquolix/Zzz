@@ -13,8 +13,11 @@ Circuit breaker: on connection failure, backs off exponentially
 Individual threads are not blocked by other threads' failures.
 """
 
+import asyncio
+import concurrent.futures
 import functools
 import logging
+import os
 import random
 import threading
 import time
@@ -231,6 +234,34 @@ def health() -> dict[str, Any]:
         }
 
 
+# ---------------------------------------------------------------------------
+# Async support — dedicated executor + async query wrappers
+# ---------------------------------------------------------------------------
+
+_CH_POOL_SIZE = int(os.environ.get("CLICKHOUSE_THREAD_POOL_SIZE", "10"))
+ch_executor = concurrent.futures.ThreadPoolExecutor(
+    max_workers=_CH_POOL_SIZE,
+    thread_name_prefix="clickhouse",
+)
+
+
+async def async_query(sql: str, parameters: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """Run query() in the dedicated ClickHouse thread pool."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(ch_executor, functools.partial(query, sql, parameters))
+
+
+async def async_query_scalar(sql: str, parameters: dict[str, Any] | None = None) -> Any:
+    """Run query_scalar() in the dedicated ClickHouse thread pool."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(ch_executor, functools.partial(query_scalar, sql, parameters))
+
+
+# ---------------------------------------------------------------------------
+# clickhouse_fallback decorator (sync + async compatible)
+# ---------------------------------------------------------------------------
+
+
 def clickhouse_fallback(fallback_fn: Any | None = None) -> Any:
     """
     Decorator for DRF view methods that depend on ClickHouse.
@@ -249,33 +280,42 @@ def clickhouse_fallback(fallback_fn: Any | None = None) -> Any:
             def get(self, request): ...
     """
 
+    _503_body = {
+        "detail": "Analytics temporarily unavailable",
+        "code": "analytics_unavailable",
+    }
+
+    def _handle_unavailable(self, request, *args, **kwargs):
+        logger.warning("ClickHouse unavailable for %s %s", request.method, request.path)
+        if fallback_fn is not None:
+            try:
+                return fallback_fn(self, request, *args, **kwargs)
+            except Exception:
+                logger.exception(
+                    "ClickHouse fallback also failed for %s %s",
+                    request.method,
+                    request.path,
+                )
+        return Response(_503_body, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+
     def decorator(method):
+        if asyncio.iscoroutinefunction(method):
+
+            @functools.wraps(method)
+            async def async_wrapper(self, request, *args, **kwargs):
+                try:
+                    return await method(self, request, *args, **kwargs)
+                except ClickHouseUnavailableError:
+                    return _handle_unavailable(self, request, *args, **kwargs)
+
+            return async_wrapper
+
         @functools.wraps(method)
         def wrapper(self, request, *args, **kwargs):
             try:
                 return method(self, request, *args, **kwargs)
             except ClickHouseUnavailableError:
-                logger.warning(
-                    "ClickHouse unavailable for %s %s",
-                    request.method,
-                    request.path,
-                )
-                if fallback_fn is not None:
-                    try:
-                        return fallback_fn(self, request, *args, **kwargs)
-                    except Exception:
-                        logger.exception(
-                            "ClickHouse fallback also failed for %s %s",
-                            request.method,
-                            request.path,
-                        )
-                return Response(
-                    {
-                        "detail": "Analytics temporarily unavailable",
-                        "code": "analytics_unavailable",
-                    },
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
-                )
+                return _handle_unavailable(self, request, *args, **kwargs)
 
         return wrapper
 

@@ -8,6 +8,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+from asgiref.sync import sync_to_async
 from rest_framework.request import Request
 
 logger = logging.getLogger("sequoia.monitoring.mixins")
@@ -71,6 +72,31 @@ class FlowAwareMixin:
             from apps.fibers.utils import filter_by_org, get_org_fiber_ids
 
             fiber_ids = get_org_fiber_ids(request.user.organization)
+            if not fiber_ids:
+                return []
+            data = filter_by_org(data, fiber_ids, fiber_key=fiber_key)
+
+        return data
+
+    async def _async_get_sim_data(
+        self,
+        request: Request,
+        sim_fn: Callable[[], list[dict[str, Any]]],
+        fiber_key: str = "fiberId",
+    ) -> list[dict[str, Any]]:
+        """Async version of _get_sim_data — wraps ORM call for async views."""
+        try:
+            data = sim_fn()
+        except ImportError:
+            return []
+
+        if not data:
+            return []
+
+        if not request.user.is_superuser:
+            from apps.fibers.utils import filter_by_org, get_org_fiber_ids
+
+            fiber_ids = await sync_to_async(get_org_fiber_ids)(request.user.organization)
             if not fiber_ids:
                 return []
             data = filter_by_org(data, fiber_ids, fiber_key=fiber_key)

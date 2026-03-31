@@ -9,6 +9,7 @@ import logging
 import time
 from typing import Any
 
+from asgiref.sync import sync_to_async
 from django.core.cache import cache as django_cache
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
@@ -34,13 +35,17 @@ from apps.monitoring.serializers import (
     IncidentSerializer,
     IncidentSnapshotSerializer,
 )
-from apps.monitoring.view_helpers import INCIDENTS_CACHE_TTL, _get_fiber_ids_or_none
+from apps.monitoring.view_helpers import (
+    INCIDENTS_CACHE_TTL,
+    _async_get_fiber_ids_or_none,
+    _get_fiber_ids_or_none,
+)
 from apps.monitoring.workflow import (
     InvalidTransitionError,
     get_current_status,
     validate_transition,
 )
-from apps.shared.clickhouse import query
+from apps.shared.clickhouse import async_query, clickhouse_fallback
 from apps.shared.constants import CH_INCIDENTS
 from apps.shared.exceptions import ClickHouseUnavailableError
 from apps.shared.permissions import IsActiveUser, IsNotViewer
@@ -66,7 +71,8 @@ class IncidentListView(FlowAwareMixin, APIView):
         responses={200: IncidentSerializer(many=True)},
         tags=["incidents"],
     )
-    def get(self, request: Request) -> Response:
+    @clickhouse_fallback()
+    async def get(self, request: Request) -> Response:
         try:
             limit = min(int(request.query_params.get("limit", 100)), 500)
         except (ValueError, TypeError):
@@ -74,46 +80,44 @@ class IncidentListView(FlowAwareMixin, APIView):
 
         flow = self._get_flow(request)
         cache_key = f"{build_org_cache_key('incidents', request.user)}:{flow}:{limit}"
-        cached = django_cache.get(cache_key)
+        cached = await sync_to_async(django_cache.get)(cache_key)
         if cached is not None:
             return Response(cached)
 
-        fiber_ids = _get_fiber_ids_or_none(request.user)
+        fiber_ids = await _async_get_fiber_ids_or_none(request.user)
         if fiber_ids is not None and not fiber_ids:
             result = {"results": [], "hasMore": False, "limit": limit}
-            django_cache.set(cache_key, result, INCIDENTS_CACHE_TTL)
+            await sync_to_async(django_cache.set)(cache_key, result, INCIDENTS_CACHE_TTL)
             return Response(result)
 
         if self._is_sim(request):
-            return self._get_sim_incidents(request, cache_key, limit)
+            return await self._async_get_sim_incidents(request, cache_key, limit)
 
-        return self._get_live_incidents(request, cache_key, limit, fiber_ids)
+        return await self._async_get_live_incidents(cache_key, limit, fiber_ids)
 
-    def _get_sim_incidents(self, request: Request, cache_key: str, limit: int) -> Response:
+    async def _async_get_sim_incidents(
+        self, request: Request, cache_key: str, limit: int
+    ) -> Response:
         """Sim flow: return incidents from simulation cache only."""
         from apps.shared.simulation_cache import get_simulation_incidents
 
-        sim_incidents = self._get_sim_data(request, get_simulation_incidents)
+        sim_incidents = await self._async_get_sim_data(request, get_simulation_incidents)
         page = sim_incidents[:limit]
         result = {
             "results": page,
             "hasMore": len(sim_incidents) > limit,
             "limit": limit,
         }
-        django_cache.set(cache_key, result, INCIDENTS_CACHE_TTL)
+        await sync_to_async(django_cache.set)(cache_key, result, INCIDENTS_CACHE_TTL)
         return Response(result)
 
-    def _get_live_incidents(
-        self, request: Request, cache_key: str, limit: int, fiber_ids: list[str] | None
+    async def _async_get_live_incidents(
+        self, cache_key: str, limit: int, fiber_ids: list[str] | None
     ) -> Response:
         """Live flow: return incidents from ClickHouse only."""
-        try:
-            incidents = incident_query_recent(fiber_ids=fiber_ids, hours=24, limit=limit + 1)
-        except ClickHouseUnavailableError:
-            return Response(
-                {"detail": "ClickHouse unavailable", "code": "clickhouse_unavailable"},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
+        incidents = await sync_to_async(incident_query_recent)(
+            fiber_ids=fiber_ids, hours=24, limit=limit + 1
+        )
 
         has_more = len(incidents) > limit
         page = incidents[:limit]
@@ -122,7 +126,7 @@ class IncidentListView(FlowAwareMixin, APIView):
             "hasMore": has_more,
             "limit": limit,
         }
-        django_cache.set(cache_key, result, INCIDENTS_CACHE_TTL)
+        await sync_to_async(django_cache.set)(cache_key, result, INCIDENTS_CACHE_TTL)
         return Response(result)
 
 
@@ -143,11 +147,12 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
         responses={200: IncidentSnapshotSerializer},
         tags=["incidents"],
     )
-    def get(self, request: Request, incident_id: str) -> Response:
+    @clickhouse_fallback()
+    async def get(self, request: Request, incident_id: str) -> Response:
         if self._is_sim(request):
             return self._get_sim_snapshot(request, incident_id)
 
-        return self._get_live_snapshot(request, incident_id)
+        return await self._async_get_live_snapshot(request, incident_id)
 
     def _get_sim_snapshot(self, request: Request, incident_id: str) -> Response:
         """Sim flow: return snapshot from simulation cache only."""
@@ -179,10 +184,10 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
             }
         )
 
-    def _get_live_snapshot(self, request: Request, incident_id: str) -> Response:
+    async def _async_get_live_snapshot(self, request: Request, incident_id: str) -> Response:
         """Live flow: return snapshot from ClickHouse only."""
         try:
-            incident_rows = query(
+            incident_rows = await async_query(
                 f"""
                 SELECT fiber_id, direction, channel_start, channel_end, timestamp_ns
                 FROM {CH_INCIDENTS}
@@ -206,7 +211,7 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
         direction = incident["direction"]
 
         # Org-scoping: verify the incident's fiber belongs to user's org
-        fiber_ids = _get_fiber_ids_or_none(request.user)
+        fiber_ids = await _async_get_fiber_ids_or_none(request.user)
         if fiber_ids is not None and not fiber_belongs_to_org(fiber_id, fiber_ids):
             raise NotFound({"detail": "Incident not found", "code": "incident_not_found"})
 
@@ -217,7 +222,7 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
         window_start_ns = ts_ns - 60_000_000_000
         window_end_ns = ts_ns + 60_000_000_000
         try:
-            agg_rows = query(
+            agg_rows = await async_query(
                 f"""
                 SELECT
                     toUnixTimestamp64Milli(
@@ -311,12 +316,12 @@ class IncidentActionView(FlowAwareMixin, APIView):
         if self._is_sim(request):
             raise ParseError("Workflow actions are not supported for simulated incidents")
 
-    def _get_incident_or_404(
+    async def _async_get_incident_or_404(
         self, incident_id: str, request: Request
     ) -> tuple[dict | None, Response | None]:
         """Fetch incident from ClickHouse and verify org access."""
         try:
-            incident = incident_query_by_id(incident_id)
+            incident = await sync_to_async(incident_query_by_id)(incident_id)
         except ClickHouseUnavailableError:
             return None, Response(
                 {"detail": "ClickHouse unavailable", "code": "clickhouse_unavailable"},
@@ -330,7 +335,7 @@ class IncidentActionView(FlowAwareMixin, APIView):
             )
 
         # Org-scoping
-        fiber_ids = _get_fiber_ids_or_none(request.user)
+        fiber_ids = await _async_get_fiber_ids_or_none(request.user)
         if fiber_ids is not None and not fiber_belongs_to_org(incident["fiber_id"], fiber_ids):
             return None, Response(
                 {"detail": "Incident not found", "code": "incident_not_found"},
@@ -343,16 +348,20 @@ class IncidentActionView(FlowAwareMixin, APIView):
         responses={200: IncidentActionSerializer(many=True)},
         tags=["incidents"],
     )
-    def get(self, request: Request, incident_id: str) -> Response:
-        _incident, error_resp = self._get_incident_or_404(incident_id, request)
+    async def get(self, request: Request, incident_id: str) -> Response:
+        _incident, error_resp = await self._async_get_incident_or_404(incident_id, request)
         if error_resp:
             return error_resp
 
-        actions = IncidentAction.objects.filter(incident_id=incident_id).select_related(
-            "performed_by"
-        )
+        actions = await sync_to_async(
+            lambda: list(
+                IncidentAction.objects.filter(incident_id=incident_id).select_related(
+                    "performed_by"
+                )
+            )
+        )()
 
-        current_status = get_current_status(incident_id)
+        current_status = await sync_to_async(get_current_status)(incident_id)
 
         return Response(
             {
@@ -366,9 +375,7 @@ class IncidentActionView(FlowAwareMixin, APIView):
         responses={201: IncidentActionSerializer},
         tags=["incidents"],
     )
-    def post(self, request: Request, incident_id: str) -> Response:
-        from django.db import transaction
-
+    async def post(self, request: Request, incident_id: str) -> Response:
         input_serializer = IncidentActionInputSerializer(data=request.data)
         if not input_serializer.is_valid():
             return Response(
@@ -380,14 +387,25 @@ class IncidentActionView(FlowAwareMixin, APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        _incident, error_resp = self._get_incident_or_404(incident_id, request)
+        _incident, error_resp = await self._async_get_incident_or_404(incident_id, request)
         if error_resp:
             return error_resp
 
         target_status = input_serializer.validated_data["action"]
 
-        # Atomic block prevents TOCTOU race: lock the latest action row
-        # so concurrent transitions are serialized.
+        # The atomic transaction block must run in a single sync thread
+        # to keep select_for_update + create on the same DB connection.
+        result = await sync_to_async(self._perform_transition, thread_sensitive=True)(
+            incident_id, target_status, request.user, input_serializer.validated_data
+        )
+        return result
+
+    def _perform_transition(
+        self, incident_id: str, target_status: str, user: Any, validated_data: dict
+    ) -> Response:
+        """Run the atomic transition in a sync context (single thread, single connection)."""
+        from django.db import transaction
+
         with transaction.atomic():
             latest = (
                 IncidentAction.objects.select_for_update()
@@ -413,8 +431,8 @@ class IncidentActionView(FlowAwareMixin, APIView):
                 incident_id=incident_id,
                 from_status=current_status,
                 to_status=target_status,
-                performed_by=request.user,
-                note=input_serializer.validated_data.get("note", ""),
+                performed_by=user,
+                note=validated_data.get("note", ""),
             )
 
         return Response(
