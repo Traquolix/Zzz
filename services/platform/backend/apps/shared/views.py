@@ -121,11 +121,12 @@ class ReadinessCheckView(APIView):
             checks["kafka"] = "unavailable"
 
         # Simulation status (informational, not blocking)
+        # Read from Django cache to avoid importing from apps.realtime
         try:
-            from apps.realtime.simulation_manager import SimulationManager
+            from django.core.cache import cache
 
-            sim = SimulationManager.instance().health()
-            checks["simulation"] = sim["status"]
+            sim_health = cache.get("simulation_health")
+            checks["simulation"] = sim_health["status"] if sim_health else "unknown"
         except Exception:
             checks["simulation"] = "unknown"
 

@@ -90,7 +90,7 @@ class IncidentListView(FlowAwareMixin, APIView):
 
     def _get_sim_incidents(self, request: Request, cache_key: str, limit: int) -> Response:
         """Sim flow: return incidents from simulation cache only."""
-        from apps.realtime.simulation import get_simulation_incidents
+        from apps.shared.simulation_cache import get_simulation_incidents
 
         sim_incidents = self._get_sim_data(request, get_simulation_incidents)
         page = sim_incidents[:limit]
@@ -150,7 +150,7 @@ class IncidentSnapshotView(FlowAwareMixin, APIView):
 
     def _get_sim_snapshot(self, request: Request, incident_id: str) -> Response:
         """Sim flow: return snapshot from simulation cache only."""
-        from apps.realtime.simulation import get_simulation_incidents, get_simulation_snapshot
+        from apps.shared.simulation_cache import get_simulation_incidents, get_simulation_snapshot
 
         sim_incidents = get_simulation_incidents()
         sim_incident = next((i for i in sim_incidents if i["id"] == incident_id), None)

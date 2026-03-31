@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from apps.fibers.utils import get_org_fiber_ids
+from apps.shared.constants import CH_INCIDENTS  # noqa: F401 — re-exported for backward compat
 
 # Maximum time ranges per tier
 MAX_HIRES_DAYS = 7
@@ -26,7 +27,6 @@ TIER_TABLES: dict[str, str] = {
     "1h": "detection_1h",
 }
 
-CH_INCIDENTS = "fiber_incidents"
 CH_FIBER_CABLES = "fiber_cables"
 
 

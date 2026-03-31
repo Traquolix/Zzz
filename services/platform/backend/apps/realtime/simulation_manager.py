@@ -58,6 +58,19 @@ class SimulationManager:
         """Reset singleton (for testing)."""
         cls._instance = None
 
+    def _publish_health(self) -> None:
+        """Write current health to Django cache for the readiness endpoint."""
+        try:
+            from django.core.cache import cache
+
+            cache.set(
+                "simulation_health",
+                {"status": self._status.value, "error": self._error},
+                timeout=None,
+            )
+        except Exception:
+            pass  # Cache unavailable — readiness endpoint will report "unknown"
+
     @property
     def status(self) -> SimulationStatus:
         return self._status
@@ -88,6 +101,7 @@ class SimulationManager:
         self._started = True
         self._status = SimulationStatus.STARTING
         self._error = None
+        self._publish_health()
 
         try:
             from asgiref.sync import sync_to_async
@@ -101,6 +115,7 @@ class SimulationManager:
             if not fibers:
                 self._status = SimulationStatus.FAILED
                 self._error = "No fiber data found"
+                self._publish_health()
                 logger.error("Simulation startup failed: no fiber data found")
                 return
 
@@ -114,6 +129,7 @@ class SimulationManager:
         except Exception as e:
             self._status = SimulationStatus.FAILED
             self._error = str(e)
+            self._publish_health()
             logger.exception("Simulation startup failed: %s", e)
 
     async def _run_with_supervision(self, fibers, infrastructure):
@@ -127,13 +143,16 @@ class SimulationManager:
 
         try:
             self._status = SimulationStatus.RUNNING
+            self._publish_health()
             await run_simulation_loop(fibers, infrastructure)
         except asyncio.CancelledError:
             self._status = SimulationStatus.STOPPED
+            self._publish_health()
             logger.info("Simulation stopped (cancelled)")
         except Exception as e:
             self._status = SimulationStatus.FAILED
             self._error = str(e)
+            self._publish_health()
             logger.exception("Simulation crashed: %s", e)
 
     async def stop(self):
@@ -143,6 +162,7 @@ class SimulationManager:
             with contextlib.suppress(asyncio.CancelledError):
                 await self._task
         self._status = SimulationStatus.STOPPED
+        self._publish_health()
         self._task = None
 
     def health(self) -> dict:

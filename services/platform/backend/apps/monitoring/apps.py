@@ -16,15 +16,26 @@ class MonitoringConfig(AppConfig):
     verbose_name = "Monitoring"
 
     def ready(self) -> None:
-        """Warm SHM spectral and peak caches in a background thread.
+        """Connect audit signals and warm SHM cache.
 
-        Loading the 131 MB HDF5 file and running ~10k scipy find_peaks
-        calls takes 5-15 seconds. Doing this at startup means the first
-        user request hits a warm cache instead of timing out.
+        Audit signals: tracks Infrastructure create/update/delete.
+        SHM cache: loads the 131 MB HDF5 file and runs ~10k scipy
+        find_peaks calls (5-15 s). Done at startup so the first user
+        request hits a warm cache instead of timing out.
 
-        Skipped during management commands (collectstatic, migrate, etc.)
-        where no server is running.
+        Cache warm-up is skipped during management commands
+        (collectstatic, migrate, etc.) where no server is running.
         """
+        from django.db.models.signals import post_delete, post_save
+
+        from apps.monitoring.models import Infrastructure
+        from apps.shared.signals import audit_post_delete, audit_post_save
+
+        post_save.connect(audit_post_save, sender=Infrastructure, dispatch_uid="audit_infra_save")
+        post_delete.connect(
+            audit_post_delete, sender=Infrastructure, dispatch_uid="audit_infra_delete"
+        )
+
         if self._is_management_command():
             return
 

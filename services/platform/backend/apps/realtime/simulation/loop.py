@@ -16,15 +16,15 @@ from apps.realtime.broadcast import (
     pubsub_broadcast_detections,
     pubsub_broadcast_shm,
 )
+from apps.shared import simulation_cache as _cache
 from apps.shared.constants import MAP_REFRESH_INTERVAL
-
-from . import cache as _cache
-from .cache import (
+from apps.shared.simulation_cache import (
     _update_simulation_incidents_cache,
     _update_simulation_snapshots,
     _update_simulation_stats,
     transform_simulation_incident,
 )
+
 from .engine import SimulationEngine
 from .types import Detection, FiberConfig, Incident
 

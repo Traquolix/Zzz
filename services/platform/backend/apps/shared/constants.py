@@ -38,6 +38,9 @@ ALL_LAYERS = [
 VIEWER_WIDGETS = ["map", "incidents", "shm"]
 VIEWER_LAYERS = ["cables", "fibers", "landmarks", "incidents", "infrastructure"]
 
+# ClickHouse table names (shared across monitoring + realtime)
+CH_INCIDENTS = "fiber_incidents"
+
 # Business limits
 # Keep in sync with frontend: services/platform/frontend/src/api/sections.ts
 MAX_SECTIONS_PER_ORG = 50

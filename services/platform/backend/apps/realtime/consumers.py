@@ -490,7 +490,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             from apps.realtime.simulation_manager import SimulationManager
 
             if SimulationManager.instance().is_running:
-                from apps.realtime.simulation import get_simulation_incidents
+                from apps.shared.simulation_cache import get_simulation_incidents
 
                 incidents = get_simulation_incidents()
                 # Org-scope: filter sim incidents to user's fibers
@@ -505,7 +505,7 @@ class RealtimeConsumer(AsyncJsonWebsocketConsumer):
             return []
 
         # 'live' flow — ClickHouse only
-        from apps.monitoring.incident_service import query_active
+        from apps.shared.incident_service import query_active
 
         try:
             if self._org_id == "__all__":

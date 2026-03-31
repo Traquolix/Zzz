@@ -173,7 +173,7 @@ def transform_incident_row(row: dict) -> dict:
 
     Delegates to the centralized IncidentService transform.
     """
-    from apps.monitoring.incident_service import transform_row
+    from apps.shared.incident_service import transform_row
 
     return transform_row(row)
 
@@ -463,8 +463,8 @@ async def _poll_incidents(
             tracked incidents. Stores both so resolved notifications include the
             correct direction for frontend placement.
     """
-    from apps.monitoring.incident_service import query_active_raw
     from apps.shared.exceptions import ClickHouseUnavailableError
+    from apps.shared.incident_service import query_active_raw
 
     try:
         rows = query_active_raw(fiber_ids=None, limit=200)

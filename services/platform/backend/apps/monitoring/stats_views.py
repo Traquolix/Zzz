@@ -67,7 +67,7 @@ class StatsView(FlowAwareMixin, APIView):
 
     def _get_sim_stats(self, request: Request) -> dict:
         """Sim flow: derive stats from simulation caches."""
-        from apps.realtime.simulation import get_simulation_incidents, get_simulation_stats
+        from apps.shared.simulation_cache import get_simulation_incidents, get_simulation_stats
 
         sim_incidents = self._get_sim_data(request, get_simulation_incidents)
         active_incidents = sum(1 for i in sim_incidents if i.get("status") == "active")
