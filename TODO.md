@@ -4,27 +4,48 @@
 > [GitHub Issues](https://github.com/Traquolix/Sequoia/issues).
 > Completed sprints are archived in `TODO/history.md`.
 
-## Sprint 5 — May 2026 (due May 30)
+## Sprint 5 — Production reliability + quick wins (due May 30)
+
+### Priority 1 — Production reliability
+
+1. [ ] **Re-apply gunicorn multi-worker with Redis sync fix** [#133]
+       Single-process uvicorn is the main production bottleneck.
+2. [ ] **CPAB/GPU memory leaks in AI engine** [#100]
+       Actively leaking memory in deployed AI engine.
+
+### Priority 2 — Contained feature
+
+3. [ ] **Store vehicle strength/weight for display color** [#187]
 
 ### Done
 
-1. [x] **Codebase hygiene sweep** [#201] — all items resolved:
-   - [x] Circular `realtime` ↔ `monitoring` imports → moved to `apps.shared` (#250)
-   - [x] `shared` inversions → distributed audit signals, cache-based health (#250)
-   - [x] `sync_fibers` dual-write → documented (#249)
-   - [x] Dead Zustand mirroring → removed store + dependency (#249)
-   - [x] Date formatting → consolidated in `formatters.ts` (#249)
-   - [x] Unsafe type assertions → runtime guards + typed constants (#249)
-   - [x] Duplicated UI patterns → shared `ToggleGroup`, `MetricCard` reuse (#251)
+4. [x] **Codebase hygiene sweep** [#201] — all items resolved (#249, #250, #251)
 
-### Open
+## Sprint 6 — Foundations + features (due June 29)
 
-2. [ ] **Store vehicle strength/weight for display color** [#187]
-3. [ ] **Re-apply gunicorn multi-worker with Redis sync fix** [#133]
-4. [ ] **CPAB/GPU memory leaks in AI engine** [#100]
+### Foundation (unblocks #99, #222)
 
-### Sprint 4 — Completed (March 31)
+5. [ ] **Channel-to-road mapping and bad coupling handling** [#12]
+6. [ ] **Add direction awareness to reports, exports, alerting** [#63]
 
-All 17 issues closed. Highlights: data coverage map (#122), fiber PostgreSQL
-consolidation (#198), DashboardMap decomposition (#180–#182), OpenTelemetry
-migration (#220), flow-aware fiber lines.
+### God-file decomposition (from sweep 2026-03-31)
+
+7. [ ] **Decompose detection_api.py** (1,191 lines → per-resource modules) [#252]
+8. [ ] **Extract ModelRegistry from ai_engine/main.py** (968 lines) [#253]
+9. [ ] **Split kafka_bridge.py** (519 lines → per-stream modules) [#254]
+
+### Features
+
+10. [ ] **Incident browsing and navigation** [#31]
+11. [ ] **Incident replay player** [#9]
+12. [ ] **Consolidate frontend to shadcn/ui** [#153]
+13. [ ] **Rewrite tests** (unit, integration, component) [#8]
+14. [ ] **Display fiber coordinates along directional roads** [#99]
+
+## Backlog (unscheduled)
+
+- [ ] Display kilometric points along roads [#222] (blocked by #12)
+- [ ] Real-time SHM data pipeline [#11]
+- [ ] Per-user channel permissions [#47]
+- [ ] Dev / Preprod / Prod environment isolation [#6]
+- [ ] Standardized dev environment [#7]
