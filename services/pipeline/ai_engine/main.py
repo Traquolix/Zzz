@@ -594,10 +594,14 @@ class AIEngineService(RollingBufferedTransformer):
         t_gpu = (time.time() - t_gpu) * 1000
 
         t_post = time.time()
+        t_detect_total = 0.0
+        t_count_total = 0.0
+        t_msg_total = 0.0
         results = []
         for _i, (section_results, meta) in enumerate(
             zip(batch_results, section_meta, strict=False)
         ):
+            t_detect = time.time()
             all_detections = []
             for result in section_results:
                 direction = int(result.direction_mask[0, 0])
@@ -610,8 +614,10 @@ class AIEngineService(RollingBufferedTransformer):
                     classify_threshold_factor=classify_threshold_factor,
                 )
                 all_detections.extend(detections)
+            t_detect_total += time.time() - t_detect
 
             # Count processing (visualization only)
+            t_count = time.time()
             buffer_key = meta["buffer_key"]
             ctx = meta["ctx"]
             count_processor = self.model_registry.get_counter(meta["model_hint"], buffer_key)
@@ -638,16 +644,24 @@ class AIEngineService(RollingBufferedTransformer):
                             speed_processor.set_count_data((counts, intervals, count_timestamps))
                     except Exception as e:
                         logger.error(f"Error in vehicle counting: {e}")
+            t_count_total += time.time() - t_count
 
+            t_msg = time.time()
             output_messages = self._create_detection_messages(
                 meta["fiber_id"],
                 all_detections,
                 ctx,
             )
             results.append((all_detections, output_messages))
+            t_msg_total += time.time() - t_msg
         t_post = (time.time() - t_post) * 1000
 
-        self.logger.info(f"Inference breakdown: gpu={t_gpu:.0f}ms, post={t_post:.0f}ms")
+        self.logger.info(
+            f"Inference breakdown: gpu={t_gpu:.0f}ms, post={t_post:.0f}ms "
+            f"(detect={t_detect_total * 1000:.0f}ms, "
+            f"count={t_count_total * 1000:.0f}ms, "
+            f"msg={t_msg_total * 1000:.0f}ms)"
+        )
 
         return results
 
