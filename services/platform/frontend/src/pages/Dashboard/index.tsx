@@ -1,8 +1,9 @@
-import { useReducer, useEffect, useCallback, useRef, useState, useMemo } from 'react'
+import { useEffect, useCallback, useRef, useState, useMemo } from 'react'
 import { toast } from 'sonner'
-import type { MapPageState, MapPageAction, Fiber, DisplayIncident, PendingPoint } from './types'
-import { defaultSpeedThresholds, buildThresholdLookup } from './data'
+import type { Fiber, DisplayIncident, PendingPoint } from './types'
+import { buildThresholdLookup } from './data'
 import { FiberProvider, useFiberData } from './context/FiberContext'
+import { DashboardProvider, useDashboard } from './context/DashboardContext'
 import { DashboardMap, type DashboardMapHandle } from './components/DashboardMap'
 import { StatusBar } from './components/StatusBar'
 import { Legend } from './components/Legend'
@@ -22,265 +23,20 @@ import { SidebarRefContext } from './hooks/useSidebarWidth'
 import type { Incident as ApiIncident } from '@/types/incident'
 import './dashboard.css'
 
-const initialState: MapPageState = {
-  activeTab: 'sections',
-  selectedIncidentId: null,
-  selectedSectionId: null,
-  filterSeverity: null,
-  hideResolved: true,
-  sectionMetric: 'speed',
-  sections: [],
-  incidents: [],
-  sectionCreationMode: false,
-  pendingPoint: null,
-  showNamingDialog: false,
-  pendingSection: null,
-  sidebarOpen: false,
-  sidebarExpanded: false,
-  displayMode: 'dots',
-  fiberThresholds: {},
-  fiberColors: {},
-  selectedStructureId: null,
-  showStructuresOnMap: false,
-  showStructureLabels: false,
-  showIncidentsOnMap: true,
-  hideFibersInOverview: false,
-  show3DBuildings: false,
-  showChannelHelper: false,
-  showFullCable: false,
-  selectedChannel: null,
-}
-
-function reducer(state: MapPageState, action: MapPageAction): MapPageState {
-  switch (action.type) {
-    case 'SET_TAB':
-      return {
-        ...state,
-        activeTab: action.tab,
-        selectedIncidentId: null,
-        selectedSectionId: null,
-        selectedStructureId: null,
-        selectedChannel: null,
-        filterSeverity: null,
-      }
-    case 'SELECT_INCIDENT':
-      return {
-        ...state,
-        activeTab: 'incidents',
-        selectedIncidentId: action.id,
-        selectedSectionId: null,
-        selectedStructureId: null,
-        selectedChannel: null,
-        sectionCreationMode: false,
-        pendingPoint: null,
-        sidebarOpen: true,
-      }
-    case 'SELECT_SECTION':
-      return {
-        ...state,
-        activeTab: 'sections',
-        selectedSectionId: action.id,
-        selectedIncidentId: null,
-        selectedStructureId: null,
-        selectedChannel: null,
-      }
-    case 'CLEAR_SELECTION':
-      return {
-        ...state,
-        selectedIncidentId: null,
-        selectedSectionId: null,
-        selectedStructureId: null,
-        selectedChannel: null,
-      }
-    case 'SET_FILTER_SEVERITY':
-      return { ...state, filterSeverity: action.severity }
-    case 'ENTER_SECTION_CREATION':
-      return {
-        ...state,
-        sectionCreationMode: true,
-        pendingPoint: null,
-        selectedIncidentId: null,
-        selectedSectionId: null,
-      }
-    case 'EXIT_SECTION_CREATION':
-      return {
-        ...state,
-        sectionCreationMode: false,
-        pendingPoint: null,
-        showNamingDialog: false,
-        pendingSection: null,
-      }
-    case 'SET_PENDING_POINT':
-      return { ...state, pendingPoint: action.point }
-    case 'OPEN_NAMING_DIALOG':
-      return {
-        ...state,
-        showNamingDialog: true,
-        pendingSection: {
-          fiberId: action.fiberId,
-          direction: action.direction,
-          startChannel: action.startChannel,
-          endChannel: action.endChannel,
-        },
-        sectionCreationMode: false,
-        pendingPoint: null,
-      }
-    case 'CLOSE_NAMING_DIALOG':
-      return {
-        ...state,
-        showNamingDialog: false,
-        pendingSection: null,
-      }
-    case 'CREATE_SECTION':
-      return {
-        ...state,
-        sections: [...state.sections, action.section],
-        showNamingDialog: false,
-        pendingSection: null,
-        sectionCreationMode: false,
-        pendingPoint: null,
-      }
-    case 'DELETE_SECTION':
-      return {
-        ...state,
-        sections: state.sections.filter(s => s.id !== action.id),
-        selectedSectionId: state.selectedSectionId === action.id ? null : state.selectedSectionId,
-      }
-    case 'TOGGLE_SIDEBAR':
-      // Keep sidebarExpanded during close so the 400ms CSS transition applies;
-      // SidePanel resets it via RESET_SIDEBAR_EXPANDED after the slide finishes.
-      // Clear selections when closing so the map deselects and polling stops.
-      if (state.sidebarOpen) {
-        return {
-          ...state,
-          sidebarOpen: false,
-          selectedSectionId: null,
-          selectedIncidentId: null,
-          selectedStructureId: null,
-          selectedChannel: null,
-        }
-      }
-      return { ...state, sidebarOpen: true }
-    case 'RESET_SIDEBAR_EXPANDED':
-      return { ...state, sidebarExpanded: false }
-    case 'OPEN_SIDEBAR':
-      return {
-        ...state,
-        sidebarOpen: true,
-        ...(action.tab
-          ? {
-              activeTab: action.tab,
-              selectedIncidentId: null,
-              selectedSectionId: null,
-            }
-          : {}),
-      }
-    case 'SET_DISPLAY_MODE':
-      return { ...state, displayMode: action.mode, selectedSectionId: null, selectedIncidentId: null }
-    case 'SET_SECTION_METRIC':
-      return { ...state, sectionMetric: action.metric }
-    case 'UPDATE_INCIDENT_DESCRIPTION':
-      return {
-        ...state,
-        incidents: state.incidents.map(inc =>
-          inc.id === action.id ? { ...inc, description: action.description } : inc,
-        ),
-      }
-    case 'UPDATE_SECTION_THRESHOLDS':
-      return {
-        ...state,
-        sections: state.sections.map(s => (s.id === action.id ? { ...s, speedThresholds: action.thresholds } : s)),
-      }
-    case 'SET_FIBER_THRESHOLDS':
-      return {
-        ...state,
-        fiberThresholds: { ...state.fiberThresholds, [action.fiberId]: action.thresholds },
-      }
-    case 'SET_FIBER_COLOR':
-      return {
-        ...state,
-        fiberColors: { ...state.fiberColors, [action.fiberId]: action.color },
-      }
-    case 'SELECT_STRUCTURE':
-      return {
-        ...state,
-        activeTab: 'shm',
-        selectedStructureId: action.id,
-        selectedIncidentId: null,
-        selectedSectionId: null,
-        selectedChannel: null,
-        sectionCreationMode: false,
-        pendingPoint: null,
-      }
-    case 'TOGGLE_STRUCTURES_ON_MAP':
-      return { ...state, showStructuresOnMap: !state.showStructuresOnMap }
-    case 'TOGGLE_STRUCTURE_LABELS':
-      return { ...state, showStructureLabels: !state.showStructureLabels }
-    case 'SELECT_CHANNEL':
-      return {
-        ...state,
-        activeTab: 'channel',
-        selectedChannel: action.channel,
-        selectedIncidentId: null,
-        selectedSectionId: null,
-        selectedStructureId: null,
-        sectionCreationMode: false,
-        pendingPoint: null,
-        sidebarOpen: true,
-      }
-    case 'SET_INCIDENTS':
-      return { ...state, incidents: action.incidents }
-    case 'SET_SECTIONS':
-      return { ...state, sections: action.sections }
-    case 'TOGGLE_HIDE_RESOLVED':
-      return { ...state, hideResolved: !state.hideResolved }
-    case 'TOGGLE_INCIDENTS_ON_MAP':
-      return { ...state, showIncidentsOnMap: !state.showIncidentsOnMap }
-    case 'TOGGLE_HIDE_FIBERS_OVERVIEW':
-      return { ...state, hideFibersInOverview: !state.hideFibersInOverview }
-    case 'TOGGLE_3D_BUILDINGS':
-      return { ...state, show3DBuildings: !state.show3DBuildings }
-    case 'TOGGLE_CHANNEL_HELPER':
-      return { ...state, showChannelHelper: !state.showChannelHelper }
-    case 'TOGGLE_SHOW_FULL_CABLE':
-      return { ...state, showFullCable: !state.showFullCable }
-    case 'TOGGLE_SIDEBAR_EXPANDED':
-      return { ...state, sidebarExpanded: !state.sidebarExpanded }
-    case 'OPEN_PANEL':
-      return {
-        ...state,
-        activeTab: action.tab,
-        sidebarOpen: true,
-        selectedIncidentId: null,
-        selectedSectionId: null,
-        selectedStructureId: null,
-        selectedChannel: null,
-      }
-    case 'INIT_FIBER_DEFAULTS': {
-      // Only set defaults if they're empty (first load)
-      if (Object.keys(state.fiberThresholds).length > 0) return state
-      return {
-        ...state,
-        fiberThresholds: Object.fromEntries(action.fibers.map(f => [f.id, { ...defaultSpeedThresholds }])),
-        fiberColors: Object.fromEntries(action.fibers.map(f => [f.id, f.color])),
-      }
-    }
-    default:
-      return state
-  }
-}
-
-/** Wrapper that places FiberProvider above the inner Dashboard. */
+/** Wrapper that places providers above the inner Dashboard. */
 export function Dashboard() {
+  const { removeSection } = useSections()
   return (
     <FiberProvider>
-      <DashboardInner />
+      <DashboardProvider removeSection={removeSection}>
+        <DashboardInner />
+      </DashboardProvider>
     </FiberProvider>
   )
 }
 
 function DashboardInner() {
-  const [state, dispatch] = useReducer(reducer, initialState)
+  const { state, dispatch } = useDashboard()
   const [isOverview, setIsOverview] = useState(false)
   const mapRef = useRef<DashboardMapHandle>(null)
   const sidebarRef = useRef<HTMLDivElement>(null)
@@ -294,7 +50,7 @@ function DashboardInner() {
     if (fiberList.length > 0) {
       dispatch({ type: 'INIT_FIBER_DEFAULTS', fibers: fiberList })
     }
-  }, [fiberList])
+  }, [fiberList, dispatch])
 
   /** Enrich an API incident with display fields computed from fiber geometry. */
   const toDisplayIncident = useCallback(
@@ -336,58 +92,57 @@ function DashboardInner() {
 
   useEffect(() => {
     dispatch({ type: 'SET_INCIDENTS', incidents: displayIncidents })
-  }, [displayIncidents])
+  }, [displayIncidents, dispatch])
 
   // Real sections from API
-  const { sections: apiSections, addSection, removeSection } = useSections()
+  const { sections: apiSections, addSection } = useSections()
   useEffect(() => {
     dispatch({ type: 'SET_SECTIONS', sections: apiSections })
-  }, [apiSections])
+  }, [apiSections, dispatch])
 
   const thresholdLookup = useMemo(
     () => buildThresholdLookup(state.sections, state.fiberThresholds, findFiber),
     [state.sections, state.fiberThresholds, findFiber],
   )
 
-  // Wrapped dispatch that intercepts DELETE_SECTION to also call the API
-  const wrappedDispatch = useCallback(
-    (action: MapPageAction) => {
-      if (action.type === 'DELETE_SECTION') {
-        removeSection(action.id).catch(() => {
-          toast.error('Failed to delete section')
-        })
-      }
-      dispatch(action)
+  const handleIncidentClick = useCallback(
+    (id: string) => {
+      dispatch({ type: 'SELECT_INCIDENT', id })
     },
-    [removeSection],
+    [dispatch],
   )
-
-  const handleIncidentClick = useCallback((id: string) => {
-    dispatch({ type: 'SELECT_INCIDENT', id })
-  }, [])
 
   const handleMapClick = useCallback(() => {
     dispatch({ type: 'CLEAR_SELECTION' })
-  }, [])
+  }, [dispatch])
 
-  const handleFiberClick = useCallback((point: PendingPoint) => {
-    dispatch({ type: 'SET_PENDING_POINT', point })
-  }, [])
+  const handleFiberClick = useCallback(
+    (point: PendingPoint) => {
+      dispatch({ type: 'SET_PENDING_POINT', point })
+    },
+    [dispatch],
+  )
 
   const handleSectionComplete = useCallback(
     (fiberId: string, direction: 0 | 1, startChannel: number, endChannel: number) => {
       dispatch({ type: 'OPEN_NAMING_DIALOG', fiberId, direction, startChannel, endChannel })
     },
-    [],
+    [dispatch],
   )
 
-  const handleStructureClick = useCallback((id: string) => {
-    dispatch({ type: 'SELECT_STRUCTURE', id })
-  }, [])
+  const handleStructureClick = useCallback(
+    (id: string) => {
+      dispatch({ type: 'SELECT_STRUCTURE', id })
+    },
+    [dispatch],
+  )
 
-  const handleChannelClick = useCallback((point: PendingPoint) => {
-    dispatch({ type: 'SELECT_CHANNEL', channel: point })
-  }, [])
+  const handleChannelClick = useCallback(
+    (point: PendingPoint) => {
+      dispatch({ type: 'SELECT_CHANNEL', channel: point })
+    },
+    [dispatch],
+  )
 
   const emptyIncidents = useMemo(() => [] as DisplayIncident[], [])
   const visibleIncidents = state.showIncidentsOnMap ? state.incidents : emptyIncidents
@@ -487,6 +242,7 @@ function DashboardInner() {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [
+    dispatch,
     state.sectionCreationMode,
     state.showNamingDialog,
     state.selectedIncidentId,
@@ -552,7 +308,7 @@ function DashboardInner() {
 
           {/* Map overlays -- user button + status bar */}
           <div className="absolute top-4 left-4 z-10 flex items-center gap-2.5">
-            <UserMenu dispatch={wrappedDispatch} />
+            <UserMenu />
             <StatusBar
               connected={connected}
               sectionCount={state.sections.length}
@@ -588,8 +344,6 @@ function DashboardInner() {
         {/* Sidebar -- overlays the map from the right */}
         <div className="absolute top-0 right-0 h-full z-20 pointer-events-none">
           <SidePanel
-            state={state}
-            dispatch={wrappedDispatch}
             panelRef={sidebarRef}
             liveStats={liveStats}
             liveSeriesData={liveSeriesData}
@@ -605,7 +359,6 @@ function DashboardInner() {
           />
         </div>
 
-        {/* Bottom panel -- detail views and user/platform features */}
         {/* Naming dialog overlay */}
         {state.showNamingDialog && state.pendingSection && (
           <NamingDialog

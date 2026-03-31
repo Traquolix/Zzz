@@ -5,7 +5,8 @@ import { cn } from '@/lib/utils'
 import { COLORS } from '@/lib/theme'
 import { defaultSpeedThresholds, getFiberColor } from '../data'
 import { useFiberData } from '../context/FiberContext'
-import type { Fiber, MapPageAction, SpeedThresholds } from '../types'
+import { useDashboard } from '../context/DashboardContext'
+import type { Fiber, SpeedThresholds } from '../types'
 import { FlowToggle } from './FlowToggle'
 import { ThresholdEditor } from './ThresholdEditor'
 import type { DataFlow } from '@/context/RealtimeContext'
@@ -120,7 +121,6 @@ function FiberColorDot({
 function SettingsPanel({
   fiberThresholds,
   fiberColors,
-  dispatch,
   onHighlightFiber,
   onClearHighlight,
   show3DBuildings,
@@ -133,7 +133,6 @@ function SettingsPanel({
 }: {
   fiberThresholds: Record<string, SpeedThresholds>
   fiberColors: Record<string, string>
-  dispatch: React.Dispatch<MapPageAction>
   onHighlightFiber?: (fiberId: string) => void
   onClearHighlight?: () => void
   show3DBuildings: boolean
@@ -144,6 +143,7 @@ function SettingsPanel({
   availableFlows: DataFlow[]
   onFlowToggle: (flow: DataFlow) => void
 }) {
+  const { dispatch } = useDashboard()
   const { t } = useTranslation()
   const { fibers } = useFiberData()
   const [colorPickerOpen, setColorPickerOpen] = useState<string | null>(null)

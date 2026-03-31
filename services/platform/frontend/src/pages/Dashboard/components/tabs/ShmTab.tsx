@@ -1,16 +1,15 @@
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import type { MapPageAction } from '../../types'
 import type { Infrastructure, SHMStatus } from '@/types/infrastructure'
 import { StructureList, StructureDetail } from '../StructurePanels'
 import { useStructureDetail } from '../../hooks/useStructureDetail'
+import { useDashboard } from '../../context/DashboardContext'
 
 interface ShmTabToolbarProps {
   shmSearch: string
   setShmSearch: (value: string) => void
   showStructuresOnMap: boolean
   showStructureLabels: boolean
-  dispatch: React.Dispatch<MapPageAction>
 }
 
 export function ShmTabToolbar({
@@ -18,8 +17,8 @@ export function ShmTabToolbar({
   setShmSearch,
   showStructuresOnMap,
   showStructureLabels,
-  dispatch,
 }: ShmTabToolbarProps) {
+  const { dispatch } = useDashboard()
   const { t } = useTranslation()
 
   return (
@@ -109,7 +108,6 @@ interface ShmTabContentProps {
   loading: boolean
   allStatuses: Map<string, SHMStatus>
   selectedStructureId: string | null
-  dispatch: React.Dispatch<MapPageAction>
   onHighlightSection?: (sectionId: string) => void
   onClearHighlight?: () => void
   search: string
@@ -120,11 +118,11 @@ export function ShmTabContent({
   loading,
   allStatuses,
   selectedStructureId,
-  dispatch,
   onHighlightSection,
   onClearHighlight,
   search,
 }: ShmTabContentProps) {
+  const { dispatch } = useDashboard()
   const detail = useStructureDetail(selectedStructureId, allStatuses)
 
   if (selectedStructureId) {
@@ -148,7 +146,6 @@ export function ShmTabContent({
       loading={loading}
       allStatuses={allStatuses}
       search={search}
-      dispatch={dispatch}
       onHighlightSection={onHighlightSection}
       onClearHighlight={onClearHighlight}
     />

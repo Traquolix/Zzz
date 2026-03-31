@@ -3,8 +3,9 @@ import { useTranslation } from 'react-i18next'
 import i18next from 'i18next'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
-import type { MapPageState, MapPageAction, LiveSectionStats, SectionDataPoint } from '../types'
+import type { LiveSectionStats, SectionDataPoint } from '../types'
 import { useRealtime } from '@/hooks/useRealtime'
+import { useDashboard } from '../context/DashboardContext'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { WaterfallPanel } from './WaterfallPanel'
 import { ChannelDetail } from './ChannelDetail'
@@ -28,8 +29,6 @@ import { DataHubTabToolbar, DataHubTabContent } from './tabs/DataHubTab'
 import type { DataHubSubTab } from './DataHubPanel'
 
 interface SidePanelProps {
-  state: MapPageState
-  dispatch: React.Dispatch<MapPageAction>
   panelRef: React.RefObject<HTMLDivElement | null>
   liveStats: Map<string, LiveSectionStats>
   liveSeriesData: Map<string, SectionDataPoint[]>
@@ -70,8 +69,6 @@ const panelFallback = (retry: () => void) => (
 )
 
 export function SidePanel({
-  state,
-  dispatch,
   panelRef,
   liveStats,
   liveSeriesData,
@@ -85,6 +82,7 @@ export function SidePanel({
   onMarkSeen,
   onMarkAllSeen,
 }: SidePanelProps) {
+  const { state, dispatch } = useDashboard()
   const {
     activeTab,
     selectedIncidentId,
@@ -266,7 +264,6 @@ export function SidePanel({
                 filterSeverity={filterSeverity}
                 hideResolved={hideResolved}
                 showIncidentsOnMap={showIncidentsOnMap}
-                dispatch={dispatch}
                 hasUnseen={hasUnseen}
                 onMarkAllSeen={onMarkAllSeen}
                 incidentSortBy={incidentSortBy}
@@ -279,7 +276,6 @@ export function SidePanel({
                 setShmSearch={setShmSearch}
                 showStructuresOnMap={showStructuresOnMap}
                 showStructureLabels={showStructureLabels}
-                dispatch={dispatch}
               />
             )}
             {activeTab === 'sections' && !selectedSectionId && (
@@ -288,7 +284,6 @@ export function SidePanel({
                 setSectionSearch={setSectionSearch}
                 sections={sections}
                 sectionMetric={sectionMetric}
-                dispatch={dispatch}
               />
             )}
             {activeTab === 'dataHub' && (
@@ -318,7 +313,6 @@ export function SidePanel({
                 selectedIncidentId={selectedIncidentId}
                 filterSeverity={filterSeverity}
                 hideResolved={hideResolved}
-                dispatch={dispatch}
                 onHighlightIncident={onHighlightIncident}
                 onClearHighlight={onClearHighlight}
                 unseenIds={unseenIds}
@@ -333,7 +327,6 @@ export function SidePanel({
               <SectionTabContent
                 sections={sections}
                 selectedSectionId={selectedSectionId}
-                dispatch={dispatch}
                 liveStats={liveStats}
                 liveSeriesData={liveSeriesData}
                 sectionMetric={sectionMetric}
@@ -349,7 +342,6 @@ export function SidePanel({
               <SettingsPanel
                 fiberThresholds={state.fiberThresholds}
                 fiberColors={fiberColors}
-                dispatch={dispatch}
                 onHighlightFiber={onHighlightFiber}
                 onClearHighlight={onClearHighlight}
                 show3DBuildings={state.show3DBuildings}
@@ -364,12 +356,7 @@ export function SidePanel({
           )}
           {activeTab === 'channel' && selectedChannel && (
             <ErrorBoundary key="channel" fallback={panelFallback}>
-              <ChannelDetail
-                channel={selectedChannel}
-                sections={sections}
-                dispatch={dispatch}
-                fiberColors={fiberColors}
-              />
+              <ChannelDetail channel={selectedChannel} sections={sections} fiberColors={fiberColors} />
             </ErrorBoundary>
           )}
           {activeTab === 'shm' && (
@@ -379,7 +366,6 @@ export function SidePanel({
                 loading={infrastructure.loading}
                 allStatuses={infrastructure.allStatuses}
                 selectedStructureId={selectedStructureId}
-                dispatch={dispatch}
                 onHighlightSection={onHighlightSection}
                 onClearHighlight={onClearHighlight}
                 search={shmSearch}

@@ -1,17 +1,17 @@
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { chartColors } from '@/lib/theme'
-import type { MapPageAction, MetricKey, Section, LiveSectionStats, SectionDataPoint } from '../../types'
+import type { MetricKey, Section, LiveSectionStats, SectionDataPoint } from '../../types'
 import { MAX_SECTIONS_PER_ORG } from '@/api/sections'
 import { MetricIcon } from '../SidebarIcons'
 import { SectionList, SectionDetail } from '../SectionPanels'
+import { useDashboard } from '../../context/DashboardContext'
 
 interface SectionTabToolbarProps {
   sectionSearch: string
   setSectionSearch: (value: string) => void
   sections: Section[]
   sectionMetric: MetricKey
-  dispatch: React.Dispatch<MapPageAction>
 }
 
 export function SectionTabToolbar({
@@ -19,8 +19,8 @@ export function SectionTabToolbar({
   setSectionSearch,
   sections,
   sectionMetric,
-  dispatch,
 }: SectionTabToolbarProps) {
+  const { dispatch } = useDashboard()
   const { t } = useTranslation()
 
   return (
@@ -94,7 +94,6 @@ export function SectionTabToolbar({
 interface SectionTabContentProps {
   sections: Section[]
   selectedSectionId: string | null
-  dispatch: React.Dispatch<MapPageAction>
   liveStats: Map<string, LiveSectionStats>
   liveSeriesData: Map<string, SectionDataPoint[]>
   sectionMetric: MetricKey
@@ -107,7 +106,6 @@ interface SectionTabContentProps {
 export function SectionTabContent({
   sections,
   selectedSectionId,
-  dispatch,
   liveStats,
   liveSeriesData,
   sectionMetric,
@@ -116,6 +114,7 @@ export function SectionTabContent({
   onClearHighlight,
   search,
 }: SectionTabContentProps) {
+  const { dispatch } = useDashboard()
   const section = selectedSectionId ? sections.find(s => s.id === selectedSectionId) : null
 
   if (section) {
@@ -125,7 +124,6 @@ export function SectionTabContent({
         onBack={() => dispatch({ type: 'CLEAR_SELECTION' })}
         liveStats={liveStats}
         liveSeriesData={liveSeriesData}
-        dispatch={dispatch}
         fiberColors={fiberColors}
       />
     )
@@ -134,7 +132,6 @@ export function SectionTabContent({
   return (
     <SectionList
       sections={sections}
-      dispatch={dispatch}
       liveStats={liveStats}
       liveSeriesData={liveSeriesData}
       metric={sectionMetric}
