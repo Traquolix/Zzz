@@ -1,8 +1,9 @@
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { severityColor } from '@/lib/theme'
-import type { MapPageAction, Severity, DisplayIncident, Section } from '../../types'
+import type { Severity, DisplayIncident, Section } from '../../types'
 import { IncidentList, IncidentDetail } from '../IncidentPanels'
+import { useDashboard } from '../../context/DashboardContext'
 
 const severityOrder: Severity[] = ['critical', 'high', 'medium', 'low']
 
@@ -12,7 +13,6 @@ interface IncidentTabProps {
   filterSeverity: Severity | null
   hideResolved: boolean
   showIncidentsOnMap: boolean
-  dispatch: React.Dispatch<MapPageAction>
   onHighlightIncident?: (incidentId: string) => void
   onClearHighlight?: () => void
   unseenIds?: Set<string>
@@ -26,18 +26,15 @@ export function IncidentTabToolbar({
   filterSeverity,
   hideResolved,
   showIncidentsOnMap,
-  dispatch,
   hasUnseen,
   onMarkAllSeen,
   incidentSortBy,
   setIncidentSortBy,
-}: Pick<
-  IncidentTabProps,
-  'filterSeverity' | 'hideResolved' | 'showIncidentsOnMap' | 'dispatch' | 'hasUnseen' | 'onMarkAllSeen'
-> & {
+}: Pick<IncidentTabProps, 'filterSeverity' | 'hideResolved' | 'showIncidentsOnMap' | 'hasUnseen' | 'onMarkAllSeen'> & {
   incidentSortBy: 'newest' | 'oldest'
   setIncidentSortBy: React.Dispatch<React.SetStateAction<'newest' | 'oldest'>>
 }) {
+  const { dispatch } = useDashboard()
   const { t } = useTranslation()
 
   return (
@@ -191,7 +188,6 @@ export function IncidentTabContent({
   selectedIncidentId,
   filterSeverity,
   hideResolved,
-  dispatch,
   onHighlightIncident,
   onClearHighlight,
   unseenIds,
@@ -199,16 +195,12 @@ export function IncidentTabContent({
   sections,
   sortBy,
 }: Omit<IncidentTabProps, 'showIncidentsOnMap' | 'hasUnseen' | 'onMarkAllSeen'> & { sortBy: 'newest' | 'oldest' }) {
+  const { dispatch } = useDashboard()
   const incident = selectedIncidentId ? incidents.find(i => i.id === selectedIncidentId) : null
 
   if (incident) {
     return (
-      <IncidentDetail
-        incident={incident}
-        sections={sections}
-        dispatch={dispatch}
-        onBack={() => dispatch({ type: 'CLEAR_SELECTION' })}
-      />
+      <IncidentDetail incident={incident} sections={sections} onBack={() => dispatch({ type: 'CLEAR_SELECTION' })} />
     )
   }
 
@@ -218,7 +210,6 @@ export function IncidentTabContent({
       filterSeverity={filterSeverity}
       hideResolved={hideResolved}
       sortBy={sortBy}
-      dispatch={dispatch}
       onHighlightIncident={onHighlightIncident}
       onClearHighlight={onClearHighlight}
       unseenIds={unseenIds}

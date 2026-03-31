@@ -2,8 +2,9 @@ import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getFiberColor, getSpeedColor } from '../data'
 import { useFiberData } from '../context/FiberContext'
+import { useDashboard } from '../context/DashboardContext'
 import { COLORS } from '@/lib/theme'
-import type { MapPageAction, Section, SelectedChannel } from '../types'
+import type { Section, SelectedChannel } from '../types'
 import { useRealtime } from '@/hooks/useRealtime'
 import { parseDetections } from '@/lib/parseMessage'
 import { DetailHeader } from './DetailHeader'
@@ -13,14 +14,13 @@ import { ColorDot } from './ColorDot'
 export function ChannelDetail({
   channel,
   sections,
-  dispatch,
   fiberColors,
 }: {
   channel: SelectedChannel
   sections: Section[]
-  dispatch: React.Dispatch<MapPageAction>
   fiberColors: Record<string, string>
 }) {
+  const { dispatch } = useDashboard()
   const { t } = useTranslation()
   const { findFiber } = useFiberData()
   const fiber = findFiber(channel.fiberId, channel.direction)

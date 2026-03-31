@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { severityColor } from '@/lib/theme'
 import { useIncidentSnapshot } from '@/hooks/useIncidentSnapshot'
-import type { DisplayIncident, MapPageAction, Severity, Section } from '../types'
+import type { DisplayIncident, Severity, Section } from '../types'
 import { useRealtime } from '@/hooks/useRealtime'
 import { TimeSeriesChart } from './TimeSeriesChart'
 import { PanelEmptyState } from './PanelEmptyState'
@@ -11,6 +11,7 @@ import { DetailHeader } from './DetailHeader'
 import { MetricCard } from './MetricCard'
 import { StatusBadge } from './StatusBadge'
 import { ColorDot } from './ColorDot'
+import { useDashboard } from '../context/DashboardContext'
 
 // ── Incident list ───────────────────────────────────────────────────────
 
@@ -19,7 +20,6 @@ export function IncidentList({
   filterSeverity,
   hideResolved,
   sortBy,
-  dispatch,
   onHighlightIncident,
   onClearHighlight,
   unseenIds,
@@ -29,12 +29,12 @@ export function IncidentList({
   filterSeverity: Severity | null
   hideResolved: boolean
   sortBy: 'newest' | 'oldest'
-  dispatch: React.Dispatch<MapPageAction>
   onHighlightIncident?: (id: string) => void
   onClearHighlight?: () => void
   unseenIds?: Set<string>
   onMarkSeen?: (id: string) => void
 }) {
+  const { dispatch } = useDashboard()
   const { t } = useTranslation()
   let filtered = filterSeverity ? incidents.filter(i => i.severity === filterSeverity) : incidents
   if (hideResolved) filtered = filtered.filter(i => !i.resolved)
@@ -103,14 +103,13 @@ export function IncidentList({
 export function IncidentDetail({
   incident,
   sections,
-  dispatch,
   onBack,
 }: {
   incident: DisplayIncident
   sections: Section[]
-  dispatch: React.Dispatch<MapPageAction>
   onBack: () => void
 }) {
+  const { dispatch } = useDashboard()
   const { t } = useTranslation()
   const { flow } = useRealtime()
 

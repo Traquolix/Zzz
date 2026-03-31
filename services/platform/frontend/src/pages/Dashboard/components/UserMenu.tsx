@@ -3,14 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/hooks/useAuth'
 import { API_URL } from '@/constants/api'
-import type { MapPageAction } from '../types'
+import { useDashboard } from '../context/DashboardContext'
 import { SettingsIcon, DataHubIcon } from './SidebarIcons'
 
-interface UserMenuProps {
-  dispatch: React.Dispatch<MapPageAction>
-}
-
-export function UserMenu({ dispatch }: UserMenuProps) {
+export function UserMenu() {
+  const { dispatch } = useDashboard()
   const { username, role, isSuperuser, organizationName, logout } = useAuth()
   const { t } = useTranslation()
   const navigate = useNavigate()

@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 import { COLORS, chartColors } from '@/lib/theme'
 import { getSpeedColor, getFiberColor } from '../data'
 import { useFiberData } from '../context/FiberContext'
-import type { MapPageAction, Section, LiveSectionStats, SectionDataPoint, MetricKey } from '../types'
+import type { Section, LiveSectionStats, SectionDataPoint, MetricKey } from '../types'
 import { TimeSeriesChart } from './TimeSeriesChart'
 import { Sparkline } from './Sparkline'
 import { useSectionHistory } from '../hooks/useSectionHistory'
@@ -12,6 +12,7 @@ import { PanelEmptyState } from './PanelEmptyState'
 import { DetailHeader } from './DetailHeader'
 import { MetricCard } from './MetricCard'
 import { ColorDot } from './ColorDot'
+import { useDashboard } from '../context/DashboardContext'
 
 type TimeRange = '1m' | '5m' | '15m' | '1h'
 
@@ -45,7 +46,6 @@ export { ThresholdEditor }
 
 export function SectionList({
   sections,
-  dispatch,
   liveStats,
   liveSeriesData,
   metric,
@@ -55,7 +55,6 @@ export function SectionList({
   search,
 }: {
   sections: Section[]
-  dispatch: React.Dispatch<MapPageAction>
   liveStats: Map<string, LiveSectionStats>
   liveSeriesData: Map<string, SectionDataPoint[]>
   metric: MetricKey
@@ -64,6 +63,7 @@ export function SectionList({
   onClearHighlight?: () => void
   search?: string
 }) {
+  const { dispatch } = useDashboard()
   const { t } = useTranslation()
   const { findFiber } = useFiberData()
   const metricConfig = chartColors[metric]
@@ -162,16 +162,15 @@ export function SectionDetail({
   onBack,
   liveStats,
   liveSeriesData,
-  dispatch,
   fiberColors,
 }: {
   section: Section
   onBack: () => void
   liveStats: Map<string, LiveSectionStats>
   liveSeriesData: Map<string, SectionDataPoint[]>
-  dispatch: React.Dispatch<MapPageAction>
   fiberColors: Record<string, string>
 }) {
+  const { dispatch } = useDashboard()
   const { t } = useTranslation()
   const { findFiber } = useFiberData()
   const fiber = findFiber(section.fiberId, section.direction)

@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useFiberData } from '../context/FiberContext'
-import type { MapPageAction } from '../types'
+import { useDashboard } from '../context/DashboardContext'
 import { PanelEmptyState } from './PanelEmptyState'
 import { DetailHeader } from './DetailHeader'
 import { MetricCard } from './MetricCard'
@@ -26,7 +26,6 @@ function StructureList({
   loading,
   allStatuses,
   search,
-  dispatch,
   onHighlightSection,
   onClearHighlight,
 }: {
@@ -34,10 +33,10 @@ function StructureList({
   loading: boolean
   allStatuses: Map<string, SHMStatus>
   search: string
-  dispatch: React.Dispatch<MapPageAction>
   onHighlightSection?: (sectionId: string) => void
   onClearHighlight?: () => void
 }) {
+  const { dispatch } = useDashboard()
   const { t } = useTranslation()
   const { findFiber } = useFiberData()
 
