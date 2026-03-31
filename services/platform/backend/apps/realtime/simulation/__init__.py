@@ -6,12 +6,13 @@ Simulation package — re-exports all public names so external imports stay unch
 continues to work as before.
 """
 
-from .cache import (
+from apps.shared.simulation_cache import (
     get_simulation_incidents,
     get_simulation_section_history,
     get_simulation_snapshot,
     get_simulation_stats,
 )
+
 from .loop import run_simulation_loop
 from .types import Detection, FiberConfig, Incident, RoadEvent, SHMReading, Vehicle
 

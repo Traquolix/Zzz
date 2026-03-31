@@ -15,7 +15,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.fibers.models import FiberCable
-from apps.monitoring.detection_utils import CH_INCIDENTS, TIER_TABLES
+from apps.monitoring.detection_utils import TIER_TABLES
 from apps.monitoring.mixins import FlowAwareMixin
 from apps.monitoring.models import Infrastructure
 from apps.monitoring.serializers import InfrastructureSerializer, StatsSerializer
@@ -25,6 +25,7 @@ from apps.monitoring.view_helpers import (
     _get_fiber_ids_or_none,
 )
 from apps.shared.clickhouse import clickhouse_fallback, query_scalar
+from apps.shared.constants import CH_INCIDENTS
 from apps.shared.permissions import IsActiveUser
 from apps.shared.utils import build_org_cache_key
 
@@ -67,7 +68,7 @@ class StatsView(FlowAwareMixin, APIView):
 
     def _get_sim_stats(self, request: Request) -> dict:
         """Sim flow: derive stats from simulation caches."""
-        from apps.realtime.simulation import get_simulation_incidents, get_simulation_stats
+        from apps.shared.simulation_cache import get_simulation_incidents, get_simulation_stats
 
         sim_incidents = self._get_sim_data(request, get_simulation_incidents)
         active_incidents = sum(1 for i in sim_incidents if i.get("status") == "active")

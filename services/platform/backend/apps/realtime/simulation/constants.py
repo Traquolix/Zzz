@@ -4,6 +4,8 @@ Simulation constants — vehicle profiles, traffic curves, detection parameters.
 
 from typing import TypedDict
 
+from apps.shared.constants import SNAPSHOT_CHANNEL_RADIUS, SNAPSHOT_WINDOW_S  # noqa: F401
+
 VEHICLE_PROFILES = {
     "car": {"min_speed": 30, "max_speed": 130, "accel": 3.5, "decel": 6, "length": 1.5},
     "truck": {"min_speed": 30, "max_speed": 90, "accel": 1.5, "decel": 4, "length": 4},
@@ -142,8 +144,6 @@ class _SpawnPoint(TypedDict):
 
 SEVERITIES = ["low", "medium", "high", "critical"]
 
-SNAPSHOT_CHANNEL_RADIUS = 30  # ±30 channels (~300m) around incident center
-SNAPSHOT_WINDOW_S = 60  # Record ±60s around incident detected_at
 AVG_VEHICLE_LENGTH_M = 6  # For occupancy estimation
 
 INFRA_BASE_FREQ = {"bridge": 5.0, "tunnel": 15.0}

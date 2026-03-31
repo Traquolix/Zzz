@@ -5,8 +5,9 @@ Auto-tracks create/update/delete on key models (User, Infrastructure,
 Organization, OrganizationSettings) without requiring explicit
 AuditService.log() calls in every view.
 
-Signals are connected with explicit sender= in connect_audit_signals(),
-called from SharedConfig.ready(), so handlers only fire for tracked models.
+Each owning app connects ``audit_post_save`` / ``audit_post_delete``
+in its own ``AppConfig.ready()`` — see accounts, monitoring, and
+organizations apps.
 
 LIMITATION: Signal-based audit does not capture the *user who performed*
 the action because Django signals don't have access to the request context.
@@ -14,8 +15,6 @@ For user-attributed audit entries, use AuditService.log() in the view layer.
 """
 
 import logging
-
-from django.db.models.signals import post_delete, post_save
 
 from apps.shared.models import AuditLog
 
@@ -95,21 +94,6 @@ def audit_post_delete(sender, instance, **kwargs):
         )
     except Exception:
         logger.exception("Signal audit failed for delete %s %s", model_name, instance.pk)
-
-
-def connect_audit_signals():
-    """Connect audit signals to specific tracked models only.
-
-    Called from SharedConfig.ready() to avoid circular imports and ensure
-    signals only fire for models we actually track.
-    """
-    from apps.accounts.models import User
-    from apps.monitoring.models import Infrastructure
-    from apps.organizations.models import Organization, OrganizationSettings
-
-    for model in (User, Infrastructure, Organization, OrganizationSettings):
-        post_save.connect(audit_post_save, sender=model)
-        post_delete.connect(audit_post_delete, sender=model)
 
 
 def _action_for_save(model_name, created):

@@ -227,7 +227,7 @@ class SectionHistoryView(FlowAwareMixin, APIView):
         self, section: dict, minutes: int, since_ms: int | None = None
     ) -> list[dict]:
         """Sim flow: query in-memory simulation detection buffers."""
-        from apps.realtime.simulation import get_simulation_section_history
+        from apps.shared.simulation_cache import get_simulation_section_history
 
         return get_simulation_section_history(
             fiber_id=section["fiberId"],
@@ -335,7 +335,7 @@ class BatchSectionHistoryView(FlowAwareMixin, APIView):
         self, sections: list[dict], minutes: int, since_map: dict[str, int] | None
     ) -> dict[str, list[dict]]:
         """Sim flow: query in-memory simulation detection buffers for each section."""
-        from apps.realtime.simulation import get_simulation_section_history
+        from apps.shared.simulation_cache import get_simulation_section_history
 
         result: dict[str, list[dict]] = {}
         for sec in sections:

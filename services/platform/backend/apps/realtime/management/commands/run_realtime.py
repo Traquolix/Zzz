@@ -279,21 +279,9 @@ class Command(BaseCommand):
 
     def _load_infrastructure(self) -> list[dict]:
         """Load infrastructure from PostgreSQL (includes organization_id for org-scoped SHM)."""
-        from apps.monitoring.models import Infrastructure
+        from apps.realtime.kafka_bridge import load_infrastructure
 
-        items = []
-        for infra in Infrastructure.objects.select_related("organization").all():
-            items.append(
-                {
-                    "id": infra.id,
-                    "type": infra.type,
-                    "name": infra.name,
-                    "fiber_id": infra.fiber_id,
-                    "start_channel": infra.start_channel,
-                    "end_channel": infra.end_channel,
-                    "organization_id": str(infra.organization_id),
-                }
-            )
+        items = load_infrastructure()
 
         if items:
             self.stdout.write(f"  Loaded {len(items)} infrastructure items from DB")
