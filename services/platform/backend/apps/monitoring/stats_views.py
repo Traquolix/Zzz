@@ -24,7 +24,7 @@ from apps.monitoring.view_helpers import (
     STATS_CACHE_TTL,
     _get_fiber_ids_or_none,
 )
-from apps.shared.clickhouse import clickhouse_fallback, query_scalar
+from apps.shared.clickhouse import clickhouse_fallback, query_scalar_concurrent
 from apps.shared.constants import CH_INCIDENTS
 from apps.shared.permissions import IsActiveUser
 from apps.shared.utils import build_org_cache_key
@@ -84,7 +84,11 @@ class StatsView(FlowAwareMixin, APIView):
         }
 
     def _get_live_stats(self, request: Request) -> dict:
-        """Live flow: query ClickHouse for real stats."""
+        """Live flow: query ClickHouse for real stats.
+
+        Runs the 3 ClickHouse queries concurrently in the dedicated
+        executor to avoid sequential latency (~3× faster under load).
+        """
         fiber_ids = _get_fiber_ids_or_none(request.user)
 
         if fiber_ids is not None:
@@ -102,65 +106,57 @@ class StatsView(FlowAwareMixin, APIView):
                 fiber_count = agg["fiber_count"]
                 total_channels = agg["total_channels"] or 0
 
-                active_incidents = (
-                    query_scalar(
-                        f"SELECT count() FROM {CH_INCIDENTS} FINAL WHERE status = 'active' AND fiber_id IN {{fids:Array(String)}}",
-                        parameters={"fids": fiber_ids},
-                    )
-                    or 0
+                params = {"fids": fiber_ids}
+                active_incidents, recent_rows, active_vehicles = query_scalar_concurrent(
+                    [
+                        (
+                            f"SELECT count() FROM {CH_INCIDENTS} FINAL"
+                            " WHERE status = 'active'"
+                            " AND fiber_id IN {fids:Array(String)}",
+                            params,
+                        ),
+                        (
+                            f"SELECT count() / 10 FROM {TIER_TABLES['hires']}"
+                            " WHERE ts >= now() - INTERVAL 10 SECOND"
+                            " AND fiber_id IN {fids:Array(String)}",
+                            params,
+                        ),
+                        (
+                            f"SELECT coalesce(sum(vehicle_count), 0) FROM {TIER_TABLES['hires']}"
+                            " WHERE ts >= (now() - toIntervalSecond(30))"
+                            " AND fiber_id IN {fids:Array(String)}",
+                            params,
+                        ),
+                    ]
                 )
-
-                recent_rows = (
-                    query_scalar(
-                        f"""
-                    SELECT count() / 10
-                    FROM {TIER_TABLES["hires"]}
-                    WHERE ts >= now() - INTERVAL 10 SECOND
-                      AND fiber_id IN {{fids:Array(String)}}
-                    """,
-                        parameters={"fids": fiber_ids},
-                    )
-                    or 0
-                )
-
-                active_vehicles = (
-                    query_scalar(
-                        f"""
-                    SELECT coalesce(sum(vehicle_count), 0)
-                    FROM {TIER_TABLES["hires"]}
-                    WHERE ts >= (now() - toIntervalSecond(30))
-                      AND fiber_id IN {{fids:Array(String)}}
-                    """,
-                        parameters={"fids": fiber_ids},
-                    )
-                    or 0
-                )
+                active_incidents = active_incidents or 0
+                recent_rows = recent_rows or 0
+                active_vehicles = active_vehicles or 0
         else:
             fiber_count = FiberCable.objects.count()
             total_channels = FiberCable.objects.aggregate(total=Sum("channel_count"))["total"] or 0
 
-            active_incidents = (
-                query_scalar(f"SELECT count() FROM {CH_INCIDENTS} FINAL WHERE status = 'active'")
-                or 0
+            active_incidents, recent_rows, active_vehicles = query_scalar_concurrent(
+                [
+                    (
+                        f"SELECT count() FROM {CH_INCIDENTS} FINAL WHERE status = 'active'",
+                        None,
+                    ),
+                    (
+                        f"SELECT count() / 10 FROM {TIER_TABLES['hires']}"
+                        " WHERE ts >= now() - INTERVAL 10 SECOND",
+                        None,
+                    ),
+                    (
+                        f"SELECT coalesce(sum(vehicle_count), 0) FROM {TIER_TABLES['hires']}"
+                        " WHERE ts >= (now() - toIntervalSecond(30))",
+                        None,
+                    ),
+                ]
             )
-
-            recent_rows = (
-                query_scalar(f"""
-                SELECT count() / 10
-                FROM {TIER_TABLES["hires"]}
-                WHERE ts >= now() - INTERVAL 10 SECOND
-            """)
-                or 0
-            )
-
-            active_vehicles = (
-                query_scalar(f"""
-                SELECT coalesce(sum(vehicle_count), 0)
-                FROM {TIER_TABLES["hires"]}
-                WHERE ts >= (now() - toIntervalSecond(30))
-            """)
-                or 0
-            )
+            active_incidents = active_incidents or 0
+            recent_rows = recent_rows or 0
+            active_vehicles = active_vehicles or 0
 
         return {
             "fiberCount": fiber_count,

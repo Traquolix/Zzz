@@ -13,8 +13,11 @@ Circuit breaker: on connection failure, backs off exponentially
 Individual threads are not blocked by other threads' failures.
 """
 
+import asyncio
+import concurrent.futures
 import functools
 import logging
+import os
 import random
 import threading
 import time
@@ -229,6 +232,52 @@ def health() -> dict[str, Any]:
             "in_cooldown": in_cooldown,
             "last_failure": _last_failure_time,
         }
+
+
+# ---------------------------------------------------------------------------
+# Async support — dedicated executor + async query wrappers
+# ---------------------------------------------------------------------------
+
+_CH_POOL_SIZE = int(os.environ.get("CLICKHOUSE_THREAD_POOL_SIZE", "10"))
+ch_executor = concurrent.futures.ThreadPoolExecutor(
+    max_workers=_CH_POOL_SIZE,
+    thread_name_prefix="clickhouse",
+)
+
+
+async def async_query(sql: str, parameters: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """Run query() in the dedicated ClickHouse thread pool."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(ch_executor, functools.partial(query, sql, parameters))
+
+
+async def async_query_scalar(sql: str, parameters: dict[str, Any] | None = None) -> Any:
+    """Run query_scalar() in the dedicated ClickHouse thread pool."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(ch_executor, functools.partial(query_scalar, sql, parameters))
+
+
+def query_scalar_concurrent(
+    queries: list[tuple[str, dict[str, Any] | None]],
+) -> list[Any]:
+    """Run multiple query_scalar calls concurrently in the ClickHouse thread pool.
+
+    Args:
+        queries: List of (sql, parameters) tuples.
+
+    Returns:
+        List of scalar results in the same order as the input queries.
+
+    Raises:
+        ClickHouseUnavailableError if any query fails.
+    """
+    futures = [ch_executor.submit(query_scalar, sql, params) for sql, params in queries]
+    return [f.result() for f in futures]
+
+
+# ---------------------------------------------------------------------------
+# clickhouse_fallback decorator (sync + async compatible)
+# ---------------------------------------------------------------------------
 
 
 def clickhouse_fallback(fallback_fn: Any | None = None) -> Any:

@@ -9,12 +9,25 @@ simulation fails to start or crashes, WebSocket connections still work
 — they just won't receive simulation data.
 """
 
+import asyncio
+import concurrent.futures
 import os
 
 from channels.routing import ProtocolTypeRouter, URLRouter
 from django.core.asgi import get_asgi_application
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "sequoia.settings.prod")
+
+# Explicit thread pool for Django's sync-to-async operations.
+# Default (~36 on 4-core) is too small when many concurrent requests
+# hit synchronous views or ORM calls. Configurable via env var.
+_THREAD_POOL_SIZE = int(os.environ.get("DJANGO_THREAD_POOL_SIZE", "40"))
+asyncio.get_event_loop().set_default_executor(
+    concurrent.futures.ThreadPoolExecutor(
+        max_workers=_THREAD_POOL_SIZE,
+        thread_name_prefix="django-asgi",
+    )
+)
 
 # Initialize Django ASGI application early to populate the app registry
 django_asgi_app = get_asgi_application()
