@@ -6,15 +6,16 @@
 
 ## Sprint 5 — May 2026 (due May 30)
 
-### In Progress
+### Done
 
-1. [ ] **Codebase hygiene sweep** [#201] — remaining items:
-   - [ ] Circular `realtime` ↔ `monitoring` imports (deferred imports hiding coupling)
-   - [ ] `shared` imports from domain apps (`shared/signals.py`, `shared/views.py` → inverted deps)
-   - [ ] `sync_fibers` dual-write undocumented (PG + ClickHouse, CH failure swallowed)
-   - [ ] Dead Zustand mirroring in `RealtimeProvider` (writes to store nothing reads)
-   - [ ] Duplicated UI patterns (sticky headers 3×, KPI cards 4×, toggle groups 2×, date formatting 3×)
-   - [ ] Unsafe type assertions (`as DataFlow`, double-cast `as unknown as RefObject`, JSON casts)
+1. [x] **Codebase hygiene sweep** [#201] — all items resolved:
+   - [x] Circular `realtime` ↔ `monitoring` imports → moved to `apps.shared` (#250)
+   - [x] `shared` inversions → distributed audit signals, cache-based health (#250)
+   - [x] `sync_fibers` dual-write → documented (#249)
+   - [x] Dead Zustand mirroring → removed store + dependency (#249)
+   - [x] Date formatting → consolidated in `formatters.ts` (#249)
+   - [x] Unsafe type assertions → runtime guards + typed constants (#249)
+   - [x] Duplicated UI patterns → shared `ToggleGroup`, `MetricCard` reuse (#251)
 
 ### Open
 
