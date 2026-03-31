@@ -6,12 +6,15 @@ Created on Tue Nov 20 10:27:16 2018
 """
 
 #%%
+import logging
 import torch
 from torch.utils.cpp_extension import load
 
 from ..core.utility import get_dir
 from .expm import expm
 from .findcellidx import findcellidx
+
+logger = logging.getLogger(__name__)
 
 
 #%%
@@ -29,46 +32,31 @@ _dir = get_dir(__file__)
 _verbose = False # TODO: set this flag in the main class, maybe
 # Jit compile cpu source
 try:
-    cpab_cpu = load(name = 'cpab_cpu',
+    cpab_cpu = load(name = 'cpab_cpu',  # nosec B614 - cpp_extension.load, not torch.load
                     sources = [_dir + '/transformer.cpp',
                                _dir + '/../core/cpab_ops.cpp'],
                     verbose=_verbose)
     _cpu_succes = True
-    if _verbose:
-        print(70*'=')
-        print('succesfully compiled cpu source')
-        print(70*'=')
+    logger.info("CPAB C++ CPU extension compiled successfully")
 except Exception as e:
     cpab_cpu = _notcompiled()
     _cpu_succes = False
-    if _verbose:
-        print(70*'=')
-        print('Unsuccesfully compiled cpu source')
-        print('Error was: ')
-        print(e)
-        print(70*'=')
+    logger.warning("CPAB C++ CPU extension failed to compile, using slow Python fallback: %s", e)
 
 # Jit compile gpu source
 try:
-    cpab_gpu = load(name = 'cpab_gpu',
+    cpab_gpu = load(name = 'cpab_gpu',  # nosec B614 - cpp_extension.load, not torch.load
                     sources = [_dir + '/transformer_cuda.cpp',
                                _dir + '/transformer_cuda.cu',
                                _dir + '/../core/cpab_ops.cu'],
                     verbose=_verbose,
                     with_cuda=True)
     _gpu_succes = True
-    if _verbose:
-        print(70*'=')
-        print('succesfully compiled gpu source')
-        print(70*'=')
+    logger.info("CPAB CUDA GPU extension compiled successfully")
 except Exception as e:
     cpab_gpu = _notcompiled()
     _gpu_succes = False
-    if _verbose:
-        print(70*'=')
-        print('Unsuccesfully compiled gpu source')
-        print('Error was: ')
-        print(e)
+    logger.warning("CPAB CUDA GPU extension failed to compile, using slow Python fallback: %s", e)
 
 #%%
 def CPAB_transformer(points, theta, params):
