@@ -39,7 +39,16 @@ function buildFiberFeatures(
     const color = fiberColors ? getFiberColor(fiber, fiberColors) : fiber.color
     const props = { id: fiber.id, name: fiber.name, color }
 
-    if (!showFullCable && coverageRenderCache.has(fiber.id)) {
+    if (showFullCable) {
+      // Full cable rendering (toggle is on)
+      const coords = fiberRenderCache.get(fiber.id)
+      if (!coords) continue
+      features.push({
+        type: 'Feature' as const,
+        properties: props,
+        geometry: { type: 'LineString' as const, coordinates: coords },
+      })
+    } else if (coverageRenderCache.has(fiber.id)) {
       // Render only the data-covered segments
       const segments = coverageRenderCache.get(fiber.id)!
       if (segments.length === 1) {
@@ -55,16 +64,8 @@ function buildFiberFeatures(
           geometry: { type: 'MultiLineString' as const, coordinates: segments },
         })
       }
-    } else {
-      // Full cable rendering (no coverage data, or toggle is on)
-      const coords = fiberRenderCache.get(fiber.id)
-      if (!coords) continue
-      features.push({
-        type: 'Feature' as const,
-        properties: props,
-        geometry: { type: 'LineString' as const, coordinates: coords },
-      })
     }
+    // If no coverage data and showFullCable is off, skip this fiber
   }
   return features
 }
