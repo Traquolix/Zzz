@@ -85,6 +85,7 @@ class VehicleCounter:
         time_window_duration: float = 360.0,
         truck_ratio_for_split: float = 2.0,
         corr_threshold: float = 500.0,
+        step_samples: int | None = None,
     ):
         self.fiber_id = fiber_id
         self.fs = sampling_rate_hz
@@ -96,7 +97,7 @@ class VehicleCounter:
 
         # Accumulation parameters
         self.time_window_duration = time_window_duration
-        self.step = COUNTING_STEP_SAMPLES  # 250 samples
+        self.step = step_samples if step_samples is not None else COUNTING_STEP_SAMPLES
         self.features_duration = self.fs * self.time_window_duration
 
         # NN model (small MLP)

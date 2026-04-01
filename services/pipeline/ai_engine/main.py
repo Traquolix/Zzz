@@ -252,6 +252,7 @@ class ModelRegistry:
                 time_window_duration=spec.counting.time_window_duration,
                 truck_ratio_for_split=spec.counting.truck_ratio_for_split,
                 corr_threshold=spec.counting.corr_threshold,
+                step_samples=spec.inference.samples_per_window,
             )
             logger.info(f"Loaded counter for model: {model_hint}")
             return counter
