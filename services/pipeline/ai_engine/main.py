@@ -321,12 +321,15 @@ class AIEngineService(RollingBufferedTransformer):
         self._log_init()
 
     def _log_init(self) -> None:
-        window_size = self._model_spec.inference.samples_per_window
-        step_size = self._model_spec.inference.step_size
-        overlap = window_size - step_size
+        inf = self._model_spec.inference
+        window_msgs = inf.messages_per_window
+        step_msgs = inf.step_size
+        overlap_msgs = window_msgs - step_msgs
+        spm = inf.samples_per_message
         self.logger.info(
-            f"Initialized with rolling buffer: window={window_size}, "
-            f"step={step_size}, overlap={overlap}, "
+            f"Initialized with rolling buffer: window={window_msgs} msgs "
+            f"({inf.samples_per_window} samples, {spm} samples/msg), "
+            f"step={step_msgs} msgs, overlap={overlap_msgs} msgs, "
             f"counting={'enabled' if self._model_spec.counting.enabled else 'disabled'}"
         )
 
