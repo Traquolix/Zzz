@@ -20,7 +20,7 @@ from .constants import GLRT_DEFAULT_WINDOW, GLRT_EDGE_SAFETY_SAMPLES
 from .dtan_inference import DTANInference
 from .glrt_detector import GLRTDetector
 from .speed_filter import SpeedFilter
-from .utils import correlation_threshold, find_ind, normalize_channel_energy
+from .utils import correlation_threshold, normalize_channel_energy
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,6 @@ class DirectionResult(NamedTuple):
     timestamps_ns: Optional[np.ndarray]  # (trimmed_time,) nanosecond timestamps, or None
     direction_mask: np.ndarray       # (sections, trimmed_time) direction value (0=fwd, 1=rev)
     aligned_speed_per_pair: np.ndarray  # (sections, Nch-1, trimmed_time) per-pair speeds
-    intervals: list = []             # Per-section [(starts, ends), ...] for counting
 
 
 def compute_edge_trim(
@@ -141,7 +140,6 @@ class VehicleSpeedEstimator:
         self.visualizer = None
         self.last_visualization_time = 0
         self.visualization_interval = 0
-        self.count_data_for_viz = None
         self._inference_lock = threading.Lock()
 
         if visualization_config and visualization_config.get("enabled", False):
@@ -159,10 +157,6 @@ class VehicleSpeedEstimator:
         """Update the section name for visualization output."""
         if self.visualizer is not None:
             self.visualizer.section = section
-
-    def set_count_data(self, count_data: tuple | None):
-        """Store count data for visualization overlay."""
-        self.count_data_for_viz = count_data
 
     # --- Delegate to sub-components (public API preserved) ---
 
@@ -244,16 +238,6 @@ class VehicleSpeedEstimator:
 
         trimmed_aligned_speed = filtered_speed[..., trim_start:trim_end]
 
-        summed_threshold = self.corr_threshold * (self.Nch - 1)
-        detection_mask = (glrt_summed >= summed_threshold).astype(float)
-        intervals_full = find_ind(detection_mask)
-
-        trimmed_intervals = []
-        for starts, ends in intervals_full:
-            shifted_starts = [s - trim_start for s in starts if s >= trim_start and s < trim_end]
-            shifted_ends = [min(e - trim_start, trim_end - trim_start) for s, e in zip(starts, ends) if s >= trim_start and s < trim_end]
-            trimmed_intervals.append((shifted_starts, shifted_ends))
-
         yield DirectionResult(
             filtered_speed=trimmed_filtered,
             glrt_summed=trimmed_glrt,
@@ -262,7 +246,6 @@ class VehicleSpeedEstimator:
             timestamps_ns=trimmed_date_ns,
             direction_mask=direction_mask,
             aligned_speed_per_pair=trimmed_aligned_speed,
-            intervals=trimmed_intervals,
         )
 
     def process_batch(self, sections: list[tuple[np.ndarray, np.ndarray, np.ndarray | None]]):
