@@ -415,18 +415,45 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
         await self._log_final_metrics()
 
     async def _poll_loop(self, loop_name: str) -> None:
-        """Shared poll-dispatch-error loop for all consuming service patterns."""
+        """Shared poll-dispatch-error loop for all consuming service patterns.
+
+        Messages are dispatched concurrently up to max_concurrent_messages
+        (controlled by the semaphore in _execute_with_protection). The poll
+        loop fires tasks without awaiting each one, allowing the event loop
+        to interleave processing of multiple messages.
+        """
+        dispatch_tasks: set[asyncio.Task] = set()
+
         while self._running:
             try:
+                # Back-pressure: if at concurrency limit, wait for a slot
+                if self._semaphore.locked():
+                    await asyncio.sleep(0.001)
+                    continue
+
                 message = await self._get_next_message()
                 if message:
-                    await self._dispatch(message)
+                    task = asyncio.create_task(self._safe_dispatch(message, loop_name))
+                    dispatch_tasks.add(task)
+                    task.add_done_callback(dispatch_tasks.discard)
                 else:
                     await asyncio.sleep(self.config.consumer_idle_delay)
             except Exception as e:
                 self.logger.error(f"Error in {loop_name} loop: {e}")
                 self.metrics.record_error(f"{loop_name}_loop")
                 await asyncio.sleep(self.config.error_backoff_delay)
+
+        # Drain in-flight tasks on shutdown
+        if dispatch_tasks:
+            await asyncio.gather(*dispatch_tasks, return_exceptions=True)
+
+    async def _safe_dispatch(self, message: Any, loop_name: str) -> None:
+        """Dispatch a single message with error handling."""
+        try:
+            await self._dispatch(message)
+        except Exception as e:
+            self.logger.error(f"Error dispatching in {loop_name}: {e}")
+            self.metrics.record_error(f"{loop_name}_dispatch")
 
     async def _dispatch(self, message: Any) -> None:
         """Override in pattern classes to handle a single polled message."""
