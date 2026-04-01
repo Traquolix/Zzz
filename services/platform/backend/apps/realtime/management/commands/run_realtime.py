@@ -75,14 +75,20 @@ class Command(BaseCommand):
             source = self._auto_detect()
 
         # Sync fiber + infrastructure JSON files → PostgreSQL
-        from apps.fibers.management.commands.sync_fiber_data import sync_fibers, sync_infrastructure
+        from apps.fibers.management.commands.sync_fiber_data import (
+            sync_default_sections,
+            sync_fibers,
+            sync_infrastructure,
+        )
 
         fiber_stats = sync_fibers()
         infra_stats = sync_infrastructure()
+        section_stats = sync_default_sections()
         self.stdout.write(
             f"Data sync: fibers ({fiber_stats['added']}+/{fiber_stats['updated']}~), "
             f"infrastructure ({infra_stats['added']}+/{infra_stats['updated']}~/"
-            f"{infra_stats['deleted']}-)"
+            f"{infra_stats['deleted']}-), "
+            f"sections ({section_stats['added']}+ default)"
         )
 
         self.stdout.write(f"Data source: {source}")
