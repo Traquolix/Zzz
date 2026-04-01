@@ -42,6 +42,13 @@ export async function createSection(data: {
   })
 }
 
+export async function renameSection(id: string, name: string): Promise<{ id: string; name: string }> {
+  return apiRequest<{ id: string; name: string }>(`/api/sections/${id}`, {
+    method: 'PATCH',
+    body: { name },
+  })
+}
+
 export async function deleteSection(id: string): Promise<void> {
   await apiRequest<void>(`/api/sections/${id}`, { method: 'DELETE' })
 }

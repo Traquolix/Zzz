@@ -55,8 +55,8 @@ urlpatterns = [
     ),
     path(
         "sections/<str:section_id>",
-        monitoring_views.SectionDeleteView.as_view(),
-        name="section-delete",
+        monitoring_views.SectionDetailView.as_view(),
+        name="section-detail",
     ),
     path("stats", monitoring_views.StatsView.as_view(), name="stats"),
     path("user/preferences", pref_views.UserPreferencesView.as_view(), name="user-preferences"),
