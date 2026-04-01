@@ -266,10 +266,10 @@ class ModelRegistry:
 class AIEngineService(RollingBufferedTransformer):
     """AI Engine with multi-model routing and rolling buffer support.
 
-    Uses a rolling FIFO buffer for seamless overlapping window processing:
-    - Window size: 300 samples (30s at 10Hz)
-    - Step size: 250 samples (valid output per window after edge trimming)
-    - Overlap: 50 samples (2 * edge_trim) - naturally maintained by rolling buffer
+    Uses a rolling FIFO buffer for seamless overlapping window processing.
+    Buffer is sized in messages (each message may contain multiple time samples,
+    configured via samples_per_message). Window and step sizes are derived from
+    inference config: messages_per_window and step_size.
 
     Supports section-aware model routing:
     - Buffers messages by fiber_id:section (compound key)
@@ -321,25 +321,30 @@ class AIEngineService(RollingBufferedTransformer):
         self._log_init()
 
     def _log_init(self) -> None:
-        window_size = self._model_spec.inference.samples_per_window
-        step_size = self._model_spec.inference.step_size
-        overlap = window_size - step_size
+        inf = self._model_spec.inference
+        window_msgs = inf.messages_per_window
+        step_msgs = inf.step_size
+        overlap_msgs = window_msgs - step_msgs
+        spm = inf.samples_per_message
         self.logger.info(
-            f"Initialized with rolling buffer: window={window_size}, "
-            f"step={step_size}, overlap={overlap}, "
+            f"Initialized with rolling buffer: window={window_msgs} msgs "
+            f"({inf.samples_per_window} samples, {spm} samples/msg), "
+            f"step={step_msgs} msgs, overlap={overlap_msgs} msgs, "
             f"counting={'enabled' if self._model_spec.counting.enabled else 'disabled'}"
         )
 
     def get_window_size(self) -> int:
-        """Window size for processing (e.g., 300 samples = 30s at 10Hz)."""
-        return int(self._model_spec.inference.samples_per_window)
+        """Window size in messages for rolling buffer.
+
+        With multi-sample messages (samples_per_message > 1), fewer messages
+        are needed to fill the processing window.
+        """
+        return int(self._model_spec.inference.messages_per_window)
 
     def get_step_size(self) -> int:
-        """Step size for rolling buffer (e.g., 250 = valid output per window).
+        """Step size in messages for rolling buffer.
 
         This determines how often we process: every step_size new messages.
-        The overlap (window_size - step_size = 50) is naturally maintained
-        by the rolling FIFO buffer.
         """
         return int(self._model_spec.inference.step_size)
 

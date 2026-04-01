@@ -35,7 +35,12 @@ class BandpassFilter(ProcessingStep):
 
         fiber_id = measurement_data.get("fiber_id", "unknown")
         values = measurement_data.get("values", [])
-        channel_count = len(values)
+
+        if not isinstance(values, np.ndarray):
+            values = np.asarray(values, dtype=np.float64)
+
+        # Handle both 1D (channels,) and 2D (samples, channels) input
+        channel_count = values.shape[1] if values.ndim == 2 else values.shape[0]
 
         if channel_count == 0:
             return measurement_data
@@ -52,8 +57,6 @@ class BandpassFilter(ProcessingStep):
             fiber_state["state"] = self.filter.create_state(channel_count)
             fiber_state["channels"] = channel_count
 
-        if not isinstance(values, np.ndarray):
-            values = np.asarray(values, dtype=np.float64)
         filtered_values = self.filter.filter(values, fiber_state["state"])
 
         # Bound filter state growth (each fiber_id gets its own state)

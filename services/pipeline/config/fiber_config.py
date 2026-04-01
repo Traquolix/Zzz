@@ -76,6 +76,7 @@ class InferenceConfig:
     gauge_meters: float = 15.3846
     bidirectional_rnn: bool = True
     time_overlap_ratio: float = 0.5
+    samples_per_message: int = 1
 
     @classmethod
     def from_dict(cls, data: dict) -> InferenceConfig:
@@ -86,6 +87,7 @@ class InferenceConfig:
             gauge_meters=data.get("gauge_meters", 15.3846),
             bidirectional_rnn=data.get("bidirectional_rnn", True),
             time_overlap_ratio=data.get("time_overlap_ratio", 0.5),
+            samples_per_message=data.get("samples_per_message", 1),
         )
 
     @property
@@ -93,13 +95,14 @@ class InferenceConfig:
         return int(self.window_seconds * self.sampling_rate_hz)
 
     @property
-    def step_size(self) -> int:
-        """Step size for rolling buffer derived from overlap ratio.
+    def messages_per_window(self) -> int:
+        """Number of Kafka messages needed to fill a processing window."""
+        return max(1, self.samples_per_window // self.samples_per_message)
 
-        With 50% overlap: window=300, step=150 (process 2x more often).
-        The overlap ensures seamless window handoff with no gaps.
-        """
-        return int(self.samples_per_window * (1 - self.time_overlap_ratio))
+    @property
+    def step_size(self) -> int:
+        """Step size in messages for rolling buffer derived from overlap ratio."""
+        return max(1, int(self.messages_per_window * (1 - self.time_overlap_ratio)))
 
 
 @dataclass(frozen=True)

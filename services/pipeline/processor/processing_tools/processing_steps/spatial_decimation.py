@@ -10,6 +10,8 @@ Example:
 
 from typing import Any
 
+import numpy as np
+
 from processor.processing_tools.processing_steps.base_step import ProcessingStep
 
 
@@ -39,38 +41,46 @@ class SpatialDecimation(ProcessingStep):
         if measurement_data is None:
             return None
 
+        # Support both 1D (channels,) and 2D (samples, channels) input
         values = measurement_data.get("values", [])
-        msg_channel_start = measurement_data.get("channel_start", 0)
+        if not isinstance(values, np.ndarray):
+            values = np.asarray(values, dtype=np.float64)
 
-        if len(values) == 0:
+        is_batch = values.ndim == 2
+        n_channels = values.shape[1] if is_batch else values.shape[0]
+
+        if n_channels == 0:
             return measurement_data
 
-        # Determine slice bounds
-        start = self.channel_start
-        stop = self.channel_stop
+        msg_channel_start = measurement_data.get("channel_start", 0)
 
-        # Convert absolute channel numbers to local indices
-        local_start = max(0, start - msg_channel_start) if start is not None else 0
+        local_start = (
+            max(0, self.channel_start - msg_channel_start) if self.channel_start is not None else 0
+        )
+        local_stop = (
+            min(n_channels, self.channel_stop - msg_channel_start)
+            if self.channel_stop is not None
+            else n_channels
+        )
 
-        local_stop = min(len(values), stop - msg_channel_start) if stop is not None else len(values)
+        if is_batch:
+            selected_values = values[:, local_start : local_stop : self.factor]
+        else:
+            selected_values = values[local_start : local_stop : self.factor]
 
-        # Apply spatial decimation (select every Nth channel)
-        selected_values = values[local_start : local_stop : self.factor]
-
-        if len(selected_values) == 0:
+        out_channels = selected_values.shape[1] if is_batch else selected_values.shape[0]
+        if out_channels == 0:
             return None
 
         result = measurement_data.copy()
         result["values"] = selected_values
-        result["channel_count"] = len(selected_values)
+        result["channel_count"] = out_channels
 
-        # Update channel_start to reflect the first selected channel
-        if start is not None:
-            result["channel_start"] = max(msg_channel_start, start)
+        if self.channel_start is not None:
+            result["channel_start"] = max(msg_channel_start, self.channel_start)
         else:
             result["channel_start"] = msg_channel_start
 
-        # Store decimation factor for downstream processing
         result["spatial_decimation_factor"] = self.factor
 
         return result

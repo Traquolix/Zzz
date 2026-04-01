@@ -66,8 +66,9 @@ def messages_to_arrays(
     if log_fn:
         log_fn(f"Channel mapping: start={channel_start}, step={channel_step}")
 
-    data_list: list[list] = []
+    data_list: list[list | np.ndarray] = []
     timestamp_ns_list: list[int] = []
+    expected_channels: int | None = None
 
     for message in messages:
         payload = message.payload
@@ -75,25 +76,58 @@ def messages_to_arrays(
         if not values:
             continue
 
-        if data_list and len(values) != len(data_list[0]):
-            raise ValueError(
-                f"Channel count mismatch: expected {len(data_list[0])}, got {len(values)}"
-            )
-
         msg_channel_start = payload.get("channel_start")
         if msg_channel_start is not None and msg_channel_start != channel_start:
             raise ValueError(
                 f"channel_start mismatch: expected {channel_start}, got {msg_channel_start}"
             )
 
-        data_list.append(values)
-        timestamp_ns = payload.get("timestamp_ns")
-        if timestamp_ns is None or timestamp_ns <= 0:
-            if len(data_list) == 1 and log_fn:
-                log_fn("Missing timestamps, using fallback")
+        sample_count = payload.get("sample_count", 1)
+        channel_count = payload.get("channel_count")
+
+        if sample_count > 1:
+            if channel_count is None:
+                raise ValueError("Multi-sample message missing required 'channel_count' field")
+
+            # Multi-sample message: reshape flat values to (samples, channels)
+            values_arr = np.asarray(values, dtype=np.float64)
+            samples_2d = values_arr.reshape(sample_count, channel_count)
+
+            if expected_channels is not None and channel_count != expected_channels:
+                raise ValueError(
+                    f"Channel count mismatch: expected {expected_channels}, got {channel_count}"
+                )
+            expected_channels = channel_count
+
+            for i in range(sample_count):
+                data_list.append(samples_2d[i])
+
+            # Reconstruct per-sample timestamps
+            base_ts = payload.get("timestamp_ns")
             sample_duration = sample_duration_nanoseconds(expected_sampling_rate)
-            timestamp_ns = current_time_nanoseconds() - len(data_list) * sample_duration
-        timestamp_ns_list.append(timestamp_ns)
+            if base_ts is None or base_ts <= 0:
+                if log_fn:
+                    log_fn("Missing timestamps in multi-sample message, using fallback")
+                base_ts = current_time_nanoseconds() - sample_count * sample_duration
+            for i in range(sample_count):
+                timestamp_ns_list.append(base_ts + i * sample_duration)
+        else:
+            # Single-sample message
+            n_values = len(values)
+            if expected_channels is not None and n_values != expected_channels:
+                raise ValueError(
+                    f"Channel count mismatch: expected {expected_channels}, got {n_values}"
+                )
+            expected_channels = n_values
+
+            data_list.append(values)
+            timestamp_ns = payload.get("timestamp_ns")
+            if timestamp_ns is None or timestamp_ns <= 0:
+                if len(data_list) == 1 and log_fn:
+                    log_fn("Missing timestamps, using fallback")
+                sample_duration = sample_duration_nanoseconds(expected_sampling_rate)
+                timestamp_ns = current_time_nanoseconds() - len(data_list) * sample_duration
+            timestamp_ns_list.append(timestamp_ns)
 
     ctx.timestamps_ns = timestamp_ns_list
     data_array = np.array(data_list).T

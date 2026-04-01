@@ -129,17 +129,14 @@ class DASProcessor(MultiTransformer):
                     fiber_id = self._extract_fiber_id(topic)
                     span.set_attribute("source_topic", topic)
                 else:
-                    # Fallback for testing - extract from payload if available
                     fiber_id = message.payload.get("fiber_id", "unknown")
 
-                # Get fiber config for sampling rate.
                 try:
                     fiber_cfg = get_fiber_config(fiber_id)
                     sampling_rate_hz = fiber_cfg.sampling_rate_hz
                 except KeyError:
-                    sampling_rate_hz = 50.0  # Default DAS hardware sampling rate.
+                    sampling_rate_hz = 50.0
 
-                # Get fiber-specific pipelines and sections from fibers.yaml.
                 pipelines = self._get_fiber_pipelines(fiber_id)
                 fiber_cfg = self._fiber_configs.get(fiber_id)  # type: ignore[assignment]
 
@@ -148,51 +145,64 @@ class DASProcessor(MultiTransformer):
 
                 span.set_attribute("fiber_id", fiber_id)
 
-                # Unbatch: split batched DAS message (Package Size > 1) into
-                # individual per-timestamp measurements
-                measurements = self._unbatch_raw_message(
+                # Parse raw DAS batch into 2D array (samples, channels) + timestamps
+                batch_data, timestamps_ns = self._parse_raw_batch(
                     message.payload, fiber_id, sampling_rate_hz, fiber_cfg.total_channels
                 )
-                span.set_attribute("batch.size", len(measurements))
+                if batch_data is None:
+                    return []
 
+                n_samples = batch_data.shape[0]
+                n_channels = batch_data.shape[1]
+                span.set_attribute("batch.samples", n_samples)
+
+                # Process each section's pipeline on the full batch at once.
+                # Pipeline steps handle 2D (samples, channels) arrays, so each
+                # raw message produces at most 1 output message per section
+                # (containing multiple decimated time samples).
                 output_messages = []
-                for measurement in measurements:
-                    values = measurement.get("values", [])
-                    msg_start = measurement.get("channel_start", 0)
-                    msg_end = msg_start + len(values)
+                for section in fiber_cfg.sections:
+                    section_id = section.name
+                    if section_id not in pipelines:
+                        continue
+                    if n_channels <= section.channel_start:
+                        continue
 
-                    for section in fiber_cfg.sections:
-                        section_id = section.name
-                        if msg_end <= section.channel_start or msg_start >= section.channel_stop:
-                            continue
+                    # Pass 2D batch through the pipeline
+                    batch_measurement = {
+                        "fiber_id": fiber_id,
+                        "values": batch_data,
+                        "timestamps_ns": timestamps_ns,
+                        "channel_start": 0,
+                        "sampling_rate_hz": sampling_rate_hz,
+                    }
+                    processed = await pipelines[section_id].process(batch_measurement)
+                    if processed is None:
+                        continue
 
-                        if section_id not in pipelines:
-                            continue
+                    output = self._build_batch_output(
+                        processed, correlation_id, start_time, fiber_cfg, section
+                    )
+                    if output is None:
+                        continue
 
-                        processed = await pipelines[section_id].process(measurement)
-                        if processed is None:
-                            continue
-
-                        output = self._build_output(
-                            measurement, processed, correlation_id, start_time, fiber_cfg, section
+                    output_messages.append(
+                        Message(
+                            id=f"{fiber_id}:{section_id}",
+                            payload=output,
+                            headers={
+                                "source": self.service_name,
+                                "fiber_id": fiber_id,
+                                "section": section_id,
+                                "model_hint": section.model,
+                                "timestamp": str(output["timestamp_ns"]),
+                                "original_message_id": message.id,
+                                **(message.headers or {}),
+                            },
+                            output_id="default",
                         )
-                        output_messages.append(
-                            Message(
-                                id=f"{fiber_id}:{section_id}",
-                                payload=output,
-                                headers={
-                                    "source": self.service_name,
-                                    "fiber_id": fiber_id,
-                                    "section": section_id,
-                                    "model_hint": section.model,
-                                    "timestamp": str(output["timestamp_ns"]),
-                                    "original_message_id": message.id,
-                                    **(message.headers or {}),
-                                },
-                                output_id="default",
-                            )
-                        )
-                        span.set_attribute(f"section.{section_id}", True)
+                    )
+                    span.set_attribute(f"section.{section_id}", True)
 
                 span.set_attribute("sections_produced", len(output_messages))
                 return output_messages
@@ -202,29 +212,39 @@ class DASProcessor(MultiTransformer):
                 self.logger.error(f"Error processing message {message.id}: {e}")
                 raise
 
-    def _unbatch_raw_message(
-        self, raw: dict, fiber_id: str, sampling_rate_hz: float, total_channels: int
-    ) -> list:
-        """Split a batched DAS message into per-timestamp measurements.
+    def _parse_raw_batch(
+        self,
+        raw: dict,
+        fiber_id: str,
+        sampling_rate_hz: float,
+        total_channels: int,
+    ) -> tuple[np.ndarray | None, list[int]]:
+        """Parse a raw DAS message into a 2D batch array.
 
-        The DAS Package Size setting controls how many timestamps are concatenated
-        in floatData. With Package Size=25 and 5427 channels:
-          floatData has 5427*25 = 135,675 floats
-          Layout: [ch0_t0, ch1_t0, ..., ch5426_t0, ch0_t1, ..., ch5426_t24]
+        The DAS hardware sends floatData with Package Size samples concatenated:
+        Layout: [ch0_t0, ch1_t0, ..., chN_t0, ch0_t1, ..., chN_t1, ...]
+        i.e. row-major with shape (package_size, total_channels).
+
+        Package Size must be divisible by the temporal decimation factor so
+        each batch produces a consistent number of output samples.
+
+        Returns:
+            (data_2d, timestamps_ns) where data_2d has shape (samples, channels)
+            and timestamps_ns is a list of nanosecond timestamps per sample.
+            Returns (None, []) on parse failure.
         """
         raw_values = raw.get("floatData") or raw.get("longData") or []
         n_values = len(raw_values)
 
-        # Single timestamp (Package Size=1) — existing path
-        if n_values <= total_channels:
-            return [self._adapt_message(raw, fiber_id, sampling_rate_hz)]
+        if n_values == 0:
+            return None, []
 
         if n_values % total_channels != 0:
             self.logger.warning(
                 f"floatData length {n_values} not divisible by total_channels "
-                f"{total_channels} for fiber '{fiber_id}'. Using single-sample fallback."
+                f"{total_channels} for fiber '{fiber_id}'. Skipping."
             )
-            return [self._adapt_message(raw, fiber_id, sampling_rate_hz)]
+            return None, []
 
         batch_size = n_values // total_channels
         all_values = np.asarray(raw_values, dtype=np.float64)
@@ -232,90 +252,74 @@ class DASProcessor(MultiTransformer):
 
         first_ts = raw.get("timeStampNanoSec", int(time.time() * 1e9))
         sample_interval_ns = int(1e9 / sampling_rate_hz)
+        timestamps_ns = [first_ts + i * sample_interval_ns for i in range(batch_size)]
 
-        measurements = []
-        for i in range(batch_size):
-            measurements.append(
-                {
-                    "fiber_id": fiber_id,
-                    "values": data_2d[i],
-                    "timestamp_ns": first_ts + i * sample_interval_ns,
-                    "channel_start": 0,
-                    "sampling_rate_hz": sampling_rate_hz,
-                }
-            )
-        return measurements
+        return data_2d, timestamps_ns
 
-    def _adapt_message(self, raw: dict, fiber_id: str, sampling_rate_hz: float) -> dict:
-        """Convert raw DAS format (floatData/longData) to internal format."""
-        if "floatData" not in raw and "longData" not in raw:
-            # Already in internal format, return copy with fiber_id set
-            result = raw.copy()
-            result["fiber_id"] = fiber_id
-            return result
-        raw_values = raw.get("floatData") or raw.get("longData") or []
-        return {
-            "fiber_id": fiber_id,
-            "values": np.asarray(raw_values, dtype=np.float64),
-            "timestamp_ns": raw.get("timeStampNanoSec", int(time.time() * 1e9)),
-            "channel_start": 0,
-            "sampling_rate_hz": sampling_rate_hz,
-        }
-
-    def _build_output(
+    def _build_batch_output(
         self,
-        original: dict,
         processed: dict,
         correlation_id: str,
         start_time: float,
         fiber_cfg: FiberConfig,
         section: SectionConfig,
-    ) -> dict:
-        """Build output message with fiber_id, section, and model_hint tags."""
-        values = processed.get("values", [])
-        n = len(values)
+    ) -> dict | None:
+        """Build output message from batch-processed data.
 
-        # Signal stats (required by schema) — use numpy for speed
-        if n > 0:
-            if isinstance(values, np.ndarray):
-                stats = {
-                    "min_value": float(values.min()),
-                    "max_value": float(values.max()),
-                    "mean_value": float(values.mean()),
-                    "rms_value": float(np.sqrt(np.mean(values * values))),
-                }
-                values = values.tolist()  # Convert to list for Avro serialization
-            else:
-                stats = {
-                    "min_value": min(values),
-                    "max_value": max(values),
-                    "mean_value": sum(values) / n,
-                    "rms_value": (sum(v * v for v in values) / n) ** 0.5,
-                }
+        The processed dict contains:
+        - values: 2D array (samples, channels) after all pipeline steps
+        - timestamps_ns: list of timestamps for kept samples
+        """
+        values = processed.get("values")
+        if values is None:
+            return None
+
+        if not isinstance(values, np.ndarray):
+            values = np.asarray(values, dtype=np.float64)
+
+        if values.ndim == 2:
+            n_samples, n_channels = values.shape
+        elif values.ndim == 1:
+            n_samples, n_channels = 1, values.shape[0]
+            values = values.reshape(1, n_channels)
         else:
-            stats = {"min_value": 0.0, "max_value": 0.0, "mean_value": 0.0, "rms_value": 0.0}
+            return None
 
-        # Extract decimation factors from processed message or defaults
-        temporal_decimation = processed.get("temporal_decimation_factor", 5)
+        if n_channels == 0 or n_samples == 0:
+            return None
+
+        # Flatten to (samples * channels,) for Avro serialization
+        flat_values = values.flatten()
+
+        stats = {
+            "min_value": float(flat_values.min()),
+            "max_value": float(flat_values.max()),
+            "mean_value": float(flat_values.mean()),
+            "rms_value": float(np.sqrt(np.mean(flat_values * flat_values))),
+        }
+
+        temporal_decimation = processed.get("temporal_decimation_factor", 1)
         spatial_decimation = processed.get("spatial_decimation_factor", 1)
 
+        # Use first kept timestamp as the message timestamp
+        timestamps_ns = processed.get("timestamps_ns", [])
+        first_ts = timestamps_ns[0] if timestamps_ns else 0
+
         return {
-            # Core data
             "fiber_id": processed.get("fiber_id"),
-            "timestamp_ns": processed.get("timestamp_ns"),
+            "timestamp_ns": first_ts,
             "sampling_rate_hz": processed.get(
                 "sampling_rate_hz", fiber_cfg.sampling_rate_hz / temporal_decimation
             ),
             "channel_start": processed.get("channel_start", section.channel_start),
-            "channel_count": n,
-            "values": values,
-            # Section routing info (for AI engine)
+            "channel_count": n_channels,
+            "sample_count": n_samples,
+            "values": flat_values.tolist(),
             "section": section.name,
             "model_hint": section.model,
-            # Metadata (required by schema, useful for debugging)
             "processing_metadata": {
                 "original_sampling_rate_hz": fiber_cfg.sampling_rate_hz,
-                "original_channel_count": len(original.get("values", [])),
+                "original_channel_count": fiber_cfg.total_channels,
                 "temporal_decimation_factor": temporal_decimation,
                 "spatial_decimation_factor": spatial_decimation,
                 "channel_selection": {
@@ -326,7 +330,7 @@ class DASProcessor(MultiTransformer):
                 "processing_timestamp_ns": time.time_ns(),
                 "correlation_id": correlation_id,
                 "processing_duration_ms": (time.time() - start_time) * 1000,
-                "original_timestamp": original.get("timestamp_ns"),
+                "original_timestamp": None,
             },
             "signal_stats": stats,
         }
