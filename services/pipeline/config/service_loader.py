@@ -120,9 +120,9 @@ def get_ai_engine_fiber_id() -> str | None:
 def get_service_name(service_type: str) -> str:
     """Get service name from config.
 
-    For the processor, if FIBER_ID is set, appends it to the service name
-    (e.g. "das-processor-carros") so each instance gets a unique Kafka
-    consumer group.id.
+    Single instance per service type handles all fibers. If FIBER_ID is
+    set (legacy), it is appended to the service name for backwards
+    compatibility with per-fiber deployments.
     """
     manager = FiberConfigManager()
     raw = manager.get_raw_config()

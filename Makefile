@@ -168,7 +168,7 @@ down: ## Stop all services
 logs: ## Tail logs for a service (usage: make logs SERVICE=platform-backend)
 	docker compose logs -f $(SERVICE)
 
-rebuild: ## Rebuild and restart a service (usage: make rebuild SERVICE=processor-carros)
+rebuild: ## Rebuild and restart a service (usage: make rebuild SERVICE=processor)
 	docker compose up -d --build --force-recreate $(SERVICE)
 
 shell: ## Open a shell in a service container (usage: make shell SERVICE=platform-backend)
