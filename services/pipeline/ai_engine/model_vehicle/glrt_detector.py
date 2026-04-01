@@ -82,6 +82,7 @@ class GLRTDetector:
         timestamps_ns: np.ndarray | None,
         min_vehicle_duration_s: float = 0.3,
         classify_threshold_factor: float = 2.0,
+        aligned_data: np.ndarray | None = None,
     ) -> list[dict]:
         """Extract vehicle detections from a single direction's output.
 
@@ -91,7 +92,9 @@ class GLRTDetector:
             direction: 0 for forward, 1 for reverse
             timestamps_ns: nanosecond timestamps for trimmed window, or None
             min_vehicle_duration_s: minimum detection duration in seconds
-            classify_threshold_factor: peaks above detect_thr * this factor are trucks
+            classify_threshold_factor: GLRT multiplier for truck classification
+            aligned_data: (sections, Nch, trimmed_time) aligned sensor data for
+                strain extraction. If None, strain fields default to 0.
 
         Returns:
             List of detection dicts
@@ -131,22 +134,36 @@ class GLRTDetector:
                     ts_ns = None
 
                 seg = glrt_summed[section_idx, v_start:v_end]
-                n_vehicles, n_cars, n_trucks = count_peaks_in_segment(
+                glrt_max = float(np.max(seg))
+                n_vehicles, _, _ = count_peaks_in_segment(
                     seg, detect_thr, classify_thr, self.fs,
                 )
                 n_vehicles = float(max(1, n_vehicles))
-                n_cars = float(n_cars)
-                n_trucks = float(n_trucks)
+
+                # Strain metrics from aligned sensor data
+                strain_peak = 0.0
+                strain_rms = 0.0
+                if aligned_data is not None:
+                    interval_data = aligned_data[section_idx, :, v_start:v_end]
+                    strain_peak = float(np.mean(np.max(np.abs(interval_data), axis=1)))
+                    strain_rms = float(np.mean(np.sqrt(np.mean(interval_data ** 2, axis=1))))
+
+                # Truck classification based on GLRT strength
+                is_truck = glrt_max >= classify_thr
+                n_trucks = n_vehicles if is_truck else 0.0
+                n_cars = n_vehicles - n_trucks
 
                 detections.append({
                     "section_idx": section_idx,
                     "speed_kmh": vehicle_speed,
                     "direction": direction,
                     "timestamp_ns": ts_ns,
-                    "glrt_max": float(np.max(seg)),
+                    "glrt_max": glrt_max,
                     "vehicle_count": n_vehicles,
                     "n_cars": n_cars,
                     "n_trucks": n_trucks,
+                    "strain_peak": strain_peak,
+                    "strain_rms": strain_rms,
                     "_t_mid_sample": t_mid,
                 })
 

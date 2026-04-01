@@ -30,17 +30,25 @@ function isObject(v: unknown): v is Record<string, unknown> {
 }
 
 function isDetection(d: unknown): d is Detection {
-  return (
-    isObject(d) &&
-    typeof d.fiberId === 'string' &&
-    typeof d.direction === 'number' &&
-    typeof d.channel === 'number' &&
-    typeof d.speed === 'number' &&
-    typeof d.count === 'number' &&
-    typeof d.nCars === 'number' &&
-    typeof d.nTrucks === 'number' &&
-    typeof d.timestamp === 'number'
+  if (
+    !(
+      isObject(d) &&
+      typeof d.fiberId === 'string' &&
+      typeof d.direction === 'number' &&
+      typeof d.channel === 'number' &&
+      typeof d.speed === 'number' &&
+      typeof d.count === 'number' &&
+      typeof d.nCars === 'number' &&
+      typeof d.nTrucks === 'number' &&
+      typeof d.timestamp === 'number'
+    )
   )
+    return false
+  // Default new fields if missing
+  if (typeof d.glrtMax !== 'number') (d as Record<string, unknown>).glrtMax = 0
+  if (typeof d.strainPeak !== 'number') (d as Record<string, unknown>).strainPeak = 0
+  if (typeof d.strainRms !== 'number') (d as Record<string, unknown>).strainRms = 0
+  return true
 }
 
 function isIncident(d: unknown): d is Incident {

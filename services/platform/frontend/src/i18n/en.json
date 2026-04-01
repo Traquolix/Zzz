@@ -148,6 +148,8 @@
     "trafficSnapshot": "Traffic Snapshot",
     "noSnapshot": "No snapshot available",
     "vehicles": "vehicles",
+    "car": "Car",
+    "truck": "Truck",
     "speedUnit": "km/h",
     "beta": "BETA",
     "appName": "Sequoia",

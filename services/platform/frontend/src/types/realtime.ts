@@ -6,5 +6,8 @@ export type Detection = {
   count: number
   nCars: number
   nTrucks: number
+  glrtMax: number
+  strainPeak: number
+  strainRms: number
   timestamp: number
 }

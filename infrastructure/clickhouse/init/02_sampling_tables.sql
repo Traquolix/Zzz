@@ -38,7 +38,9 @@ CREATE TABLE IF NOT EXISTS sequoia.detection_hires
     n_cars Float32 DEFAULT 0 CODEC(Gorilla),
     n_trucks Float32 DEFAULT 0 CODEC(Gorilla),
     lng Nullable(Float64) CODEC(Gorilla),
-    lat Nullable(Float64) CODEC(Gorilla)
+    lat Nullable(Float64) CODEC(Gorilla),
+    strain_peak Float32 DEFAULT 0 CODEC(Gorilla),
+    strain_rms Float32 DEFAULT 0 CODEC(Gorilla)
 )
 ENGINE = ReplacingMergeTree()
 PARTITION BY (fiber_id, toYYYYMMDD(ts))

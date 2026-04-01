@@ -616,6 +616,7 @@ class AIEngineService(RollingBufferedTransformer):
                     timestamps_ns=result.timestamps_ns,
                     min_vehicle_duration_s=min_vehicle_duration_s,
                     classify_threshold_factor=classify_threshold_factor,
+                    aligned_data=result.aligned_data,
                 )
                 all_detections.extend(detections)
 
@@ -939,6 +940,7 @@ class AIEngineService(RollingBufferedTransformer):
                 timestamps_ns=result.timestamps_ns,
                 min_vehicle_duration_s=min_vehicle_duration_s,
                 classify_threshold_factor=classify_threshold_factor,
+                aligned_data=result.aligned_data,
             )
             all_detections.extend(detections)
 
