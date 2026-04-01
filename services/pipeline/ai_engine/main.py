@@ -314,7 +314,6 @@ class AIEngineService(RollingBufferedTransformer):
             ai_metrics=self.ai_metrics,
         )
         self.speed_processor = self.model_registry._default_model
-        self.count_processor = self.model_registry._default_counter
 
         # Per-fiber filtering: if FIBER_ID is set, only process that fiber's messages
         self._fiber_filter = get_ai_engine_fiber_id()
@@ -594,14 +593,10 @@ class AIEngineService(RollingBufferedTransformer):
         t_gpu = (time.time() - t_gpu) * 1000
 
         t_post = time.time()
-        t_detect_total = 0.0
-        t_count_total = 0.0
-        t_msg_total = 0.0
         results = []
         for _i, (section_results, meta) in enumerate(
             zip(batch_results, section_meta, strict=False)
         ):
-            t_detect = time.time()
             all_detections = []
             for result in section_results:
                 direction = int(result.direction_mask[0, 0])
@@ -614,56 +609,118 @@ class AIEngineService(RollingBufferedTransformer):
                     classify_threshold_factor=classify_threshold_factor,
                 )
                 all_detections.extend(detections)
-            t_detect_total += time.time() - t_detect
 
-            # Count processing (visualization only)
-            t_count = time.time()
-            buffer_key = meta["buffer_key"]
+            # CNN counting: aggregate sub-windows → 1 section, feed to counter.
+            # The counter accumulates a 360s sliding window and yields CNN counts
+            # per interval. We apply those counts to detections in the last batch slice.
             ctx = meta["ctx"]
-            count_processor = self.model_registry.get_counter(meta["model_hint"], buffer_key)
+            count_processor = self.model_registry.get_counter(
+                meta["model_hint"], meta["buffer_key"]
+            )
             if self._model_spec.counting.enabled and count_processor is not None:
                 for result in section_results:
                     try:
+                        # Aggregate 164 sub-windows → 1 section (matches notebook pattern)
+                        agg_corr = np.mean(result.glrt_summed, axis=0, keepdims=True)
+                        agg_speed = np.nanmedian(
+                            result.aligned_speed_per_pair, axis=0, keepdims=True
+                        )
+                        agg_data = np.mean(result.aligned_data, axis=0, keepdims=True)
+
                         chunk_start_ns = (
                             int(result.timestamps_ns[0])
                             if result.timestamps_ns is not None
                             else None
                         )
-                        for chunk_result in count_processor.process_data_chunk(
-                            aligned_speed=result.aligned_speed_per_pair,
-                            correlations=result.glrt_summed,
-                            aligned_data=result.aligned_data,
+                        for (
+                            counts,
+                            intervals,
+                            _window_start_ns,
+                        ) in count_processor.process_data_chunk(
+                            aligned_speed=agg_speed,
+                            correlations=agg_corr,
+                            aligned_data=agg_data,
                             timestamp_ns=chunk_start_ns,
                         ):
-                            counts, intervals, window_start_ns = chunk_result
-                            count_timestamps = (
-                                [window_start_ns]
-                                if window_start_ns is not None
-                                else ctx.timestamps_ns
+                            # Apply CNN counts to detections whose timestamps fall
+                            # within counting intervals. The counter's intervals are
+                            # in sample indices relative to the 360s window; we match
+                            # detections by checking if they overlap the last batch
+                            # slice of the counting window.
+                            self._apply_cnn_counts(
+                                all_detections, counts, intervals, count_processor
                             )
-                            speed_processor.set_count_data((counts, intervals, count_timestamps))
                     except Exception as e:
                         logger.error(f"Error in vehicle counting: {e}")
-            t_count_total += time.time() - t_count
 
-            t_msg = time.time()
             output_messages = self._create_detection_messages(
                 meta["fiber_id"],
                 all_detections,
                 ctx,
             )
             results.append((all_detections, output_messages))
-            t_msg_total += time.time() - t_msg
         t_post = (time.time() - t_post) * 1000
 
-        self.logger.info(
-            f"Inference breakdown: gpu={t_gpu:.0f}ms, post={t_post:.0f}ms "
-            f"(detect={t_detect_total * 1000:.0f}ms, "
-            f"count={t_count_total * 1000:.0f}ms, "
-            f"msg={t_msg_total * 1000:.0f}ms)"
-        )
+        self.logger.info(f"Inference breakdown: gpu={t_gpu:.0f}ms, post={t_post:.0f}ms")
 
         return results
+
+    def _apply_cnn_counts(
+        self,
+        detections: list[dict],
+        counts: list,
+        intervals: list,
+        count_processor: VehicleCounter,
+    ) -> None:
+        """Overwrite detection vehicle_count/n_cars/n_trucks with CNN counter results.
+
+        The CNN counter operates on a 360s window with 1 aggregated section.
+        We take the counts from section 0 and match them to detections by
+        checking if the detection's sample position falls within a counting interval.
+        Only detections in the last batch slice (recent data) get updated.
+        """
+        if not counts or not intervals or not detections:
+            return
+
+        # Section 0 (we aggregated to 1 section)
+        sec_counts = counts[0] if len(counts) > 0 else None
+        sec_intervals = intervals[0] if len(intervals) > 0 else None
+        if sec_counts is None or sec_intervals is None:
+            return
+
+        starts, ends = sec_intervals
+        if not starts or not ends:
+            return
+
+        sec_counts_arr = np.asarray(sec_counts, dtype=float)
+
+        # The counting window is time_window_samples long. The last batch of data
+        # sits at the end of this window. Detections have _t_mid_sample relative to
+        # the current 30s batch (trimmed). We offset them to the counting window's
+        # coordinate system: the batch occupies the tail of the counting window.
+        time_window_samples = int(count_processor.time_window_duration * count_processor.fs)
+        # Current batch length in samples (from the trimmed detection window)
+        batch_samples = 0
+        for det in detections:
+            if det.get("_t_mid_sample") is not None:
+                batch_samples = max(batch_samples, det["_t_mid_sample"] + 1)
+        if batch_samples == 0:
+            return
+
+        batch_offset = time_window_samples - batch_samples
+
+        for det in detections:
+            t_mid = det.get("_t_mid_sample")
+            if t_mid is None:
+                continue
+            # Map detection position to counting window coordinates
+            t_in_window = batch_offset + t_mid
+
+            # Find which counting interval contains this detection
+            for idx, (s, e) in enumerate(zip(starts, ends, strict=False)):
+                if s <= t_in_window < e and idx < len(sec_counts_arr):
+                    det["vehicle_count"] = float(max(1.0, sec_counts_arr[idx]))
+                    break
 
     async def process_buffer(self, messages: list[Message]) -> list[Message]:
         with self.tracer.start_as_current_span("process_buffer") as span:
@@ -694,7 +751,6 @@ class AIEngineService(RollingBufferedTransformer):
 
                 # Get the appropriate model for this section
                 speed_processor = self.model_registry.get_speed_estimator(model_hint)
-                count_processor = self.model_registry.get_counter(model_hint, buffer_key)
 
                 # Get or create processing context for this buffer
                 ctx = self._get_or_create_context(buffer_key)
@@ -726,7 +782,6 @@ class AIEngineService(RollingBufferedTransformer):
                         buffer_key,
                         ctx,
                         speed_processor=speed_processor,
-                        count_processor=count_processor,
                     )
                 except RuntimeError as e:
                     # Catch PyTorch dimension mismatches (e.g., "input.size(-1) must be equal to input_size")
@@ -825,7 +880,6 @@ class AIEngineService(RollingBufferedTransformer):
         buffer_key: str,
         ctx: ProcessingContext,
         speed_processor: VehicleSpeedEstimator | None = None,
-        count_processor: VehicleCounter | None = None,
     ) -> list[dict]:
         """Run AI inference and return unified detections.
 
@@ -840,7 +894,6 @@ class AIEngineService(RollingBufferedTransformer):
             buffer_key,
             ctx,
             speed_processor or self.speed_processor,
-            count_processor,
         )
 
     def _sync_ai_inference(
@@ -851,7 +904,6 @@ class AIEngineService(RollingBufferedTransformer):
         buffer_key: str,
         ctx: ProcessingContext,
         speed_processor: VehicleSpeedEstimator,
-        count_processor: VehicleCounter | None = None,
     ) -> list[dict]:
         timestamps = np.array(timestamp_list)
         timestamps_ns_array = np.array(timestamps_ns)
@@ -880,26 +932,6 @@ class AIEngineService(RollingBufferedTransformer):
                 classify_threshold_factor=classify_threshold_factor,
             )
             all_detections.extend(detections)
-
-            # Optional: feed count data to visualizer (does NOT produce Kafka output)
-            if self._model_spec.counting.enabled and count_processor is not None:
-                try:
-                    chunk_start_ns = (
-                        int(result.timestamps_ns[0]) if result.timestamps_ns is not None else None
-                    )
-                    for chunk_result in count_processor.process_data_chunk(
-                        aligned_speed=result.aligned_speed_per_pair,
-                        correlations=result.glrt_summed,
-                        aligned_data=result.aligned_data,
-                        timestamp_ns=chunk_start_ns,
-                    ):
-                        counts, intervals, window_start_ns = chunk_result
-                        count_timestamps = (
-                            [window_start_ns] if window_start_ns is not None else ctx.timestamps_ns
-                        )
-                        speed_processor.set_count_data((counts, intervals, count_timestamps))
-                except Exception as e:
-                    self.logger.error(f"Error in vehicle counting (visualization): {e}")
 
         if yield_count == 0:
             raise RuntimeError(f"AI model did not yield results for {buffer_key}")

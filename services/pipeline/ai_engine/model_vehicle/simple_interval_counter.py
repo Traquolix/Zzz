@@ -231,46 +231,6 @@ class VehicleCounter:
             yield counts, intervals, window_start_ts
 
     # ------------------------------------------------------------------
-    # Legacy API (kept for backwards compatibility with existing callers)
-    # ------------------------------------------------------------------
-
-    def count_from_intervals(
-        self,
-        filtered_speed: np.ndarray,
-        glrt_summed: np.ndarray,
-        intervals_list: List[Tuple[List[int], List[int]]],
-        timestamps_ns: List[int],
-    ) -> Tuple[List, List, List]:
-        """Legacy peak-based counting (fallback when not using accumulation).
-
-        This method provides backwards compatibility for callers that
-        haven't been updated to use process_data_chunk yet.
-        """
-        counts = []
-        for section_idx, (starts, ends) in enumerate(intervals_list):
-            section_counts = []
-            for start, end in zip(starts, ends):
-                glrt_segment = glrt_summed[section_idx, start:end]
-                n_vehicles, n_cars, n_trucks = self._count_peaks_in_segment(
-                    glrt_segment,
-                    self.corr_threshold * self.n_pairs,
-                    self.fs,
-                )
-                section_counts.append((n_vehicles, n_cars, n_trucks))
-            counts.append(section_counts)
-        return counts, intervals_list, timestamps_ns
-
-    def _count_peaks_in_segment(
-        self, glrt_segment: np.ndarray, threshold: float, fs: float
-    ) -> Tuple[int, int, int]:
-        return count_peaks_in_segment(
-            glrt_segment,
-            detect_threshold=threshold,
-            classify_threshold=threshold * 2.0,
-            sampling_rate_hz=fs,
-        )
-
-    # ------------------------------------------------------------------
     # Core: process_window_data (matches notebook)
     # ------------------------------------------------------------------
 
