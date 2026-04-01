@@ -65,6 +65,8 @@ class Args_NN_model_all_channels:
 
         if TORCH_AVAILABLE and torch.backends.mps.is_available():
             self.batch_size = 64
+        elif TORCH_AVAILABLE and torch.cuda.is_available():
+            self.batch_size = 128
         else:
             self.batch_size = 32
 
