@@ -10,8 +10,7 @@
 
 1. [ ] **Re-apply gunicorn multi-worker with Redis sync fix** [#133]
        Single-process uvicorn is the main production bottleneck.
-2. [ ] **CPAB/GPU memory leaks in AI engine** [#100]
-       Actively leaking memory in deployed AI engine.
+2. [x] **Remove "v2" naming from message_service_v2** [#268]
 
 ### Priority 2 — Contained feature
 
@@ -20,6 +19,15 @@
 ### Done
 
 4. [x] **Codebase hygiene sweep** [#201] — all items resolved (#249, #250, #251)
+5. [x] **CPAB CUDA JIT compilation** [#258] — 230x speedup on transform_grid
+6. [x] **Fix counting wiring + dead code removal** [#264] — CNN counting properly wired
+7. [x] **Batch size + DataLoader optimization** [#266] — DTAN batch_size 32→128
+8. [x] **Multi-fiber AI engine** [#269] — single instance for all fibers
+9. [x] **Multi-fiber processor** [#272] — single instance for all fibers
+10. [x] **Enable mathis + promenade fibers** [#273, #279]
+11. [x] **Batch pipeline processing** [#280] — 25x reduction in pipeline runs
+12. [x] **Concurrent poll loop** [#276] — async dispatch in ServiceBase
+13. [x] **Fix multi-fiber batch dispatch** [#277] — all sections per fiber before dispatching
 
 ## Sprint 6 — Foundations + features (due June 29)
 
