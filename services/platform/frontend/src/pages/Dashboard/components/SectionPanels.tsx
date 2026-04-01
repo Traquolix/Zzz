@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { COLORS, chartColors } from '@/lib/theme'
@@ -181,6 +181,7 @@ export function SectionDetail({
   const [timeRange, setTimeRange] = useState<TimeRange>('1m')
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState(section.name)
+  const committedRef = useRef(false)
 
   // KPIs use the always-on page-level stats (stable regardless of chart time range)
   const live = liveStats.get(section.id)
@@ -258,15 +259,21 @@ export function SectionDetail({
                 onChange={e => setNameDraft(e.target.value)}
                 onKeyDown={e => {
                   if (e.key === 'Enter') {
-                    updateSectionName(section.id, nameDraft)
+                    committedRef.current = true
+                    if (nameDraft.trim()) {
+                      updateSectionName(section.id, nameDraft)
+                    }
                     setEditingName(false)
                   } else if (e.key === 'Escape') {
+                    committedRef.current = true
                     setNameDraft(section.name)
                     setEditingName(false)
                   }
                 }}
                 onBlur={() => {
-                  updateSectionName(section.id, nameDraft)
+                  if (!committedRef.current && nameDraft.trim()) {
+                    updateSectionName(section.id, nameDraft)
+                  }
                   setEditingName(false)
                 }}
                 className="bg-transparent border-b border-[var(--dash-accent)] text-[length:inherit] font-[inherit] text-[var(--dash-text)] outline-none w-full"
@@ -278,12 +285,14 @@ export function SectionDetail({
               tabIndex={0}
               className="cursor-pointer hover:text-[var(--dash-accent)] transition-colors"
               onClick={() => {
+                committedRef.current = false
                 setNameDraft(section.name)
                 setEditingName(true)
               }}
               onKeyDown={e => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault()
+                  committedRef.current = false
                   setNameDraft(section.name)
                   setEditingName(true)
                 }
