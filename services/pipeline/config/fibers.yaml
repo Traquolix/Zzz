@@ -7,6 +7,14 @@
 #   - section: A contiguous range of channels processed together (with its own model)
 #   - temporal_decimation: Reduce sampling rate (e.g., 125Hz -> 10.4167Hz)
 #   - spatial_decimation: Reduce channel count (e.g., keep every Nth channel)
+#
+# DAS hardware requirement:
+#   Package Size must be divisible by temporal_decimation factor (12).
+#   Recommended: package_size=24 → 24/12 = 2 output samples per message.
+#   Set samples_per_message in inference config to match.
+#
+# Section passthrough:
+#   Set pipeline: [] on a section to forward raw data without processing.
 
 # =============================================================================
 # Service Infrastructure Defaults
@@ -156,6 +164,7 @@ model_defaults:
     channels_per_section: 9
     gauge_meters: 15.3846       # = 5.128 * 3 (post spatial decimation)
     bidirectional_rnn: true
+    samples_per_message: 2      # = DAS package_size (24) / temporal_decimation (12)
 
   speed_detection:
     min_speed_kmh: 20.0

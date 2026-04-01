@@ -331,15 +331,17 @@ class AIEngineService(RollingBufferedTransformer):
         )
 
     def get_window_size(self) -> int:
-        """Window size for processing (e.g., 300 samples = 30s at 10Hz)."""
-        return int(self._model_spec.inference.samples_per_window)
+        """Window size in messages for rolling buffer.
+
+        With multi-sample messages (samples_per_message > 1), fewer messages
+        are needed to fill the processing window.
+        """
+        return int(self._model_spec.inference.messages_per_window)
 
     def get_step_size(self) -> int:
-        """Step size for rolling buffer (e.g., 250 = valid output per window).
+        """Step size in messages for rolling buffer.
 
         This determines how often we process: every step_size new messages.
-        The overlap (window_size - step_size = 50) is naturally maintained
-        by the rolling FIFO buffer.
         """
         return int(self._model_spec.inference.step_size)
 

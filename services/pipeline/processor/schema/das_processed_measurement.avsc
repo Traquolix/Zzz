@@ -42,12 +42,18 @@
       "doc": "Model hint for AI engine routing (e.g., dtan_carros, urban_v2)"
     },
     {
+      "name": "sample_count",
+      "type": "int",
+      "default": 1,
+      "doc": "Number of time samples in this message. Values array contains channel_count * sample_count floats, row-major: [ch0_t0, ch1_t0, ..., chN_t0, ch0_t1, ..., chN_t1]"
+    },
+    {
       "name": "values",
       "type": {
         "type": "array",
         "items": "float"
       },
-      "doc": "Processed channel measurement values, one per channel"
+      "doc": "Processed channel values. Contains channel_count * sample_count floats, row-major by time sample"
     },
     {
       "name": "processing_metadata",
