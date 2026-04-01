@@ -107,7 +107,7 @@ fibers:
 
   mathis:
     input_topic: das.raw.mathis
-    total_channels: 5342
+    total_channels: 5428
     sampling_rate_hz: 125.0
 
     sections:
