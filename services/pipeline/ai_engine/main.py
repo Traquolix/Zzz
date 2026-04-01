@@ -317,7 +317,6 @@ class AIEngineService(RollingBufferedTransformer):
 
         # Per-fiber pending sections for batch dispatch
         self._pending_per_fiber: dict[str, dict] = {}
-        self._msgs_since_ready_per_fiber: dict[str, int] = {}
 
         self._log_init()
 
@@ -418,21 +417,17 @@ class AIEngineService(RollingBufferedTransformer):
                 self._pending_per_fiber[fiber_id][buffer_key] = list(buffer_info["deque"])
                 buffer_info["new_count"] = 0
 
-            # Track messages per fiber and dispatch when ready
+            # Dispatch when all sections for a fiber are ready
             for fid in list(self._pending_per_fiber):
-                if fid not in self._msgs_since_ready_per_fiber:
-                    self._msgs_since_ready_per_fiber[fid] = 0
-                if fiber_id == fid:
-                    self._msgs_since_ready_per_fiber[fid] += 1
-
-                # Count sections belonging to this fiber
-                fiber_buffer_count = sum(
+                # Count how many sections this fiber has (active buffers)
+                fiber_section_count = sum(
                     1 for info in self._rolling_buffers.values() if info.get("fiber_id") == fid
                 )
 
-                if self._msgs_since_ready_per_fiber[fid] >= fiber_buffer_count:
+                # Dispatch when all sections are pending
+                pending_count = len(self._pending_per_fiber[fid])
+                if pending_count >= fiber_section_count:
                     ready = self._pending_per_fiber.pop(fid)
-                    self._msgs_since_ready_per_fiber.pop(fid, None)
                     self.logger.info(
                         f"Dispatching batch: {len(ready)} sections: {list(ready.keys())}"
                     )
