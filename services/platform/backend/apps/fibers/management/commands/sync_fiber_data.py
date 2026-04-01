@@ -308,7 +308,7 @@ def sync_default_sections(dry_run: bool = False) -> dict[str, int]:
 
         for r in ranges:
             for direction in (0, 1):
-                section_id = f"{fiber_id}:{r['start']}-{r['end']}:d{direction}"
+                section_id = f"{org.slug}:{fiber_id}:{r['start']}-{r['end']}:d{direction}"
                 Section.objects.get_or_create(
                     id=section_id,
                     defaults={
