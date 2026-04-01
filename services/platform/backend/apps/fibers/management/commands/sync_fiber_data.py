@@ -273,6 +273,58 @@ def sync_infrastructure(dry_run: bool = False, org_slug: str = "sequoia") -> dic
     return stats
 
 
+def sync_default_sections(dry_run: bool = False) -> dict[str, int]:
+    """Create default sections from fibers.yaml for orgs that have no sections yet.
+
+    For each fiber assigned to an org, if the org has zero sections on that
+    fiber, creates one Section per direction per fibers.yaml section definition.
+    Existing sections are never modified or deleted.
+    """
+    from apps.fibers.models import FiberAssignment
+    from apps.monitoring.models import Section
+
+    stats = {"added": 0, "skipped": 0}
+    coverage = _load_data_coverage()
+
+    if not coverage:
+        return stats
+
+    for assignment in FiberAssignment.objects.select_related("organization").all():
+        fiber_id = assignment.fiber_id
+        org = assignment.organization
+        ranges = coverage.get(fiber_id, [])
+        if not ranges:
+            continue
+
+        # Skip if org already has any sections on this fiber
+        existing = Section.objects.filter(organization=org, fiber_id=fiber_id).exists()
+        if existing:
+            stats["skipped"] += 1
+            continue
+
+        if dry_run:
+            stats["added"] += len(ranges) * 2  # Both directions
+            continue
+
+        for r in ranges:
+            for direction in (0, 1):
+                section_id = f"{org.slug}:{fiber_id}:{r['start']}-{r['end']}:d{direction}"
+                Section.objects.get_or_create(
+                    id=section_id,
+                    defaults={
+                        "organization": org,
+                        "fiber_id": fiber_id,
+                        "direction": direction,
+                        "name": f"{fiber_id} [{r['start']}-{r['end']}]",
+                        "channel_start": r["start"],
+                        "channel_end": r["end"],
+                    },
+                )
+                stats["added"] += 1
+
+    return stats
+
+
 class Command(BaseCommand):
     help = "Sync fiber and infrastructure data from JSON/YAML sources into PostgreSQL."
 
@@ -292,4 +344,10 @@ class Command(BaseCommand):
         self.stdout.write(
             f"{prefix}Infrastructure: {infra_stats['added']} added, "
             f"{infra_stats['updated']} updated, {infra_stats['deleted']} deleted"
+        )
+
+        section_stats = sync_default_sections(dry_run=dry_run)
+        self.stdout.write(
+            f"{prefix}Default sections: {section_stats['added']} added, "
+            f"{section_stats['skipped']} fibers skipped (already have sections)"
         )
