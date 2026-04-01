@@ -35,20 +35,28 @@ class SpeedFilter:
         filtered_data = speed * binary_filter
 
         for ch_idx in range(speed.shape[0]):
-            start, finish = intervals[ch_idx]
+            starts, ends = intervals[ch_idx]
 
-            if len(start) == 0:
+            if len(starts) == 0:
                 continue
 
+            starts_arr = np.asarray(starts)
+            ends_arr = np.asarray(ends)
+
+            # Compute median speed per interval in one vectorized pass
             vehicle_speeds = np.array(
-                [np.nanmedian(filtered_data[ch_idx, start[i] : finish[i]])
-                 for i in range(len(start))]
+                [np.nanmedian(filtered_data[ch_idx, s:e]) for s, e in zip(starts_arr, ends_arr)]
             )
 
-            mask = (vehicle_speeds > self.max_speed) | (vehicle_speeds < self.min_speed)
+            invalid = (vehicle_speeds > self.max_speed) | (vehicle_speeds < self.min_speed)
+            invalid_idx = np.where(invalid)[0]
 
-            for idx in np.where(mask)[0]:
-                filtered_data[ch_idx, start[idx] : finish[idx]] = np.nan
+            if len(invalid_idx) > 0:
+                # Build a boolean mask for all invalid time samples at once
+                nan_mask = np.zeros(filtered_data.shape[1], dtype=bool)
+                for idx in invalid_idx:
+                    nan_mask[starts_arr[idx] : ends_arr[idx]] = True
+                filtered_data[ch_idx, nan_mask] = np.nan
 
         return filtered_data
 

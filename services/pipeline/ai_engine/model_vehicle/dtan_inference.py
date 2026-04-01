@@ -14,7 +14,6 @@ import numpy as np
 
 try:
     import torch
-    from torch.utils.data import DataLoader, TensorDataset
     TORCH_AVAILABLE = True
 except ImportError:
     TORCH_AVAILABLE = False
@@ -84,13 +83,9 @@ class DTANInference:
             Tuple of (thetas, grid_t)
         """
         batch_size = self.model_args.batch_size
+        device = self.model_args.device_name
 
-        test_data_torch = torch.from_numpy(data_window)
-        test = TensorDataset(test_data_torch)
-
-        test_loader = DataLoader(
-            test, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=True
-        )
+        data_tensor = torch.from_numpy(data_window).float().to(device, non_blocking=True)
 
         with torch.no_grad():
             torch.backends.cudnn.benchmark = True
@@ -98,11 +93,10 @@ class DTANInference:
             test_thetas_list = []
             test_grid_t_list = []
 
-            for data in test_loader:
-                device = self.model_args.device_name
-                data = data[0].to(torch.FloatTensor(), non_blocking=True).to(device, non_blocking=True)
+            for start in range(0, len(data_tensor), batch_size):
+                batch = data_tensor[start : start + batch_size]
 
-                _, thetas, grid_t = self.model(data, return_theta_and_transformed_grid=True)
+                _, thetas, grid_t = self.model(batch, return_theta_and_transformed_grid=True)
 
                 test_thetas_list.append(thetas.detach().cpu().numpy())
                 test_grid_t_list.append(grid_t.detach().cpu().numpy())
