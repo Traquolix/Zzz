@@ -121,8 +121,7 @@ services:
       KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
     networks: [ internal ]
 
-  # Per-fiber processors for horizontal scaling.
-  # Each subscribes to a single das.raw.<fiber> topic via FIBER_ID env var.
+  # Single processor handles all fibers via topic pattern subscription (das.raw.*).
   processor:
     build:
       context: services/pipeline
