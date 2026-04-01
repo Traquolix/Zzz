@@ -136,9 +136,11 @@ class SectionDetailView(APIView):
 
     permission_classes = [IsActiveUser, IsNotViewer]
 
+    @extend_schema(
+        responses={200: dict},
+        tags=["sections"],
+    )
     def patch(self, request: Request, section_id: str) -> Response:
-        from apps.monitoring.models import Section
-
         org_id = None if request.user.is_superuser else request.user.organization_id
         qs = Section.objects.filter(id=section_id)
         if org_id is not None:
@@ -150,9 +152,13 @@ class SectionDetailView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
         name = request.data.get("name")
-        if name:
-            section.name = name
-            section.save(update_fields=["name", "updated_at"])
+        if not name or not name.strip():
+            return Response(
+                {"detail": "name is required", "code": "validation_error"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        section.name = name.strip()
+        section.save(update_fields=["name", "updated_at"])
         return Response({"id": section.id, "name": section.name})
 
     def delete(self, request: Request, section_id: str) -> Response:
