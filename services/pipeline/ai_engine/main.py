@@ -266,10 +266,10 @@ class ModelRegistry:
 class AIEngineService(RollingBufferedTransformer):
     """AI Engine with multi-model routing and rolling buffer support.
 
-    Uses a rolling FIFO buffer for seamless overlapping window processing:
-    - Window size: 300 samples (30s at 10Hz)
-    - Step size: 250 samples (valid output per window after edge trimming)
-    - Overlap: 50 samples (2 * edge_trim) - naturally maintained by rolling buffer
+    Uses a rolling FIFO buffer for seamless overlapping window processing.
+    Buffer is sized in messages (each message may contain multiple time samples,
+    configured via samples_per_message). Window and step sizes are derived from
+    inference config: messages_per_window and step_size.
 
     Supports section-aware model routing:
     - Buffers messages by fiber_id:section (compound key)

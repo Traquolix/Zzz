@@ -221,6 +221,13 @@ class DASProcessor(MultiTransformer):
     ) -> tuple[np.ndarray | None, list[int]]:
         """Parse a raw DAS message into a 2D batch array.
 
+        The DAS hardware sends floatData with Package Size samples concatenated:
+        Layout: [ch0_t0, ch1_t0, ..., chN_t0, ch0_t1, ..., chN_t1, ...]
+        i.e. row-major with shape (package_size, total_channels).
+
+        Package Size must be divisible by the temporal decimation factor so
+        each batch produces a consistent number of output samples.
+
         Returns:
             (data_2d, timestamps_ns) where data_2d has shape (samples, channels)
             and timestamps_ns is a list of nanosecond timestamps per sample.

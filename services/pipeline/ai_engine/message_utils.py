@@ -66,7 +66,7 @@ def messages_to_arrays(
     if log_fn:
         log_fn(f"Channel mapping: start={channel_start}, step={channel_step}")
 
-    data_list: list = []
+    data_list: list[list | np.ndarray] = []
     timestamp_ns_list: list[int] = []
     expected_channels: int | None = None
 
@@ -83,9 +83,12 @@ def messages_to_arrays(
             )
 
         sample_count = payload.get("sample_count", 1)
-        channel_count = payload.get("channel_count", len(values))
+        channel_count = payload.get("channel_count")
 
         if sample_count > 1:
+            if channel_count is None:
+                raise ValueError("Multi-sample message missing required 'channel_count' field")
+
             # Multi-sample message: reshape flat values to (samples, channels)
             values_arr = np.asarray(values, dtype=np.float64)
             samples_2d = values_arr.reshape(sample_count, channel_count)
@@ -100,17 +103,22 @@ def messages_to_arrays(
                 data_list.append(samples_2d[i])
 
             # Reconstruct per-sample timestamps
-            base_ts = payload.get("timestamp_ns", 0)
+            base_ts = payload.get("timestamp_ns")
             sample_duration = sample_duration_nanoseconds(expected_sampling_rate)
+            if base_ts is None or base_ts <= 0:
+                if log_fn:
+                    log_fn("Missing timestamps in multi-sample message, using fallback")
+                base_ts = current_time_nanoseconds() - sample_count * sample_duration
             for i in range(sample_count):
                 timestamp_ns_list.append(base_ts + i * sample_duration)
         else:
-            # Single-sample message (legacy format)
-            if expected_channels is not None and len(values) != expected_channels:
+            # Single-sample message
+            n_values = len(values)
+            if expected_channels is not None and n_values != expected_channels:
                 raise ValueError(
-                    f"Channel count mismatch: expected {expected_channels}, got {len(values)}"
+                    f"Channel count mismatch: expected {expected_channels}, got {n_values}"
                 )
-            expected_channels = len(values)
+            expected_channels = n_values
 
             data_list.append(values)
             timestamp_ns = payload.get("timestamp_ns")
