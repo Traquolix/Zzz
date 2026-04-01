@@ -137,7 +137,7 @@ backend venv on first run, but `make lint` and `make typecheck` expect venvs to 
 ## Architectural Invariants
 
 1. **One Kafka partition per fiber** — strict message ordering required. The sliding-window buffers in Processor and AI Engine produce wrong results with out-of-order messages.
-2. **Per-fiber service instances** — each Processor and AI Engine runs for one fiber only (configured via `FIBER_ID` env var). Scaling = more instances for more fibers.
+2. **Single-instance multi-fiber** — one Processor and one AI Engine handle all fibers. The Processor subscribes to `das.raw.*` (topic pattern). The AI Engine dispatches per-fiber batches independently with GPU lock serialization.
 3. **Config hot-reload** — `FiberConfigManager` watches `fibers.yaml` for changes. Never cache fiber config in module-level variables.
 4. **Multi-tenant backend** — every API query is scoped to `request.user.organization`. Superuser admin endpoints are the only exception.
 5. **ClickHouse 3-tier storage** — `detection_hires` (48h TTL) → `detection_1m` (90d) → `detection_1h` (forever). Aggregation is handled by ClickHouse materialized views, not Python.
