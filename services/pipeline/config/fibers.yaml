@@ -105,20 +105,20 @@ fibers:
       - name: 202Bis
         channels: [1200, 2748]
 
-  # mathis:
-  #   input_topic: das.raw.mathis
-  #   total_channels: 5428
-  #   sampling_rate_hz: 125.0
-  #
-  #   sections:
-  #     - name: seg1
-  #       channels: [800, 870]
-  #     - name: seg2
-  #       channels: [971, 1441]
-  #     - name: seg3
-  #       channels: [1794, 1981]
-  #     - name: seg4
-  #       channels: [2096, 2251]
+  mathis:
+    input_topic: das.raw.mathis
+    total_channels: 5428
+    sampling_rate_hz: 125.0
+
+    sections:
+      - name: seg1
+        channels: [800, 870]
+      - name: seg2
+        channels: [971, 1441]
+      - name: seg3
+        channels: [1794, 1981]
+      - name: seg4
+        channels: [2096, 2251]
 
   # promenade:
   #   input_topic: das.raw.promenade
