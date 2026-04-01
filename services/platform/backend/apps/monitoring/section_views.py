@@ -126,14 +126,34 @@ class SectionListView(APIView):
         return Response(section, status=status.HTTP_201_CREATED)
 
 
-class SectionDeleteView(APIView):
+class SectionDetailView(APIView):
     """
+    PATCH  /api/sections/<id> — update section name.
     DELETE /api/sections/<id> — delete a monitored section.
 
     Org-scoped via Section.organization FK. Requires non-viewer role.
     """
 
     permission_classes = [IsActiveUser, IsNotViewer]
+
+    def patch(self, request: Request, section_id: str) -> Response:
+        from apps.monitoring.models import Section
+
+        org_id = None if request.user.is_superuser else request.user.organization_id
+        qs = Section.objects.filter(id=section_id)
+        if org_id is not None:
+            qs = qs.filter(organization_id=org_id)
+        section = qs.first()
+        if not section:
+            return Response(
+                {"detail": "Section not found", "code": "not_found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        name = request.data.get("name")
+        if name:
+            section.name = name
+            section.save(update_fields=["name", "updated_at"])
+        return Response({"id": section.id, "name": section.name})
 
     def delete(self, request: Request, section_id: str) -> Response:
         org_id = None if request.user.is_superuser else request.user.organization_id

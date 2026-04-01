@@ -6,7 +6,7 @@ export function DetailHeader({
   onBack,
   badge,
 }: {
-  title: string
+  title: React.ReactNode
   subtitle?: React.ReactNode
   onBack?: () => void
   badge?: React.ReactNode

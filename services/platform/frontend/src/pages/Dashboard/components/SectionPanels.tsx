@@ -8,6 +8,7 @@ import type { Section, LiveSectionStats, SectionDataPoint, MetricKey } from '../
 import { TimeSeriesChart } from './TimeSeriesChart'
 import { Sparkline } from './Sparkline'
 import { useSectionHistory } from '../hooks/useSectionHistory'
+import { useSections } from '../hooks/useSections'
 import { PanelEmptyState } from './PanelEmptyState'
 import { DetailHeader } from './DetailHeader'
 import { MetricCard } from './MetricCard'
@@ -173,10 +174,13 @@ export function SectionDetail({
   const { dispatch } = useDashboard()
   const { t } = useTranslation()
   const { findFiber } = useFiberData()
+  const { updateSectionName } = useSections()
   const fiber = findFiber(section.fiberId, section.direction)
   const fiberColor = fiber ? getFiberColor(fiber, fiberColors) : COLORS.chart.speed
 
   const [timeRange, setTimeRange] = useState<TimeRange>('1m')
+  const [editingName, setEditingName] = useState(false)
+  const [nameDraft, setNameDraft] = useState(section.name)
 
   // KPIs use the always-on page-level stats (stable regardless of chart time range)
   const live = liveStats.get(section.id)
@@ -245,7 +249,51 @@ export function SectionDetail({
   return (
     <div className="dash-analysis-enter flex flex-col">
       <DetailHeader
-        title={section.name}
+        title={
+          editingName ? (
+            <div className="flex items-center gap-1.5">
+              <input
+                autoFocus
+                value={nameDraft}
+                onChange={e => setNameDraft(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    updateSectionName(section.id, nameDraft)
+                    setEditingName(false)
+                  } else if (e.key === 'Escape') {
+                    setNameDraft(section.name)
+                    setEditingName(false)
+                  }
+                }}
+                onBlur={() => {
+                  updateSectionName(section.id, nameDraft)
+                  setEditingName(false)
+                }}
+                className="bg-transparent border-b border-[var(--dash-accent)] text-[length:inherit] font-[inherit] text-[var(--dash-text)] outline-none w-full"
+              />
+            </div>
+          ) : (
+            <span
+              role="button"
+              tabIndex={0}
+              className="cursor-pointer hover:text-[var(--dash-accent)] transition-colors"
+              onClick={() => {
+                setNameDraft(section.name)
+                setEditingName(true)
+              }}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  setNameDraft(section.name)
+                  setEditingName(true)
+                }
+              }}
+              title={t('common.clickToEdit')}
+            >
+              {section.name}
+            </span>
+          )
+        }
         onBack={onBack}
         subtitle={
           fiber && (

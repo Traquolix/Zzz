@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { fetchSections, createSection, deleteSection, type ApiSection } from '@/api/sections'
+import { fetchSections, createSection, deleteSection, renameSection, type ApiSection } from '@/api/sections'
 import type { Section } from '../types'
 import { defaultSpeedThresholds } from '../data'
 
@@ -55,6 +55,15 @@ export function useSections() {
     },
   })
 
+  const renameMutation = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => renameSection(id, name),
+    onSuccess: result => {
+      queryClient.setQueryData<Section[]>(['sections'], prev =>
+        (prev ?? []).map(s => (s.id === result.id ? { ...s, name: result.name } : s)),
+      )
+    },
+  })
+
   const deleteMutation = useMutation({
     mutationFn: deleteSection,
     onSuccess: (_data, id) => {
@@ -77,5 +86,12 @@ export function useSections() {
     [deleteMutation],
   )
 
-  return { sections, loading, addSection, removeSection }
+  const updateSectionName = useCallback(
+    async (id: string, name: string) => {
+      await renameMutation.mutateAsync({ id, name })
+    },
+    [renameMutation],
+  )
+
+  return { sections, loading, addSection, removeSection, updateSectionName }
 }
