@@ -22,7 +22,7 @@
               v                   v
     +---------+--------+  +-------+---------+
     |   PROCESSOR      |  |   AI ENGINE     |
-    |   (per fiber)    |  |   (per fiber)   |
+    |   (all fibers)   |  |   (all fibers)  |
     |                  |  |                 |
     |   das.raw.*  -->-+->|  das.processed  |
     |   das.processed  |  |  --> das.detections
@@ -60,22 +60,22 @@
 ## Services
 
 ### Processor (`services/pipeline/processor/`)
-- **Consumes:** `das.raw.<fiber_id>` (raw DAS measurements, Avro)
+- **Consumes:** `das.raw.*` (raw DAS measurements from all fibers, Avro, topic pattern)
 - **Produces:** `das.processed` (filtered/decimated measurements, Avro)
 - **Entry point:** `processor/main.py`
-- **Pattern:** RollingBufferedTransformer (inherits from ServiceBase)
-- **Processing chain:** Bandpass filter → Spatial decimation → Temporal decimation → Common mode removal → Energy normalization
-- **One instance per fiber** — configured via `FIBER_ID` env var
+- **Pattern:** MultiTransformer (inherits from ServiceBase)
+- **Processing chain:** Spatial decimation → Scale → Bandpass filter → Temporal decimation
+- **Single instance** handles all fibers via topic pattern subscription
 
 ### AI Engine (`services/pipeline/ai_engine/`)
-- **Consumes:** `das.processed` (filtered by `FIBER_ID`)
+- **Consumes:** `das.processed` (all fibers)
 - **Produces:** `das.detections` (vehicle detections, Avro) + direct ClickHouse inserts
 - **Entry point:** `ai_engine/main.py`
 - **Requires:** NVIDIA GPU (CUDA 12.4)
 - **Model:** DTAN (Diffeomorphic Temporal Alignment Network) for speed estimation
 - **Detection:** GLRT (Generalized Likelihood Ratio Test) for peak counting
-- **Classification:** Car vs truck via energy thresholds per section
-- **One instance per fiber** — configured via `FIBER_ID` env var
+- **Classification:** Car vs truck via GLRT strength thresholds
+- **Single instance** handles all fibers with per-fiber batch dispatch and GPU lock serialization
 
 ### Backend (`services/platform/backend/`)
 - **Consumes:** Kafka `das.detections` via Kafka bridge → Redis channels → WebSocket

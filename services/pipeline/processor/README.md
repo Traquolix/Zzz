@@ -72,7 +72,6 @@ inside Docker containers (the config file is bind-mounted from the host).
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `FIBER_ID` | (none) | Filter to one fiber (e.g., `carros`). Creates consumer group `das-processor-<fiber>`. |
 | `KAFKA_BOOTSTRAP_SERVERS` | `kafka:29092` | Kafka broker address |
 | `SCHEMA_REGISTRY_URL` | `http://schema-registry:8081` | Avro schema registry |
 
@@ -80,18 +79,18 @@ inside Docker containers (the config file is bind-mounted from the host).
 
 ```bash
 # Docker (standard)
-make rebuild SERVICE=processor-carros
+make rebuild SERVICE=processor
 
 # Local development
 cd services/pipeline
 pip install -e .
-FIBER_ID=carros python -m processor.main
+python -m processor.main
 ```
 
 ## Design
 
 - **Pattern:** `MultiTransformer` (1 input → N outputs, one per section)
-- **Scaling:** One instance per fiber via `FIBER_ID` env var
+- **Scaling:** Single instance handles all fibers via topic pattern subscription (`das.raw.*`)
 - **State:** Processing steps maintain per-fiber state (filter coefficients, CMR warmup)
 - **Health:** HTTP server on `:8080` (`/healthz`, `/readyz`, `/metrics`)
 - **Errors:** Circuit breaker + exponential backoff, failed messages routed to `das.dlq`

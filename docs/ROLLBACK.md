@@ -45,7 +45,7 @@ If only one service is broken, rebuild just that one:
 docker compose up -d --build --force-recreate platform-backend
 
 # Example: only the AI engine is broken
-docker compose up -d --build --force-recreate ai-engine-carros
+docker compose up -d --build --force-recreate ai-engine
 ```
 
 ## Manual Rollback — Frontend

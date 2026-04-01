@@ -82,7 +82,6 @@ fibers:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `FIBER_ID` | (none) | Filter to one fiber. Creates consumer group `das-ai-engine-<fiber>`. |
 | `KAFKA_BOOTSTRAP_SERVERS` | `kafka:29092` | Kafka broker address |
 | `SCHEMA_REGISTRY_URL` | `http://schema-registry:8081` | Avro schema registry |
 | `CALIBRATION_PATH` | `/app/calibration` | Directory with per-fiber `.npz` calibration files |
@@ -91,21 +90,21 @@ fibers:
 
 ```bash
 # Docker (standard) — requires NVIDIA GPU
-make rebuild SERVICE=ai-engine-carros
+make rebuild SERVICE=ai-engine
 
 # Local development
 cd services/pipeline
 pip install -e ".[ai]"       # Includes PyTorch + CUDA
-FIBER_ID=carros python -m ai_engine.main
+python -m ai_engine.main
 
 # CPU fallback (slower, minor numerical differences)
-CUDA_VISIBLE_DEVICES="" FIBER_ID=carros python -m ai_engine.main
+CUDA_VISIBLE_DEVICES="" python -m ai_engine.main
 ```
 
 ## Design
 
 - **Pattern:** `RollingBufferedTransformer` (sliding window with overlap)
-- **Scaling:** One instance per fiber via `FIBER_ID` env var
+- **Scaling:** Single instance handles all fibers with per-fiber batch dispatch
 - **GPU:** NVIDIA GPU required for production throughput. CPU fallback works but is slower.
 - **Model registry:** LRU cache of loaded models (max 20), lazy-loaded on first use
 - **Health:** HTTP server on `:8080` (`/healthz`, `/readyz`, `/metrics`)

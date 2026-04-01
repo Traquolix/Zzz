@@ -79,7 +79,7 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
         self._running = False
         self.config = config or ServiceConfig()
 
-        self.logger = logging.getLogger(f"message_service_v2.{service_name}")
+        self.logger = logging.getLogger(f"sequoia.pipeline.{service_name}")
         self.tracer = trace.get_tracer(__name__)
 
         self.service_type = self._detect_service_type()

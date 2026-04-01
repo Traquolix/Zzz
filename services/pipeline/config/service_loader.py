@@ -97,9 +97,9 @@ def _build_outputs(service_type: str, topics: dict, schemas: dict) -> dict[str, 
 def _get_input_config(service_type: str, topics: dict) -> tuple[str | None, str | None]:
     """Get input topic or pattern for service type.
 
-    For the processor, if FIBER_ID env var is set, subscribes to a single
-    topic (das.raw.<fiber_id>) instead of the regex pattern. This allows
-    running one processor per fiber for horizontal scaling.
+    For the processor, subscribes to a regex pattern matching all fiber
+    topics (das.raw.*). If FIBER_ID env var is set (legacy), subscribes
+    to a single topic instead.
     """
     if service_type == "processor":
         fiber_id = os.getenv("FIBER_ID")
@@ -113,16 +113,16 @@ def _get_input_config(service_type: str, topics: dict) -> tuple[str | None, str 
 
 
 def get_ai_engine_fiber_id() -> str | None:
-    """Get FIBER_ID for AI engine filtering, if set."""
+    """Get FIBER_ID for AI engine filtering, if set. Legacy — no longer used."""
     return os.getenv("FIBER_ID")
 
 
 def get_service_name(service_type: str) -> str:
     """Get service name from config.
 
-    For the processor, if FIBER_ID is set, appends it to the service name
-    (e.g. "das-processor-carros") so each instance gets a unique Kafka
-    consumer group.id.
+    Single instance per service type handles all fibers. If FIBER_ID is
+    set (legacy), it is appended to the service name for backwards
+    compatibility with per-fiber deployments.
     """
     manager = FiberConfigManager()
     raw = manager.get_raw_config()

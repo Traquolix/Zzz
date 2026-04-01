@@ -35,7 +35,7 @@ Data flow: DAS Interrogator → Kafka → Processor → Kafka → AI Engine → 
 - **Bounded in-memory caches.** Any in-memory buffer or cache (detection rings, incident snapshots, simulation state) must have both a size cap and a TTL or time-window eviction. Unbounded growth will eventually OOM the server.
 - **Org-scoped cache keys.** Cache keys for per-user or per-org data must include the org ID (use `build_org_cache_key`). Cache keys for flow-dependent data must include the flow. A cache key without scoping is a cross-tenant or cross-flow data leak.
 - **One Kafka partition per fiber** — strict message ordering. Anything that could cause out-of-order processing is a bug.
-- **Per-fiber service instances** — Processor and AI Engine run for one fiber only (`FIBER_ID` env var). Code must not assume multiple fibers in a single instance.
+- **Single-instance multi-fiber** — one Processor and one AI Engine handle all fibers. Per-fiber batch dispatch with GPU lock serialization.
 - **Config hot-reload** — `FiberConfigManager` watches `fibers.yaml`. Flag any module-level caching of fiber config.
 - **ClickHouse 3-tier storage** — `detection_hires` (48h) → `detection_1m` (90d) → `detection_1h` (forever). Aggregation is done by ClickHouse materialized views, not application code.
 - **ServiceBase pattern** — all pipeline services inherit from `shared.service_base.ServiceBase`. New services that don't follow the transformer hierarchy (Consumer → Producer → Transformer → MultiTransformer → BufferedTransformer → RollingBufferedTransformer) need justification.
