@@ -123,7 +123,7 @@ services:
 
   # Per-fiber processors for horizontal scaling.
   # Each subscribes to a single das.raw.<fiber> topic via FIBER_ID env var.
-  processor-carros:
+  processor:
     build:
       context: services/pipeline
       dockerfile: processor/Dockerfile
@@ -131,7 +131,7 @@ services:
         HTTP_PROXY: ${HTTP_PROXY:-}
         HTTPS_PROXY: ${HTTPS_PROXY:-}
         NO_PROXY: ${NO_PROXY:-}
-    container_name: processor-carros
+    container_name: processor
     restart: unless-stopped
     depends_on:
       kafka:
@@ -144,65 +144,10 @@ services:
           memory: 4G
           cpus: '4.0'
     environment:
-      FIBER_ID: carros
       no_proxy: localhost,127.0.0.1,kafka,schema-registry,otel-lgtm
       NO_PROXY: localhost,127.0.0.1,kafka,schema-registry,otel-lgtm
     env_file: .env
     networks: [ internal ]
-
-  # processor-mathis:
-  #   build:
-  #     context: services/pipeline
-  #     dockerfile: processor/Dockerfile
-  #     args:
-  #       HTTP_PROXY: ${HTTP_PROXY:-}
-  #       HTTPS_PROXY: ${HTTPS_PROXY:-}
-  #       NO_PROXY: ${NO_PROXY:-}
-  #   container_name: processor-mathis
-  #   restart: unless-stopped
-  #   depends_on:
-  #     kafka:
-  #       condition: service_healthy
-  #     schema-registry:
-  #       condition: service_healthy
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         memory: 4G
-  #         cpus: '4.0'
-  #   environment:
-  #     FIBER_ID: mathis
-  #   env_file: .env
-  #   networks: [ internal ]
-
-  # processor-promenade:
-  #   build:
-  #     context: services/pipeline
-  #     dockerfile: processor/Dockerfile
-  #     args:
-  #       HTTP_PROXY: ${HTTP_PROXY:-}
-  #       HTTPS_PROXY: ${HTTPS_PROXY:-}
-  #       NO_PROXY: ${NO_PROXY:-}
-  #   container_name: processor-promenade
-  #   restart: unless-stopped
-  #   depends_on:
-  #     kafka:
-  #       condition: service_healthy
-  #     schema-registry:
-  #       condition: service_healthy
-  #   deploy:
-  #     resources:
-  #       limits:
-  #         memory: 4G
-  #         cpus: '4.0'
-  #   environment:
-  #     FIBER_ID: promenade
-  #   env_file: .env
-  #   networks: [ internal ]
-
-
-  # Per-fiber AI engines for horizontal scaling.
-  # Each filters messages by FIBER_ID from the shared das.processed topic.
   # Separate consumer groups ensure parallel processing.
   ai-engine:
     build:

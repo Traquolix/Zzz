@@ -12,12 +12,6 @@ services:
             - driver: nvidia
               device_ids: ['1']
               capabilities: [gpu]
-  processor-carros:
+  processor:
     volumes:
       - ./data/captures:/app/data_captures:rw
-  # processor-mathis:
-  #   volumes:
-  #     - ./data/captures:/app/data_captures:rw
-  # processor-promenade:
-  #   volumes:
-  #   - ./data/captures:/app/data_captures:rw
