@@ -2,7 +2,7 @@ services:
   platform-backend:
     volumes:
       - ./secrets:/app/secrets:ro
-  ai-engine-carros:
+  ai-engine:
     environment:
       - NVIDIA_VISIBLE_DEVICES=1
     deploy:
@@ -12,26 +12,6 @@ services:
             - driver: nvidia
               device_ids: ['1']
               capabilities: [gpu]
-  # ai-engine-mathis:
-  #   environment:
-  #     - NVIDIA_VISIBLE_DEVICES=1
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             device_ids: ['1']
-  #             capabilities: [gpu]
-  # ai-engine-promenade:
-  #   environment:
-  #     - NVIDIA_VISIBLE_DEVICES=1
-  #   deploy:
-  #     resources:
-  #       reservations:
-  #         devices:
-  #           - driver: nvidia
-  #             device_ids: ['1']
-  #             capabilities: [gpu]
   processor-carros:
     volumes:
       - ./data/captures:/app/data_captures:rw

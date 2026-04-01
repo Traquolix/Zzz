@@ -8,7 +8,7 @@ import time
 
 # Suppress PyTorch deprecation warnings
 import warnings
-from collections import OrderedDict, deque
+from collections import OrderedDict, defaultdict, deque
 from pathlib import Path
 
 import numpy as np
@@ -31,7 +31,6 @@ from ai_engine.model_vehicle.simple_interval_counter import VehicleCounter, buil
 
 # Unified config loader
 from config import (
-    get_ai_engine_fiber_id,
     get_default_model_name,
     get_model_spec,
     get_service_name,
@@ -316,10 +315,9 @@ class AIEngineService(RollingBufferedTransformer):
         )
         self.speed_processor = self.model_registry._default_model
 
-        # Per-fiber filtering: if FIBER_ID is set, only process that fiber's messages
-        self._fiber_filter = get_ai_engine_fiber_id()
-        if self._fiber_filter:
-            self.logger.info(f"Fiber filter active: processing only fiber '{self._fiber_filter}'")
+        # Per-fiber pending sections for batch dispatch
+        self._pending_per_fiber: dict[str, dict] = {}
+        self._msgs_since_ready_per_fiber: dict[str, int] = {}
 
         self._log_init()
 
@@ -361,26 +359,19 @@ class AIEngineService(RollingBufferedTransformer):
 
     async def _start_service_loops(self):
         """Override to initialize batch collection state before starting loops."""
-        self._pending_ready: dict = {}
-        self._msgs_since_first_ready = 0
         await super()._start_service_loops()
 
     async def _handle_rolling_message(self, message: Message) -> None:
-        """Filter by FIBER_ID, buffer, and batch-process ready sections together.
+        """Buffer messages and batch-process ready sections per fiber.
 
-        Instead of dispatching immediately when one section is ready, we collect
-        ready sections and dispatch after all sections in the fiber have had a
-        chance to become ready. Since messages arrive interleaved (seg1, seg2,
-        seg3, seg4, seg1, ...), all sections become ready within num_sections
-        messages of each other.
+        Messages arrive interleaved across fibers and sections (carros:seg1,
+        carros:seg2, mathis:seg1, ...). We group pending sections by fiber_id
+        and dispatch each fiber's batch independently when all its sections
+        are ready.
         """
-        if self._fiber_filter:
-            msg_fiber = message.payload.get("fiber_id", "")
-            if msg_fiber != self._fiber_filter:
-                return
-
         try:
             buffer_key = self.get_buffer_key(message)
+            fiber_id = message.payload.get("fiber_id", "unknown")
 
             # Evict LRU buffer if at capacity
             if (
@@ -404,6 +395,7 @@ class AIEngineService(RollingBufferedTransformer):
                     "deque": deque(maxlen=self._window_size),
                     "new_count": 0,
                     "last_update": time.time(),
+                    "fiber_id": fiber_id,
                 }
                 self.metrics.update_buffer_count(len(self._rolling_buffers))
             else:
@@ -421,21 +413,26 @@ class AIEngineService(RollingBufferedTransformer):
                 and len(buffer_info["deque"]) >= self._window_size
                 and buffer_info["new_count"] >= self._step_size
             ):
-                self._pending_ready[buffer_key] = list(buffer_info["deque"])
+                if fiber_id not in self._pending_per_fiber:
+                    self._pending_per_fiber[fiber_id] = {}
+                self._pending_per_fiber[fiber_id][buffer_key] = list(buffer_info["deque"])
                 buffer_info["new_count"] = 0
 
-            # Track messages since first section became ready
-            if self._pending_ready:
-                self._msgs_since_first_ready += 1
+            # Track messages per fiber and dispatch when ready
+            for fid in list(self._pending_per_fiber):
+                if fid not in self._msgs_since_ready_per_fiber:
+                    self._msgs_since_ready_per_fiber[fid] = 0
+                if fiber_id == fid:
+                    self._msgs_since_ready_per_fiber[fid] += 1
 
-                # Dispatch when we've waited long enough for all sections.
-                # num_buffers = total sections for this fiber. After processing
-                # num_buffers more messages, all sections have had a chance.
-                num_buffers = len(self._rolling_buffers)
-                if self._msgs_since_first_ready >= num_buffers:
-                    ready = dict(self._pending_ready)
-                    self._pending_ready.clear()
-                    self._msgs_since_first_ready = 0
+                # Count sections belonging to this fiber
+                fiber_buffer_count = sum(
+                    1 for info in self._rolling_buffers.values() if info.get("fiber_id") == fid
+                )
+
+                if self._msgs_since_ready_per_fiber[fid] >= fiber_buffer_count:
+                    ready = self._pending_per_fiber.pop(fid)
+                    self._msgs_since_ready_per_fiber.pop(fid, None)
                     self.logger.info(
                         f"Dispatching batch: {len(ready)} sections: {list(ready.keys())}"
                     )
@@ -497,18 +494,29 @@ class AIEngineService(RollingBufferedTransformer):
                     return
                 t_deser = (time.time() - t_deser) * 1000
 
-                speed_processor = self.model_registry.get_speed_estimator(
-                    section_meta[0]["model_hint"]
-                )
+                # Group sections by model_hint for batched GPU passes.
+                # Sections sharing a model are processed together; different
+                # models get separate passes (future: per-fiber models).
+                model_groups: dict[str, tuple[list, list]] = defaultdict(lambda: ([], []))
+                for inp, meta in zip(section_inputs, section_meta, strict=False):
+                    hint = meta["model_hint"]
+                    model_groups[hint][0].append(inp)
+                    model_groups[hint][1].append(meta)
 
-                # Run batched inference
+                # Run batched inference per model group
                 t_infer = time.time()
-                batch_results = await asyncio.to_thread(
-                    self._sync_batch_inference,
-                    section_inputs,
-                    section_meta,
-                    speed_processor,
-                )
+                all_batch_results: list[tuple[list, list]] = []
+                all_batch_meta: list[dict] = []
+                for model_hint, (group_inputs, group_meta) in model_groups.items():
+                    speed_processor = self.model_registry.get_speed_estimator(model_hint)
+                    batch_results = await asyncio.to_thread(
+                        self._sync_batch_inference,
+                        group_inputs,
+                        group_meta,
+                        speed_processor,
+                    )
+                    all_batch_results.extend(batch_results)
+                    all_batch_meta.extend(group_meta)
                 t_infer = (time.time() - t_infer) * 1000
 
                 processing_time = (time.time() - start_time) * 1000
@@ -516,7 +524,7 @@ class AIEngineService(RollingBufferedTransformer):
                 # Send outputs and record metrics for each section
                 total_outputs = 0
                 for meta, (detections, output_messages) in zip(
-                    section_meta, batch_results, strict=False
+                    all_batch_meta, all_batch_results, strict=False
                 ):
                     for msg in output_messages:
                         await self._internal_send(msg)
@@ -524,7 +532,7 @@ class AIEngineService(RollingBufferedTransformer):
 
                     self._analyses_completed += 1
                     self.ai_metrics.record_inference(
-                        duration_seconds=processing_time / 1000.0 / len(section_meta),
+                        duration_seconds=processing_time / 1000.0 / len(all_batch_meta),
                         fiber_id=meta["fiber_id"],
                         section=meta["section"],
                         num_detections=len(detections),
@@ -550,20 +558,20 @@ class AIEngineService(RollingBufferedTransformer):
 
                 t_send = processing_time - t_deser - t_infer
                 self.logger.info(
-                    f"Batched analysis complete: {len(section_meta)} sections, "
+                    f"Batched analysis complete: {len(all_batch_meta)} sections, "
                     f"{total_outputs} total outputs in {processing_time:.1f}ms "
                     f"(deser={t_deser:.0f}ms, infer={t_infer:.0f}ms, send={t_send:.0f}ms)"
                 )
 
                 processing_time_s = processing_time / 1000.0
                 self.metrics.record_message_processed(processing_time_s)
-                for meta in section_meta:
+                for meta in all_batch_meta:
                     self.metrics.record_buffer_processed(
                         len(meta["messages"]), meta["buffer_key"], partial=False
                     )
 
                 # Commit last message per section
-                for meta in section_meta:
+                for meta in all_batch_meta:
                     messages = meta["messages"]
                     if messages:
                         last_msg = messages[-1]

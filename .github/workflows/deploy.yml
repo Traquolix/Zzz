@@ -58,7 +58,7 @@ jobs:
       - name: Rebuild and restart application services
         run: |
           cd ${{ env.DEPLOY_DIR }}
-          APP_SERVICES="platform-backend processor-carros ai-engine-carros"
+          APP_SERVICES="platform-backend processor-carros ai-engine"
           docker compose build --parallel $APP_SERVICES
           docker compose up -d --no-deps --force-recreate $APP_SERVICES
 
@@ -118,7 +118,7 @@ jobs:
           cd ${{ env.DEPLOY_DIR }}
           echo "ROLLING BACK to ${{ steps.pre_deploy.outputs.sha_before }}"
           git reset --hard ${{ steps.pre_deploy.outputs.sha_before }}
-          APP_SERVICES="platform-backend processor-carros ai-engine-carros"
+          APP_SERVICES="platform-backend processor-carros ai-engine"
           docker compose build --parallel $APP_SERVICES
           docker compose up -d --no-deps --force-recreate $APP_SERVICES
           echo "Rollback complete. Failed services were: ${{ steps.health.outputs.failed_services }}"
