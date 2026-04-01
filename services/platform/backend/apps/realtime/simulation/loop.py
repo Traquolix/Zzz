@@ -100,6 +100,9 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
                     "count": d.count,
                     "nCars": d.n_cars,
                     "nTrucks": d.n_trucks,
+                    "glrtMax": round(d.glrt_max, 1),
+                    "strainPeak": round(d.strain_peak, 6),
+                    "strainRms": round(d.strain_rms, 6),
                     "timestamp": d.timestamp,
                 }
                 for d in pending_detections

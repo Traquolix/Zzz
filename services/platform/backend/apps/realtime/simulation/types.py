@@ -53,6 +53,9 @@ class Detection:
     n_trucks: int
     direction: int
     timestamp: int
+    glrt_max: float = 0.0
+    strain_peak: float = 0.0
+    strain_rms: float = 0.0
 
 
 @dataclass
