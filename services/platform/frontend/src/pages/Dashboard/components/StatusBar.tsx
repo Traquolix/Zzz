@@ -121,8 +121,7 @@ export function StatusBar({ connected, sectionCount, incidentCount, lastDetectio
   const overallColor = !connected ? 'var(--dash-red)' : infraReady ? 'var(--dash-green)' : 'var(--dash-amber)'
   const overallLabel = !connected ? 'Disconnected' : infraReady ? 'Operational' : 'Degraded'
 
-  const detectionAge =
-    lastDetectionTsRef?.current != null ? Math.round((Date.now() - lastDetectionTsRef.current) / 1000) : null
+  const detectionAge = lastDetectionTsRef?.current ? Math.round((Date.now() - lastDetectionTsRef.current) / 1000) : null
 
   const expanded = showTooltip && shiftHeld
 
