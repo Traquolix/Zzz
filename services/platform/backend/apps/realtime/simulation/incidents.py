@@ -8,7 +8,6 @@ import time
 import uuid
 from dataclasses import dataclass
 
-from .constants import DEFAULT_TAGS  # noqa: F401
 from .types import FiberConfig, Incident, RoadEvent, Vehicle
 from .vehicles import _get_density_multiplier, _get_max_channel
 
