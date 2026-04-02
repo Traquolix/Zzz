@@ -27,7 +27,7 @@ class AlertRule(models.Model):
 
     Supports two rule types:
     - speed_below: triggers when detection speed < threshold
-    - incident_type: triggers when a new incident matches type + severity filters
+    - incident_type: triggers when a new incident matches type + tag filters
 
     Optional filters narrow the scope to specific fibers and channel ranges.
     """
@@ -52,11 +52,11 @@ class AlertRule(models.Model):
         help_text="List of incident types to match: accident, congestion, anomaly, slowdown",
     )
 
-    # Severity filter (applies to both rule types)
-    severity_filter = models.JSONField(
+    # Tags filter (applies to both rule types)
+    tags_filter = models.JSONField(
         default=list,
         blank=True,
-        help_text="Only alert for these severities. Empty = all.",
+        help_text="Only alert when incident has at least one of these tags. Empty = all.",
     )
 
     # Scope filters

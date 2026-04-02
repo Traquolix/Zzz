@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { formatTime, formatTimeShort, formatDateShort } from '@/lib/formatters'
-import { severityColor } from '@/lib/theme'
+import { getTagColor } from '@/lib/theme'
 import { useIncidentSnapshot } from '@/hooks/useIncidentSnapshot'
-import type { DisplayIncident, Severity, Section } from '../types'
+import type { DisplayIncident, Section } from '../types'
 import { useRealtime } from '@/hooks/useRealtime'
 import { TimeSeriesChart } from './TimeSeriesChart'
 import { PanelEmptyState } from './PanelEmptyState'
@@ -18,7 +18,7 @@ import { useDashboard } from '../context/DashboardContext'
 
 export function IncidentList({
   incidents,
-  filterSeverity,
+  filterTags,
   hideResolved,
   sortBy,
   onHighlightIncident,
@@ -27,7 +27,7 @@ export function IncidentList({
   onMarkSeen,
 }: {
   incidents: DisplayIncident[]
-  filterSeverity: Severity | null
+  filterTags: string[]
   hideResolved: boolean
   sortBy: 'newest' | 'oldest'
   onHighlightIncident?: (id: string) => void
@@ -37,7 +37,7 @@ export function IncidentList({
 }) {
   const { dispatch } = useDashboard()
   const { t } = useTranslation()
-  let filtered = filterSeverity ? incidents.filter(i => i.severity === filterSeverity) : incidents
+  let filtered = filterTags.length > 0 ? incidents.filter(i => i.tags.some(t => filterTags.includes(t))) : incidents
   if (hideResolved) filtered = filtered.filter(i => !i.resolved)
 
   const sorted = [...filtered].sort((a, b) => {
@@ -64,7 +64,7 @@ export function IncidentList({
               className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-[var(--dash-surface-raised)] transition-colors cursor-pointer"
             >
               <div className="flex items-start gap-2.5 min-w-0">
-                <ColorDot color={severityColor[inc.severity]} className="mt-1.5" />
+                <ColorDot color={getTagColor(inc.tags[0] ?? 'low')} className="mt-1.5" />
                 {unseenIds?.has(inc.id) && (
                   <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-[var(--dash-accent)] mt-2 -ml-1.5" />
                 )}
@@ -138,7 +138,7 @@ export function IncidentDetail({
       <DetailHeader
         title={incident.title}
         onBack={onBack}
-        badge={<StatusBadge label={incident.severity} color={severityColor[incident.severity]} />}
+        badge={<StatusBadge label={incident.tags[0] ?? ''} color={getTagColor(incident.tags[0] ?? 'low')} />}
       />
 
       <div className="px-4 py-4 flex flex-col gap-3">

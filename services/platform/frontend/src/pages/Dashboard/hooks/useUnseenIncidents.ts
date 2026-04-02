@@ -6,7 +6,7 @@ export interface IncidentToast {
   incidentId: string
   title: string
   type: string
-  severity: string
+  tags: string[]
   createdAt: number
 }
 
@@ -76,7 +76,7 @@ export function useUnseenIncidents(incidents: DisplayIncident[], loading: boolea
           incidentId: id,
           title: inc.title,
           type: inc.type,
-          severity: inc.severity,
+          tags: inc.tags,
           createdAt: now,
         }
       })

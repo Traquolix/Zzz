@@ -5,7 +5,7 @@ export const initialState: MapPageState = {
   activeTab: 'sections',
   selectedIncidentId: null,
   selectedSectionId: null,
-  filterSeverity: null,
+  filterTags: [],
   hideResolved: true,
   sectionMetric: 'speed',
   sections: [],
@@ -40,7 +40,7 @@ export function reducer(state: MapPageState, action: MapPageAction): MapPageStat
         selectedSectionId: null,
         selectedStructureId: null,
         selectedChannel: null,
-        filterSeverity: null,
+        filterTags: [],
       }
     case 'SELECT_INCIDENT':
       return {
@@ -71,8 +71,8 @@ export function reducer(state: MapPageState, action: MapPageAction): MapPageStat
         selectedStructureId: null,
         selectedChannel: null,
       }
-    case 'SET_FILTER_SEVERITY':
-      return { ...state, filterSeverity: action.severity }
+    case 'SET_FILTER_TAGS':
+      return { ...state, filterTags: action.tags }
     case 'ENTER_SECTION_CREATION':
       return {
         ...state,

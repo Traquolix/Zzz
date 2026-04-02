@@ -37,7 +37,7 @@ class IncidentListAPIView(APIView):
             OpenApiParameter("fiber_id", str, required=True, description="Fiber identifier"),
             OpenApiParameter("start", str, required=True, description="Start time (ISO 8601)"),
             OpenApiParameter("end", str, required=True, description="End time (ISO 8601)"),
-            OpenApiParameter("severity", str, required=False, description="Filter by severity"),
+            OpenApiParameter("tag", str, required=False, description="Filter by tag"),
             OpenApiParameter("status", str, required=False, description="Filter by status"),
             OpenApiParameter("limit", int, required=False, description="Page size (max 1000)"),
             OpenApiParameter("cursor", str, required=False, description="Pagination cursor"),
@@ -93,10 +93,10 @@ class IncidentListAPIView(APIView):
         extra_clauses = []
         extra_params: dict = {}
 
-        severity = request.GET.get("severity")
-        if severity:
-            extra_clauses.append("AND severity = {sev:String}")
-            extra_params["sev"] = severity
+        tag = request.GET.get("tag")
+        if tag:
+            extra_clauses.append("AND has(tags, {tag:String})")
+            extra_params["tag"] = tag
 
         status_filter = request.GET.get("status")
         if status_filter:
@@ -117,7 +117,7 @@ class IncidentListAPIView(APIView):
         fetch_limit = limit + 1
 
         sql = f"""
-            SELECT incident_id, fiber_id, type, severity, status,
+            SELECT incident_id, fiber_id, type, severity, tags, status,
                    toString(detected_at) as detected_at,
                    channel_start, channel_end, speed_kmh, duration_s
             FROM {CH_INCIDENTS} FINAL
@@ -155,7 +155,7 @@ class IncidentListAPIView(APIView):
                 "incidentId": r["incident_id"],
                 "fiberId": r["fiber_id"],
                 "type": r["type"],
-                "severity": r["severity"],
+                "tags": r.get("tags") or ([r["severity"]] if r.get("severity") else []),
                 "status": r["status"],
                 "detectedAt": r["detected_at"],
                 "channelStart": r["channel_start"],
@@ -198,7 +198,7 @@ class IncidentDetailAPIView(APIView):
 
         rows = query(
             f"""
-            SELECT incident_id, fiber_id, type, severity, status,
+            SELECT incident_id, fiber_id, type, severity, tags, status,
                    toString(detected_at) as detected_at,
                    channel_start, channel_end, speed_kmh, duration_s
             FROM {CH_INCIDENTS} FINAL
@@ -219,7 +219,7 @@ class IncidentDetailAPIView(APIView):
                     "incidentId": row["incident_id"],
                     "fiberId": row["fiber_id"],
                     "type": row["type"],
-                    "severity": row["severity"],
+                    "tags": row.get("tags") or ([row["severity"]] if row.get("severity") else []),
                     "status": row["status"],
                     "detectedAt": row["detected_at"],
                     "channelStart": row["channel_start"],

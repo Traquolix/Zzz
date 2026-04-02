@@ -1,6 +1,6 @@
-import type { Severity, IncidentType, DisplayIncident } from '@/types/incident'
+import type { IncidentType, DisplayIncident } from '@/types/incident'
 
-export type { Severity, IncidentType, DisplayIncident }
+export type { IncidentType, DisplayIncident }
 export type SidebarTab = 'incidents' | 'sections' | 'settings' | 'shm' | 'channel' | 'waterfall' | 'dataHub'
 
 /**
@@ -98,7 +98,7 @@ export interface MapPageState {
   activeTab: SidebarTab
   selectedIncidentId: string | null
   selectedSectionId: string | null
-  filterSeverity: Severity | null
+  filterTags: string[]
   hideResolved: boolean
   sectionMetric: MetricKey
   sections: Section[]
@@ -128,7 +128,7 @@ export type MapPageAction =
   | { type: 'SELECT_INCIDENT'; id: string }
   | { type: 'SELECT_SECTION'; id: string }
   | { type: 'CLEAR_SELECTION' }
-  | { type: 'SET_FILTER_SEVERITY'; severity: Severity | null }
+  | { type: 'SET_FILTER_TAGS'; tags: string[] }
   | { type: 'ENTER_SECTION_CREATION' }
   | { type: 'EXIT_SECTION_CREATION' }
   | { type: 'SET_PENDING_POINT'; point: PendingPoint }

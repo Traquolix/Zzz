@@ -38,7 +38,7 @@
       "accident": "Accident",
       "anomaly": "Anomaly"
     },
-    "severity": {
+    "tags": {
       "low": "Low",
       "medium": "Medium",
       "high": "High",
@@ -54,7 +54,7 @@
     "csvHeaders": {
       "id": "ID",
       "type": "Type",
-      "severity": "Severity",
+      "tags": "Tags",
       "fiber": "Fiber",
       "channel": "Channel",
       "detectedAt": "Detected At",
@@ -93,7 +93,7 @@
       "hideResolved": "Hide resolved"
     },
     "sort": {
-      "severity": "Sort: Severity",
+      "tags": "Sort: Tags",
       "recent": "Sort: Most Recent",
       "oldest": "Sort: Oldest First",
       "type": "Sort: Type"
@@ -146,7 +146,7 @@
     "fiber": "Fiber",
     "channel": "Channel",
     "position": "Position",
-    "severity": "Severity",
+    "tags": "Tags",
     "duration": "Duration",
     "location": "Location",
     "trafficSnapshot": "Traffic Snapshot",

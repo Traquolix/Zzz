@@ -142,7 +142,7 @@ class _SpawnPoint(TypedDict):
     last: float
 
 
-SEVERITIES = ["low", "medium", "high", "critical"]
+DEFAULT_TAGS = ["low", "medium", "high", "critical"]
 
 AVG_VEHICLE_LENGTH_M = 6  # For occupancy estimation
 

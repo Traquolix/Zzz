@@ -130,7 +130,7 @@ class AlertRuleListView(APIView):
             rule_type=rule_type,
             threshold=data.get("threshold"),
             incident_type_filter=data.get("incidentTypeFilter", []),
-            severity_filter=data.get("severityFilter", []),
+            tags_filter=data.get("tagsFilter", []),
             fiber_id_filter=data.get("fiberIdFilter", []),
             channel_start=data.get("channelStart"),
             channel_end=data.get("channelEnd"),
@@ -208,8 +208,8 @@ class AlertRuleDetailView(APIView):
             rule.cooldown_seconds = data["cooldownSeconds"]
         if "incidentTypeFilter" in data:
             rule.incident_type_filter = data["incidentTypeFilter"]
-        if "severityFilter" in data:
-            rule.severity_filter = data["severityFilter"]
+        if "tagsFilter" in data:
+            rule.tags_filter = data["tagsFilter"]
         if "fiberIdFilter" in data:
             rule.fiber_id_filter = data["fiberIdFilter"]
         if "channelStart" in data:

@@ -60,18 +60,18 @@ def build_report_html(report) -> str:
 
 
 def _query_incidents(report) -> list[dict]:
-    """Incident summary grouped by type and severity."""
+    """Incident summary grouped by type and tag."""
     try:
         rows = query(
             f"""
             SELECT
                 incident_type,
-                severity,
+                arrayJoin(tags) AS tag,
                 count() AS total
             FROM {CH_INCIDENTS}
             WHERE fiber_id IN {{fids:Array(String)}}
               AND timestamp BETWEEN {{start:DateTime64(3)}} AND {{end:DateTime64(3)}}
-            GROUP BY incident_type, severity
+            GROUP BY incident_type, tag
             ORDER BY total DESC
             """,
             parameters={
@@ -86,7 +86,7 @@ def _query_incidents(report) -> list[dict]:
     return [
         {
             "type": row["incident_type"],
-            "severity": row["severity"],
+            "tag": row["tag"],
             "count": row["total"],
         }
         for row in rows

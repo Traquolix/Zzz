@@ -2,16 +2,16 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
-import { severityColor } from '@/lib/theme'
+import { getTagColor, KNOWN_TAGS } from '@/lib/theme'
 import type { CalendarDay, Incident } from '@/types/incident'
-import type { Severity, DisplayIncident, Section } from '../../types'
+import type { DisplayIncident, Section } from '../../types'
 import { IncidentList, IncidentDetail } from '../IncidentPanels'
 import { IncidentCalendar } from '../IncidentCalendar'
 import { useDashboard } from '../../context/DashboardContext'
 import { useRealtime } from '@/hooks/useRealtime'
 import { fetchIncidents, fetchIncidentCalendar } from '@/api/incidents'
 
-const severityOrder: Severity[] = ['critical', 'high', 'medium', 'low']
+const tagOrder = [...KNOWN_TAGS]
 
 function toYMD(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -25,7 +25,7 @@ function formatDateShort(dateStr: string, locale: string): string {
 interface IncidentTabProps {
   incidents: DisplayIncident[]
   selectedIncidentId: string | null
-  filterSeverity: Severity | null
+  filterTags: string[]
   hideResolved: boolean
   showIncidentsOnMap: boolean
   onHighlightIncident?: (incidentId: string) => void
@@ -38,7 +38,7 @@ interface IncidentTabProps {
 }
 
 export function IncidentTabToolbar({
-  filterSeverity,
+  filterTags,
   hideResolved,
   showIncidentsOnMap,
   hasUnseen,
@@ -47,7 +47,7 @@ export function IncidentTabToolbar({
   setIncidentSortBy,
   selectedDate,
   onToggleCalendar,
-}: Pick<IncidentTabProps, 'filterSeverity' | 'hideResolved' | 'showIncidentsOnMap' | 'hasUnseen' | 'onMarkAllSeen'> & {
+}: Pick<IncidentTabProps, 'filterTags' | 'hideResolved' | 'showIncidentsOnMap' | 'hasUnseen' | 'onMarkAllSeen'> & {
   incidentSortBy: 'newest' | 'oldest'
   setIncidentSortBy: React.Dispatch<React.SetStateAction<'newest' | 'oldest'>>
   selectedDate: string
@@ -70,9 +70,9 @@ export function IncidentTabToolbar({
       >
         {isToday ? t('incidents.calendar.today') : formatDateShort(selectedDate, i18n.language)}
       </button>
-      {filterSeverity && (
+      {filterTags.length > 0 && (
         <button
-          onClick={() => dispatch({ type: 'SET_FILTER_SEVERITY', severity: null })}
+          onClick={() => dispatch({ type: 'SET_FILTER_TAGS', tags: [] })}
           className="w-3 h-3 rounded-full transition-all cursor-pointer opacity-50 hover:opacity-80 bg-[var(--dash-text-muted)]"
           title={t('incidents.filters.clearFilter')}
         >
@@ -91,16 +91,21 @@ export function IncidentTabToolbar({
           </svg>
         </button>
       )}
-      {severityOrder.map(s => (
+      {tagOrder.map(tag => (
         <button
-          key={s}
-          onClick={() => dispatch({ type: 'SET_FILTER_SEVERITY', severity: filterSeverity === s ? null : s })}
+          key={tag}
+          onClick={() => {
+            const next = filterTags.includes(tag) ? filterTags.filter(t => t !== tag) : [...filterTags, tag]
+            dispatch({ type: 'SET_FILTER_TAGS', tags: next })
+          }}
           className={cn(
             'w-3 h-3 rounded-full transition-all cursor-pointer ring-offset-1 ring-offset-[var(--dash-surface)]',
-            filterSeverity === s ? 'ring-1 ring-[var(--dash-text-secondary)] scale-125' : 'opacity-50 hover:opacity-80',
+            filterTags.includes(tag)
+              ? 'ring-1 ring-[var(--dash-text-secondary)] scale-125'
+              : 'opacity-50 hover:opacity-80',
           )}
-          style={{ backgroundColor: severityColor[s] }}
-          title={t(`incidents.severity.${s}`)}
+          style={{ backgroundColor: getTagColor(tag) }}
+          title={t(`incidents.tags.${tag}`, tag)}
         />
       ))}
       <button
@@ -217,7 +222,7 @@ export function IncidentTabToolbar({
 export function IncidentTabContent({
   incidents,
   selectedIncidentId,
-  filterSeverity,
+  filterTags,
   hideResolved,
   onHighlightIncident,
   onClearHighlight,
@@ -333,7 +338,7 @@ export function IncidentTabContent({
       )}
       <IncidentList
         incidents={displayIncidents}
-        filterSeverity={filterSeverity}
+        filterTags={filterTags}
         hideResolved={hideResolved}
         sortBy={sortBy}
         onHighlightIncident={onHighlightIncident}

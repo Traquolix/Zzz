@@ -1,11 +1,10 @@
 export type IncidentType = 'accident' | 'congestion' | 'slowdown' | 'anomaly'
-export type Severity = 'critical' | 'high' | 'medium' | 'low'
 export type IncidentStatus = 'active' | 'acknowledged' | 'investigating' | 'resolved'
 
 export type Incident = {
   id: string
   type: IncidentType
-  severity: Severity
+  tags: string[]
   fiberId: string
   direction: 0 | 1
   channel: number // which channel (array index)

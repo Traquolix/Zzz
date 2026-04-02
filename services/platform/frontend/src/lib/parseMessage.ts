@@ -57,7 +57,7 @@ function isIncident(d: unknown): d is Incident {
     isObject(d) &&
     typeof d.id === 'string' &&
     typeof d.type === 'string' &&
-    typeof d.severity === 'string' &&
+    Array.isArray(d.tags) &&
     typeof d.fiberId === 'string' &&
     typeof d.direction === 'number' &&
     typeof d.channel === 'number' &&

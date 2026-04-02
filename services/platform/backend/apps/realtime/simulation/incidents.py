@@ -8,7 +8,7 @@ import time
 import uuid
 from dataclasses import dataclass
 
-from .constants import SEVERITIES  # noqa: F401 — re-exported for engine
+from .constants import DEFAULT_TAGS  # noqa: F401
 from .types import FiberConfig, Incident, RoadEvent, Vehicle
 from .vehicles import _get_density_multiplier, _get_max_channel
 
@@ -146,7 +146,7 @@ class IncidentOverseer:
             if too_close:
                 continue
 
-            # Determine incident type and severity
+            # Determine incident type and tags
             ema = m.ema_speed
             drop_pct = m.speed_drop_pct
 
@@ -160,13 +160,13 @@ class IncidentOverseer:
                 inc_type = "anomaly"
 
             if drop_pct > 80 or ema < 5:
-                severity = "critical"
+                tags = ["critical"]
             elif drop_pct > 60:
-                severity = "high"
+                tags = ["high"]
             elif drop_pct > 50:
-                severity = "medium"
+                tags = ["medium"]
             else:
-                severity = "low"
+                tags = ["low"]
 
             fiber = next((f for f in fibers if f.id == fiber_id), None)
             inc_ch = min(ch, _get_max_channel(fiber, direction) - 1) if fiber else ch
@@ -175,7 +175,7 @@ class IncidentOverseer:
             inc = Incident(
                 id=inc_id,
                 type=inc_type,
-                severity=severity,
+                tags=tags,
                 fiber_line=fiber_id,
                 channel=inc_ch,
                 detected_at=time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime(now)),
@@ -190,7 +190,7 @@ class IncidentOverseer:
             logger.info(
                 "Incident detected: %s %s on %s dir %d ch %d (EMA=%.1f, drop=%.0f%%)",
                 inc_type,
-                severity,
+                tags,
                 fiber_id,
                 direction,
                 inc_ch,
@@ -230,12 +230,12 @@ class IncidentOverseer:
                     logger.info("Incident resolved: %s on %s", inc.id, inc.fiber_line)
             else:
                 self._recovery_timers.pop(inc.id, None)
-                # Escalate severity if anomaly deepens
+                # Escalate tags if anomaly deepens
                 drop_pct = m.speed_drop_pct
-                if drop_pct > 80 and inc.severity != "critical":
-                    inc.severity = "critical"
-                elif drop_pct > 60 and inc.severity in ("low", "medium"):
-                    inc.severity = "high"
+                if drop_pct > 80 and "critical" not in inc.tags:
+                    inc.tags = ["critical"]
+                elif drop_pct > 60 and inc.tags[0] in ("low", "medium"):
+                    inc.tags = ["high"]
 
         return resolved
 

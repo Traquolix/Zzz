@@ -64,7 +64,7 @@ def evaluate_incident(
     """
     Evaluate a new incident against a list of rules.
 
-    incident shape: {id, type, severity, fiberId, direction, channel, ...}
+    incident shape: {id, type, tags, fiberId, direction, channel, ...}
     Returns: [(rule, reason_string), ...]
     """
     triggered: list[tuple[AlertRule, str]] = []
@@ -72,7 +72,7 @@ def evaluate_incident(
     fiber_id = incident.get("fiberId", "")
     channel = incident.get("channel", 0)
     inc_type = incident.get("type", "")
-    severity = incident.get("severity", "")
+    tags = incident.get("tags", [])
 
     for rule in rules:
         if not rule.is_active:
@@ -88,11 +88,11 @@ def evaluate_incident(
         if rule.incident_type_filter and inc_type not in rule.incident_type_filter:
             continue
 
-        # Severity filter
-        if rule.severity_filter and severity not in rule.severity_filter:
+        # Tags filter — fire if any incident tag matches any rule tag
+        if rule.tags_filter and not any(t in rule.tags_filter for t in tags):
             continue
 
-        reason = f"Incident {incident.get('id', '?')} type={inc_type} severity={severity}"
+        reason = f"Incident {incident.get('id', '?')} type={inc_type} tags={tags}"
         triggered.append((rule, reason))
 
     return triggered
