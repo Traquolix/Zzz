@@ -2,16 +2,13 @@ import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
-import { getTagColor, KNOWN_TAGS } from '@/lib/theme'
-import type { CalendarDay, Incident } from '@/types/incident'
+import type { CalendarDay, Incident, IncidentTag } from '@/types/incident'
 import type { DisplayIncident, Section } from '../../types'
 import { IncidentList, IncidentDetail } from '../IncidentPanels'
 import { IncidentCalendar } from '../IncidentCalendar'
 import { useDashboard } from '../../context/DashboardContext'
 import { useRealtime } from '@/hooks/useRealtime'
 import { fetchIncidents, fetchIncidentCalendar } from '@/api/incidents'
-
-const tagOrder = [...KNOWN_TAGS]
 
 function toYMD(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -26,6 +23,7 @@ interface IncidentTabProps {
   incidents: DisplayIncident[]
   selectedIncidentId: string | null
   filterTags: string[]
+  orgTags: IncidentTag[]
   hideResolved: boolean
   showIncidentsOnMap: boolean
   onHighlightIncident?: (incidentId: string) => void
@@ -39,6 +37,7 @@ interface IncidentTabProps {
 
 export function IncidentTabToolbar({
   filterTags,
+  orgTags,
   hideResolved,
   showIncidentsOnMap,
   hasUnseen,
@@ -47,7 +46,10 @@ export function IncidentTabToolbar({
   setIncidentSortBy,
   selectedDate,
   onToggleCalendar,
-}: Pick<IncidentTabProps, 'filterTags' | 'hideResolved' | 'showIncidentsOnMap' | 'hasUnseen' | 'onMarkAllSeen'> & {
+}: Pick<
+  IncidentTabProps,
+  'filterTags' | 'orgTags' | 'hideResolved' | 'showIncidentsOnMap' | 'hasUnseen' | 'onMarkAllSeen'
+> & {
   incidentSortBy: 'newest' | 'oldest'
   setIncidentSortBy: React.Dispatch<React.SetStateAction<'newest' | 'oldest'>>
   selectedDate: string
@@ -91,21 +93,23 @@ export function IncidentTabToolbar({
           </svg>
         </button>
       )}
-      {tagOrder.map(tag => (
+      {orgTags.map(tag => (
         <button
-          key={tag}
+          key={tag.id}
           onClick={() => {
-            const next = filterTags.includes(tag) ? filterTags.filter(t => t !== tag) : [...filterTags, tag]
+            const next = filterTags.includes(tag.name)
+              ? filterTags.filter(t => t !== tag.name)
+              : [...filterTags, tag.name]
             dispatch({ type: 'SET_FILTER_TAGS', tags: next })
           }}
           className={cn(
             'w-3 h-3 rounded-full transition-all cursor-pointer ring-offset-1 ring-offset-[var(--dash-surface)]',
-            filterTags.includes(tag)
+            filterTags.includes(tag.name)
               ? 'ring-1 ring-[var(--dash-text-secondary)] scale-125'
               : 'opacity-50 hover:opacity-80',
           )}
-          style={{ backgroundColor: getTagColor(tag) }}
-          title={t(`incidents.tags.${tag}`, tag)}
+          style={{ backgroundColor: tag.color }}
+          title={tag.name}
         />
       ))}
       <button
@@ -232,7 +236,7 @@ export function IncidentTabContent({
   sortBy,
   toDisplayIncident,
   calendar,
-}: Omit<IncidentTabProps, 'showIncidentsOnMap' | 'hasUnseen' | 'onMarkAllSeen'> & {
+}: Omit<IncidentTabProps, 'showIncidentsOnMap' | 'hasUnseen' | 'onMarkAllSeen' | 'orgTags'> & {
   sortBy: 'newest' | 'oldest'
   toDisplayIncident: (inc: Incident) => DisplayIncident
   calendar: {

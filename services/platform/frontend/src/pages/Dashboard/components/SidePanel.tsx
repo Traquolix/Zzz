@@ -28,6 +28,7 @@ import { ShmTabToolbar, ShmTabContent } from './tabs/ShmTab'
 import type { InfrastructureData } from '../hooks/useInfrastructure'
 import { DataHubTabToolbar, DataHubTabContent } from './tabs/DataHubTab'
 import type { DataHubSubTab } from './DataHubPanel'
+import { useTags } from '../hooks/useTags'
 
 interface SidePanelProps {
   panelRef: React.RefObject<HTMLDivElement | null>
@@ -86,6 +87,7 @@ export function SidePanel({
   toDisplayIncident,
 }: SidePanelProps) {
   const { state, dispatch } = useDashboard()
+  const { tags: orgTags, addTag, removeTag } = useTags()
   const {
     activeTab,
     selectedIncidentId,
@@ -264,6 +266,7 @@ export function SidePanel({
             {activeTab === 'incidents' && (
               <IncidentTabToolbar
                 filterTags={filterTags}
+                orgTags={orgTags}
                 hideResolved={hideResolved}
                 showIncidentsOnMap={showIncidentsOnMap}
                 hasUnseen={hasUnseen}
@@ -377,6 +380,9 @@ export function SidePanel({
                 switchingFlow={realtimeCtx.switchingFlow}
                 availableFlows={realtimeCtx.availableFlows}
                 onFlowToggle={realtimeCtx.setFlow}
+                tags={orgTags}
+                onAddTag={addTag}
+                onDeleteTag={removeTag}
               />
             </ErrorBoundary>
           )}

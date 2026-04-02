@@ -127,8 +127,6 @@ export const COLORS = {
 // DERIVED MAPS — convenience re-exports for components that need Record<> shapes
 // ============================================================================
 
-export const KNOWN_TAGS = ['critical', 'high', 'medium', 'low'] as const
-
 export function getTagColor(tag: string): string {
   return COLORS.tag[tag as keyof typeof COLORS.tag] ?? '#6b7280' // gray-500 fallback
 }
