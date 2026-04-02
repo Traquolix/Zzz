@@ -31,7 +31,7 @@ logger = logging.getLogger("sequoia.realtime.replay_buffer")
 # Safety margin above observed pipeline delay
 SAFETY_MARGIN_S = 15.0
 # Initial estimate before we have observations
-INITIAL_DELAY_S = 90.0
+INITIAL_DELAY_S = 60.0
 # Rolling window size for delay estimation
 DELAY_WINDOW_SIZE = 50
 
