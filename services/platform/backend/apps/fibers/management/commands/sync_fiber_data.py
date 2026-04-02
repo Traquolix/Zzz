@@ -81,6 +81,22 @@ def _sync_fiber_to_clickhouse(fiber_id: str, fields: dict) -> None:
         logger.warning("ClickHouse unavailable — skipped fiber_cables sync for %s", fiber_id)
 
 
+def _optimize_fiber_cables() -> None:
+    """Force ReplacingMergeTree deduplication on fiber_cables.
+
+    Without this, repeated INSERTs (e.g. on each startup) leave unmerged
+    duplicate rows. The detection_kafka_mv LEFT JOINs on this table — duplicate
+    rows cause a cartesian product that doubles detection inserts.
+    """
+    from apps.shared.clickhouse import command as ch_command
+    from apps.shared.exceptions import ClickHouseUnavailableError
+
+    try:
+        ch_command(f"OPTIMIZE TABLE {CH_FIBER_CABLES} FINAL")
+    except ClickHouseUnavailableError:
+        logger.warning("ClickHouse unavailable — skipped fiber_cables OPTIMIZE")
+
+
 def _discover_fiber_files(cables_dir: Path) -> dict[str, dict]:
     """Discover fiber JSON files and return {fiber_id: parsed_data}."""
     fibers: dict[str, dict] = {}
@@ -196,6 +212,11 @@ def sync_fibers(dry_run: bool = False) -> dict[str, int]:
         _, created = FiberCable.objects.update_or_create(id=fiber_id, defaults=fields)
         stats["added" if created else "updated"] += 1
         _sync_fiber_to_clickhouse(fiber_id, fields)
+
+    # Force ReplacingMergeTree deduplication so the detection MV's LEFT JOIN
+    # never sees duplicate fiber rows (which would double detection inserts).
+    if desired:
+        _optimize_fiber_cables()
 
     return stats
 
