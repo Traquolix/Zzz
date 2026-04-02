@@ -135,10 +135,12 @@ class GLRTDetector:
 
                 seg = glrt_summed[section_idx, v_start:v_end]
                 glrt_max = float(np.max(seg))
-                n_vehicles, _, _ = count_peaks_in_segment(
+                n_vehicles, n_cars, n_trucks = count_peaks_in_segment(
                     seg, detect_thr, classify_thr, self.fs,
                 )
                 n_vehicles = float(max(1, n_vehicles))
+                n_cars = float(n_cars)
+                n_trucks = float(n_trucks)
 
                 # Strain metrics from aligned sensor data
                 strain_peak = 0.0
@@ -147,11 +149,6 @@ class GLRTDetector:
                     interval_data = aligned_data[section_idx, :, v_start:v_end]
                     strain_peak = float(np.mean(np.max(np.abs(interval_data), axis=1)))
                     strain_rms = float(np.mean(np.sqrt(np.mean(interval_data ** 2, axis=1))))
-
-                # Truck classification based on GLRT strength
-                is_truck = glrt_max >= classify_thr
-                n_trucks = n_vehicles if is_truck else 0.0
-                n_cars = n_vehicles - n_trucks
 
                 detections.append({
                     "section_idx": section_idx,

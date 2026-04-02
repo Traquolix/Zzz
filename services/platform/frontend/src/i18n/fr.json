@@ -150,6 +150,8 @@
     "vehicles": "vehicules",
     "car": "Voiture",
     "truck": "Camion",
+    "glrt": "GLRT",
+    "strain": "Contrainte",
     "speedUnit": "km/h",
     "beta": "BETA",
     "appName": "Sequoia",

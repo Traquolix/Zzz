@@ -39,15 +39,16 @@ function isDetection(d: unknown): d is Detection {
       typeof d.speed === 'number' &&
       typeof d.count === 'number' &&
       typeof d.nCars === 'number' &&
-      typeof d.nTrucks === 'number' &&
       typeof d.timestamp === 'number'
     )
   )
     return false
-  // Default new fields if missing
-  if (typeof d.glrtMax !== 'number') (d as Record<string, unknown>).glrtMax = 0
-  if (typeof d.strainPeak !== 'number') (d as Record<string, unknown>).strainPeak = 0
-  if (typeof d.strainRms !== 'number') (d as Record<string, unknown>).strainRms = 0
+  // Default fields that may be absent during rolling deploys
+  const rec = d as Record<string, unknown>
+  if (typeof rec.nTrucks !== 'number') rec.nTrucks = 0
+  if (typeof rec.glrtMax !== 'number') rec.glrtMax = 0
+  if (typeof rec.strainPeak !== 'number') rec.strainPeak = 0
+  if (typeof rec.strainRms !== 'number') rec.strainRms = 0
   return true
 }
 

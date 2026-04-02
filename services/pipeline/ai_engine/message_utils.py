@@ -150,7 +150,7 @@ def create_detection_messages(
     Args:
         detections: List of dicts with keys:
             section_idx, speed_kmh, direction, timestamp_ns, glrt_max,
-            vehicle_count, n_cars, n_trucks
+            vehicle_count, n_cars, n_trucks, strain_peak, strain_rms
         ctx: ProcessingContext with channel_start and channel_step
     """
     from shared.message import Message

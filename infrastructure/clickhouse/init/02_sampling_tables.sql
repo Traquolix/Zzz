@@ -5,7 +5,7 @@
 -- All fibers share the same tables, partitioned by (fiber_id, date).
 --
 -- Each row = one detection interval from the AI engine, carrying:
---   speed, vehicle_count, n_cars, n_trucks, coordinates
+--   speed, vehicle_count, n_cars, n_trucks, strain_peak, strain_rms, coordinates
 --
 -- TIERS:
 --   1. detection_hires  - High-resolution (48h TTL)

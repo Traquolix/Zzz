@@ -67,7 +67,7 @@ export function useVehiclePopup({ mapRef, thresholdLookupRef, findFiberRef }: Us
             `<div class="dash-vehicle-popup-speed" style="color:${speedColor}">${Math.round(v.detectionSpeed)} ${i18n.t('common.speedUnit')}</div>` +
             `<div class="dash-vehicle-popup-detail">${fiberName} ${dir} \u00b7 ch ${v.channel}</div>` +
             `<div class="dash-vehicle-popup-detail">${vehicleLabel} \u00b7 ${typeLabel}</div>` +
-            `<div class="dash-vehicle-popup-detail">GLRT: ${v.glrtMax.toFixed(0)} \u00b7 Strain: ${v.strainPeak.toFixed(4)}</div>` +
+            `<div class="dash-vehicle-popup-detail">${i18n.t('common.glrt')}: ${v.glrtMax.toFixed(0)} \u00b7 ${i18n.t('common.strain')}: ${v.strainPeak.toFixed(4)}</div>` +
             `</div>`,
         )
       if (!popup.isOpen()) popup.addTo(map)

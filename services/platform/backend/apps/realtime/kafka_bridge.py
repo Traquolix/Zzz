@@ -125,7 +125,8 @@ def transform_detection_message(data: dict) -> list[dict]:
     Kafka Avro schema (das.detections) — batched format:
         { fiber_id, engine_version, detections: [
             { timestamp_ns, channel, speed_kmh, direction,
-              vehicle_count, n_cars, n_trucks, glrt_max }, ...
+              vehicle_count, n_cars, n_trucks, glrt_max,
+              strain_peak, strain_rms }, ...
         ]}
 
     Frontend Detection:

@@ -184,7 +184,7 @@ class VehicleSpeedEstimator:
     def extract_detections(self, glrt_summed, aligned_speed_pairs, direction,
                            timestamps_ns, min_vehicle_duration_s=0.3,
                            classify_threshold_factor=2.0,
-                           aligned_data=None):
+                           aligned_data: np.ndarray | None = None):
         return self._glrt.extract_detections(
             glrt_summed, aligned_speed_pairs, direction, timestamps_ns,
             min_vehicle_duration_s, classify_threshold_factor,

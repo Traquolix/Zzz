@@ -150,6 +150,8 @@
     "vehicles": "vehicles",
     "car": "Car",
     "truck": "Truck",
+    "glrt": "GLRT",
+    "strain": "Strain",
     "speedUnit": "km/h",
     "beta": "BETA",
     "appName": "Sequoia",
