@@ -250,7 +250,10 @@ class DASProcessor(MultiTransformer):
         all_values = np.asarray(raw_values, dtype=np.float64)
         data_2d = all_values.reshape(batch_size, total_channels)
 
-        first_ts = raw.get("timeStampNanoSec", int(time.time() * 1e9))
+        # Use processor wall clock instead of instrument timestamp.
+        # The DAS instrument clock drifts when GPS is not locked, but the
+        # processor host is NTP-synced. Relative sample spacing is preserved.
+        first_ts = time.time_ns()
         sample_interval_ns = int(1e9 / sampling_rate_hz)
         timestamps_ns = [first_ts + i * sample_interval_ns for i in range(batch_size)]
 
