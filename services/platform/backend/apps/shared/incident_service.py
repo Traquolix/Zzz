@@ -22,6 +22,11 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
+def extract_tags(row: dict) -> list[str]:
+    """Extract tags from a ClickHouse row, falling back to severity for pre-migration rows."""
+    return row.get("tags") or ([row["severity"]] if row.get("severity") else [])
+
+
 def transform_row(row: dict) -> dict:
     """
     Transform a ClickHouse ``fiber_incidents`` row into the frontend
@@ -38,7 +43,7 @@ def transform_row(row: dict) -> dict:
     return {
         "id": row["incident_id"],
         "type": row["incident_type"],
-        "tags": row.get("tags") or ([row["severity"]] if row.get("severity") else []),
+        "tags": extract_tags(row),
         "fiberId": row["fiber_id"],
         "direction": row.get("direction", 0),
         "channel": row["channel_start"],
@@ -224,8 +229,7 @@ def query_by_id(incident_id: str) -> dict | None:
     """
     rows = query(
         f"""
-        SELECT incident_id, incident_type, severity, tags, fiber_id, direction,
-               channel_start, timestamp, status, duration_seconds
+        SELECT incident_id, fiber_id, direction, status
         FROM {CH_INCIDENTS}
         FINAL
         WHERE incident_id = {{iid:String}}

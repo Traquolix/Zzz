@@ -233,7 +233,7 @@ class IncidentOverseer:
                 drop_pct = m.speed_drop_pct
                 if drop_pct > 80 and "critical" not in inc.tags:
                     inc.tags = ["critical"]
-                elif drop_pct > 60 and inc.tags[0] in ("low", "medium"):
+                elif drop_pct > 60 and inc.tags and inc.tags[0] in ("low", "medium"):
                     inc.tags = ["high"]
 
         return resolved

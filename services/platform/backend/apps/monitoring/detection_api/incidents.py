@@ -17,6 +17,7 @@ from apps.monitoring.detection_serializers import (
 from apps.monitoring.detection_utils import check_fiber_access
 from apps.shared.clickhouse import clickhouse_fallback, query
 from apps.shared.constants import CH_INCIDENTS
+from apps.shared.incident_service import extract_tags
 
 from .auth import IsAPIKeyUser, PublicAPIThrottle
 from .params import decode_cursor, encode_cursor
@@ -155,7 +156,7 @@ class IncidentListAPIView(APIView):
                 "incidentId": r["incident_id"],
                 "fiberId": r["fiber_id"],
                 "type": r["type"],
-                "tags": r.get("tags") or ([r["severity"]] if r.get("severity") else []),
+                "tags": extract_tags(r),
                 "status": r["status"],
                 "detectedAt": r["detected_at"],
                 "channelStart": r["channel_start"],
@@ -219,7 +220,7 @@ class IncidentDetailAPIView(APIView):
                     "incidentId": row["incident_id"],
                     "fiberId": row["fiber_id"],
                     "type": row["type"],
-                    "tags": row.get("tags") or ([row["severity"]] if row.get("severity") else []),
+                    "tags": extract_tags(row),
                     "status": row["status"],
                     "detectedAt": row["detected_at"],
                     "channelStart": row["channel_start"],
