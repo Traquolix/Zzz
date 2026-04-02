@@ -51,6 +51,7 @@ COPY config/ config/
 
 # AI Engine specific files
 COPY ai_engine/main.py ai_engine/main.py
+COPY ai_engine/model_registry.py ai_engine/model_registry.py
 COPY ai_engine/message_utils.py ai_engine/message_utils.py
 COPY ai_engine/schema/ ai_engine/schema/
 
