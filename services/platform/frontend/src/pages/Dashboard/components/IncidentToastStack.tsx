@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { severityColor } from '@/lib/theme'
+import { getTagColor } from '@/lib/theme'
 import type { IncidentToast } from '../hooks/useUnseenIncidents'
 import { ColorDot } from './ColorDot'
 
@@ -57,7 +57,7 @@ export function IncidentToastStack({ toasts, onClickToast }: Props) {
                 className="w-full flex flex-col rounded-lg bg-[var(--dash-surface)] border border-[var(--dash-border)] shadow-lg cursor-pointer hover:bg-[var(--dash-surface-raised)] transition-colors text-left overflow-hidden"
               >
                 <div className="flex items-start gap-2.5 px-3.5 py-2.5">
-                  <ColorDot color={severityColor[toast.severity as keyof typeof severityColor]} className="mt-1" />
+                  <ColorDot color={getTagColor(toast.tags?.[0] ?? 'low')} className="mt-1" />
                   <div className="min-w-0 flex-1">
                     <div className="text-sm text-[var(--dash-text)] font-medium truncate max-w-[240px]">
                       {toast.title}

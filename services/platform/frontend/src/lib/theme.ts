@@ -13,13 +13,12 @@
 // ============================================================================
 
 /**
- * Severity colors — used for incidents across all components.
- * Re-exported from constants/incidents.ts for backwards compatibility,
- * but this is the canonical reference.
+ * Tag colors — used for incident tags across all components.
+ * This is the canonical reference for tag-level coloring.
  */
 export const COLORS = {
-  /** Incident severity — matches the live values used by all 17+ Dashboard components. */
-  severity: {
+  /** Incident tag colors — matches the live values used by all 17+ Dashboard components. */
+  tag: {
     critical: '#ef4444', // red-500
     high: '#f97316', // orange-500
     medium: '#f59e0b', // amber-500
@@ -130,11 +129,8 @@ export const COLORS = {
 // DERIVED MAPS — convenience re-exports for components that need Record<> shapes
 // ============================================================================
 
-export const severityColor: Record<string, string> = {
-  critical: COLORS.severity.critical,
-  high: COLORS.severity.high,
-  medium: COLORS.severity.medium,
-  low: COLORS.severity.low,
+export function getTagColor(tag: string): string {
+  return COLORS.tag[tag as keyof typeof COLORS.tag] ?? '#6b7280'
 }
 
 export const chartColors = {

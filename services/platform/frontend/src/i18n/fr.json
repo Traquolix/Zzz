@@ -38,7 +38,7 @@
       "accident": "Accident",
       "anomaly": "Anomalie"
     },
-    "severity": {
+    "tags": {
       "low": "Faible",
       "medium": "Moyen",
       "high": "Eleve",
@@ -54,7 +54,7 @@
     "csvHeaders": {
       "id": "ID",
       "type": "Type",
-      "severity": "Severite",
+      "tags": "Etiquettes",
       "fiber": "Fibre",
       "channel": "Canal",
       "detectedAt": "Detecte le",
@@ -93,7 +93,7 @@
       "hideResolved": "Masquer les resolus"
     },
     "sort": {
-      "severity": "Tri : Severite",
+      "tags": "Tri : Etiquettes",
       "recent": "Tri : Plus recent",
       "oldest": "Tri : Plus ancien",
       "type": "Tri : Type"
@@ -146,7 +146,7 @@
     "fiber": "Fibre",
     "channel": "Canal",
     "position": "Position",
-    "severity": "Severite",
+    "tags": "Etiquettes",
     "duration": "Duree",
     "location": "Localisation",
     "trafficSnapshot": "Apercu du trafic",

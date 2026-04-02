@@ -11,7 +11,7 @@ from rest_framework import serializers
 class IncidentSerializer(serializers.Serializer):
     id = serializers.CharField()
     type = serializers.CharField()
-    severity = serializers.CharField()
+    tags = serializers.ListField(child=serializers.CharField())
     fiberId = serializers.CharField()
     direction = serializers.IntegerField()
     channel = serializers.IntegerField()
