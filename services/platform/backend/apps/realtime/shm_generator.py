@@ -1,9 +1,11 @@
 """SHM frequency reading generator.
 
 Generates simulated structural health monitoring data for infrastructure
-items (bridges, tunnels). Uses a physics model with periodic oscillation,
-fast vibration, and random noise. Reusable by both the Kafka bridge and
-the simulation engine.
+items (bridges, tunnels). Uses a simplified physics model with periodic
+oscillation, fast vibration, and random noise.
+
+Note: the simulation engine (simulation/engine.py) has its own
+generate_shm_readings with additional load_factor and traffic_amp terms.
 """
 
 import math
@@ -15,7 +17,7 @@ def generate_shm_readings(infrastructure: list[dict], shm_state: dict) -> list[d
     """
     Generate SHM frequency readings for infrastructure items.
 
-    Uses the same physics model as the simulation engine:
+    Simplified physics model (no vehicle-count dependency):
     - Base frequency: bridge ~5Hz, tunnel ~15Hz
     - Periodic + fast oscillation + random noise
     - Amplitude based on traffic load approximation
