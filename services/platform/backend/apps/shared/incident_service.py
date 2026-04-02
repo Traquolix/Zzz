@@ -22,11 +22,6 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def extract_tags(row: dict) -> list[str]:
-    """Extract tags from a ClickHouse row, falling back to severity for pre-migration rows."""
-    return row.get("tags") or ([row["severity"]] if row.get("severity") else [])
-
-
 def transform_row(row: dict) -> dict:
     """
     Transform a ClickHouse ``fiber_incidents`` row into the frontend
@@ -43,7 +38,7 @@ def transform_row(row: dict) -> dict:
     return {
         "id": row["incident_id"],
         "type": row["incident_type"],
-        "tags": extract_tags(row),
+        "tags": row["tags"],
         "fiberId": row["fiber_id"],
         "direction": row.get("direction", 0),
         "channel": row["channel_start"],
@@ -86,7 +81,7 @@ def transform_simulation_incident(incident) -> dict:
 # ---------------------------------------------------------------------------
 
 _ACTIVE_SQL_SCOPED = f"""
-    SELECT incident_id, incident_type, severity, tags, fiber_id, direction,
+    SELECT incident_id, incident_type, tags, fiber_id, direction,
            channel_start, channel_end, timestamp, status, duration_seconds,
            speed_before_kmh, speed_during_kmh, speed_drop_percent
     FROM {CH_INCIDENTS}
@@ -98,7 +93,7 @@ _ACTIVE_SQL_SCOPED = f"""
 """
 
 _ACTIVE_SQL_ALL = f"""
-    SELECT incident_id, incident_type, severity, tags, fiber_id, direction,
+    SELECT incident_id, incident_type, tags, fiber_id, direction,
            channel_start, channel_end, timestamp, status, duration_seconds,
            speed_before_kmh, speed_during_kmh, speed_drop_percent
     FROM {CH_INCIDENTS}
@@ -109,7 +104,7 @@ _ACTIVE_SQL_ALL = f"""
 """
 
 _RECENT_SQL_SCOPED = f"""
-    SELECT incident_id, incident_type, severity, tags, fiber_id, direction,
+    SELECT incident_id, incident_type, tags, fiber_id, direction,
            channel_start, channel_end, timestamp, status, duration_seconds,
            speed_before_kmh, speed_during_kmh, speed_drop_percent
     FROM {CH_INCIDENTS}
@@ -121,7 +116,7 @@ _RECENT_SQL_SCOPED = f"""
 """
 
 _RECENT_SQL_ALL = f"""
-    SELECT incident_id, incident_type, severity, tags, fiber_id, direction,
+    SELECT incident_id, incident_type, tags, fiber_id, direction,
            channel_start, channel_end, timestamp, status, duration_seconds,
            speed_before_kmh, speed_during_kmh, speed_drop_percent
     FROM {CH_INCIDENTS}
@@ -133,7 +128,7 @@ _RECENT_SQL_ALL = f"""
 
 
 _BY_DATE_SQL_SCOPED = f"""
-    SELECT incident_id, incident_type, severity, tags, fiber_id, direction,
+    SELECT incident_id, incident_type, tags, fiber_id, direction,
            channel_start, channel_end, timestamp, status, duration_seconds,
            speed_before_kmh, speed_during_kmh, speed_drop_percent
     FROM {CH_INCIDENTS}
@@ -145,7 +140,7 @@ _BY_DATE_SQL_SCOPED = f"""
 """
 
 _BY_DATE_SQL_ALL = f"""
-    SELECT incident_id, incident_type, severity, tags, fiber_id, direction,
+    SELECT incident_id, incident_type, tags, fiber_id, direction,
            channel_start, channel_end, timestamp, status, duration_seconds,
            speed_before_kmh, speed_during_kmh, speed_drop_percent
     FROM {CH_INCIDENTS}
