@@ -38,7 +38,7 @@ def transform_row(row: dict) -> dict:
     return {
         "id": row["incident_id"],
         "type": row["incident_type"],
-        "severity": row["severity"],
+        "tags": [],  # populated by _apply_tags in PR 2
         "fiberId": row["fiber_id"],
         "direction": row.get("direction", 0),
         "channel": row["channel_start"],
@@ -62,7 +62,7 @@ def transform_simulation_incident(incident) -> dict:
     return {
         "id": incident.id,
         "type": incident.type,
-        "severity": incident.severity,
+        "tags": incident.tags,
         "fiberId": incident.fiber_line,
         "direction": incident.direction,
         "channel": incident.channel,
@@ -81,7 +81,7 @@ def transform_simulation_incident(incident) -> dict:
 # ---------------------------------------------------------------------------
 
 _ACTIVE_SQL_SCOPED = f"""
-    SELECT incident_id, incident_type, severity, fiber_id, direction,
+    SELECT incident_id, incident_type, fiber_id, direction,
            channel_start, channel_end, timestamp, status, duration_seconds,
            speed_before_kmh, speed_during_kmh, speed_drop_percent
     FROM {CH_INCIDENTS}
@@ -93,7 +93,7 @@ _ACTIVE_SQL_SCOPED = f"""
 """
 
 _ACTIVE_SQL_ALL = f"""
-    SELECT incident_id, incident_type, severity, fiber_id, direction,
+    SELECT incident_id, incident_type, fiber_id, direction,
            channel_start, channel_end, timestamp, status, duration_seconds,
            speed_before_kmh, speed_during_kmh, speed_drop_percent
     FROM {CH_INCIDENTS}
@@ -104,7 +104,7 @@ _ACTIVE_SQL_ALL = f"""
 """
 
 _RECENT_SQL_SCOPED = f"""
-    SELECT incident_id, incident_type, severity, fiber_id, direction,
+    SELECT incident_id, incident_type, fiber_id, direction,
            channel_start, channel_end, timestamp, status, duration_seconds,
            speed_before_kmh, speed_during_kmh, speed_drop_percent
     FROM {CH_INCIDENTS}
@@ -116,7 +116,7 @@ _RECENT_SQL_SCOPED = f"""
 """
 
 _RECENT_SQL_ALL = f"""
-    SELECT incident_id, incident_type, severity, fiber_id, direction,
+    SELECT incident_id, incident_type, fiber_id, direction,
            channel_start, channel_end, timestamp, status, duration_seconds,
            speed_before_kmh, speed_during_kmh, speed_drop_percent
     FROM {CH_INCIDENTS}
@@ -128,7 +128,7 @@ _RECENT_SQL_ALL = f"""
 
 
 _BY_DATE_SQL_SCOPED = f"""
-    SELECT incident_id, incident_type, severity, fiber_id, direction,
+    SELECT incident_id, incident_type, fiber_id, direction,
            channel_start, channel_end, timestamp, status, duration_seconds,
            speed_before_kmh, speed_during_kmh, speed_drop_percent
     FROM {CH_INCIDENTS}
@@ -140,7 +140,7 @@ _BY_DATE_SQL_SCOPED = f"""
 """
 
 _BY_DATE_SQL_ALL = f"""
-    SELECT incident_id, incident_type, severity, fiber_id, direction,
+    SELECT incident_id, incident_type, fiber_id, direction,
            channel_start, channel_end, timestamp, status, duration_seconds,
            speed_before_kmh, speed_during_kmh, speed_drop_percent
     FROM {CH_INCIDENTS}
@@ -224,7 +224,7 @@ def query_by_id(incident_id: str) -> dict | None:
     """
     rows = query(
         f"""
-        SELECT incident_id, incident_type, severity, fiber_id, direction,
+        SELECT incident_id, fiber_id, direction,
                channel_start, timestamp, status, duration_seconds
         FROM {CH_INCIDENTS}
         FINAL

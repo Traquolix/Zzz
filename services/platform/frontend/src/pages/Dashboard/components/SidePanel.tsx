@@ -92,7 +92,7 @@ export function SidePanel({
     selectedSectionId,
     selectedStructureId,
     selectedChannel,
-    filterSeverity,
+    filterTags,
     hideResolved,
     sectionMetric,
     sections,
@@ -263,7 +263,7 @@ export function SidePanel({
           <div className="flex items-center gap-2">
             {activeTab === 'incidents' && (
               <IncidentTabToolbar
-                filterSeverity={filterSeverity}
+                filterTags={filterTags}
                 hideResolved={hideResolved}
                 showIncidentsOnMap={showIncidentsOnMap}
                 hasUnseen={hasUnseen}
@@ -315,7 +315,7 @@ export function SidePanel({
               <IncidentTabContent
                 incidents={incidents}
                 selectedIncidentId={selectedIncidentId}
-                filterSeverity={filterSeverity}
+                filterTags={filterTags}
                 hideResolved={hideResolved}
                 onHighlightIncident={onHighlightIncident}
                 onClearHighlight={onClearHighlight}

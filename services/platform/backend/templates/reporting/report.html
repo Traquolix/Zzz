@@ -26,10 +26,10 @@
   {% if section.type == "incidents" %}
     {% if section.data %}
     <table>
-      <thead><tr><th>{% trans "Type" %}</th><th>{% trans "Severity" %}</th><th>{% trans "Count" %}</th></tr></thead>
+      <thead><tr><th>{% trans "Type" %}</th><th>{% trans "Count" %}</th></tr></thead>
       <tbody>
         {% for row in section.data %}
-        <tr><td>{{ row.type }}</td><td>{{ row.severity }}</td><td>{{ row.count }}</td></tr>
+        <tr><td>{{ row.type }}</td><td>{{ row.count }}</td></tr>
         {% endfor %}
       </tbody>
     </table>

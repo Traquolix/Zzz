@@ -112,7 +112,9 @@ class IncidentSerializer(serializers.Serializer):
     incidentId = serializers.CharField(help_text="Unique incident identifier")
     fiberId = serializers.CharField(help_text="Fiber cable ID")
     type = serializers.CharField(help_text="Incident type (slowdown, congestion, etc.)")
-    severity = serializers.CharField(help_text="Severity level (low, medium, high, critical)")
+    tags = serializers.ListField(
+        child=serializers.CharField(), help_text="Tags (e.g. critical, high, congestion)"
+    )
     status = serializers.CharField(help_text="Current status (active, resolved, etc.)")
     detectedAt = serializers.DateTimeField(help_text="When the incident was detected (UTC)")
     channelStart = serializers.IntegerField(help_text="First affected channel")

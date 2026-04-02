@@ -176,7 +176,7 @@ class ExportIncidentsView(FlowAwareMixin, APIView):
 
         rows = query(
             f"""
-            SELECT incident_id, fiber_id, type, severity, direction,
+            SELECT incident_id, fiber_id, type, direction,
                    toString(detected_at) as detected_at,
                    channel_start, channel_end, speed_kmh, duration_s
             FROM {CH_INCIDENTS}

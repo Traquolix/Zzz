@@ -50,8 +50,6 @@ CREATE TABLE IF NOT EXISTS sequoia.fiber_incidents
 
     -- Classification
     incident_type Enum8('accident' = 1, 'congestion' = 2, 'anomaly' = 3, 'slowdown' = 4) CODEC(ZSTD(1)),
-    severity Enum8('critical' = 1, 'high' = 2, 'medium' = 3, 'low' = 4) CODEC(ZSTD(1)),
-
     -- Detection metadata
     speed_before_kmh Nullable(Float32) CODEC(Gorilla),
     speed_during_kmh Nullable(Float32) CODEC(Gorilla),
@@ -75,8 +73,6 @@ ALTER TABLE sequoia.fiber_incidents ADD INDEX IF NOT EXISTS idx_incident_id (inc
 ALTER TABLE sequoia.fiber_incidents ADD INDEX IF NOT EXISTS idx_location (channel_start, channel_end) TYPE minmax GRANULARITY 4;
 ALTER TABLE sequoia.fiber_incidents ADD INDEX IF NOT EXISTS idx_status (status) TYPE set(10) GRANULARITY 1;
 ALTER TABLE sequoia.fiber_incidents ADD INDEX IF NOT EXISTS idx_type (incident_type) TYPE set(10) GRANULARITY 1;
-ALTER TABLE sequoia.fiber_incidents ADD INDEX IF NOT EXISTS idx_severity (severity) TYPE set(10) GRANULARITY 1;
-
 -- ============================================================================
 -- SUCCESS
 -- ============================================================================

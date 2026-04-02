@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import mapboxgl from 'mapbox-gl'
-import { COLORS, severityColor } from '@/lib/theme'
+import { COLORS, getTagColor } from '@/lib/theme'
 import type { DisplayIncident } from '../../types'
 import type { MapHandlers } from './mapTypes'
 
@@ -28,7 +28,7 @@ export function useIncidentMarkers({ mapRef, incidents, incidentClickedRef, hand
       if (inc.resolved) continue
 
       const lngLat: [number, number] = inc.location
-      const color = severityColor[inc.severity]
+      const color = getTagColor(inc.tags[0] ?? 'low')
 
       const el = document.createElement('div')
       el.style.cssText = `

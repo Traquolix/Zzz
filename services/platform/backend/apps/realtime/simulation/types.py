@@ -62,7 +62,7 @@ class Detection:
 class Incident:
     id: str
     type: str
-    severity: str
+    tags: list[str]
     fiber_line: str
     direction: int
     channel: int

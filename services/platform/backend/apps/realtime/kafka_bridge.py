@@ -378,7 +378,7 @@ async def _poll_incidents(
             "id": rid,
             "status": "resolved",
             "type": "",
-            "severity": "",
+            "tags": [],
             "fiberId": fiber_id,
             "direction": direction,
             "channel": 0,
