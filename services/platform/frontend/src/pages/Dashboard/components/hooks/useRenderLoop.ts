@@ -273,8 +273,8 @@ export function useRenderLoop({
         }
       }
 
-      // Adaptive loop: 60fps rAF for vehicles, 10Hz for dots, 2Hz for overview
-      let currentLoopMode: 'raf' | 'fast' | 'slow' | null = null
+      // Adaptive loop: 60fps rAF for dots/vehicles, 2Hz for overview
+      let currentLoopMode: 'raf' | 'slow' | null = null
 
       function rafLoop() {
         if (loopStopped) return
@@ -295,21 +295,14 @@ export function useRenderLoop({
       }
 
       function syncLoop() {
-        let target: 'raf' | 'fast' | 'slow'
-        if (overviewRef.current) {
-          target = 'slow'
-        } else if (displayModeRef.current === 'vehicles') {
-          target = 'raf'
-        } else {
-          target = 'fast'
-        }
+        const target: 'raf' | 'slow' = overviewRef.current ? 'slow' : 'raf'
         if (target === currentLoopMode) return
         stopCurrentLoop()
         currentLoopMode = target
         if (target === 'raf') {
           rafLoop()
         } else {
-          slowInterval = setInterval(renderTick, target === 'fast' ? 100 : 500)
+          slowInterval = setInterval(renderTick, 500)
         }
       }
 
