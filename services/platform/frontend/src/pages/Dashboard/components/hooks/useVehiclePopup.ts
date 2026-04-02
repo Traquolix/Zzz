@@ -58,6 +58,7 @@ export function useVehiclePopup({ mapRef, thresholdLookupRef, findFiberRef }: Us
       const speedColor = getSpeedColor(v.detectionSpeed, thresholds)
       const vehicleLabel =
         v.carCount > 1 ? `${v.carCount} ${i18n.t('common.vehicles')}` : `1 ${i18n.t('common.vehicles')}`
+      const typeLabel = v.nTrucks > 0 ? i18n.t('common.truck') : i18n.t('common.car')
       const popup = getPopup()
       popup
         .setLngLat([v.position[0], v.position[1]])
@@ -65,7 +66,8 @@ export function useVehiclePopup({ mapRef, thresholdLookupRef, findFiberRef }: Us
           `<div class="dash-vehicle-popup-body">` +
             `<div class="dash-vehicle-popup-speed" style="color:${speedColor}">${Math.round(v.detectionSpeed)} ${i18n.t('common.speedUnit')}</div>` +
             `<div class="dash-vehicle-popup-detail">${fiberName} ${dir} \u00b7 ch ${v.channel}</div>` +
-            `<div class="dash-vehicle-popup-detail">${vehicleLabel}</div>` +
+            `<div class="dash-vehicle-popup-detail">${vehicleLabel} \u00b7 ${typeLabel}</div>` +
+            `<div class="dash-vehicle-popup-detail">${i18n.t('common.glrt')}: ${v.glrtMax.toFixed(0)} \u00b7 ${i18n.t('common.strain')}: ${v.strainPeak.toFixed(4)}</div>` +
             `</div>`,
         )
       if (!popup.isOpen()) popup.addTo(map)

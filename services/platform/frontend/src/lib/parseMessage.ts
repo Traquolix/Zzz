@@ -30,17 +30,26 @@ function isObject(v: unknown): v is Record<string, unknown> {
 }
 
 function isDetection(d: unknown): d is Detection {
-  return (
-    isObject(d) &&
-    typeof d.fiberId === 'string' &&
-    typeof d.direction === 'number' &&
-    typeof d.channel === 'number' &&
-    typeof d.speed === 'number' &&
-    typeof d.count === 'number' &&
-    typeof d.nCars === 'number' &&
-    typeof d.nTrucks === 'number' &&
-    typeof d.timestamp === 'number'
+  if (
+    !(
+      isObject(d) &&
+      typeof d.fiberId === 'string' &&
+      typeof d.direction === 'number' &&
+      typeof d.channel === 'number' &&
+      typeof d.speed === 'number' &&
+      typeof d.count === 'number' &&
+      typeof d.nCars === 'number' &&
+      typeof d.timestamp === 'number'
+    )
   )
+    return false
+  // Default fields that may be absent during rolling deploys
+  const rec = d as Record<string, unknown>
+  if (typeof rec.nTrucks !== 'number') rec.nTrucks = 0
+  if (typeof rec.glrtMax !== 'number') rec.glrtMax = 0
+  if (typeof rec.strainPeak !== 'number') rec.strainPeak = 0
+  if (typeof rec.strainRms !== 'number') rec.strainRms = 0
+  return true
 }
 
 function isIncident(d: unknown): d is Incident {

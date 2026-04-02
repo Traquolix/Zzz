@@ -245,6 +245,10 @@ class SimulationEngine:
                 processed.add(o.id)
             count = len(nearby)
             n_trucks = sum(1 for o in nearby if o.vehicle_type == "truck")
+            # Simulate signal strength: trucks produce stronger signals
+            has_truck = n_trucks > 0
+            base_glrt = random.uniform(1500, 3000) if has_truck else random.uniform(500, 1500)
+            base_strain = random.uniform(0.005, 0.02) if has_truck else random.uniform(0.001, 0.005)
             detections.append(
                 Detection(
                     fiber_line=v.fiber_line,
@@ -255,6 +259,9 @@ class SimulationEngine:
                     n_trucks=n_trucks,
                     direction=v.direction,
                     timestamp=now_ms,
+                    glrt_max=base_glrt,
+                    strain_peak=base_strain,
+                    strain_rms=base_strain * random.uniform(0.5, 0.8),
                 )
             )
         return detections
@@ -276,6 +283,9 @@ class SimulationEngine:
                     "count": d.count,
                     "nCars": d.n_cars,
                     "nTrucks": d.n_trucks,
+                    "glrtMax": round(d.glrt_max, 1),
+                    "strainPeak": round(d.strain_peak, 6),
+                    "strainRms": round(d.strain_rms, 6),
                     "timestamp": d.timestamp,
                 }
             )

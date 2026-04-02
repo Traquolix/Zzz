@@ -159,6 +159,10 @@ export class VehicleSimEngine {
     track.lastDetectionChannel = event.channel
     track.lastDetectionSpeed = event.speed // Store raw detection speed (ground truth)
     track.lastInnovation = event.channel - predictedPosition
+    track.lastGlrtMax = event.glrtMax
+    track.lastStrainPeak = event.strainPeak
+    track.lastStrainRms = event.strainRms
+    track.lastNTrucks = event.nTrucks
 
     // Convert speed to channels/ms for Kalman update
     const velocityChannelsPerMs = speedToChannelsPerMs(event.speed, this.config.metersPerChannel)
@@ -214,6 +218,10 @@ export class VehicleSimEngine {
       lastDetectionChannel: event.channel,
       lastDetectionSpeed: event.speed, // Store initial detection speed
       lastInnovation: 0,
+      lastGlrtMax: event.glrtMax,
+      lastStrainPeak: event.strainPeak,
+      lastStrainRms: event.strainRms,
+      lastNTrucks: event.nTrucks,
     }
 
     this.tracks.push(track)

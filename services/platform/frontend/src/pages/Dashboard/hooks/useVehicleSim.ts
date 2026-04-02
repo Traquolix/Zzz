@@ -18,6 +18,10 @@ export interface VehiclePosition {
   direction: 0 | 1
   channel: number
   carCount: number
+  glrtMax: number
+  strainPeak: number
+  strainRms: number
+  nTrucks: number
 }
 
 interface FiberEngine {
@@ -102,6 +106,10 @@ export function useVehicleSim(fibers: Fiber[]): {
           speed: d.speed,
           count: d.count,
           direction: d.direction,
+          glrtMax: d.glrtMax,
+          strainPeak: d.strainPeak,
+          strainRms: d.strainRms,
+          nTrucks: d.nTrucks,
         }
         fe.engine.onSensorEvent(event, now)
       }
@@ -142,6 +150,10 @@ export function useVehicleSim(fibers: Fiber[]): {
             direction: fe.direction,
             channel: Math.round(track.renderPosition),
             carCount: activeCarCount,
+            glrtMax: track.lastGlrtMax,
+            strainPeak: track.lastStrainPeak,
+            strainRms: track.lastStrainRms,
+            nTrucks: track.lastNTrucks,
           })
         }
       }

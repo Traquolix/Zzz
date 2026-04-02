@@ -67,6 +67,18 @@
               "type": "float",
               "default": 0.0,
               "doc": "Maximum GLRT value within the detection interval"
+            },
+            {
+              "name": "strain_peak",
+              "type": "float",
+              "default": 0.0,
+              "doc": "Peak strain rate amplitude at detection point (mean across channels)"
+            },
+            {
+              "name": "strain_rms",
+              "type": "float",
+              "default": 0.0,
+              "doc": "RMS strain rate energy at detection point (mean across channels)"
             }
           ]
         }

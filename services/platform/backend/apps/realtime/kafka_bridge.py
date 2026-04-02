@@ -125,11 +125,13 @@ def transform_detection_message(data: dict) -> list[dict]:
     Kafka Avro schema (das.detections) — batched format:
         { fiber_id, engine_version, detections: [
             { timestamp_ns, channel, speed_kmh, direction,
-              vehicle_count, n_cars, n_trucks, glrt_max }, ...
+              vehicle_count, n_cars, n_trucks, glrt_max,
+              strain_peak, strain_rms }, ...
         ]}
 
     Frontend Detection:
-        { fiberId, direction, channel, speed, count, nCars, nTrucks, timestamp }
+        { fiberId, direction, channel, speed, count, nCars, nTrucks,
+          glrtMax, strainPeak, strainRms, timestamp }
 
     Direction convention: 0 = forward, 1 = reverse (unified across pipeline and platform).
     """
@@ -161,6 +163,9 @@ def transform_detection_message(data: dict) -> list[dict]:
                 "count": round(float(vehicle_count), 1),
                 "nCars": round(float(n_cars), 1),
                 "nTrucks": round(float(n_trucks), 1),
+                "glrtMax": round(float(det.get("glrt_max", 0.0)), 1),
+                "strainPeak": round(float(det.get("strain_peak", 0.0)), 6),
+                "strainRms": round(float(det.get("strain_rms", 0.0)), 6),
                 "timestamp": timestamp_ms,
             }
         )

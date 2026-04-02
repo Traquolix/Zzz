@@ -47,7 +47,7 @@ export function onMapReady(
 
 export const getPosition = (d: VehiclePosition) => d.position
 export const getOrientation = (d: VehiclePosition): [number, number, number] => [0, -d.angle, 0]
-export const getScale = (): [number, number, number] => [3, 6, 2]
+export const getScale = (d: VehiclePosition): [number, number, number] => (d.nTrucks > 0 ? [3, 9, 4] : [3, 6, 2])
 
 // ── Zoom expressions for fiber lines ─────────────────────────────────
 export const FIBER_WIDTH_EXPR: ExpressionSpecification = ['interpolate', ['linear'], ['zoom'], 10, 1.5, 12, 2, 14, 2.5]

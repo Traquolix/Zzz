@@ -150,7 +150,7 @@ def create_detection_messages(
     Args:
         detections: List of dicts with keys:
             section_idx, speed_kmh, direction, timestamp_ns, glrt_max,
-            vehicle_count, n_cars, n_trucks
+            vehicle_count, n_cars, n_trucks, strain_peak, strain_rms
         ctx: ProcessingContext with channel_start and channel_step
     """
     from shared.message import Message
@@ -177,6 +177,8 @@ def create_detection_messages(
                 "n_cars": det.get("n_cars", 1.0),
                 "n_trucks": det.get("n_trucks", 0.0),
                 "glrt_max": det.get("glrt_max", 0.0),
+                "strain_peak": det.get("strain_peak", 0.0),
+                "strain_rms": det.get("strain_rms", 0.0),
             }
         )
 

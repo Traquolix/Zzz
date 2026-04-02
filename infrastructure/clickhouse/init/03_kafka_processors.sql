@@ -58,7 +58,9 @@ CREATE TABLE sequoia.detection_kafka
     `detections.vehicle_count` Array(Float32),
     `detections.n_cars` Array(Float32),
     `detections.n_trucks` Array(Float32),
-    `detections.glrt_max` Array(Float32)
+    `detections.glrt_max` Array(Float32),
+    `detections.strain_peak` Array(Float32),
+    `detections.strain_rms` Array(Float32)
 )
 ENGINE = Kafka()
 SETTINGS
@@ -83,7 +85,9 @@ SELECT
     det_ncars AS n_cars,
     det_ntrucks AS n_trucks,
     CAST(arrayElement(c.channel_coordinates, det_ch + 1).1 AS Nullable(Float64)) AS lng,
-    CAST(arrayElement(c.channel_coordinates, det_ch + 1).2 AS Nullable(Float64)) AS lat
+    CAST(arrayElement(c.channel_coordinates, det_ch + 1).2 AS Nullable(Float64)) AS lat,
+    det_strain_peak AS strain_peak,
+    det_strain_rms AS strain_rms
 FROM sequoia.detection_kafka d
 ARRAY JOIN
     `detections.timestamp_ns` AS det_ts,
@@ -92,7 +96,9 @@ ARRAY JOIN
     `detections.direction` AS det_dir,
     `detections.vehicle_count` AS det_vcount,
     `detections.n_cars` AS det_ncars,
-    `detections.n_trucks` AS det_ntrucks
+    `detections.n_trucks` AS det_ntrucks,
+    `detections.strain_peak` AS det_strain_peak,
+    `detections.strain_rms` AS det_strain_rms
 LEFT JOIN sequoia.fiber_cables c ON d.fiber_id = c.fiber_id;
 
 -- ============================================================================

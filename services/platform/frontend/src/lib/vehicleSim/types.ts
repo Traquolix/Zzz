@@ -36,6 +36,10 @@ export type Track = {
   lastDetectionChannel: number // Raw detection position (before Kalman update)
   lastDetectionSpeed: number // Raw detection speed in km/h (ground truth)
   lastInnovation: number // Correction applied (detection - prediction)
+  lastGlrtMax: number // Max GLRT correlation value
+  lastStrainPeak: number // Peak strain rate amplitude
+  lastStrainRms: number // RMS strain rate energy
+  lastNTrucks: number // Truck count from last detection
 }
 
 export type SensorEvent = {
@@ -43,6 +47,10 @@ export type SensorEvent = {
   speed: number
   count: number
   direction: 0 | 1
+  glrtMax: number
+  strainPeak: number
+  strainRms: number
+  nTrucks: number
 }
 
 export type SimConfig = {

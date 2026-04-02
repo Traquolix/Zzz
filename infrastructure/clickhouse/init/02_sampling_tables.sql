@@ -5,7 +5,7 @@
 -- All fibers share the same tables, partitioned by (fiber_id, date).
 --
 -- Each row = one detection interval from the AI engine, carrying:
---   speed, vehicle_count, n_cars, n_trucks, coordinates
+--   speed, vehicle_count, n_cars, n_trucks, strain_peak, strain_rms, coordinates
 --
 -- TIERS:
 --   1. detection_hires  - High-resolution (48h TTL)
@@ -38,7 +38,9 @@ CREATE TABLE IF NOT EXISTS sequoia.detection_hires
     n_cars Float32 DEFAULT 0 CODEC(Gorilla),
     n_trucks Float32 DEFAULT 0 CODEC(Gorilla),
     lng Nullable(Float64) CODEC(Gorilla),
-    lat Nullable(Float64) CODEC(Gorilla)
+    lat Nullable(Float64) CODEC(Gorilla),
+    strain_peak Float32 DEFAULT 0 CODEC(Gorilla),
+    strain_rms Float32 DEFAULT 0 CODEC(Gorilla)
 )
 ENGINE = ReplacingMergeTree()
 PARTITION BY (fiber_id, toYYYYMMDD(ts))
