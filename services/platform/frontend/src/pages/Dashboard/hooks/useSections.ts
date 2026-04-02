@@ -66,8 +66,16 @@ export function useSections() {
 
   const deleteMutation = useMutation({
     mutationFn: deleteSection,
-    onSuccess: (_data, id) => {
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: ['sections'] })
+      const previous = queryClient.getQueryData<Section[]>(['sections'])
       queryClient.setQueryData<Section[]>(['sections'], prev => (prev ?? []).filter(s => s.id !== id))
+      return { previous }
+    },
+    onError: (_err, _id, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(['sections'], context.previous)
+      }
     },
   })
 
