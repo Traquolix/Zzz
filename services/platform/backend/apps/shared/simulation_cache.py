@@ -98,7 +98,11 @@ def get_simulation_section_history(
         cutoff_ms = max(cutoff_ms, since_ms)
     points: list[dict] = []
 
-    for (fid, d, ch), entries in buf.items():
+    try:
+        snapshot = dict(buf)
+    except RuntimeError:
+        snapshot = {}
+    for (fid, d, ch), entries in snapshot.items():
         if fid != fiber_id or d != direction:
             continue
         if ch < channel_start or ch > channel_end:

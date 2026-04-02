@@ -21,7 +21,13 @@ from rest_framework.views import APIView
 from apps.fibers.utils import fiber_belongs_to_org
 from apps.monitoring.detection_utils import TIER_TABLES
 from apps.monitoring.incident_service import (
+    query_by_date as incident_query_by_date,
+)
+from apps.monitoring.incident_service import (
     query_by_id as incident_query_by_id,
+)
+from apps.monitoring.incident_service import (
+    query_daily_counts as incident_query_daily_counts,
 )
 from apps.monitoring.incident_service import (
     query_recent as incident_query_recent,
@@ -72,8 +78,17 @@ class IncidentListView(FlowAwareMixin, APIView):
         except (ValueError, TypeError):
             limit = 100
 
+        date = request.query_params.get("date")
+        if date:
+            try:
+                from datetime import date as date_cls
+
+                date_cls.fromisoformat(date)
+            except ValueError as err:
+                raise ParseError("date must be YYYY-MM-DD format") from err
+
         flow = self._get_flow(request)
-        cache_key = f"{build_org_cache_key('incidents', request.user)}:{flow}:{limit}"
+        cache_key = f"{build_org_cache_key('incidents', request.user)}:{flow}:{limit}:{date or ''}"
         cached = django_cache.get(cache_key)
         if cached is not None:
             return Response(cached)
@@ -85,15 +100,19 @@ class IncidentListView(FlowAwareMixin, APIView):
             return Response(result)
 
         if self._is_sim(request):
-            return self._get_sim_incidents(request, cache_key, limit)
+            return self._get_sim_incidents(request, cache_key, limit, date)
 
-        return self._get_live_incidents(request, cache_key, limit, fiber_ids)
+        return self._get_live_incidents(request, cache_key, limit, fiber_ids, date)
 
-    def _get_sim_incidents(self, request: Request, cache_key: str, limit: int) -> Response:
+    def _get_sim_incidents(
+        self, request: Request, cache_key: str, limit: int, date: str | None = None
+    ) -> Response:
         """Sim flow: return incidents from simulation cache only."""
         from apps.shared.simulation_cache import get_simulation_incidents
 
         sim_incidents = self._get_sim_data(request, get_simulation_incidents)
+        if date:
+            sim_incidents = [i for i in sim_incidents if i.get("detectedAt", "").startswith(date)]
         page = sim_incidents[:limit]
         result = {
             "results": page,
@@ -104,11 +123,19 @@ class IncidentListView(FlowAwareMixin, APIView):
         return Response(result)
 
     def _get_live_incidents(
-        self, request: Request, cache_key: str, limit: int, fiber_ids: list[str] | None
+        self,
+        request: Request,
+        cache_key: str,
+        limit: int,
+        fiber_ids: list[str] | None,
+        date: str | None = None,
     ) -> Response:
         """Live flow: return incidents from ClickHouse only."""
         try:
-            incidents = incident_query_recent(fiber_ids=fiber_ids, hours=24, limit=limit + 1)
+            if date:
+                incidents = incident_query_by_date(date=date, fiber_ids=fiber_ids, limit=limit + 1)
+            else:
+                incidents = incident_query_recent(fiber_ids=fiber_ids, hours=24, limit=limit + 1)
         except ClickHouseUnavailableError:
             return Response(
                 {"detail": "ClickHouse unavailable", "code": "clickhouse_unavailable"},
@@ -122,6 +149,88 @@ class IncidentListView(FlowAwareMixin, APIView):
             "hasMore": has_more,
             "limit": limit,
         }
+        django_cache.set(cache_key, result, INCIDENTS_CACHE_TTL)
+        return Response(result)
+
+
+class IncidentCalendarView(FlowAwareMixin, APIView):
+    """
+    GET /api/incidents/calendar — daily incident counts for a month.
+
+    Query params:
+        month: YYYY-MM (defaults to current month)
+        flow: sim or live
+
+    Returns: { days: [{ date: "2026-04-01", count: 5 }, ...] }
+    """
+
+    permission_classes = [IsActiveUser]
+
+    @extend_schema(tags=["incidents"])
+    def get(self, request: Request) -> Response:
+        from datetime import date
+
+        month_str = request.query_params.get("month")
+        if month_str:
+            try:
+                year, month = month_str.split("-")
+                year, month = int(year), int(month)
+            except (ValueError, AttributeError) as err:
+                raise ParseError("month must be YYYY-MM format") from err
+            if not 1 <= month <= 12:
+                raise ParseError("month must be between 1 and 12")
+        else:
+            today = date.today()
+            year, month = today.year, today.month
+
+        start_date = f"{year:04d}-{month:02d}-01"
+        end_date = date(year + (month // 12), (month % 12) + 1, 1).isoformat()
+
+        fiber_ids = _get_fiber_ids_or_none(request.user)
+        if fiber_ids is not None and not fiber_ids:
+            return Response({"days": []})
+
+        flow = self._get_flow(request)
+        cache_key = f"{build_org_cache_key('incident-cal', request.user)}:{flow}:{year}-{month:02d}"
+        cached = django_cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
+        if self._is_sim(request):
+            return self._get_sim_calendar(request, cache_key, start_date, end_date)
+
+        try:
+            days = incident_query_daily_counts(
+                start_date=start_date, end_date=end_date, fiber_ids=fiber_ids
+            )
+        except ClickHouseUnavailableError:
+            return Response(
+                {"detail": "ClickHouse unavailable", "code": "clickhouse_unavailable"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        result = {"days": days}
+        django_cache.set(cache_key, result, INCIDENTS_CACHE_TTL)
+        return Response(result)
+
+    def _get_sim_calendar(
+        self, request: Request, cache_key: str, start_date: str, end_date: str
+    ) -> Response:
+        """Aggregate simulation incidents by date."""
+        from collections import Counter
+
+        from apps.shared.simulation_cache import get_simulation_incidents
+
+        sim_incidents = self._get_sim_data(request, get_simulation_incidents)
+        day_counts: Counter[str] = Counter()
+        for inc in sim_incidents:
+            detected = inc.get("detectedAt", "")
+            day = detected[:10] if detected else ""
+            if start_date <= day < end_date:
+                day_counts[day] += 1
+
+        days = [{"date": d, "count": c} for d, c in sorted(day_counts.items())]
+        result = {"days": days}
         django_cache.set(cache_key, result, INCIDENTS_CACHE_TTL)
         return Response(result)
 

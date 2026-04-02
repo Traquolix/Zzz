@@ -26,6 +26,13 @@ export type DisplayIncident = Incident & {
   resolved: boolean
 }
 
+export type CalendarDay = {
+  date: string
+  count: number
+  hasUnresolved?: boolean
+  hasUnread?: boolean
+}
+
 export type IncidentAction = {
   id: string
   fromStatus: IncidentStatus

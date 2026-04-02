@@ -30,6 +30,11 @@ urlpatterns = [
     path("fibers", fiber_views.FiberListView.as_view(), name="fibers"),
     path("incidents", monitoring_views.IncidentListView.as_view(), name="incidents"),
     path(
+        "incidents/calendar",
+        monitoring_views.IncidentCalendarView.as_view(),
+        name="incident-calendar",
+    ),
+    path(
         "incidents/<str:incident_id>/snapshot",
         monitoring_views.IncidentSnapshotView.as_view(),
         name="incident-snapshot",

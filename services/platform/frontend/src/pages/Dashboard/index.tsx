@@ -356,6 +356,7 @@ function DashboardInner() {
             hasUnseen={hasUnseen}
             onMarkSeen={markSeen}
             onMarkAllSeen={markAllSeen}
+            toDisplayIncident={toDisplayIncident}
           />
         </div>
 
