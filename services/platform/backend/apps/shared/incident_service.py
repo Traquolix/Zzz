@@ -127,6 +127,49 @@ _RECENT_SQL_ALL = f"""
 """
 
 
+_BY_DATE_SQL_SCOPED = f"""
+    SELECT incident_id, incident_type, severity, fiber_id, direction,
+           channel_start, channel_end, timestamp, status, duration_seconds,
+           speed_before_kmh, speed_during_kmh, speed_drop_percent
+    FROM {CH_INCIDENTS}
+    FINAL
+    WHERE toDate(timestamp) = {{date:Date}}
+      AND fiber_id IN {{fids:Array(String)}}
+    ORDER BY timestamp DESC
+    LIMIT {{lim:UInt32}}
+"""
+
+_BY_DATE_SQL_ALL = f"""
+    SELECT incident_id, incident_type, severity, fiber_id, direction,
+           channel_start, channel_end, timestamp, status, duration_seconds,
+           speed_before_kmh, speed_during_kmh, speed_drop_percent
+    FROM {CH_INCIDENTS}
+    FINAL
+    WHERE toDate(timestamp) = {{date:Date}}
+    ORDER BY timestamp DESC
+    LIMIT {{lim:UInt32}}
+"""
+
+_DAILY_COUNTS_SQL_SCOPED = f"""
+    SELECT toDate(timestamp) AS day, count() AS cnt
+    FROM {CH_INCIDENTS}
+    FINAL
+    WHERE timestamp >= {{start:Date}} AND timestamp < {{end:Date}}
+      AND fiber_id IN {{fids:Array(String)}}
+    GROUP BY day
+    ORDER BY day
+"""
+
+_DAILY_COUNTS_SQL_ALL = f"""
+    SELECT toDate(timestamp) AS day, count() AS cnt
+    FROM {CH_INCIDENTS}
+    FINAL
+    WHERE timestamp >= {{start:Date}} AND timestamp < {{end:Date}}
+    GROUP BY day
+    ORDER BY day
+"""
+
+
 def query_active(
     fiber_ids: list[str] | None = None,
     limit: int = 200,
@@ -199,6 +242,54 @@ def query_by_id(incident_id: str) -> dict | None:
         "direction": row.get("direction", 0),
         "status": row["status"],
     }
+
+
+def query_by_date(
+    date: str,
+    fiber_ids: list[str] | None = None,
+    limit: int = 500,
+) -> list[dict]:
+    """
+    Return incidents for a specific date, transformed to frontend shape.
+
+    Args:
+        date: Date string in YYYY-MM-DD format.
+        fiber_ids: Restrict to these fibers. ``None`` = all (superuser).
+        limit: Max rows.
+    """
+    if fiber_ids is not None:
+        rows = query(
+            _BY_DATE_SQL_SCOPED, parameters={"date": date, "fids": fiber_ids, "lim": limit}
+        )
+    else:
+        rows = query(_BY_DATE_SQL_ALL, parameters={"date": date, "lim": limit})
+    return [transform_row(r) for r in rows]
+
+
+def query_daily_counts(
+    start_date: str,
+    end_date: str,
+    fiber_ids: list[str] | None = None,
+) -> list[dict]:
+    """
+    Return incident counts per day for a date range.
+
+    Args:
+        start_date: Start date (inclusive) in YYYY-MM-DD format.
+        end_date: End date (exclusive) in YYYY-MM-DD format.
+        fiber_ids: Restrict to these fibers. ``None`` = all (superuser).
+
+    Returns:
+        List of {day: "YYYY-MM-DD", count: N} dicts.
+    """
+    if fiber_ids is not None:
+        rows = query(
+            _DAILY_COUNTS_SQL_SCOPED,
+            parameters={"start": start_date, "end": end_date, "fids": fiber_ids},
+        )
+    else:
+        rows = query(_DAILY_COUNTS_SQL_ALL, parameters={"start": start_date, "end": end_date})
+    return [{"date": str(r["day"]), "count": r["cnt"]} for r in rows]
 
 
 def query_active_raw(

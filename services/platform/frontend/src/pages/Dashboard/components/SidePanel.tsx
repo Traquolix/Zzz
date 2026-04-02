@@ -4,7 +4,7 @@ import i18next from 'i18next'
 import { ToggleGroup } from '@/components/ui/toggle-group'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
-import type { LiveSectionStats, SectionDataPoint } from '../types'
+import type { DisplayIncident, LiveSectionStats, SectionDataPoint } from '../types'
 import { useRealtime } from '@/hooks/useRealtime'
 import { useDashboard } from '../context/DashboardContext'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
@@ -42,6 +42,7 @@ interface SidePanelProps {
   hasUnseen?: boolean
   onMarkSeen?: (id: string) => void
   onMarkAllSeen?: () => void
+  toDisplayIncident: (inc: import('@/types/incident').Incident) => DisplayIncident
 }
 
 /** Compact fallback UI for panel-level error boundaries. */
@@ -82,6 +83,7 @@ export function SidePanel({
   hasUnseen,
   onMarkSeen,
   onMarkAllSeen,
+  toDisplayIncident,
 }: SidePanelProps) {
   const { state, dispatch } = useDashboard()
   const {
@@ -109,6 +111,11 @@ export function SidePanel({
 
   // Per-tab local state
   const [incidentSortBy, setIncidentSortBy] = useState<'newest' | 'oldest'>('newest')
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const [selectedDate, setSelectedDate] = useState(todayStr)
+  const [calendarOpen, setCalendarOpen] = useState(false)
+  const [calendarYear, setCalendarYear] = useState(new Date().getFullYear())
+  const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth() + 1)
   const [shmSearch, setShmSearch] = useState('')
   const [sectionSearch, setSectionSearch] = useState('')
   const [dataHubSubTab, setDataHubSubTab] = useState<DataHubSubTab>('export')
@@ -263,6 +270,8 @@ export function SidePanel({
                 onMarkAllSeen={onMarkAllSeen}
                 incidentSortBy={incidentSortBy}
                 setIncidentSortBy={setIncidentSortBy}
+                selectedDate={selectedDate}
+                onToggleCalendar={() => setCalendarOpen(o => !o)}
               />
             )}
             {activeTab === 'shm' && (
@@ -314,6 +323,28 @@ export function SidePanel({
                 onMarkSeen={onMarkSeen}
                 sections={sections}
                 sortBy={incidentSortBy}
+                toDisplayIncident={toDisplayIncident}
+                calendar={{
+                  open: calendarOpen,
+                  selectedDate,
+                  year: calendarYear,
+                  month: calendarMonth,
+                  onSelectDate: d => {
+                    setSelectedDate(d)
+                    setCalendarOpen(false)
+                    const parsed = new Date(d + 'T00:00:00')
+                    setCalendarYear(parsed.getFullYear())
+                    setCalendarMonth(parsed.getMonth() + 1)
+                  },
+                  onPrevMonth: () => {
+                    setCalendarMonth(m => (m === 1 ? 12 : m - 1))
+                    if (calendarMonth === 1) setCalendarYear(y => y - 1)
+                  },
+                  onNextMonth: () => {
+                    setCalendarMonth(m => (m === 12 ? 1 : m + 1))
+                    if (calendarMonth === 12) setCalendarYear(y => y + 1)
+                  },
+                }}
               />
             </ErrorBoundary>
           )}

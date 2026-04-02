@@ -109,6 +109,10 @@
       "legendSlow": "Slow",
       "incident": "Incident"
     },
+    "calendar": {
+      "today": "Today",
+      "noIncidents": "No incidents this day"
+    },
     "time": {
       "justNow": "Just now",
       "minutesAgo": "{{count}}m ago",

@@ -4,11 +4,26 @@ import type { Incident, IncidentSnapshot, IncidentActionHistory, IncidentAction 
 
 /**
  * Fetch incidents from the paginated endpoint.
- * Returns the full paginated response so callers can check hasMore.
+ * Optionally filter by date (YYYY-MM-DD) for calendar browsing.
  */
-export async function fetchIncidents(flow?: DataFlow): Promise<PaginatedResponse<Incident>> {
-  const params = flow ? `?flow=${flow}` : ''
-  return apiPaginatedRequest<Incident>(`/api/incidents${params}`)
+export async function fetchIncidents(flow?: DataFlow, date?: string): Promise<PaginatedResponse<Incident>> {
+  const params = new URLSearchParams()
+  if (flow) params.set('flow', flow)
+  if (date) params.set('date', date)
+  const qs = params.toString()
+  return apiPaginatedRequest<Incident>(`/api/incidents${qs ? '?' + qs : ''}`)
+}
+
+import type { CalendarDay } from '@/types/incident'
+
+/**
+ * Fetch daily incident counts for a month (YYYY-MM).
+ */
+export async function fetchIncidentCalendar(month: string, flow?: DataFlow): Promise<CalendarDay[]> {
+  const params = new URLSearchParams({ month })
+  if (flow) params.set('flow', flow)
+  const res = await apiRequest<{ days: CalendarDay[] }>(`/api/incidents/calendar?${params}`)
+  return res.days
 }
 
 /**

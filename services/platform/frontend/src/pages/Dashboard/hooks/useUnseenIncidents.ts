@@ -47,6 +47,20 @@ export function useUnseenIncidents(incidents: DisplayIncident[], loading: boolea
       }
     }
 
+    // Auto-mark resolved incidents as seen — nothing to act on
+    setUnseenIds(prev => {
+      let changed = false
+      const next = new Set(prev)
+      for (const id of prev) {
+        const inc = incidents.find(i => i.id === id)
+        if (inc?.resolved) {
+          next.delete(id)
+          changed = true
+        }
+      }
+      return changed ? next : prev
+    })
+
     if (newIds.length > 0) {
       setUnseenIds(prev => {
         const next = new Set(prev)

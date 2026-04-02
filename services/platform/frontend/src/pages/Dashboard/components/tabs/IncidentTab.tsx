@@ -1,11 +1,26 @@
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 import { severityColor } from '@/lib/theme'
+import type { CalendarDay, Incident } from '@/types/incident'
 import type { Severity, DisplayIncident, Section } from '../../types'
 import { IncidentList, IncidentDetail } from '../IncidentPanels'
+import { IncidentCalendar } from '../IncidentCalendar'
 import { useDashboard } from '../../context/DashboardContext'
+import { useRealtime } from '@/hooks/useRealtime'
+import { fetchIncidents, fetchIncidentCalendar } from '@/api/incidents'
 
 const severityOrder: Severity[] = ['critical', 'high', 'medium', 'low']
+
+function toYMD(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+function formatDateShort(dateStr: string, locale: string): string {
+  const d = new Date(dateStr + 'T00:00:00')
+  return d.toLocaleDateString(locale, { month: 'short', day: 'numeric' })
+}
 
 interface IncidentTabProps {
   incidents: DisplayIncident[]
@@ -30,15 +45,31 @@ export function IncidentTabToolbar({
   onMarkAllSeen,
   incidentSortBy,
   setIncidentSortBy,
+  selectedDate,
+  onToggleCalendar,
 }: Pick<IncidentTabProps, 'filterSeverity' | 'hideResolved' | 'showIncidentsOnMap' | 'hasUnseen' | 'onMarkAllSeen'> & {
   incidentSortBy: 'newest' | 'oldest'
   setIncidentSortBy: React.Dispatch<React.SetStateAction<'newest' | 'oldest'>>
+  selectedDate: string
+  onToggleCalendar: () => void
 }) {
   const { dispatch } = useDashboard()
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const isToday = selectedDate === toYMD(new Date())
 
   return (
     <>
+      <button
+        onClick={onToggleCalendar}
+        className={cn(
+          'px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors cursor-pointer',
+          isToday
+            ? 'bg-[var(--dash-accent)]/20 text-[var(--dash-accent)]'
+            : 'bg-[var(--dash-surface-raised)] text-[var(--dash-text)]',
+        )}
+      >
+        {isToday ? t('incidents.calendar.today') : formatDateShort(selectedDate, i18n.language)}
+      </button>
       {filterSeverity && (
         <button
           onClick={() => dispatch({ type: 'SET_FILTER_SEVERITY', severity: null })}
@@ -194,9 +225,82 @@ export function IncidentTabContent({
   onMarkSeen,
   sections,
   sortBy,
-}: Omit<IncidentTabProps, 'showIncidentsOnMap' | 'hasUnseen' | 'onMarkAllSeen'> & { sortBy: 'newest' | 'oldest' }) {
+  toDisplayIncident,
+  calendar,
+}: Omit<IncidentTabProps, 'showIncidentsOnMap' | 'hasUnseen' | 'onMarkAllSeen'> & {
+  sortBy: 'newest' | 'oldest'
+  toDisplayIncident: (inc: Incident) => DisplayIncident
+  calendar: {
+    open: boolean
+    selectedDate: string
+    year: number
+    month: number
+    onSelectDate: (date: string) => void
+    onPrevMonth: () => void
+    onNextMonth: () => void
+  }
+}) {
   const { dispatch } = useDashboard()
-  const incident = selectedIncidentId ? incidents.find(i => i.id === selectedIncidentId) : null
+  const { t } = useTranslation()
+  const { flow } = useRealtime()
+  const today = toYMD(new Date())
+  const isToday = calendar.selectedDate === today
+
+  // Calendar counts from API (fetched when calendar is open)
+  const monthStr = `${calendar.year}-${String(calendar.month).padStart(2, '0')}`
+  const {
+    data: apiDays = [],
+    isLoading: calendarLoading,
+    isError: calendarError,
+  } = useQuery({
+    queryKey: ['incident-calendar', monthStr, flow],
+    queryFn: () => fetchIncidentCalendar(monthStr, flow),
+    enabled: calendar.open,
+    staleTime: 60_000,
+  })
+
+  // Enrich API calendar data with live incident status (unread/unresolved)
+  const calendarDays: CalendarDay[] = useMemo(() => {
+    // Group in-memory incidents by date for status enrichment
+    const byDate = new Map<string, { count: number; hasUnresolved: boolean; hasUnread: boolean }>()
+    for (const inc of incidents) {
+      const day = inc.detectedAt.slice(0, 10)
+      const entry = byDate.get(day) ?? { count: 0, hasUnresolved: false, hasUnread: false }
+      entry.count++
+      if (!inc.resolved) entry.hasUnresolved = true
+      if (unseenIds?.has(inc.id)) entry.hasUnread = true
+      byDate.set(day, entry)
+    }
+
+    // Start with API data, override with live data where available
+    const merged = new Map<string, CalendarDay>()
+    for (const d of apiDays) merged.set(d.date, d)
+    for (const [date, live] of byDate) {
+      const existing = merged.get(date)
+      merged.set(date, {
+        date,
+        count: Math.max(existing?.count ?? 0, live.count),
+        hasUnresolved: live.hasUnresolved,
+        hasUnread: live.hasUnread,
+      })
+    }
+    return Array.from(merged.values())
+  }, [apiDays, incidents, unseenIds])
+
+  // Past day incidents: fetch from API and transform, cached per date
+  const { data: pastDayIncidents, isLoading: pastDayLoading } = useQuery({
+    queryKey: ['incidents-by-date', calendar.selectedDate, flow],
+    queryFn: async () => {
+      const res = await fetchIncidents(flow, calendar.selectedDate)
+      return res.results.map(toDisplayIncident)
+    },
+    enabled: !isToday,
+    staleTime: 5 * 60_000, // 5 min — past incidents may still get resolved
+  })
+
+  const displayIncidents = isToday ? incidents.filter(i => i.detectedAt.startsWith(today)) : (pastDayIncidents ?? [])
+
+  const incident = selectedIncidentId ? displayIncidents.find(i => i.id === selectedIncidentId) : null
 
   if (incident) {
     return (
@@ -205,15 +309,38 @@ export function IncidentTabContent({
   }
 
   return (
-    <IncidentList
-      incidents={incidents}
-      filterSeverity={filterSeverity}
-      hideResolved={hideResolved}
-      sortBy={sortBy}
-      onHighlightIncident={onHighlightIncident}
-      onClearHighlight={onClearHighlight}
-      unseenIds={unseenIds}
-      onMarkSeen={onMarkSeen}
-    />
+    <>
+      {calendar.open && (
+        <div className="border-b border-[var(--dash-border)]">
+          <IncidentCalendar
+            year={calendar.year}
+            month={calendar.month}
+            days={calendarDays}
+            selectedDate={calendar.selectedDate}
+            loading={calendarLoading}
+            error={calendarError}
+            onSelectDate={calendar.onSelectDate}
+            onPrevMonth={calendar.onPrevMonth}
+            onNextMonth={calendar.onNextMonth}
+          />
+        </div>
+      )}
+      {!isToday && pastDayLoading && (
+        <div className="flex items-center justify-center py-8 text-[var(--dash-text-muted)] text-cq-xs">
+          <span className="w-4 h-4 rounded-full border-2 border-[var(--dash-text-muted)]/30 border-t-[var(--dash-accent)] animate-spin mr-2" />
+          {t('common.loading')}
+        </div>
+      )}
+      <IncidentList
+        incidents={displayIncidents}
+        filterSeverity={filterSeverity}
+        hideResolved={hideResolved}
+        sortBy={sortBy}
+        onHighlightIncident={onHighlightIncident}
+        onClearHighlight={onClearHighlight}
+        unseenIds={unseenIds}
+        onMarkSeen={onMarkSeen}
+      />
+    </>
   )
 }

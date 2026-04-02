@@ -2,7 +2,7 @@
 Re-export all views for URL routing compatibility.
 
 The implementation has been split into focused modules:
-- incident_views.py  — IncidentListView, IncidentSnapshotView, IncidentActionView
+- incident_views.py  — IncidentListView, IncidentCalendarView, IncidentSnapshotView, IncidentActionView
 - section_views.py   — SectionListView, SectionDeleteView, SectionHistoryView, BatchSectionHistoryView
 - shm_views.py       — SpectralDataView, SpectralPeaksView, SpectralSummaryView, SHMStatusView
 - stats_views.py     — StatsView, InfrastructureListView
