@@ -16,7 +16,6 @@
  * Tag colors — used for incident tags across all components.
  */
 export const COLORS = {
-  /** Incident tag colors — known tags get fixed colors, unknown tags get a generated one. */
   tag: {
     critical: '#ef4444', // red-500
     high: '#f97316', // orange-500
@@ -128,25 +127,11 @@ export const COLORS = {
 // DERIVED MAPS — convenience re-exports for components that need Record<> shapes
 // ============================================================================
 
-const TAG_COLORS: Record<string, string> = {
-  critical: COLORS.tag.critical,
-  high: COLORS.tag.high,
-  medium: COLORS.tag.medium,
-  low: COLORS.tag.low,
-}
-
-/** Fallback palette for unknown tags — deterministic hash-based selection. */
-const FALLBACK_PALETTE = ['#8b5cf6', '#06b6d4', '#ec4899', '#14b8a6', '#a855f7', '#f43f5e']
+export const KNOWN_TAGS = ['critical', 'high', 'medium', 'low'] as const
 
 export function getTagColor(tag: string): string {
-  if (TAG_COLORS[tag]) return TAG_COLORS[tag]
-  let hash = 0
-  for (let i = 0; i < tag.length; i++) hash = ((hash << 5) - hash + tag.charCodeAt(i)) | 0
-  return FALLBACK_PALETTE[Math.abs(hash) % FALLBACK_PALETTE.length]
+  return COLORS.tag[tag as keyof typeof COLORS.tag] ?? '#6b7280' // gray-500 fallback
 }
-
-/** Known tag display order — these appear first in the filter UI. */
-export const KNOWN_TAGS = ['critical', 'high', 'medium', 'low'] as const
 
 export const chartColors = {
   speed: { label: 'Speed', unit: 'km/h', color: COLORS.chart.speed },
