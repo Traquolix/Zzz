@@ -23,8 +23,6 @@ Time-shifted replay:
 import asyncio
 import contextlib
 import logging
-import math
-import random
 import time
 
 from channels.layers import get_channel_layer
@@ -41,6 +39,8 @@ from apps.realtime.broadcast import (
     pubsub_broadcast_detections,
     pubsub_broadcast_shm,
 )
+from apps.realtime.shm_generator import generate_shm_readings
+from apps.realtime.transforms import transform_detection_message, transform_incident_row
 from apps.shared.constants import INFRA_REFRESH_INTERVAL, MAP_REFRESH_INTERVAL
 
 logger = logging.getLogger("sequoia.realtime.kafka_bridge")
@@ -88,7 +88,7 @@ def _try_import_confluent_kafka():
 
 
 # ============================================================================
-# MESSAGE TRANSFORMS
+# KAFKA MESSAGE HELPERS
 # ============================================================================
 
 
@@ -116,132 +116,6 @@ def _parse_detection_message(value: dict | None) -> dict | None:
         logger.warning("Detection message is not a dict: %s", type(value))
         return None
     return value
-
-
-def transform_detection_message(data: dict) -> list[dict]:
-    """
-    Transform a parsed das.detections message into frontend Detection[] shape.
-
-    Kafka Avro schema (das.detections) — batched format:
-        { fiber_id, engine_version, detections: [
-            { timestamp_ns, channel, speed_kmh, direction,
-              vehicle_count, n_cars, n_trucks, glrt_max,
-              strain_peak, strain_rms }, ...
-        ]}
-
-    Frontend Detection:
-        { fiberId, direction, channel, speed, count, nCars, nTrucks,
-          glrtMax, strainPeak, strainRms, timestamp }
-
-    Direction convention: 0 = forward, 1 = reverse (unified across pipeline and platform).
-    """
-    fiber_id = data.get("fiber_id", "")
-    det_list = data.get("detections", [])
-
-    # Fallback for legacy single-detection format (no 'detections' array)
-    if not det_list and "timestamp_ns" in data:
-        det_list = [data]
-
-    results = []
-    for det in det_list:
-        timestamp_ns = det.get("timestamp_ns", 0)
-        channel = det.get("channel", 0)
-        speed = det.get("speed_kmh", 0.0)
-        vehicle_count = det.get("vehicle_count", 1.0)
-        n_cars = det.get("n_cars", 0.0)
-        n_trucks = det.get("n_trucks", 0.0)
-        timestamp_ms = timestamp_ns // 1_000_000
-
-        direction = det.get("direction", 0)
-
-        results.append(
-            {
-                "fiberId": fiber_id,
-                "direction": direction,
-                "channel": int(channel),
-                "speed": round(abs(speed), 1),
-                "count": round(float(vehicle_count), 1),
-                "nCars": round(float(n_cars), 1),
-                "nTrucks": round(float(n_trucks), 1),
-                "glrtMax": round(float(det.get("glrt_max", 0.0)), 1),
-                "strainPeak": round(float(det.get("strain_peak", 0.0)), 6),
-                "strainRms": round(float(det.get("strain_rms", 0.0)), 6),
-                "timestamp": timestamp_ms,
-            }
-        )
-    return results
-
-
-def transform_incident_row(row: dict) -> dict:
-    """
-    Transform a ClickHouse fiber_incidents row into frontend Incident shape.
-
-    Delegates to the centralized IncidentService transform.
-    """
-    from apps.shared.incident_service import transform_row
-
-    return transform_row(row)
-
-
-# ============================================================================
-# SHM GENERATOR (reusable for both simulation and bridge)
-# ============================================================================
-
-
-def generate_shm_readings(infrastructure: list[dict], shm_state: dict) -> list[dict]:
-    """
-    Generate SHM frequency readings for infrastructure items.
-
-    Uses the same physics model as the simulation engine:
-    - Base frequency: bridge ~5Hz, tunnel ~15Hz
-    - Periodic + fast oscillation + random noise
-    - Amplitude based on traffic load approximation
-    """
-    now_ms = int(time.time() * 1000)
-    t = time.time()
-    readings = []
-
-    for infra in infrastructure:
-        iid = infra["id"]
-
-        if iid not in shm_state:
-            infra_type = infra.get("type", "bridge")
-            base = {"bridge": 5.0, "tunnel": 15.0}.get(infra_type, 10.0)
-            shm_state[iid] = {
-                "base_freq": base + (random.random() - 0.5) * 2,
-                "phase": random.random() * math.pi * 2,
-            }
-
-        state = shm_state[iid]
-        base_freq = state["base_freq"]
-        phase = state["phase"]
-
-        periodic = math.sin(t * 0.1 + phase) * 0.3
-        fast = math.sin(t * 2.5 + phase * 2) * 0.1
-        noise = (random.random() - 0.5) * 0.2
-        freq = base_freq + periodic + fast + noise
-
-        base_amp = 0.3
-        vib_amp = abs(math.sin(t * 5 + phase)) * 0.15
-        noise_amp = random.random() * 0.1
-        amp = min(1.0, base_amp + vib_amp + noise_amp)
-
-        readings.append(
-            {
-                "infrastructureId": iid,
-                "fiberId": infra.get("fiber_id", ""),
-                "frequency": round(freq, 2),
-                "amplitude": round(amp, 2),
-                "timestamp": now_ms,
-            }
-        )
-
-    return readings
-
-
-# ============================================================================
-# KAFKA BRIDGE LOOP (time-shifted replay)
-# ============================================================================
 
 
 async def run_kafka_bridge_loop(infrastructure: list[dict]):
