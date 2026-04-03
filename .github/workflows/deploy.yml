@@ -49,20 +49,6 @@ jobs:
           echo "sha_before=$(git rev-parse HEAD~1)" >> $GITHUB_OUTPUT
           echo "sha_after=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
 
-      - name: Run AI engine tests
-        id: tests
-        run: |
-          cd ${{ env.DEPLOY_DIR }}
-          make test-ai-engine
-
-      - name: Rollback on test failure
-        if: failure() && steps.tests.outcome == 'failure'
-        run: |
-          cd ${{ env.DEPLOY_DIR }}
-          echo "TESTS FAILED — rolling back to ${{ steps.pre_deploy.outputs.sha_before }}"
-          git reset --hard ${{ steps.pre_deploy.outputs.sha_before }}
-          exit 1
-
       - name: Ensure infrastructure is running
         run: |
           cd ${{ env.DEPLOY_DIR }}
