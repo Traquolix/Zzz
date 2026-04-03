@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import mapboxgl from 'mapbox-gl'
-import { COLORS, getTagColor } from '@/lib/theme'
+import { COLORS } from '@/lib/theme'
+import { useTagColor } from '../../hooks/useTags'
 import type { DisplayIncident } from '../../types'
 import type { MapHandlers } from './mapTypes'
 
@@ -12,6 +13,7 @@ interface UseIncidentMarkersParams {
 }
 
 export function useIncidentMarkers({ mapRef, incidents, incidentClickedRef, handlersRef }: UseIncidentMarkersParams) {
+  const getColor = useTagColor()
   const markersRef = useRef<Map<string, mapboxgl.Marker>>(new Map())
 
   useEffect(() => {
@@ -28,7 +30,7 @@ export function useIncidentMarkers({ mapRef, incidents, incidentClickedRef, hand
       if (inc.resolved) continue
 
       const lngLat: [number, number] = inc.location
-      const color = getTagColor(inc.tags[0] ?? 'low')
+      const color = getColor(inc.tags[0] ?? 'low')
 
       const el = document.createElement('div')
       el.style.cssText = `
@@ -63,7 +65,7 @@ export function useIncidentMarkers({ mapRef, incidents, incidentClickedRef, hand
       markers.forEach(m => m.remove())
       markers.clear()
     }
-  }, [incidents, mapRef, incidentClickedRef, handlersRef])
+  }, [incidents, mapRef, incidentClickedRef, handlersRef, getColor])
 
   return { markersRef }
 }

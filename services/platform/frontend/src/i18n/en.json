@@ -280,6 +280,11 @@
   "settings": {
     "title": "Settings",
     "showFullCable": "Show Full Cable",
+    "tags": {
+      "title": "Incident Tags",
+      "add": "Add",
+      "namePlaceholder": "Tag name"
+    },
     "speedLimits": "Speed Limits",
     "speed": {
       "loadingFibers": "Loading fibers...",

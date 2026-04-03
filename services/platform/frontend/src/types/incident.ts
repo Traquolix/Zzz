@@ -1,3 +1,10 @@
+export type IncidentTag = {
+  id: string
+  name: string
+  color: string
+  isLocked: boolean
+}
+
 export type IncidentType = 'accident' | 'congestion' | 'slowdown' | 'anomaly'
 export type IncidentStatus = 'active' | 'acknowledged' | 'investigating' | 'resolved'
 

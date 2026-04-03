@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useLayoutEffect, useRef } from 'react'
+import { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
@@ -10,6 +10,7 @@ import type { Fiber, SpeedThresholds } from '../types'
 import { FlowToggle } from './FlowToggle'
 import { ThresholdEditor } from './ThresholdEditor'
 import type { DataFlow } from '@/context/RealtimeContext'
+import type { IncidentTag } from '@/types/incident'
 
 // ── Settings panel ──────────────────────────────────────────────────────
 
@@ -130,6 +131,9 @@ function SettingsPanel({
   switchingFlow,
   availableFlows,
   onFlowToggle,
+  tags,
+  onAddTag,
+  onDeleteTag,
 }: {
   fiberThresholds: Record<string, SpeedThresholds>
   fiberColors: Record<string, string>
@@ -142,11 +146,25 @@ function SettingsPanel({
   switchingFlow: boolean
   availableFlows: DataFlow[]
   onFlowToggle: (flow: DataFlow) => void
+  tags: IncidentTag[]
+  onAddTag: (name: string, color: string) => void
+  onDeleteTag: (id: string) => void
 }) {
   const { dispatch } = useDashboard()
   const { t } = useTranslation()
   const { fibers } = useFiberData()
   const [colorPickerOpen, setColorPickerOpen] = useState<string | null>(null)
+  const [newTagName, setNewTagName] = useState('')
+  const [newTagColor, setNewTagColor] = useState('#6b7280')
+  const newTagColorRef = useRef<HTMLButtonElement>(null)
+
+  const handleAddTag = useCallback(() => {
+    const name = newTagName.trim()
+    if (!name) return
+    onAddTag(name, newTagColor)
+    setNewTagName('')
+    setNewTagColor('#6b7280')
+  }, [newTagName, newTagColor, onAddTag])
 
   // Group fibers by cable
   const cableGroups = useMemo(() => {
@@ -208,6 +226,85 @@ function SettingsPanel({
             />
           </button>
         </label>
+      </div>
+
+      <div className="h-px bg-[var(--dash-border)]" />
+
+      {/* Incident tags */}
+      <div className="flex flex-col gap-2">
+        <span className="text-cq-xs text-[var(--dash-text-secondary)]">{t('settings.tags.title')}</span>
+        <div className="flex flex-col gap-1">
+          {tags.map(tag => (
+            <div key={tag.id} className="flex items-center gap-2 py-0.5 group">
+              <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: tag.color }} />
+              <span className="text-cq-sm text-[var(--dash-text)] flex-1 truncate">{tag.name}</span>
+              {tag.isLocked ? (
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="text-[var(--dash-text-muted)] shrink-0"
+                >
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              ) : (
+                <button
+                  onClick={() => onDeleteTag(tag.id)}
+                  className="opacity-0 group-hover:opacity-100 text-[var(--dash-text-muted)] hover:text-[var(--dash-red)] transition-all cursor-pointer"
+                >
+                  <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 10 10"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  >
+                    <line x1="3" y1="3" x2="7" y2="7" />
+                    <line x1="7" y1="3" x2="3" y2="7" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        {/* Add new tag */}
+        <div className="flex items-center gap-1.5 mt-1">
+          <button
+            ref={newTagColorRef}
+            onClick={() => setColorPickerOpen(colorPickerOpen === 'new-tag' ? null : 'new-tag')}
+            className="w-3 h-3 rounded-full shrink-0 cursor-pointer ring-offset-1 ring-offset-[var(--dash-surface)] hover:ring-1 hover:ring-[var(--dash-text-muted)] transition-all"
+            style={{ backgroundColor: newTagColor }}
+          />
+          {colorPickerOpen === 'new-tag' && (
+            <ColorPicker
+              current={newTagColor}
+              onSelect={setNewTagColor}
+              onClose={() => setColorPickerOpen(null)}
+              anchorRef={newTagColorRef}
+            />
+          )}
+          <input
+            type="text"
+            value={newTagName}
+            onChange={e => setNewTagName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleAddTag()}
+            placeholder={t('settings.tags.namePlaceholder')}
+            className="flex-1 px-1.5 py-0.5 rounded bg-[var(--dash-surface)] border border-[var(--dash-border)] text-cq-sm text-[var(--dash-text)] outline-none focus:border-[var(--dash-accent)] min-w-0"
+          />
+          <button
+            onClick={handleAddTag}
+            disabled={!newTagName.trim()}
+            className="px-2 py-0.5 rounded text-cq-xs bg-[var(--dash-accent)] text-white cursor-pointer hover:opacity-80 transition-opacity disabled:opacity-30 disabled:cursor-default"
+          >
+            {t('settings.tags.add')}
+          </button>
+        </div>
       </div>
 
       <div className="h-px bg-[var(--dash-border)]" />

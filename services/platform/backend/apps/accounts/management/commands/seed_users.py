@@ -10,6 +10,7 @@ from django.core.management.base import BaseCommand
 
 from apps.accounts.models import User
 from apps.fibers.models import FiberAssignment
+from apps.incidents.models import seed_default_tags
 from apps.organizations.models import Organization, OrganizationSettings
 from apps.shared.constants import ALL_LAYERS, ALL_WIDGETS, VIEWER_LAYERS, VIEWER_WIDGETS
 
@@ -53,6 +54,8 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"Created organization: {org.name}"))
         else:
             self.stdout.write(f"Organization already exists: {org.name}")
+
+        seed_default_tags(org)
 
         # Assign all fibers to default org
         for fid in ALL_FIBER_IDS:
@@ -126,6 +129,8 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"Created organization: {acme.name}"))
         else:
             self.stdout.write(f"Organization already exists: {acme.name}")
+
+        seed_default_tags(acme)
 
         # Assign only carros fiber to ACME
         _, fa_created = FiberAssignment.objects.get_or_create(

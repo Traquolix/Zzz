@@ -193,6 +193,12 @@ urlpatterns = [
         admin_views.InfrastructureAdminDetailView.as_view(),
         name="admin-infrastructure-detail",
     ),
+    path("admin/tags", admin_views.TagListView.as_view(), name="admin-tags"),
+    path(
+        "admin/tags/<uuid:tag_id>",
+        admin_views.TagDetailView.as_view(),
+        name="admin-tag-detail",
+    ),
     path("admin/alert-rules", admin_views.AlertRuleListView.as_view(), name="admin-alert-rules"),
     path(
         "admin/alert-rules/<uuid:rule_id>",

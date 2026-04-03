@@ -14,6 +14,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.incidents.models import seed_default_tags
 from apps.organizations.models import Organization, OrganizationSettings
 from apps.shared.admin_permissions import IsAdminOrSuperuser, IsSuperuser
 from apps.shared.utils import add_cache_control, paginate_queryset
@@ -85,6 +86,7 @@ class OrganizationListView(APIView):
         org = Organization.objects.create(name=name)
         # Auto-create settings
         OrganizationSettings.objects.get_or_create(organization=org)
+        seed_default_tags(org)
         return Response(
             {
                 "id": str(org.pk),
