@@ -2,6 +2,10 @@
 
 Tests that the pipeline fails explicitly rather than producing
 confident garbage when given pathological input.
+
+CPU-only: pathological input (NaN, Inf, noise in extreme shapes) triggers
+CUDA kernel asserts in the CPAB library. The CPU Python fallback handles
+these gracefully. CI sets CUDA_VISIBLE_DEVICES="" to force CPU.
 """
 
 from __future__ import annotations
