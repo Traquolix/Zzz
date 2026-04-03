@@ -48,8 +48,17 @@ jobs:
       - name: Typecheck frontend
         run: cd services/platform/frontend && npx tsc -p tsconfig.app.json --noEmit
 
-  # ---------- UNIT TESTS ----------
-  # Temporarily removed — tests being rewritten (see TODO.md)
+  # ---------- UNIT TESTS (self-hosted — requires PyTorch + model weights) ----------
+  test:
+    if: >
+      github.event_name != 'schedule' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, backend]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run AI engine tests
+        run: cd services/pipeline && make test-ai-engine
 
   # ---------- SECURITY (weekly only) ----------
   security:
