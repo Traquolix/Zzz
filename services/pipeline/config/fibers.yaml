@@ -120,20 +120,20 @@ fibers:
       - name: seg4
         channels: [2096, 2251]
 
-  # promenade:
-  #   sections:
-  #     - name: seg1
-  #       channels: [1762, 1822]
-  #     - name: seg2
-  #       channels: [2392, 2582]
-  #     - name: seg3
-  #       channels: [2937, 3002]
-  #     - name: seg4
-  #       channels: [3132, 3217]
-  #     - name: seg5
-  #       channels: [3362, 3612]
-  #     - name: seg6
-  #       channels: [3682, 3912]
+  promenade:
+    sections:
+      - name: seg1
+        channels: [1762, 1822]
+      - name: seg2
+        channels: [2392, 2582]
+      - name: seg3
+        channels: [2937, 3002]
+      - name: seg4
+        channels: [3132, 3217]
+      - name: seg5
+        channels: [3362, 3612]
+      - name: seg6
+        channels: [3682, 3912]
 
 # =============================================================================
 # Model Defaults
