@@ -169,7 +169,7 @@ def _query_section_history_hires(
           AND direction = {{dir:UInt8}}
           AND ch BETWEEN {{cs:UInt16}} AND {{ce:UInt16}}
           AND ts >= now() - INTERVAL {{mins:UInt32}} MINUTE
-          AND ({{since:UInt64}} = 0 OR ts > fromUnixTimestamp64Milli({{since:UInt64}}))
+          AND ({{since:UInt64}} = 0 OR ts >= fromUnixTimestamp64Milli({{since:UInt64}} + 1000))
         GROUP BY toStartOfSecond(ts)
         ORDER BY toStartOfSecond(ts)
         """,
@@ -322,7 +322,7 @@ def _query_batch_hires(
               AND ch BETWEEN {{cs{s}:UInt16}} AND {{ce{s}:UInt16}}
               AND ts >= now() - INTERVAL {{mins:UInt32}} MINUTE
               AND ({{since{s}:UInt64}} = 0
-                   OR ts > fromUnixTimestamp64Milli({{since{s}:UInt64}}))
+                   OR ts >= fromUnixTimestamp64Milli({{since{s}:UInt64}} + 1000))
             GROUP BY toStartOfSecond(ts)
         """)
 
