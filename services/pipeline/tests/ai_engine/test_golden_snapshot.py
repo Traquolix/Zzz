@@ -178,25 +178,37 @@ class TestGoldenSnapshotDetections:
 class TestGoldenSnapshotArrays:
     """Snapshot tests for intermediate array outputs (GLRT, speed)."""
 
+    def _check_glrt_array(self, actual, expected, direction_label):
+        """Check GLRT array with relative tolerance for cross-platform float32 diffs."""
+        if actual.shape != expected.shape:
+            pytest.fail(
+                f"{direction_label} GLRT shape changed: {expected.shape} -> {actual.shape}\n{_SNAPSHOT_HELP}"
+            )
+
+        # Use relative tolerance: float32 accumulation differs between
+        # platforms (ARM vs x86, different torch builds). 0.1% is tight
+        # enough to catch real regressions but tolerates platform variance.
+        abs_diff = np.abs(actual - expected)
+        scale = np.maximum(np.abs(expected), 1.0)  # avoid division by zero on near-zero values
+        rel_diff = abs_diff / scale
+        max_rel = rel_diff.max()
+
+        if max_rel > 0.001:  # 0.1% relative tolerance
+            max_abs = abs_diff.max()
+            pytest.fail(
+                f"{direction_label} GLRT values changed:\n"
+                f"  Max absolute diff: {max_abs:.4f}\n"
+                f"  Max relative diff: {max_rel:.6f} ({max_rel * 100:.4f}%)\n"
+                f"{_SNAPSHOT_HELP}"
+            )
+
     def test_fwd_glrt_summed(self, golden_results, golden_ref):
         """Forward GLRT summed array must match reference."""
         results, _ = golden_results
         fwd_results = [r for r in results if int(r.direction_mask[0, 0]) == 0]
         if not fwd_results or "fwd_glrt_summed" not in golden_ref:
             return
-
-        actual = fwd_results[0].glrt_summed
-        expected = golden_ref["fwd_glrt_summed"]
-
-        if actual.shape != expected.shape:
-            pytest.fail(
-                f"Forward GLRT shape changed: {expected.shape} -> {actual.shape}\n{_SNAPSHOT_HELP}"
-            )
-
-        if np.abs(actual - expected).max() > 1.0:
-            pytest.fail(
-                f"Forward GLRT values changed (max diff: {np.abs(actual - expected).max():.4f})\n{_SNAPSHOT_HELP}"
-            )
+        self._check_glrt_array(fwd_results[0].glrt_summed, golden_ref["fwd_glrt_summed"], "Forward")
 
     def test_rev_glrt_summed(self, golden_results, golden_ref):
         """Reverse GLRT summed array must match reference."""
@@ -204,19 +216,7 @@ class TestGoldenSnapshotArrays:
         rev_results = [r for r in results if int(r.direction_mask[0, 0]) == 1]
         if not rev_results or "rev_glrt_summed" not in golden_ref:
             return
-
-        actual = rev_results[0].glrt_summed
-        expected = golden_ref["rev_glrt_summed"]
-
-        if actual.shape != expected.shape:
-            pytest.fail(
-                f"Reverse GLRT shape changed: {expected.shape} -> {actual.shape}\n{_SNAPSHOT_HELP}"
-            )
-
-        if np.abs(actual - expected).max() > 1.0:
-            pytest.fail(
-                f"Reverse GLRT values changed (max diff: {np.abs(actual - expected).max():.4f})\n{_SNAPSHOT_HELP}"
-            )
+        self._check_glrt_array(rev_results[0].glrt_summed, golden_ref["rev_glrt_summed"], "Reverse")
 
 
 class TestGoldenNormalization:
