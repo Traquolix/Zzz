@@ -21,6 +21,39 @@ DEFAULT_CONFIG_PATH = Path(__file__).parent / "fibers.yaml"
 
 
 @dataclass(frozen=True)
+class InstrumentParams:
+    """DAS instrument parameters from the .params Kafka topic."""
+
+    n_channels: int
+    sampling_rate_hz: float
+    gauge_length: float
+    dx: float
+    data_scale: float
+    unit: str
+    schema_version: str
+    experiment: str
+    instrument: str
+    trusted_time_source: bool
+    measurement_start_time: str
+
+    @classmethod
+    def from_kafka_message(cls, data: dict) -> InstrumentParams:
+        return cls(
+            n_channels=data["nChannels"],
+            sampling_rate_hz=1.0 / data["dt"],
+            gauge_length=data.get("gaugeLength", 0.0),
+            dx=data.get("dx", 0.0),
+            data_scale=data.get("dataScale", 1.0),
+            unit=data.get("unit", ""),
+            schema_version=data.get("schemaVersion", ""),
+            experiment=data.get("experiment", ""),
+            instrument=data.get("instrument", ""),
+            trusted_time_source=data.get("trustedTimeSource", False),
+            measurement_start_time=data.get("measurementStartTime", ""),
+        )
+
+
+@dataclass(frozen=True)
 class PipelineStepConfig:
     """Configuration for a single processing step."""
 
@@ -254,6 +287,7 @@ class FiberConfig:
     total_channels: int
     sampling_rate_hz: float
     sections: list[SectionConfig]
+    instrument_params: InstrumentParams | None = None
 
     @classmethod
     def from_dict(cls, fiber_id: str, data: dict, defaults: dict) -> FiberConfig:
@@ -261,11 +295,16 @@ class FiberConfig:
         sections = [SectionConfig.from_dict(s, defaults) for s in sections_data]
         return cls(
             fiber_id=fiber_id,
-            input_topic=data.get("input_topic", f"das.raw.{fiber_id}"),
-            total_channels=data.get("total_channels", 3000),
-            sampling_rate_hz=data.get("sampling_rate_hz", 50.0),
+            input_topic=f"das.raw.{fiber_id}",
+            total_channels=data.get("total_channels", 0),
+            sampling_rate_hz=data.get("sampling_rate_hz", 0.0),
             sections=sections,
         )
+
+    @property
+    def is_ready(self) -> bool:
+        """True when total_channels and sampling_rate_hz are populated."""
+        return self.total_channels > 0 and self.sampling_rate_hz > 0.0
 
     def get_section_for_channel(self, channel: int) -> SectionConfig | None:
         """Find which section a channel belongs to."""
@@ -435,6 +474,117 @@ class FiberConfigManager:
         """
         self._check_reload()
         return dict(self._raw_config)
+
+    def bootstrap_instrument_params(
+        self,
+        kafka_bootstrap_servers: str,
+        schema_registry_url: str,
+        timeout_s: float = 10.0,
+    ) -> None:
+        """Read instrument params from das.raw.<fiber_id>.params topics.
+
+        Creates an ephemeral Kafka consumer, reads the single compacted message
+        from each fiber's .params topic, and populates total_channels and
+        sampling_rate_hz on the FiberConfig. The instrument is the source of
+        truth — values from fibers.yaml are only used as fallback when the
+        params topic is unavailable.
+        """
+        import uuid
+
+        from confluent_kafka import Consumer
+        from confluent_kafka.schema_registry import SchemaRegistryClient
+        from confluent_kafka.schema_registry.avro import AvroDeserializer
+
+        if self._config is None:
+            raise RuntimeError("FiberConfigManager: config not loaded")
+
+        fibers = self._config.fibers
+        if not fibers:
+            return
+
+        sr_client = SchemaRegistryClient({"url": schema_registry_url})
+        deserializer = AvroDeserializer(sr_client)
+
+        topics = [f"das.raw.{fid}.params" for fid in fibers]
+        consumer = Consumer(
+            {
+                "bootstrap.servers": kafka_bootstrap_servers,
+                "group.id": f"params-bootstrap-{uuid.uuid4()}",
+                "auto.offset.reset": "earliest",
+                "enable.auto.commit": False,
+            }
+        )
+        consumer.subscribe(topics)
+
+        bootstrapped: list[str] = []
+        pending = set(fibers.keys())
+        deadline = time.monotonic() + timeout_s
+
+        try:
+            while pending and time.monotonic() < deadline:
+                remaining_ms = int((deadline - time.monotonic()) * 1000)
+                if remaining_ms <= 0:
+                    break
+                msg = consumer.poll(timeout=min(remaining_ms / 1000, 1.0))
+                if msg is None or msg.error():
+                    continue
+
+                topic = msg.topic()
+                if topic is None:
+                    continue
+                # das.raw.carros.params -> carros
+                parts = topic.split(".")
+                if len(parts) < 4 or parts[-1] != "params":
+                    continue
+                fiber_id = parts[2]
+
+                if fiber_id not in fibers:
+                    continue
+
+                try:
+                    data = deserializer(msg.value(), None)
+                except Exception as e:
+                    logger.warning(f"Failed to deserialize params for '{fiber_id}': {e}")
+                    continue
+
+                params = InstrumentParams.from_kafka_message(data)
+                fiber = fibers[fiber_id]
+                fiber.total_channels = params.n_channels
+                fiber.sampling_rate_hz = params.sampling_rate_hz
+                fiber.instrument_params = params
+                pending.discard(fiber_id)
+                bootstrapped.append(fiber_id)
+
+                logger.info(
+                    f"Bootstrapped instrument params for fiber '{fiber_id}': "
+                    f"nChannels={params.n_channels}, "
+                    f"sampling_rate_hz={params.sampling_rate_hz:.1f}, "
+                    f"gaugeLength={params.gauge_length:.3f}m, "
+                    f"dx={params.dx:.4f}m"
+                )
+        finally:
+            consumer.close()
+
+        if pending:
+            for fid in pending:
+                fiber = fibers[fid]
+                if fiber.is_ready:
+                    logger.warning(
+                        f"No params topic for fiber '{fid}', "
+                        f"using fibers.yaml fallback: "
+                        f"total_channels={fiber.total_channels}, "
+                        f"sampling_rate_hz={fiber.sampling_rate_hz}"
+                    )
+                else:
+                    logger.error(
+                        f"No params topic for fiber '{fid}' and no fibers.yaml fallback. "
+                        f"Fiber will not process until params are available."
+                    )
+
+        logger.info(
+            f"Instrument params bootstrap complete: "
+            f"{len(bootstrapped)} bootstrapped, {len(pending)} pending"
+        )
 
     def get_default_model_name(self) -> str:
         """Get the default model name from config defaults."""

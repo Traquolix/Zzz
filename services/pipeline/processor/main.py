@@ -12,6 +12,7 @@ from opentelemetry import trace
 # Unified config loader
 from config import (
     FiberConfig,
+    FiberConfigManager,
     SectionConfig,
     get_fiber_config,
     get_service_name,
@@ -41,6 +42,13 @@ class DASProcessor(MultiTransformer):
         # Load config from unified loader (fibers.yaml + env vars)
         service_name = get_service_name("processor")
         service_config = load_service_config("processor")
+
+        # Bootstrap instrument params from Kafka before subscribing to data topics
+        manager = FiberConfigManager()
+        manager.bootstrap_instrument_params(
+            kafka_bootstrap_servers=service_config.kafka_bootstrap_servers,
+            schema_registry_url=service_config.schema_registry_url,
+        )
 
         # Pipelines built per-fiber dynamically from fibers.yaml
         self._fiber_pipelines: dict[str, dict[str, ProcessingChain]] = {}
@@ -133,9 +141,17 @@ class DASProcessor(MultiTransformer):
 
                 try:
                     fiber_cfg = get_fiber_config(fiber_id)
-                    sampling_rate_hz = fiber_cfg.sampling_rate_hz
                 except KeyError:
-                    sampling_rate_hz = 50.0
+                    self.logger.warning(f"Unknown fiber '{fiber_id}'. Skipping.")
+                    return []
+
+                if not fiber_cfg.is_ready:
+                    self.logger.warning(
+                        f"Fiber '{fiber_id}' not ready (no instrument params). Skipping."
+                    )
+                    return []
+
+                sampling_rate_hz = fiber_cfg.sampling_rate_hz
 
                 pipelines = self._get_fiber_pipelines(fiber_id)
                 fiber_cfg = self._fiber_configs.get(fiber_id)  # type: ignore[assignment]

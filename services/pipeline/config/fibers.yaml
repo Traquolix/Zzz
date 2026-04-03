@@ -105,19 +105,11 @@ defaults:
 
 fibers:
   carros:
-    input_topic: das.raw.carros
-    total_channels: 2830
-    sampling_rate_hz: 125.0
-
     sections:
       - name: 202Bis
         channels: [1200, 2748]
 
   mathis:
-    input_topic: das.raw.mathis
-    total_channels: 5428
-    sampling_rate_hz: 125.0
-
     sections:
       - name: seg1
         channels: [800, 870]
@@ -129,10 +121,6 @@ fibers:
         channels: [2096, 2251]
 
   # promenade:
-  #   input_topic: das.raw.promenade
-  #   total_channels: 7768
-  #   sampling_rate_hz: 125.0
-  #
   #   sections:
   #     - name: seg1
   #       channels: [1762, 1822]
