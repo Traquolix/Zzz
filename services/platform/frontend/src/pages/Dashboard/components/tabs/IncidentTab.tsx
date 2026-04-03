@@ -3,11 +3,12 @@ import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 import { severityColor } from '@/lib/theme'
-import type { CalendarDay, Incident } from '@/types/incident'
+import type { CalendarDay } from '@/types/incident'
 import type { Severity, DisplayIncident, Section } from '../../types'
 import { IncidentList, IncidentDetail } from '../IncidentPanels'
 import { IncidentCalendar } from '../IncidentCalendar'
 import { useDashboard } from '../../context/DashboardContext'
+import { useDisplayIncident } from '../../hooks/useDisplayIncident'
 import { useRealtime } from '@/hooks/useRealtime'
 import { fetchIncidents, fetchIncidentCalendar } from '@/api/incidents'
 
@@ -225,11 +226,9 @@ export function IncidentTabContent({
   onMarkSeen,
   sections,
   sortBy,
-  toDisplayIncident,
   calendar,
 }: Omit<IncidentTabProps, 'showIncidentsOnMap' | 'hasUnseen' | 'onMarkAllSeen'> & {
   sortBy: 'newest' | 'oldest'
-  toDisplayIncident: (inc: Incident) => DisplayIncident
   calendar: {
     open: boolean
     selectedDate: string
@@ -241,6 +240,7 @@ export function IncidentTabContent({
   }
 }) {
   const { dispatch } = useDashboard()
+  const toDisplayIncident = useDisplayIncident()
   const { t } = useTranslation()
   const { flow } = useRealtime()
   const today = toYMD(new Date())

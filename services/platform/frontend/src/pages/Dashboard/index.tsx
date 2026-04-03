@@ -16,11 +16,11 @@ import { useSections } from './hooks/useSections'
 import { useConfigUpdates } from '@/hooks/useConfigUpdates'
 import { useIncidents } from '@/hooks/useIncidents'
 import { useUnseenIncidents } from './hooks/useUnseenIncidents'
+import { useDisplayIncident } from './hooks/useDisplayIncident'
 import { IncidentToastStack } from './components/IncidentToastStack'
 import { UserMenu } from './components/UserMenu'
 import { ConnectionBanner } from './components/ConnectionBanner'
 import { SidebarRefContext } from './hooks/useSidebarWidth'
-import type { Incident as ApiIncident } from '@/types/incident'
 import './dashboard.css'
 
 /** Wrapper that places providers above the inner Dashboard. */
@@ -52,30 +52,7 @@ function DashboardInner() {
     }
   }, [fiberList, dispatch])
 
-  /** Enrich an API incident with display fields computed from fiber geometry. */
-  const toDisplayIncident = useCallback(
-    (api: ApiIncident): DisplayIncident => {
-      const fiber = findFiber(api.fiberId, api.direction)
-      const loc = fiber ? channelToCoord(fiber, api.channel) : null
-      const fiberName = fiber?.name ?? api.fiberId
-      const typeLabel = api.type.charAt(0).toUpperCase() + api.type.slice(1)
-      const title = `${typeLabel} \u2014 ${fiberName}`
-
-      let description = `${typeLabel} detected on ${fiberName} at channel ${api.channel}.`
-      if (api.speedBefore != null && api.speedDuring != null) {
-        description += ` Speed dropped from ${Math.round(api.speedBefore)} to ${Math.round(api.speedDuring)} km/h.`
-      }
-
-      return {
-        ...api,
-        title,
-        description,
-        location: loc ?? [7.24, 43.72],
-        resolved: api.status !== 'active',
-      }
-    },
-    [findFiber, channelToCoord],
-  )
+  const toDisplayIncident = useDisplayIncident()
 
   const { buildGeoJSON, connected, lastDetectionTsRef } = useDetections(findFiber, channelToCoord)
   const { tickAndCollect } = useVehicleSim(fiberList)
@@ -356,7 +333,6 @@ function DashboardInner() {
             hasUnseen={hasUnseen}
             onMarkSeen={markSeen}
             onMarkAllSeen={markAllSeen}
-            toDisplayIncident={toDisplayIncident}
           />
         </div>
 

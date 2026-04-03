@@ -4,7 +4,7 @@ import i18next from 'i18next'
 import { ToggleGroup } from '@/components/ui/toggle-group'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
-import type { DisplayIncident, LiveSectionStats, SectionDataPoint } from '../types'
+import type { LiveSectionStats, SectionDataPoint } from '../types'
 import { useRealtime } from '@/hooks/useRealtime'
 import { useDashboard } from '../context/DashboardContext'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
@@ -42,7 +42,6 @@ interface SidePanelProps {
   hasUnseen?: boolean
   onMarkSeen?: (id: string) => void
   onMarkAllSeen?: () => void
-  toDisplayIncident: (inc: import('@/types/incident').Incident) => DisplayIncident
 }
 
 /** Compact fallback UI for panel-level error boundaries. */
@@ -83,7 +82,6 @@ export function SidePanel({
   hasUnseen,
   onMarkSeen,
   onMarkAllSeen,
-  toDisplayIncident,
 }: SidePanelProps) {
   const { state, dispatch } = useDashboard()
   const {
@@ -323,7 +321,6 @@ export function SidePanel({
                 onMarkSeen={onMarkSeen}
                 sections={sections}
                 sortBy={incidentSortBy}
-                toDisplayIncident={toDisplayIncident}
                 calendar={{
                   open: calendarOpen,
                   selectedDate,
