@@ -56,6 +56,8 @@ jobs:
     runs-on: [self-hosted, backend]
     steps:
       - uses: actions/checkout@v6
+        with:
+          clean: false
 
       - name: Ensure pipeline venv + dependencies
         run: |
