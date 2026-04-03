@@ -10,13 +10,12 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 
 import numpy as np
 
 from .calibration import CalibrationData
-from .constants import GLRT_DEFAULT_WINDOW, GLRT_EDGE_SAFETY_SAMPLES
+from .constants import GLRT_EDGE_SAFETY_SAMPLES
 from .dtan_inference import DTANInference
 from .glrt_detector import GLRTDetector
 from .speed_filter import SpeedFilter
@@ -36,7 +35,7 @@ class DirectionResult(NamedTuple):
     glrt_summed: np.ndarray          # (sections, trimmed_time) summed GLRT
     aligned_data: np.ndarray         # (sections, Nch, trimmed_time) aligned sensor data
     timestamps: np.ndarray           # (trimmed_time,) datetime timestamps
-    timestamps_ns: Optional[np.ndarray]  # (trimmed_time,) nanosecond timestamps, or None
+    timestamps_ns: np.ndarray | None  # (trimmed_time,) nanosecond timestamps, or None
     direction_mask: np.ndarray       # (sections, trimmed_time) direction value (0=fwd, 1=rev)
     aligned_speed_per_pair: np.ndarray  # (sections, Nch-1, trimmed_time) per-pair speeds
 
@@ -116,7 +115,6 @@ class VehicleSpeedEstimator:
         model = model.to(device)
         model.eval()
 
-        import torch
         uniform_grid = T.uniform_meshgrid(
             (model_args.input_shape, 1)
         ).detach().to("cpu").numpy()
@@ -268,7 +266,7 @@ class VehicleSpeedEstimator:
         prepared = []
         for x, d, d_ns in sections:
             _, L = x.shape
-            if L < self.window_size:
+            if self.window_size > L:
                 logger.warning(f"Batch: {L} samples < {self.window_size}. Skipping section.")
                 prepared.append(None)
                 continue
@@ -303,7 +301,7 @@ class VehicleSpeedEstimator:
         rev_results_list = None
         if self.bidirectional_detection:
             rev_splits = []
-            for i, idx in enumerate(valid_indices):
+            for _i, idx in enumerate(valid_indices):
                 data_window = prepared[idx][0]
                 data_flipped = data_window[::-1, :].copy()
                 ss = self._dtan.split_channel_overlap(data_flipped)
@@ -382,13 +380,17 @@ class VehicleSpeedEstimator:
             yield from self._process_file_unlocked(x, d, d_ns)
 
     def _process_file_unlocked(self, x: np.ndarray, d: np.ndarray, d_ns: np.ndarray | None = None):
-        _, L = x.shape
+        C, L = x.shape
 
-        if L < self.window_size:
+        if self.Nch > C:
+            logger.warning(f"Received {C} channels, need >= {self.Nch}. Skipping.")
+            return
+
+        if self.window_size > L:
             logger.warning(f"Received {L} samples, need {self.window_size}. Skipping.")
             return
 
-        if L > self.window_size:
+        if self.window_size < L:
             logger.warning(
                 f"Received {L} samples, expected {self.window_size}. "
                 f"Processing first window only."
@@ -399,7 +401,7 @@ class VehicleSpeedEstimator:
         date_window_ns = d_ns[:self.window_size] if d_ns is not None else None
 
         # --- Forward pass ---
-        fwd_per_pair, fwd_summed, fwd_filtered, fwd_aligned, fwd_thetas = (
+        _fwd_per_pair, fwd_summed, fwd_filtered, fwd_aligned, _fwd_thetas = (
             self._process_single_direction(data_window)
         )
 
@@ -414,7 +416,7 @@ class VehicleSpeedEstimator:
         # --- Reverse pass (if bidirectional) ---
         if self.bidirectional_detection:
             data_flipped = data_window[::-1, :].copy()
-            rev_per_pair, rev_summed, rev_filtered, rev_aligned, rev_thetas = (
+            _rev_per_pair, rev_summed, rev_filtered, rev_aligned, _rev_thetas = (
                 self._process_single_direction(data_flipped)
             )
             rev_summed = rev_summed[::-1, :].copy()

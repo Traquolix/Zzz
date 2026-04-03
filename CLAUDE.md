@@ -24,7 +24,7 @@ Work is tracked through GitHub issues. Before starting any task:
 7. **Open a PR**: `gh pr create --title "short title" --body "Closes #N\n\n## Summary\n- what changed\n- why"` — the `Closes #N` line is **mandatory** so GitHub auto-closes the issue on merge.
 8. **Never merge** — the human reviews and merges PRs
 9. **Address PR feedback** — when asked to fix PR comments, read them with
-   `gh api repos/Traquolix/Sequoia/pulls/<number>/comments` and
+   `gh api repos/Traquolix/Zzz/pulls/<number>/comments` and
    `gh pr view <number> --comments`, then fix, commit, and push
 
 If the user doesn't specify a branch name, ask for one. Never work directly on main.
@@ -62,6 +62,25 @@ make lint && make typecheck
 
 If any step fails, fix the issue and re-run. Do not report completion until all pass.
 
+### AI Engine Tests
+
+```bash
+make test              # Run AI engine test suite (243 tests, ~55s)
+```
+
+Tests run in CI on every PR. The suite includes golden snapshot tests that compare
+inference output against a saved reference from real DAS data.
+
+**When you update the DTAN model weights, detection thresholds, or preprocessing:**
+
+```bash
+make snapshot-confirm  # Re-record golden baselines from current model
+```
+
+This regenerates `services/pipeline/tests/ai_engine/fixtures/*.npz`. Review the
+changes (detection count, speed range), then commit the updated fixtures alongside
+your code change. If you skip this, the snapshot tests will fail in CI.
+
 ## Makefile — Always Use It
 
 The Makefile is the single entry point for all dev operations. **Never run `python3`,
@@ -76,6 +95,8 @@ service-local venvs automatically.
 | Type-check all code | `make typecheck` |
 | Auto-format | `make format` |
 | Security scan | `make security` |
+| Run tests | `make test` |
+| Update AI golden snapshots | `make snapshot-confirm` |
 | Full CI pipeline | `make ci` |
 | Docker stack up/down | `make up` / `make down` |
 | Rebuild one service | `make rebuild SERVICE=<name>` |

@@ -84,3 +84,10 @@ testpaths = ["tests"]
 python_files = "test_*.py"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+    # torch internals — not our code, nothing actionable
+    "ignore:.*sourceTensor.detach.*:UserWarning",
+    "ignore:.*torch.jit.script_method.*:DeprecationWarning",
+    # numpy: expected when nanmedian receives all-NaN slice (zero-input test)
+    "ignore:.*All-NaN slice.*:RuntimeWarning",
+]

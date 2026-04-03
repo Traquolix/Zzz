@@ -48,8 +48,27 @@ jobs:
       - name: Typecheck frontend
         run: cd services/platform/frontend && npx tsc -p tsconfig.app.json --noEmit
 
-  # ---------- UNIT TESTS ----------
-  # Temporarily removed — tests being rewritten (see TODO.md)
+  # ---------- UNIT TESTS (self-hosted — requires PyTorch + model weights) ----------
+  test:
+    if: >
+      github.event_name != 'schedule' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, backend]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Ensure pipeline venv + dependencies
+        run: |
+          make setup-pipeline
+          services/pipeline/.venv/bin/python -c "import torch, matplotlib, pytest" 2>/dev/null || {
+            services/pipeline/.venv/bin/pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124 -q
+            services/pipeline/.venv/bin/pip install -e "services/pipeline[ai,dev]" -q
+          }
+
+      - name: Run AI engine tests
+        run: make test-ai-engine
+        env:
+          CUDA_VISIBLE_DEVICES: ""
 
   # ---------- SECURITY (weekly only) ----------
   security:

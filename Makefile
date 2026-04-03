@@ -7,6 +7,7 @@
         lint lint-pipeline lint-backend lint-frontend \
         format format-pipeline format-backend format-frontend \
         typecheck typecheck-pipeline typecheck-backend typecheck-frontend \
+        test test-ai-engine snapshot-confirm \
         security security-pipeline security-backend security-frontend \
         ci up down logs rebuild shell clean dev dev-deps dev-stop dev-backend dev-frontend \
         ch-migrate backup restore _check-python
@@ -132,8 +133,19 @@ typecheck-frontend: ## Type-check frontend
 	cd $(FRONTEND_DIR) && npx tsc -p tsconfig.app.json --noEmit
 
 # ---------------------------------------------------------------------------
-# Tests (temporarily removed — tests being rewritten, see TODO.md)
+# Tests
 # ---------------------------------------------------------------------------
+test: test-ai-engine ## Run all tests
+
+test-ai-engine: ## Run AI engine test suite
+	cd $(PIPELINE_DIR) && .venv/bin/python -m pytest tests/ai_engine/ -v --tb=short
+
+snapshot-confirm: ## Re-generate AI engine golden test snapshots after intentional changes
+	cd $(PIPELINE_DIR) && .venv/bin/python tests/ai_engine/fixtures/generate_golden_fixture.py
+	@echo ""
+	@echo "Snapshots updated. Review the changes, then commit:"
+	@echo "  git add services/pipeline/tests/ai_engine/fixtures/*.npz"
+	@echo "  git commit -m 'test: update AI engine golden snapshots'"
 
 # ---------------------------------------------------------------------------
 # Security
@@ -154,7 +166,7 @@ security-frontend: ## Security scan frontend
 # ---------------------------------------------------------------------------
 # CI (full validation pipeline — run this before any PR)
 # ---------------------------------------------------------------------------
-ci: lint typecheck security ## Full CI pipeline: lint + typecheck + security
+ci: lint typecheck test security ## Full CI pipeline: lint + typecheck + test + security
 
 # ---------------------------------------------------------------------------
 # Docker Compose lifecycle
