@@ -143,8 +143,12 @@ def main():
         else np.array([], dtype=np.float64)
     )
 
+    import platform
+
+    arch = platform.machine()  # "arm64" or "x86_64"
+
     np.savez_compressed(
-        FIXTURE_DIR / "golden_reference.npz",
+        FIXTURE_DIR / f"golden_reference_{arch}.npz",
         n_detections=np.int32(n_det),
         det_speeds=det_speeds,
         det_directions=det_directions,
@@ -160,11 +164,11 @@ def main():
     )
 
     np.savez_compressed(
-        FIXTURE_DIR / "golden_normalization.npz",
+        FIXTURE_DIR / f"golden_normalization_{arch}.npz",
         normalized_first_window=norm_ref,
     )
 
-    print(f"Reference regenerated: {n_det} detections")
+    print(f"Reference regenerated ({arch}): {n_det} detections")
     if n_det:
         print(f"  Speeds: [{det_speeds.min():.1f}, {det_speeds.max():.1f}] km/h")
         print(f"  Directions: fwd={sum(det_directions == 0)}, rev={sum(det_directions == 1)}")
