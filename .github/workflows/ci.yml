@@ -58,7 +58,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Run AI engine tests
-        run: cd services/pipeline && make test-ai-engine
+        run: make test-ai-engine
 
   # ---------- SECURITY (weekly only) ----------
   security:
