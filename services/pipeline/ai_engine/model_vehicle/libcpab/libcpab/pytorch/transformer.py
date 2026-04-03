@@ -77,12 +77,16 @@ def CPAB_transformer(points, theta, params):
 
 #%%
 def CPAB_transformer_slow(points, theta, params):
+    # Ensure consistent dtype throughout (torch.compile is strict about this)
+    dtype = theta.dtype
+    points = points.to(dtype=dtype)
+
     # Problem parameters
     n_theta = theta.shape[0]
     n_points = points.shape[-1]
 
     # Create homogenous coordinates
-    ones = torch.ones((n_theta, 1, n_points)).to(points.device)
+    ones = torch.ones((n_theta, 1, n_points), dtype=dtype, device=points.device)
     if len(points.shape) == 2:
         newpoints = points[None].repeat(n_theta, 1, 1) # [n_theta, ndim, n_points]
     else:
@@ -93,10 +97,10 @@ def CPAB_transformer_slow(points, theta, params):
     newpoints = newpoints[:,:,None] # [n_theta*n_points, ndim+1, 1]
 
     # Get velocity fields
-    B = torch.tensor(params.basis, dtype=torch.float32, device=theta.device)
+    B = torch.tensor(params.basis, dtype=dtype, device=theta.device)
     Avees = torch.matmul(B, theta.t())
     As = Avees.t().reshape(n_theta*params.nC, *params.Ashape)
-    zero_row = torch.zeros(n_theta*params.nC, 1, params.ndim+1, device=As.device)
+    zero_row = torch.zeros(n_theta*params.nC, 1, params.ndim+1, dtype=dtype, device=As.device)
     AsSquare = torch.cat([As, zero_row], dim=1)
 
     # Take matrix exponential

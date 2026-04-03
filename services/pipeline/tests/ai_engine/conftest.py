@@ -13,8 +13,9 @@ import numpy as np
 import pytest
 import torch
 
-# Disable torch.compile for tests — the compiled CPAB path has dtype
-# mismatches (double vs float) on some platforms. Eager mode handles this.
+# Disable torch.compile for tests — CPAB has dtype mismatches that
+# torch.compile's strict tracing exposes. The fixes in transformer.py/expm.py
+# handle eager mode; full torch.compile compatibility requires deeper CPAB work.
 torch._dynamo.config.disable = True
 
 # Ensure pipeline root is on sys.path

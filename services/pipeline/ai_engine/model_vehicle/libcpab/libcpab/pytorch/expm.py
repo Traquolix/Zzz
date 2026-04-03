@@ -15,8 +15,8 @@ def expm(A):
     A_fro = torch.sqrt(A.abs().pow(2).sum(dim=(1,2), keepdim=True))
 
     # Scaling step
-    maxnorm = torch.Tensor([5.371920351148152]).type(A.dtype).to(A.device)
-    zero = torch.Tensor([0.0]).type(A.dtype).to(A.device)
+    maxnorm = torch.tensor([5.371920351148152], dtype=A.dtype, device=A.device)
+    zero = torch.tensor([0.0], dtype=A.dtype, device=A.device)
     n_squarings = torch.max(zero, torch.ceil(log2(A_fro / maxnorm)))
     Ascaled = A / 2.0**n_squarings
     n_squarings = n_squarings.flatten().type(torch.int64)
@@ -39,14 +39,14 @@ def expm(A):
 
 #%%
 def log2(x):
-    return torch.log(x) / torch.log(torch.Tensor([2.0])).type(x.dtype).to(x.device)
+    return torch.log(x) / torch.log(torch.tensor([2.0], dtype=x.dtype, device=x.device))
 
 #%%
 def pade13(A):
-    b = torch.Tensor([64764752532480000., 32382376266240000., 7771770303897600.,
+    b = torch.tensor([64764752532480000., 32382376266240000., 7771770303897600.,
                       1187353796428800., 129060195264000., 10559470521600.,
                       670442572800., 33522128640., 1323241920., 40840800.,
-                      960960., 16380., 182., 1.]).type(A.dtype).to(A.device)
+                      960960., 16380., 182., 1.], dtype=A.dtype, device=A.device)
 
     ident = torch.eye(A.shape[1], dtype=A.dtype).to(A.device)
     A2 = torch.matmul(A,A)
