@@ -7,17 +7,11 @@ The DTAN model is loaded once per session (expensive) and shared across tests.
 from __future__ import annotations
 
 import sys
-import warnings
 from pathlib import Path
 
 import numpy as np
 import pytest
 import torch
-
-# Suppress noisy warnings from CPAB/torch
-warnings.filterwarnings("ignore", message=".*torch.meshgrid.*")
-warnings.filterwarnings("ignore", message=".*NNPACK.*")
-warnings.filterwarnings("ignore", message=".*sourceTensor.detach.*")
 
 # Ensure pipeline root is on sys.path
 _pipeline_root = Path(__file__).resolve().parents[2]

@@ -111,7 +111,7 @@ def uniform_meshgrid(ndim, domain_min, domain_max, n_points, device='cpu',device
         'cpu') if device == 'cpu' else torch.device(device_name)
     lin = [torch.linspace(domain_min[i], domain_max[i], n_points[i],
                           device=device) for i in range(ndim)]
-    mesh = torch.meshgrid(lin[::-1])
+    mesh = torch.meshgrid(lin[::-1], indexing="ij")
     grid = torch.cat([g.reshape(1,-1) for g in mesh[::-1]], dim=0)
     return grid
 
