@@ -22,6 +22,7 @@ import {
   ChannelIcon,
   DataHubIcon,
 } from './SidebarIcons'
+import { useTags } from '../hooks/useTags'
 import { IncidentTabToolbar, IncidentTabContent } from './tabs/IncidentTab'
 import { SectionTabToolbar, SectionTabContent } from './tabs/SectionTab'
 import { ShmTabToolbar, ShmTabContent } from './tabs/ShmTab'
@@ -86,6 +87,7 @@ export function SidePanel({
   toDisplayIncident,
 }: SidePanelProps) {
   const { state, dispatch } = useDashboard()
+  const { tags: orgTags, addTag, removeTag } = useTags()
   const {
     activeTab,
     selectedIncidentId,
@@ -272,6 +274,7 @@ export function SidePanel({
                 setIncidentSortBy={setIncidentSortBy}
                 selectedDate={selectedDate}
                 onToggleCalendar={() => setCalendarOpen(o => !o)}
+                orgTags={orgTags}
               />
             )}
             {activeTab === 'shm' && (
@@ -377,6 +380,9 @@ export function SidePanel({
                 switchingFlow={realtimeCtx.switchingFlow}
                 availableFlows={realtimeCtx.availableFlows}
                 onFlowToggle={realtimeCtx.setFlow}
+                tags={orgTags}
+                onAddTag={addTag}
+                onDeleteTag={removeTag}
               />
             </ErrorBoundary>
           )}

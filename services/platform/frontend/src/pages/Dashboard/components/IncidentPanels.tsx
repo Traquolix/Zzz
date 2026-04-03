@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { formatTime, formatTimeShort, formatDateShort } from '@/lib/formatters'
-import { getTagColor } from '@/lib/theme'
+import { useTagColor } from '../hooks/useTags'
 import { useIncidentSnapshot } from '@/hooks/useIncidentSnapshot'
 import type { DisplayIncident, Section } from '../types'
 import { useRealtime } from '@/hooks/useRealtime'
@@ -37,6 +37,7 @@ export function IncidentList({
 }) {
   const { dispatch } = useDashboard()
   const { t } = useTranslation()
+  const getColor = useTagColor()
   let filtered = filterTags.length > 0 ? incidents.filter(i => i.tags.some(t => filterTags.includes(t))) : incidents
   if (hideResolved) filtered = filtered.filter(i => !i.resolved)
 
@@ -64,7 +65,7 @@ export function IncidentList({
               className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-[var(--dash-surface-raised)] transition-colors cursor-pointer"
             >
               <div className="flex items-start gap-2.5 min-w-0">
-                <ColorDot color={getTagColor(inc.tags[0] ?? 'low')} className="mt-1.5" />
+                <ColorDot color={getColor(inc.tags[0] ?? 'low')} className="mt-1.5" />
                 {unseenIds?.has(inc.id) && (
                   <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-[var(--dash-accent)] mt-2 -ml-1.5" />
                 )}
@@ -113,6 +114,7 @@ export function IncidentDetail({
   const { dispatch } = useDashboard()
   const { t } = useTranslation()
   const { flow } = useRealtime()
+  const getColor = useTagColor()
 
   // Find containing section by channel range
   const relatedSection = sections.find(
@@ -138,7 +140,7 @@ export function IncidentDetail({
       <DetailHeader
         title={incident.title}
         onBack={onBack}
-        badge={<StatusBadge label={incident.tags[0] ?? ''} color={getTagColor(incident.tags[0] ?? 'low')} />}
+        badge={<StatusBadge label={incident.tags[0] ?? ''} color={getColor(incident.tags[0] ?? 'low')} />}
       />
 
       <div className="px-4 py-4 flex flex-col gap-3">

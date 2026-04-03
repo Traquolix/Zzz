@@ -11,6 +11,7 @@ and ``apps.shared.constants`` — no monitoring-specific imports.
 
 import logging
 
+from apps.incidents.models import IncidentTags
 from apps.shared.clickhouse import query
 from apps.shared.constants import CH_INCIDENTS
 
@@ -38,7 +39,7 @@ def transform_row(row: dict) -> dict:
     return {
         "id": row["incident_id"],
         "type": row["incident_type"],
-        "tags": [],  # populated by _apply_tags in PR 2
+        "tags": [],  # populated by _apply_tags()
         "fiberId": row["fiber_id"],
         "direction": row.get("direction", 0),
         "channel": row["channel_start"],
@@ -50,6 +51,17 @@ def transform_row(row: dict) -> dict:
         "speedDuring": row.get("speed_during_kmh"),
         "speedDropPercent": row.get("speed_drop_percent"),
     }
+
+
+def _apply_tags(incidents: list[dict]) -> list[dict]:
+    """Batch-fetch tags from PostgreSQL and merge into incident dicts."""
+    if not incidents:
+        return incidents
+    ids = [i["id"] for i in incidents]
+    overrides = {o.incident_id: o.tags for o in IncidentTags.objects.filter(incident_id__in=ids)}
+    for inc in incidents:
+        inc["tags"] = overrides.get(inc["id"], [])
+    return incidents
 
 
 def transform_simulation_incident(incident) -> dict:
@@ -188,7 +200,7 @@ def query_active(
         rows = query(_ACTIVE_SQL_SCOPED, parameters={"fids": fiber_ids, "lim": limit})
     else:
         rows = query(_ACTIVE_SQL_ALL, parameters={"lim": limit})
-    return [transform_row(r) for r in rows]
+    return _apply_tags([transform_row(r) for r in rows])
 
 
 def query_recent(
@@ -213,7 +225,7 @@ def query_recent(
         )
     else:
         rows = query(_RECENT_SQL_ALL, parameters={"hours": hours, "lim": limit})
-    return [transform_row(r) for r in rows]
+    return _apply_tags([transform_row(r) for r in rows])
 
 
 def query_by_id(incident_id: str) -> dict | None:
@@ -263,7 +275,7 @@ def query_by_date(
         )
     else:
         rows = query(_BY_DATE_SQL_ALL, parameters={"date": date, "lim": limit})
-    return [transform_row(r) for r in rows]
+    return _apply_tags([transform_row(r) for r in rows])
 
 
 def query_daily_counts(

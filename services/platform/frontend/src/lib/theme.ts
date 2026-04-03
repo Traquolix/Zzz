@@ -12,18 +12,7 @@
 // COLORS — Hex values for canvas/mapbox/deck.gl, Tailwind classes for UI
 // ============================================================================
 
-/**
- * Tag colors — used for incident tags across all components.
- * This is the canonical reference for tag-level coloring.
- */
 export const COLORS = {
-  /** Incident tag colors — matches the live values used by all 17+ Dashboard components. */
-  tag: {
-    critical: '#ef4444', // red-500
-    high: '#f97316', // orange-500
-    medium: '#f59e0b', // amber-500
-    low: '#22c55e', // green-500
-  },
   speed: {
     fast: '#22c55e', // green-500
     normal: '#eab308', // yellow-500
@@ -128,10 +117,6 @@ export const COLORS = {
 // ============================================================================
 // DERIVED MAPS — convenience re-exports for components that need Record<> shapes
 // ============================================================================
-
-export function getTagColor(tag: string): string {
-  return COLORS.tag[tag as keyof typeof COLORS.tag] ?? '#6b7280'
-}
 
 export const chartColors = {
   speed: { label: 'Speed', unit: 'km/h', color: COLORS.chart.speed },

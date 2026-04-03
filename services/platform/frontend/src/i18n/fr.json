@@ -280,6 +280,11 @@
   "settings": {
     "title": "Parametres",
     "showFullCable": "Afficher le cable complet",
+    "tags": {
+      "title": "Etiquettes d'incidents",
+      "add": "Ajouter",
+      "namePlaceholder": "Nom de l'etiquette"
+    },
     "speedLimits": "Limites de vitesse",
     "speed": {
       "loadingFibers": "Chargement des fibres...",

@@ -9,6 +9,7 @@ import time
 from channels.layers import get_channel_layer
 
 from apps.alerting.integration import check_alerts_for_detections, check_alerts_for_incident
+from apps.incidents.models import IncidentTags
 from apps.realtime.broadcast import (
     broadcast_to_orgs,
     group_by_org,
@@ -157,6 +158,13 @@ async def run_simulation_loop(fibers: list[FiberConfig], infrastructure: list[di
                 )
                 # Check alerts for incident
                 await check_alerts_for_incident(inc_data, fiber_org_map)
+            # Seed IncidentTags rows so _apply_tags() picks them up on REST queries
+            for inc in pending_new_incidents:
+                inc_data = transform_simulation_incident(inc)
+                IncidentTags.objects.get_or_create(
+                    incident_id=inc_data["id"],
+                    defaults={"tags": inc_data["tags"]},
+                )
             pending_new_incidents.clear()
             pending_resolved_incidents.clear()
 

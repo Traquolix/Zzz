@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     "apps.fibers",
     "apps.monitoring",
     "apps.alerting",
+    "apps.incidents",
     "apps.preferences",
     "apps.reporting",
     "apps.realtime",

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getTagColor } from '@/lib/theme'
+import { useTagColor } from '../hooks/useTags'
 import type { IncidentToast } from '../hooks/useUnseenIncidents'
 import { ColorDot } from './ColorDot'
 
@@ -11,6 +11,7 @@ interface Props {
 const TOAST_LIFETIME = 10_000
 
 export function IncidentToastStack({ toasts, onClickToast }: Props) {
+  const getColor = useTagColor()
   const [now, setNow] = useState(Date.now())
 
   // Tick every second to drive progress bar
@@ -57,7 +58,7 @@ export function IncidentToastStack({ toasts, onClickToast }: Props) {
                 className="w-full flex flex-col rounded-lg bg-[var(--dash-surface)] border border-[var(--dash-border)] shadow-lg cursor-pointer hover:bg-[var(--dash-surface-raised)] transition-colors text-left overflow-hidden"
               >
                 <div className="flex items-start gap-2.5 px-3.5 py-2.5">
-                  <ColorDot color={getTagColor(toast.tags?.[0] ?? 'low')} className="mt-1" />
+                  <ColorDot color={getColor(toast.tags?.[0] ?? 'low')} className="mt-1" />
                   <div className="min-w-0 flex-1">
                     <div className="text-sm text-[var(--dash-text)] font-medium truncate max-w-[240px]">
                       {toast.title}
