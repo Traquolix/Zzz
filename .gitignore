@@ -60,6 +60,9 @@ venv.bak/
 # Claude Code
 .claude
 
+# Serena MCP plugin
+.serena/
+
 # Testing
 .pytest_cache/
 pytest-cache-files-*/
