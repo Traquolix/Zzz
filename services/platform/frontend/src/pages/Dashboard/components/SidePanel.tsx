@@ -90,9 +90,6 @@ export function SidePanel({
     selectedSectionId,
     selectedStructureId,
     selectedChannel,
-    filterSeverity,
-    hideResolved,
-    sectionMetric,
     sections,
     incidents,
     sidebarOpen,
@@ -100,7 +97,6 @@ export function SidePanel({
     fiberColors,
     showStructuresOnMap,
     showStructureLabels,
-    showIncidentsOnMap,
   } = state
   const realtimeCtx = useRealtime()
   const { t } = useTranslation()
@@ -255,9 +251,6 @@ export function SidePanel({
           <div className="flex items-center gap-2">
             {activeTab === 'incidents' && (
               <IncidentTabToolbar
-                filterSeverity={filterSeverity}
-                hideResolved={hideResolved}
-                showIncidentsOnMap={showIncidentsOnMap}
                 hasUnseen={hasUnseen}
                 onMarkAllSeen={onMarkAllSeen}
                 incidentSortBy={incident.incidentSortBy}
@@ -279,7 +272,6 @@ export function SidePanel({
                 sectionSearch={sectionTab.sectionSearch}
                 setSectionSearch={sectionTab.setSectionSearch}
                 sections={sections}
-                sectionMetric={sectionMetric}
               />
             )}
             {activeTab === 'dataHub' && (
@@ -307,8 +299,6 @@ export function SidePanel({
               <IncidentTabContent
                 incidents={incidents}
                 selectedIncidentId={selectedIncidentId}
-                filterSeverity={filterSeverity}
-                hideResolved={hideResolved}
                 onHighlightIncident={onHighlightIncident}
                 onClearHighlight={onClearHighlight}
                 unseenIds={unseenIds}
@@ -346,7 +336,6 @@ export function SidePanel({
                 selectedSectionId={selectedSectionId}
                 liveStats={liveStats}
                 liveSeriesData={liveSeriesData}
-                sectionMetric={sectionMetric}
                 fiberColors={fiberColors}
                 onHighlightSection={onHighlightSection}
                 onClearHighlight={onClearHighlight}

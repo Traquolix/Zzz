@@ -26,9 +26,6 @@ function formatDateShort(dateStr: string, locale: string): string {
 interface IncidentTabProps {
   incidents: DisplayIncident[]
   selectedIncidentId: string | null
-  filterSeverity: Severity | null
-  hideResolved: boolean
-  showIncidentsOnMap: boolean
   onHighlightIncident?: (incidentId: string) => void
   onClearHighlight?: () => void
   unseenIds?: Set<string>
@@ -39,22 +36,20 @@ interface IncidentTabProps {
 }
 
 export function IncidentTabToolbar({
-  filterSeverity,
-  hideResolved,
-  showIncidentsOnMap,
   hasUnseen,
   onMarkAllSeen,
   incidentSortBy,
   setIncidentSortBy,
   selectedDate,
   onToggleCalendar,
-}: Pick<IncidentTabProps, 'filterSeverity' | 'hideResolved' | 'showIncidentsOnMap' | 'hasUnseen' | 'onMarkAllSeen'> & {
+}: Pick<IncidentTabProps, 'hasUnseen' | 'onMarkAllSeen'> & {
   incidentSortBy: 'newest' | 'oldest'
   setIncidentSortBy: React.Dispatch<React.SetStateAction<'newest' | 'oldest'>>
   selectedDate: string
   onToggleCalendar: () => void
 }) {
-  const { dispatch } = useDashboard()
+  const { state, dispatch } = useDashboard()
+  const { filterSeverity, hideResolved, showIncidentsOnMap } = state
   const { t, i18n } = useTranslation()
   const isToday = selectedDate === toYMD(new Date())
 
@@ -218,8 +213,6 @@ export function IncidentTabToolbar({
 export function IncidentTabContent({
   incidents,
   selectedIncidentId,
-  filterSeverity,
-  hideResolved,
   onHighlightIncident,
   onClearHighlight,
   unseenIds,
@@ -227,7 +220,7 @@ export function IncidentTabContent({
   sections,
   sortBy,
   calendar,
-}: Omit<IncidentTabProps, 'showIncidentsOnMap' | 'hasUnseen' | 'onMarkAllSeen'> & {
+}: Omit<IncidentTabProps, 'hasUnseen' | 'onMarkAllSeen'> & {
   sortBy: 'newest' | 'oldest'
   calendar: {
     open: boolean
@@ -239,7 +232,8 @@ export function IncidentTabContent({
     onNextMonth: () => void
   }
 }) {
-  const { dispatch } = useDashboard()
+  const { state, dispatch } = useDashboard()
+  const { filterSeverity, hideResolved } = state
   const toDisplayIncident = useDisplayIncident()
   const { t } = useTranslation()
   const { flow } = useRealtime()
