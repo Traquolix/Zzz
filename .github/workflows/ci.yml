@@ -57,6 +57,14 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Ensure pipeline venv exists
+        run: make setup-pipeline
+
+      - name: Install PyTorch (if missing)
+        run: |
+          services/pipeline/.venv/bin/python -c "import torch" 2>/dev/null || \
+          services/pipeline/.venv/bin/pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124
+
       - name: Run AI engine tests
         run: make test-ai-engine
 
