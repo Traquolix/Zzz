@@ -62,8 +62,7 @@ jobs:
           make setup-pipeline
           services/pipeline/.venv/bin/python -c "import torch" 2>/dev/null || \
             services/pipeline/.venv/bin/pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu124 -q
-          services/pipeline/.venv/bin/pip install ".[ai]" -q 2>/dev/null
-        working-directory: services/pipeline
+          services/pipeline/.venv/bin/pip install -e "services/pipeline[ai]" -q 2>/dev/null
 
       - name: Run AI engine tests
         run: make test-ai-engine
