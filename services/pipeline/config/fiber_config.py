@@ -38,9 +38,12 @@ class InstrumentParams:
 
     @classmethod
     def from_kafka_message(cls, data: dict) -> InstrumentParams:
+        dt = data["dt"]
+        if dt <= 0:
+            raise ValueError(f"Invalid dt={dt} in instrument params (must be > 0)")
         return cls(
             n_channels=data["nChannels"],
-            sampling_rate_hz=1.0 / data["dt"],
+            sampling_rate_hz=1.0 / dt,
             gauge_length=data.get("gaugeLength", 0.0),
             dx=data.get("dx", 0.0),
             data_scale=data.get("dataScale", 1.0),
@@ -348,6 +351,7 @@ class FiberConfigManager:
         self._last_mtime_check: float = 0
         self._mtime_check_interval: float = 5.0  # seconds between filesystem polls
         self._reload_lock = threading.Lock()
+        self._instrument_params: dict[str, InstrumentParams] = {}
         self._initialized = True
 
         # Initial load
@@ -382,6 +386,15 @@ class FiberConfigManager:
                 defaults=defaults,
             )
             self._mtime = os.path.getmtime(self._path)
+
+            # Re-apply cached instrument params to newly constructed FiberConfig objects.
+            # Bootstrap populates these from Kafka .params topics at startup; they must
+            # survive YAML hot-reloads since the YAML no longer carries these values.
+            for fiber_id, params in self._instrument_params.items():
+                if fiber_id in fibers:
+                    fibers[fiber_id].total_channels = params.n_channels
+                    fibers[fiber_id].sampling_rate_hz = params.sampling_rate_hz
+                    fibers[fiber_id].instrument_params = params
 
             logger.info(f"Config loaded: {len(fibers)} fibers, {len(models)} models")
         except Exception as e:
@@ -492,6 +505,7 @@ class FiberConfigManager:
         import uuid
 
         from confluent_kafka import Consumer
+        from confluent_kafka.error import SerializationError
         from confluent_kafka.schema_registry import SchemaRegistryClient
         from confluent_kafka.schema_registry.avro import AvroDeserializer
 
@@ -543,15 +557,15 @@ class FiberConfigManager:
 
                 try:
                     data = deserializer(msg.value(), None)
-                except Exception as e:
-                    logger.warning(f"Failed to deserialize params for '{fiber_id}': {e}")
+                    params = InstrumentParams.from_kafka_message(data)
+                except (SerializationError, KeyError, ValueError) as e:
+                    logger.warning(f"Failed to parse params for '{fiber_id}': {e}")
                     continue
-
-                params = InstrumentParams.from_kafka_message(data)
                 fiber = fibers[fiber_id]
                 fiber.total_channels = params.n_channels
                 fiber.sampling_rate_hz = params.sampling_rate_hz
                 fiber.instrument_params = params
+                self._instrument_params[fiber_id] = params
                 pending.discard(fiber_id)
                 bootstrapped.append(fiber_id)
 
