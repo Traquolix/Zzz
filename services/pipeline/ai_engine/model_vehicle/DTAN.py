@@ -108,6 +108,24 @@ class DTAN(nn.Module):
         out_tensor = self.localization(rand_tensor)
         return out_tensor.size(1) * out_tensor.size(3)
 
+    def predict_thetas(self, x: torch.Tensor) -> torch.Tensor:
+        """Run only the CNN+RNN+FC head to predict transformation parameters.
+
+        Skips the CPAB transform entirely. Use this when you need thetas
+        but will compute the grid transform separately (e.g., with a cached grid).
+
+        Args:
+            x: Input tensor (batch_size, Nch, signal_length)
+
+        Returns:
+            thetas: (batch_size, Nch-1, theta_dim) transformation parameters
+        """
+        xs = self.localization(x.unsqueeze(dim=1))
+        xs = torch.swapaxes(xs, 1, 2)
+        xs = torch.flatten(xs, start_dim=2, end_dim=3)
+        out_rnn1, _ = self.RNN1(xs)
+        return self.fc_loc(out_rnn1)
+
     def stn(self, x: torch.Tensor, return_theta: bool = False, return_theta_and_transformed_grid: bool = False):
         """Spatial transformer network forward function.
 

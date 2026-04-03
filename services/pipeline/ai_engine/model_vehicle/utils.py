@@ -18,13 +18,12 @@ def normalize_channel_energy(data: np.ndarray) -> np.ndarray:
     Returns:
         Copy of data with equalized per-channel energy.
     """
-    data_norm = data.copy()
-    data_norm -= np.mean(data_norm, axis=1, keepdims=True)
+    data_norm = data - np.mean(data, axis=1, keepdims=True)
     channel_energy = np.sum(np.square(data_norm), axis=1)
     mean_energy = np.mean(channel_energy)
-    for i in range(data_norm.shape[0]):
-        if channel_energy[i] > 0:
-            data_norm[i] *= np.sqrt(mean_energy / channel_energy[i])
+    with np.errstate(divide="ignore", invalid="ignore"):
+        scale = np.where(channel_energy > 0, np.sqrt(mean_energy / channel_energy), 1.0)
+    data_norm *= scale[:, np.newaxis]
     return data_norm
 
 

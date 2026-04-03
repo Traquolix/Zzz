@@ -147,6 +147,12 @@ snapshot-confirm: ## Re-generate AI engine golden test snapshots after intention
 	@echo "  git add services/pipeline/tests/ai_engine/fixtures/*.npz"
 	@echo "  git commit -m 'test: update AI engine golden snapshots'"
 
+bench: ## Run AI engine benchmarks, compare to baseline
+	cd $(PIPELINE_DIR) && .venv/bin/python benchmarks/ai_engine/bench.py
+
+bench-save: ## Save current benchmark results as new baseline
+	cd $(PIPELINE_DIR) && .venv/bin/python benchmarks/ai_engine/bench.py --save
+
 # ---------------------------------------------------------------------------
 # Security
 # ---------------------------------------------------------------------------

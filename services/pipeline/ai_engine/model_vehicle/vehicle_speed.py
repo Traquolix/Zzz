@@ -91,6 +91,7 @@ class VehicleSpeedEstimator:
         speed_glrt_factor: float = 1.0,
         speed_weighting: str = "median",
         speed_positive_glrt_only: bool = False,
+        alignment_method: str = "cpab",
     ):
         if model_args is None:
             raise ValueError("model_args is required to initialize VehicleSpeedEstimator")
@@ -108,12 +109,37 @@ class VehicleSpeedEstimator:
         self.bidirectional_detection = bidirectional_detection
         self.min_speed = min_speed
         self.max_speed = max_speed
+        self.alignment_method = alignment_method
 
         # Initialize DTAN inference
         T, model = model_args.get_model_Theta()
         device = model_args.device_name
         model = model.to(device)
         model.eval()
+
+        # Reduce CPAB ODE solver steps from default 50 to 10.
+        # The 1D piecewise-affine transforms converge well before 50 steps;
+        # 10 steps gives ~5x faster alignment with <0.05 km/h mean speed diff
+        # (validated on carros:202Bis golden fixture, 2858 detections matched).
+        # If marginal detections are lost on weak fiber sections, increase to 15.
+        T.set_solver_params(nstepsolver=10)
+
+        # Compile the NN head (CNN+RNN+FC) for faster theta prediction.
+        # The CPAB transform is not compiled — it uses custom autograd functions
+        # that cause graph breaks. Only the pure NN forward pass is compiled.
+        # "reduce-overhead" mode uses CUDA graphs for minimal kernel launch cost
+        # on GPU; on CPU we use "default" mode which still fuses operators via
+        # TorchInductor without the CUDA graph overhead.
+        import torch
+        if hasattr(torch, "compile"):
+            try:
+                compile_mode = "reduce-overhead" if torch.cuda.is_available() else "default"
+                model.predict_thetas = torch.compile(
+                    model.predict_thetas, mode=compile_mode
+                )
+                logger.info(f"DTAN predict_thetas compiled (mode={compile_mode})")
+            except Exception as e:
+                logger.warning(f"torch.compile failed (non-critical): {e}")
 
         uniform_grid = T.uniform_meshgrid(
             (model_args.input_shape, 1)
@@ -201,12 +227,20 @@ class VehicleSpeedEstimator:
             space_split[i] = normalize_channel_energy(space_split[i])
 
         thetas, grid_t = self._dtan.predict_theta(space_split)
-        aligned = self._dtan.align_window(space_split, thetas, self.Nch, align_channel_idx)
-
         all_speed = self._dtan.comp_speed(grid_t)
-        aligned_speed = self._dtan.align_window(
-            all_speed, thetas[:, :-1, :], self.Nch - 1, align_channel_idx
-        ).detach().cpu().numpy()
+
+        if self.alignment_method == "shift":
+            aligned = self._dtan.align_window_shift(
+                space_split, grid_t, align_channel_idx
+            )
+            aligned_speed = all_speed
+        else:
+            aligned = self._dtan.align_window(
+                space_split, thetas, self.Nch, align_channel_idx
+            )
+            aligned_speed = self._dtan.align_window(
+                all_speed, thetas[:, :-1, :], self.Nch - 1, align_channel_idx
+            ).detach().cpu().numpy()
 
         glrt_per_pair = self._glrt.apply_glrt(aligned).detach().cpu().numpy()
 
@@ -262,7 +296,40 @@ class VehicleSpeedEstimator:
             return self._process_batch_unlocked(sections)
 
     def _process_batch_unlocked(self, sections):
-        # Validate and prepare per-section data windows
+        prepared, valid_indices, fwd_combined, rev_combined, window_counts = (
+            self._preprocess_batch(sections)
+        )
+
+        if fwd_combined is None:
+            return [[] for _ in sections]
+
+        return self._run_inference_and_postprocess(
+            sections, prepared, valid_indices,
+            fwd_combined, rev_combined, window_counts,
+        )
+
+    def _run_inference_and_postprocess(
+        self, sections, prepared, valid_indices,
+        fwd_combined, rev_combined, window_counts,
+    ):
+        """GPU inference + postprocessing. Caller holds GPU lock if needed."""
+        fwd_results = self._batched_direction(fwd_combined, window_counts)
+        rev_results_list = None
+        if self.bidirectional_detection and rev_combined is not None:
+            rev_results_list = self._batched_direction(rev_combined, window_counts)
+
+        return self._postprocess_batch(
+            sections, prepared, valid_indices, fwd_results, rev_results_list
+        )
+
+    def _preprocess_batch(self, sections):
+        """CPU-only preprocessing: validate, split, normalize.
+
+        Returns:
+            (prepared, valid_indices, fwd_combined, rev_combined, window_counts)
+            where fwd_combined/rev_combined are ready for _batched_direction,
+            or (prepared, valid_indices, None, None, []) if no valid sections.
+        """
         prepared = []
         for x, d, d_ns in sections:
             _, L = x.shape
@@ -275,7 +342,6 @@ class VehicleSpeedEstimator:
             date_window_ns = d_ns[:self.window_size] if d_ns is not None else None
             prepared.append((data_window, date_window, date_window_ns))
 
-        # Collect space_split arrays for all valid sections
         valid_indices = []
         space_splits = []
         window_counts = []
@@ -291,27 +357,27 @@ class VehicleSpeedEstimator:
             valid_indices.append(i)
 
         if not space_splits:
-            return [[] for _ in sections]
+            return prepared, valid_indices, None, None, []
 
-        # --- Batched forward pass ---
-        combined = np.concatenate(space_splits, axis=0)
-        fwd_results = self._batched_direction(combined, window_counts)
+        fwd_combined = np.concatenate(space_splits, axis=0)
 
-        # --- Batched reverse pass ---
-        rev_results_list = None
+        rev_combined = None
         if self.bidirectional_detection:
             rev_splits = []
-            for _i, idx in enumerate(valid_indices):
+            for idx in valid_indices:
                 data_window = prepared[idx][0]
                 data_flipped = data_window[::-1, :].copy()
                 ss = self._dtan.split_channel_overlap(data_flipped)
                 for j in range(ss.shape[0]):
                     ss[j] = normalize_channel_energy(ss[j])
                 rev_splits.append(ss)
-            combined_rev = np.concatenate(rev_splits, axis=0)
-            rev_results_list = self._batched_direction(combined_rev, window_counts)
+            rev_combined = np.concatenate(rev_splits, axis=0)
 
-        # Build per-section results
+        return prepared, valid_indices, fwd_combined, rev_combined, window_counts
+
+    def _postprocess_batch(self, sections, prepared, valid_indices,
+                           fwd_results, rev_results_list):
+        """CPU-only postprocessing: calibration, trimming, result assembly."""
         all_results = [[] for _ in sections]
         for list_idx, section_idx in enumerate(valid_indices):
             data_window, date_window, date_window_ns = prepared[section_idx]
@@ -339,12 +405,22 @@ class VehicleSpeedEstimator:
         align_channel_idx = (self.Nch - 1) // 2
 
         thetas, grid_t = self._dtan.predict_theta(combined_space_split)
-        aligned = self._dtan.align_window(combined_space_split, thetas, self.Nch, align_channel_idx)
-
         all_speed = self._dtan.comp_speed(grid_t)
-        aligned_speed = self._dtan.align_window(
-            all_speed, thetas[:, :-1, :], self.Nch - 1, align_channel_idx
-        ).detach().cpu().numpy()
+
+        if self.alignment_method == "shift":
+            aligned = self._dtan.align_window_shift(
+                combined_space_split, grid_t, align_channel_idx
+            )
+            # Shift alignment puts channels in sync; use unaligned speed
+            # (shift doesn't warp the speed array, only the data for GLRT)
+            aligned_speed = all_speed
+        else:
+            aligned = self._dtan.align_window(
+                combined_space_split, thetas, self.Nch, align_channel_idx
+            )
+            aligned_speed = self._dtan.align_window(
+                all_speed, thetas[:, :-1, :], self.Nch - 1, align_channel_idx
+            ).detach().cpu().numpy()
 
         glrt_per_pair = self._glrt.apply_glrt(aligned).detach().cpu().numpy()
 

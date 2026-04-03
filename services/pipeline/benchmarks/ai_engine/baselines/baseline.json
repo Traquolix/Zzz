@@ -1,0 +1,53 @@
+{
+  "environment": {
+    "python": "3.10.18",
+    "torch": "2.11.0",
+    "platform": "macOS-15.7.2-arm64-arm-64bit",
+    "processor": "arm",
+    "cuda": false,
+    "cuda_device": null
+  },
+  "results": {
+    "split_channel_overlap": {
+      "median_ms": 0.513334,
+      "p95_ms": 0.575417
+    },
+    "normalize_energy": {
+      "median_ms": 10.051834,
+      "p95_ms": 10.344417
+    },
+    "predict_theta": {
+      "median_ms": 1236.865166,
+      "p95_ms": 1248.759541
+    },
+    "align_window_data": {
+      "median_ms": 578.192916,
+      "p95_ms": 582.558167
+    },
+    "align_window_speed": {
+      "median_ms": 521.314042,
+      "p95_ms": 531.456292
+    },
+    "comp_speed": {
+      "median_ms": 1.338208,
+      "p95_ms": 1.484541
+    },
+    "apply_glrt": {
+      "median_ms": 14.075458,
+      "p95_ms": 14.497
+    },
+    "filtering_speed": {
+      "median_ms": 69.406583,
+      "p95_ms": 157.764625
+    },
+    "process_file_e2e": {
+      "median_ms": 5103.133208,
+      "p95_ms": 5323.715708
+    },
+    "process_batch_e2e": {
+      "median_ms": 5685.918625,
+      "p95_ms": 6196.546375
+    }
+  },
+  "timestamp": "2026-04-04T00:29:42"
+}

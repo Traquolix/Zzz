@@ -114,26 +114,9 @@ class Args_NN_model_all_channels:
         if self.device == "gpu":
             model = model.to("cuda:0")
 
-        if torch.backends.mps.is_available() and self.device == "cpu":
+        if self.device == "cpu":
             cpu_count = os.cpu_count() or 4
             torch.set_num_threads(cpu_count)
-            torch.backends.nnpack.enabled = True
-
-            try:
-                if hasattr(torch, "compile"):
-                    model = torch.compile(model, mode="reduce-overhead")
-                    logger.debug("Model compiled with torch.compile")
-                else:
-                    model = torch.jit.optimize_for_inference(model)
-                    logger.debug("Model optimized with JIT")
-            except Exception as e:
-                logger.warning(f"Model optimization failed (non-critical): {e}")
-
-            try:
-                torch.backends.opt_einsum.enabled = True
-                logger.debug("opt_einsum enabled")
-            except AttributeError:
-                logger.debug("opt_einsum not available (expected on some platforms)")
 
         T = model.get_basis()
         return T, model

@@ -97,6 +97,8 @@ service-local venvs automatically.
 | Security scan | `make security` |
 | Run tests | `make test` |
 | Update AI golden snapshots | `make snapshot-confirm` |
+| Run AI benchmarks | `make bench` |
+| Save benchmark baseline | `make bench-save` |
 | Full CI pipeline | `make ci` |
 | Docker stack up/down | `make up` / `make down` |
 | Rebuild one service | `make rebuild SERVICE=<name>` |
