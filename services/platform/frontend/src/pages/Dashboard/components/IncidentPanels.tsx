@@ -1,16 +1,18 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { formatTime, formatTimeShort, formatDateShort } from '@/lib/formatters'
 import { useTagColor } from '../hooks/useTags'
+import { useTags } from '../hooks/useTags'
 import { useIncidentSnapshot } from '@/hooks/useIncidentSnapshot'
+import { useIncidents } from '@/hooks/useIncidents'
+import { updateIncidentTags } from '@/api/incidents'
 import type { DisplayIncident, Section } from '../types'
 import { useRealtime } from '@/hooks/useRealtime'
 import { TimeSeriesChart } from './TimeSeriesChart'
 import { PanelEmptyState } from './PanelEmptyState'
 import { DetailHeader } from './DetailHeader'
 import { MetricCard } from './MetricCard'
-import { StatusBadge } from './StatusBadge'
 import { ColorDot } from './ColorDot'
 import { useDashboard } from '../context/DashboardContext'
 
@@ -114,7 +116,47 @@ export function IncidentDetail({
   const { dispatch } = useDashboard()
   const { t } = useTranslation()
   const { flow } = useRealtime()
+  const isSim = flow === 'sim'
   const getColor = useTagColor()
+  const { tags: orgTags } = useTags()
+  const { updateTags } = useIncidents()
+  const [tagDropdownOpen, setTagDropdownOpen] = useState(false)
+  const tagDropdownRef = useRef<HTMLDivElement>(null)
+
+  // Close tag dropdown on outside click
+  useEffect(() => {
+    if (!tagDropdownOpen) return
+    function handler(e: MouseEvent) {
+      if (tagDropdownRef.current && !tagDropdownRef.current.contains(e.target as Node)) {
+        setTagDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler, true)
+    return () => document.removeEventListener('mousedown', handler, true)
+  }, [tagDropdownOpen])
+
+  const handleRemoveTag = async (tagName: string) => {
+    const newTags = incident.tags.filter(t => t !== tagName)
+    updateTags(incident.id, newTags)
+    try {
+      await updateIncidentTags(incident.id, newTags)
+    } catch {
+      updateTags(incident.id, incident.tags)
+    }
+  }
+
+  const handleAddTag = async (tagName: string) => {
+    const newTags = [...incident.tags, tagName]
+    updateTags(incident.id, newTags)
+    setTagDropdownOpen(false)
+    try {
+      await updateIncidentTags(incident.id, newTags)
+    } catch {
+      updateTags(incident.id, incident.tags)
+    }
+  }
+
+  const availableTags = orgTags.filter(t => !incident.tags.includes(t.name))
 
   // Find containing section by channel range
   const relatedSection = sections.find(
@@ -137,11 +179,78 @@ export function IncidentDetail({
 
   return (
     <div className="dash-analysis-enter flex flex-col">
-      <DetailHeader
-        title={incident.title}
-        onBack={onBack}
-        badge={<StatusBadge label={incident.tags[0] ?? ''} color={getColor(incident.tags[0] ?? 'low')} />}
-      />
+      <DetailHeader title={incident.title} onBack={onBack} />
+
+      {/* Tags */}
+      <div className="flex flex-wrap items-center gap-1.5 px-4 pt-3">
+        {incident.tags.map(tagName => {
+          const color = getColor(tagName)
+          return (
+            <span
+              key={tagName}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-cq-xs font-medium text-white"
+              style={{ backgroundColor: color }}
+            >
+              {tagName}
+              {!isSim && (
+                <button
+                  onClick={() => handleRemoveTag(tagName)}
+                  className="ml-0.5 hover:opacity-70 transition-opacity cursor-pointer"
+                >
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 10 10"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                  >
+                    <line x1="3" y1="3" x2="7" y2="7" />
+                    <line x1="7" y1="3" x2="3" y2="7" />
+                  </svg>
+                </button>
+              )}
+            </span>
+          )
+        })}
+        {!isSim && availableTags.length > 0 && (
+          <div className="relative" ref={tagDropdownRef}>
+            <button
+              onClick={() => setTagDropdownOpen(!tagDropdownOpen)}
+              className="inline-flex items-center justify-center w-6 h-6 rounded-full border border-dashed border-[var(--dash-text-muted)] text-[var(--dash-text-muted)] hover:border-[var(--dash-text-secondary)] hover:text-[var(--dash-text-secondary)] transition-colors cursor-pointer"
+              title={t('incidents.detail.addTag')}
+            >
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 10 10"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              >
+                <line x1="5" y1="2" x2="5" y2="8" />
+                <line x1="2" y1="5" x2="8" y2="5" />
+              </svg>
+            </button>
+            {tagDropdownOpen && (
+              <div className="absolute top-full left-0 mt-1 py-1 rounded-lg bg-[var(--dash-surface-raised)] border border-[var(--dash-border)] shadow-xl z-50 min-w-[140px] max-h-[200px] overflow-y-auto">
+                {availableTags.map(tag => (
+                  <button
+                    key={tag.id}
+                    onClick={() => handleAddTag(tag.name)}
+                    className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-[var(--dash-surface)] transition-colors cursor-pointer"
+                  >
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: tag.color }} />
+                    <span className="text-cq-sm text-[var(--dash-text)] truncate">{tag.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="px-4 py-4 flex flex-col gap-3">
         {/* Speed metrics when available */}

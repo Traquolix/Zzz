@@ -45,6 +45,11 @@ urlpatterns = [
         name="incident-actions",
     ),
     path(
+        "incidents/<str:incident_id>/tags",
+        monitoring_views.IncidentTagView.as_view(),
+        name="incident-tags",
+    ),
+    path(
         "infrastructure", monitoring_views.InfrastructureListView.as_view(), name="infrastructure"
     ),
     path("sections", monitoring_views.SectionListView.as_view(), name="sections"),

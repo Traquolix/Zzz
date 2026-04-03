@@ -49,6 +49,16 @@ export function useIncidents() {
     [queryClient, flow],
   )
 
+  // Update incident tags locally (optimistic)
+  const updateTags = useCallback(
+    (id: string, tags: string[]) => {
+      queryClient.setQueryData<Incident[]>(['incidents', flow], prev =>
+        (prev ?? []).map(i => (i.id === id ? { ...i, tags } : i)),
+      )
+    },
+    [queryClient, flow],
+  )
+
   // WebSocket subscription — apply real-time updates to the query cache
   useEffect(() => {
     if (!connected) return
@@ -90,5 +100,5 @@ export function useIncidents() {
     return () => clearInterval(interval)
   }, [])
 
-  return { incidents, loading, connected, isNewIncident, updateIncidentStatus }
+  return { incidents, loading, connected, isNewIncident, updateIncidentStatus, updateTags }
 }

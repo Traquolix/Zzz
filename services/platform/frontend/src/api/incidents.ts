@@ -42,6 +42,16 @@ export async function fetchIncidentActions(incidentId: string): Promise<Incident
 }
 
 /**
+ * Update the tags assigned to an incident.
+ */
+export async function updateIncidentTags(incidentId: string, tags: string[]): Promise<{ tags: string[] }> {
+  return apiRequest<{ tags: string[] }>(`/api/incidents/${incidentId}/tags`, {
+    method: 'PUT',
+    body: { tags },
+  })
+}
+
+/**
  * Post a workflow action (acknowledge, investigate, resolve) for an incident.
  */
 export async function postIncidentAction(incidentId: string, action: string, note?: string): Promise<IncidentAction> {
