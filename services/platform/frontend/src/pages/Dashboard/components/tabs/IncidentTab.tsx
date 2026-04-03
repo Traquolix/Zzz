@@ -3,11 +3,12 @@ import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 import { severityColor } from '@/lib/theme'
-import type { CalendarDay, Incident } from '@/types/incident'
+import type { CalendarDay } from '@/types/incident'
 import type { Severity, DisplayIncident, Section } from '../../types'
 import { IncidentList, IncidentDetail } from '../IncidentPanels'
 import { IncidentCalendar } from '../IncidentCalendar'
 import { useDashboard } from '../../context/DashboardContext'
+import { useDisplayIncident } from '../../hooks/useDisplayIncident'
 import { useRealtime } from '@/hooks/useRealtime'
 import { fetchIncidents, fetchIncidentCalendar } from '@/api/incidents'
 
@@ -25,9 +26,6 @@ function formatDateShort(dateStr: string, locale: string): string {
 interface IncidentTabProps {
   incidents: DisplayIncident[]
   selectedIncidentId: string | null
-  filterSeverity: Severity | null
-  hideResolved: boolean
-  showIncidentsOnMap: boolean
   onHighlightIncident?: (incidentId: string) => void
   onClearHighlight?: () => void
   unseenIds?: Set<string>
@@ -38,22 +36,20 @@ interface IncidentTabProps {
 }
 
 export function IncidentTabToolbar({
-  filterSeverity,
-  hideResolved,
-  showIncidentsOnMap,
   hasUnseen,
   onMarkAllSeen,
   incidentSortBy,
   setIncidentSortBy,
   selectedDate,
   onToggleCalendar,
-}: Pick<IncidentTabProps, 'filterSeverity' | 'hideResolved' | 'showIncidentsOnMap' | 'hasUnseen' | 'onMarkAllSeen'> & {
+}: Pick<IncidentTabProps, 'hasUnseen' | 'onMarkAllSeen'> & {
   incidentSortBy: 'newest' | 'oldest'
   setIncidentSortBy: React.Dispatch<React.SetStateAction<'newest' | 'oldest'>>
   selectedDate: string
   onToggleCalendar: () => void
 }) {
-  const { dispatch } = useDashboard()
+  const { state, dispatch } = useDashboard()
+  const { filterSeverity, hideResolved, showIncidentsOnMap } = state
   const { t, i18n } = useTranslation()
   const isToday = selectedDate === toYMD(new Date())
 
@@ -217,19 +213,15 @@ export function IncidentTabToolbar({
 export function IncidentTabContent({
   incidents,
   selectedIncidentId,
-  filterSeverity,
-  hideResolved,
   onHighlightIncident,
   onClearHighlight,
   unseenIds,
   onMarkSeen,
   sections,
   sortBy,
-  toDisplayIncident,
   calendar,
-}: Omit<IncidentTabProps, 'showIncidentsOnMap' | 'hasUnseen' | 'onMarkAllSeen'> & {
+}: Omit<IncidentTabProps, 'hasUnseen' | 'onMarkAllSeen'> & {
   sortBy: 'newest' | 'oldest'
-  toDisplayIncident: (inc: Incident) => DisplayIncident
   calendar: {
     open: boolean
     selectedDate: string
@@ -240,7 +232,9 @@ export function IncidentTabContent({
     onNextMonth: () => void
   }
 }) {
-  const { dispatch } = useDashboard()
+  const { state, dispatch } = useDashboard()
+  const { filterSeverity, hideResolved } = state
+  const toDisplayIncident = useDisplayIncident()
   const { t } = useTranslation()
   const { flow } = useRealtime()
   const today = toYMD(new Date())

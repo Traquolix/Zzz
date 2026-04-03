@@ -11,16 +11,11 @@ interface SectionTabToolbarProps {
   sectionSearch: string
   setSectionSearch: (value: string) => void
   sections: Section[]
-  sectionMetric: MetricKey
 }
 
-export function SectionTabToolbar({
-  sectionSearch,
-  setSectionSearch,
-  sections,
-  sectionMetric,
-}: SectionTabToolbarProps) {
-  const { dispatch } = useDashboard()
+export function SectionTabToolbar({ sectionSearch, setSectionSearch, sections }: SectionTabToolbarProps) {
+  const { state, dispatch } = useDashboard()
+  const sectionMetric = state.sectionMetric
   const { t } = useTranslation()
 
   return (
@@ -96,7 +91,6 @@ interface SectionTabContentProps {
   selectedSectionId: string | null
   liveStats: Map<string, LiveSectionStats>
   liveSeriesData: Map<string, SectionDataPoint[]>
-  sectionMetric: MetricKey
   fiberColors: Record<string, string>
   onHighlightSection?: (sectionId: string) => void
   onClearHighlight?: () => void
@@ -108,13 +102,13 @@ export function SectionTabContent({
   selectedSectionId,
   liveStats,
   liveSeriesData,
-  sectionMetric,
   fiberColors,
   onHighlightSection,
   onClearHighlight,
   search,
 }: SectionTabContentProps) {
-  const { dispatch } = useDashboard()
+  const { state, dispatch } = useDashboard()
+  const sectionMetric = state.sectionMetric
   const section = selectedSectionId ? sections.find(s => s.id === selectedSectionId) : null
 
   if (section) {
