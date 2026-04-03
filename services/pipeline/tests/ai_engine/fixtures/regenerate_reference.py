@@ -24,6 +24,8 @@ sys.path.insert(0, str(PIPELINE_ROOT))
 
 import torch  # noqa: E402
 
+torch._dynamo.config.disable = True  # avoid dtype mismatches in compiled CPAB
+
 from ai_engine.model_vehicle.model_T import Args_NN_model_all_channels  # noqa: E402
 from ai_engine.model_vehicle.utils import normalize_channel_energy  # noqa: E402
 from ai_engine.model_vehicle.vehicle_speed import VehicleSpeedEstimator  # noqa: E402
