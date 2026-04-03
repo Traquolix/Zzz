@@ -83,7 +83,8 @@
       "status": "Statut :",
       "affectedSection": "Section concernee",
       "collecting": "collecte...",
-      "snapshot": "Apercu"
+      "snapshot": "Apercu",
+      "addTag": "Ajouter"
     },
     "filters": {
       "allTypes": "Tous les types",

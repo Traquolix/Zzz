@@ -19,6 +19,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.fibers.utils import fiber_belongs_to_org
+from apps.incidents.models import IncidentTags, Tag
 from apps.monitoring.detection_utils import TIER_TABLES
 from apps.monitoring.incident_service import (
     query_by_date as incident_query_by_date,
@@ -530,3 +531,71 @@ class IncidentActionView(FlowAwareMixin, APIView):
             IncidentActionSerializer(action).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+class IncidentTagView(FlowAwareMixin, APIView):
+    """
+    PUT /api/incidents/<id>/tags — replace tags on an incident.
+
+    Validates all tag names exist in the user's org Tag table.
+    Creates or updates the IncidentTags row in PostgreSQL.
+    Live flow only — sim incidents are ephemeral.
+    """
+
+    def get_permissions(self) -> list[BasePermission]:
+        return [IsActiveUser(), IsNotViewer()]
+
+    def initial(self, request: Request, *args: Any, **kwargs: Any) -> None:
+        super().initial(request, *args, **kwargs)
+        if self._is_sim(request):
+            raise ParseError("Tag editing is not supported for simulated incidents")
+
+    def put(self, request: Request, incident_id: str) -> Response:
+        # Verify incident exists and belongs to user's org
+        try:
+            incident = incident_query_by_id(incident_id)
+        except ClickHouseUnavailableError:
+            return Response(
+                {"detail": "ClickHouse unavailable", "code": "clickhouse_unavailable"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        if not incident:
+            return Response(
+                {"detail": "Incident not found", "code": "incident_not_found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Org-scoping
+        fiber_ids = _get_fiber_ids_or_none(request.user)
+        if fiber_ids is not None and not fiber_belongs_to_org(incident["fiber_id"], fiber_ids):
+            return Response(
+                {"detail": "Incident not found", "code": "incident_not_found"},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Validate input
+        tag_names = request.data.get("tags")
+        if not isinstance(tag_names, list):
+            return Response(
+                {"detail": "tags must be a list of strings", "code": "validation_error"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Validate all tag names exist in the org
+        org = request.user.organization
+        org_tag_names = set(Tag.objects.filter(organization=org).values_list("name", flat=True))
+        invalid = [t for t in tag_names if t not in org_tag_names]
+        if invalid:
+            return Response(
+                {"detail": f"Unknown tags: {', '.join(invalid)}", "code": "invalid_tags"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Create or update
+        obj, _created = IncidentTags.objects.update_or_create(
+            incident_id=incident_id,
+            defaults={"tags": tag_names, "updated_by": request.user},
+        )
+
+        return Response({"tags": obj.tags})
