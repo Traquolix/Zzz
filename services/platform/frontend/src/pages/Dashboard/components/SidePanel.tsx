@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useIncidentTabState, useShmTabState, useSectionTabState, useDataHubTabState } from '../hooks/useTabState'
 import { useTranslation } from 'react-i18next'
 import i18next from 'i18next'
 import { ToggleGroup } from '@/components/ui/toggle-group'
@@ -27,7 +28,6 @@ import { SectionTabToolbar, SectionTabContent } from './tabs/SectionTab'
 import { ShmTabToolbar, ShmTabContent } from './tabs/ShmTab'
 import type { InfrastructureData } from '../hooks/useInfrastructure'
 import { DataHubTabToolbar, DataHubTabContent } from './tabs/DataHubTab'
-import type { DataHubSubTab } from './DataHubPanel'
 
 interface SidePanelProps {
   panelRef: React.RefObject<HTMLDivElement | null>
@@ -107,17 +107,11 @@ export function SidePanel({
   const { isSuperuser, role } = useAuth()
   const isAdmin = isSuperuser || role === 'admin'
 
-  // Per-tab local state
-  const [incidentSortBy, setIncidentSortBy] = useState<'newest' | 'oldest'>('newest')
-  const todayStr = new Date().toISOString().slice(0, 10)
-  const [selectedDate, setSelectedDate] = useState(todayStr)
-  const [calendarOpen, setCalendarOpen] = useState(false)
-  const [calendarYear, setCalendarYear] = useState(new Date().getFullYear())
-  const [calendarMonth, setCalendarMonth] = useState(new Date().getMonth() + 1)
-  const [shmSearch, setShmSearch] = useState('')
-  const [sectionSearch, setSectionSearch] = useState('')
-  const [dataHubSubTab, setDataHubSubTab] = useState<DataHubSubTab>('export')
-  const [showCreateKey, setShowCreateKey] = useState(false)
+  // Per-tab local state (extracted into hooks to reduce SidePanel noise)
+  const incident = useIncidentTabState()
+  const shm = useShmTabState()
+  const sectionTab = useSectionTabState()
+  const dataHub = useDataHubTabState()
 
   // Track when the slide transition finishes so we can delay showing/hiding elements
   const [fullyClosed, setFullyClosed] = useState(!sidebarOpen)
@@ -246,10 +240,10 @@ export function SidePanel({
             {activeTab === 'dataHub' && isAdmin && (
               <ToggleGroup
                 options={['export', 'apiKeys'] as ('export' | 'apiKeys')[]}
-                value={dataHubSubTab}
+                value={dataHub.dataHubSubTab}
                 onChange={tab => {
-                  setDataHubSubTab(tab)
-                  if (tab !== 'apiKeys') setShowCreateKey(false)
+                  dataHub.setDataHubSubTab(tab)
+                  if (tab !== 'apiKeys') dataHub.setShowCreateKey(false)
                 }}
                 labels={{
                   export: t('export.sectionTitle'),
@@ -266,33 +260,33 @@ export function SidePanel({
                 showIncidentsOnMap={showIncidentsOnMap}
                 hasUnseen={hasUnseen}
                 onMarkAllSeen={onMarkAllSeen}
-                incidentSortBy={incidentSortBy}
-                setIncidentSortBy={setIncidentSortBy}
-                selectedDate={selectedDate}
-                onToggleCalendar={() => setCalendarOpen(o => !o)}
+                incidentSortBy={incident.incidentSortBy}
+                setIncidentSortBy={incident.setIncidentSortBy}
+                selectedDate={incident.selectedDate}
+                onToggleCalendar={() => incident.setCalendarOpen(o => !o)}
               />
             )}
             {activeTab === 'shm' && (
               <ShmTabToolbar
-                shmSearch={shmSearch}
-                setShmSearch={setShmSearch}
+                shmSearch={shm.shmSearch}
+                setShmSearch={shm.setShmSearch}
                 showStructuresOnMap={showStructuresOnMap}
                 showStructureLabels={showStructureLabels}
               />
             )}
             {activeTab === 'sections' && !selectedSectionId && (
               <SectionTabToolbar
-                sectionSearch={sectionSearch}
-                setSectionSearch={setSectionSearch}
+                sectionSearch={sectionTab.sectionSearch}
+                setSectionSearch={sectionTab.setSectionSearch}
                 sections={sections}
                 sectionMetric={sectionMetric}
               />
             )}
             {activeTab === 'dataHub' && (
               <DataHubTabToolbar
-                dataHubSubTab={dataHubSubTab}
-                showCreateKey={showCreateKey}
-                setShowCreateKey={setShowCreateKey}
+                dataHubSubTab={dataHub.dataHubSubTab}
+                showCreateKey={dataHub.showCreateKey}
+                setShowCreateKey={dataHub.setShowCreateKey}
                 isAdmin={isAdmin}
               />
             )}
@@ -320,26 +314,26 @@ export function SidePanel({
                 unseenIds={unseenIds}
                 onMarkSeen={onMarkSeen}
                 sections={sections}
-                sortBy={incidentSortBy}
+                sortBy={incident.incidentSortBy}
                 calendar={{
-                  open: calendarOpen,
-                  selectedDate,
-                  year: calendarYear,
-                  month: calendarMonth,
+                  open: incident.calendarOpen,
+                  selectedDate: incident.selectedDate,
+                  year: incident.calendarYear,
+                  month: incident.calendarMonth,
                   onSelectDate: d => {
-                    setSelectedDate(d)
-                    setCalendarOpen(false)
+                    incident.setSelectedDate(d)
+                    incident.setCalendarOpen(false)
                     const parsed = new Date(d + 'T00:00:00')
-                    setCalendarYear(parsed.getFullYear())
-                    setCalendarMonth(parsed.getMonth() + 1)
+                    incident.setCalendarYear(parsed.getFullYear())
+                    incident.setCalendarMonth(parsed.getMonth() + 1)
                   },
                   onPrevMonth: () => {
-                    setCalendarMonth(m => (m === 1 ? 12 : m - 1))
-                    if (calendarMonth === 1) setCalendarYear(y => y - 1)
+                    incident.setCalendarMonth(m => (m === 1 ? 12 : m - 1))
+                    if (incident.calendarMonth === 1) incident.setCalendarYear(y => y - 1)
                   },
                   onNextMonth: () => {
-                    setCalendarMonth(m => (m === 12 ? 1 : m + 1))
-                    if (calendarMonth === 12) setCalendarYear(y => y + 1)
+                    incident.setCalendarMonth(m => (m === 12 ? 1 : m + 1))
+                    if (incident.calendarMonth === 12) incident.setCalendarYear(y => y + 1)
                   },
                 }}
               />
@@ -356,7 +350,7 @@ export function SidePanel({
                 fiberColors={fiberColors}
                 onHighlightSection={onHighlightSection}
                 onClearHighlight={onClearHighlight}
-                search={sectionSearch}
+                search={sectionTab.sectionSearch}
               />
             </ErrorBoundary>
           )}
@@ -391,7 +385,7 @@ export function SidePanel({
                 selectedStructureId={selectedStructureId}
                 onHighlightSection={onHighlightSection}
                 onClearHighlight={onClearHighlight}
-                search={shmSearch}
+                search={shm.shmSearch}
               />
             </ErrorBoundary>
           )}
@@ -403,10 +397,10 @@ export function SidePanel({
           {activeTab === 'dataHub' && (
             <ErrorBoundary key="dataHub" fallback={panelFallback}>
               <DataHubTabContent
-                dataHubSubTab={dataHubSubTab}
+                dataHubSubTab={dataHub.dataHubSubTab}
                 isAdmin={isAdmin}
-                showCreateKey={showCreateKey}
-                onCloseCreateKey={() => setShowCreateKey(false)}
+                showCreateKey={dataHub.showCreateKey}
+                onCloseCreateKey={() => dataHub.setShowCreateKey(false)}
               />
             </ErrorBoundary>
           )}
