@@ -75,22 +75,15 @@ class ModelRegistry:
         with self._lock:
             if model_hint in self._loaded_models:
                 self._loaded_models.move_to_end(model_hint)
-                if self._ai_metrics:
-                    self._ai_metrics.record_cache_hit(model_hint)
                 return self._loaded_models[model_hint]
 
             # Evict oldest if at capacity
             while len(self._loaded_models) >= self._max_models:
                 oldest, _ = self._loaded_models.popitem(last=False)
                 logger.info(f"Evicted model {oldest} (LRU)")
-                if self._ai_metrics:
-                    self._ai_metrics.record_cache_eviction(oldest)
                 if oldest in self._loaded_counters:
                     del self._loaded_counters[oldest]
 
-            # Load new model
-            if self._ai_metrics:
-                self._ai_metrics.record_cache_miss(model_hint)
             model = self._load_speed_estimator(model_hint)
             self._loaded_models[model_hint] = model
             return model

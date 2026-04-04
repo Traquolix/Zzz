@@ -5,7 +5,8 @@
   "graphTooltip": 1,
   "id": null,
   "links": [
-    { "title": "DAS Operations", "url": "/d/das-operations", "type": "link", "targetBlank": false }
+    { "title": "DAS Operations", "url": "/d/das-operations", "type": "link", "targetBlank": false },
+    { "title": "AI Engine", "url": "/d/ai-engine", "type": "link", "targetBlank": false }
   ],
   "liveNow": true,
   "panels": [

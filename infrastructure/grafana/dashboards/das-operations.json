@@ -5,7 +5,8 @@
   "graphTooltip": 1,
   "id": null,
   "links": [
-    { "title": "DAS Traffic", "url": "/d/das-traffic", "type": "link", "targetBlank": false }
+    { "title": "DAS Traffic", "url": "/d/das-traffic", "type": "link", "targetBlank": false },
+    { "title": "AI Engine", "url": "/d/ai-engine", "type": "link", "targetBlank": false }
   ],
   "liveNow": true,
   "panels": [
@@ -356,8 +357,8 @@
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.95, rate(ai_inference_duration_seconds_bucket{service_name=~\"ai-engine.*\"}[5m])) * 1000",
-          "legendFormat": "AI inference slow",
+          "expr": "histogram_quantile(0.95, rate(ai_gpu_lock_held_duration_seconds_bucket{service_name=~\"ai-engine.*\"}[5m])) * 1000",
+          "legendFormat": "AI inference p95",
           "refId": "C"
         }
       ],
