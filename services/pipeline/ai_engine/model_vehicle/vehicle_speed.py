@@ -127,17 +127,16 @@ class VehicleSpeedEstimator:
         # Compile the NN head (CNN+RNN+FC) for faster theta prediction.
         # The CPAB transform is not compiled — it uses custom autograd functions
         # that cause graph breaks. Only the pure NN forward pass is compiled.
-        # "reduce-overhead" mode uses CUDA graphs for minimal kernel launch cost
-        # on GPU; on CPU we use "default" mode which still fuses operators via
-        # TorchInductor without the CUDA graph overhead.
+        # Using "default" mode (TorchInductor kernel fusion) on all platforms.
+        # "reduce-overhead" (CUDA graphs) causes transient errors at startup
+        # when multiple fibers trigger concurrent graph captures on the same GPU.
         import torch
         if hasattr(torch, "compile"):
             try:
-                compile_mode = "reduce-overhead" if torch.cuda.is_available() else "default"
                 model.predict_thetas = torch.compile(
-                    model.predict_thetas, mode=compile_mode
+                    model.predict_thetas, mode="default"
                 )
-                logger.info(f"DTAN predict_thetas compiled (mode={compile_mode})")
+                logger.info("DTAN predict_thetas compiled (mode=default)")
             except Exception as e:
                 logger.warning(f"torch.compile failed (non-critical): {e}")
 
