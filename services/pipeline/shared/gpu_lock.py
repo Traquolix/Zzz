@@ -25,10 +25,10 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-# Lock file on the shared visualizations volume.
-# When this path exists (shared Docker volume), file locking is used for
-# inter-container exclusion. When it doesn't exist (single container),
-# CUDA streams provide intra-process concurrency.
+# GPU lock mode: "stream" (default) uses CUDA streams for intra-process
+# concurrency. "file" uses a file lock for inter-container exclusion.
+# Set GPU_LOCK_MODE=file when multiple AI engine containers share one GPU.
+_LOCK_MODE = os.environ.get("GPU_LOCK_MODE", "stream")
 _LOCK_PATH = os.environ.get("GPU_LOCK_PATH", "/app/visualizations/.gpu_lock")
 
 # CUDA stream pool — one per concurrent fiber, reused across calls.
@@ -95,8 +95,7 @@ def gpu_lock(timeout: float = 120.0):
     """
     timing = GPULockTiming()
 
-    lock_dir = os.path.dirname(_LOCK_PATH)
-    use_file_lock = os.path.isdir(lock_dir)
+    use_file_lock = _LOCK_MODE == "file"
 
     if not use_file_lock:
         # Single-container mode: use CUDA stream for concurrency
