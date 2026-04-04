@@ -156,6 +156,7 @@ class SpeedDetectionConfig:
     speed_weighting: str = "median"
     speed_positive_glrt_only: bool = False
     min_vehicle_duration_s: float = 0.3
+    alignment_method: str = "cpab"  # "cpab" (diffeomorphic ODE) or "shift" (linear delay)
 
     @classmethod
     def from_dict(cls, data: dict) -> SpeedDetectionConfig:
@@ -171,6 +172,7 @@ class SpeedDetectionConfig:
             speed_weighting=data.get("speed_weighting", "median"),
             speed_positive_glrt_only=data.get("speed_positive_glrt_only", False),
             min_vehicle_duration_s=data.get("min_vehicle_duration_s", 0.3),
+            alignment_method=data.get("alignment_method", "cpab"),
         )
 
 

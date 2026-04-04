@@ -20,6 +20,7 @@ Or via Makefile:
 from __future__ import annotations
 
 import importlib.util
+import platform
 import sys
 from pathlib import Path
 
@@ -44,6 +45,7 @@ _bp_spec.loader.exec_module(_bp_mod)
 VectorizedBiquadFilter = _bp_mod.VectorizedBiquadFilter
 
 FIXTURE_DIR = Path(__file__).parent
+_ARCH = platform.machine()  # "arm64" or "x86_64"
 
 # Config matching production (fibers.yaml carros default section)
 CONFIG = {
@@ -257,9 +259,9 @@ def run_inference_and_save(
         gauge=np.float64(gauge),
     )
 
-    # Save golden reference output
+    # Save golden reference output (platform-specific due to float32 accumulation differences)
     np.savez_compressed(
-        FIXTURE_DIR / "golden_reference.npz",
+        FIXTURE_DIR / f"golden_reference_{_ARCH}.npz",
         n_detections=np.int32(n_det),
         det_speeds=det_speeds,
         det_directions=det_directions,
@@ -274,9 +276,9 @@ def run_inference_and_save(
         **result_arrays,
     )
 
-    # Save normalization reference
+    # Save normalization reference (platform-specific)
     np.savez_compressed(
-        FIXTURE_DIR / "golden_normalization.npz",
+        FIXTURE_DIR / f"golden_normalization_{_ARCH}.npz",
         normalized_first_window=norm_ref,
     )
 
@@ -285,13 +287,13 @@ def run_inference_and_save(
     print(f"  Input: {FIXTURE_DIR / 'golden_input.npz'}")
     print(f"    Shape: {data_window.shape} ({data_window.nbytes / 1024:.0f} KB)")
     print(f"    fs={fs:.4f} Hz, gauge={gauge:.4f} m")
-    print(f"  Reference: {FIXTURE_DIR / 'golden_reference.npz'}")
+    print(f"  Reference: {FIXTURE_DIR / f'golden_reference_{_ARCH}.npz'}")
     print(f"    Detections: {n_det}")
     if n_det:
         print(f"    Speeds: [{det_speeds.min():.1f}, {det_speeds.max():.1f}] km/h")
         print(f"    Directions: fwd={sum(det_directions == 0)}, rev={sum(det_directions == 1)}")
         print(f"    GLRT range: [{det_glrt_max.min():.0f}, {det_glrt_max.max():.0f}]")
-    print(f"  Normalization: {FIXTURE_DIR / 'golden_normalization.npz'}")
+    print(f"  Normalization: {FIXTURE_DIR / f'golden_normalization_{_ARCH}.npz'}")
     print(f"    Shape: {norm_ref.shape}")
 
 

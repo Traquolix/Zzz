@@ -165,6 +165,7 @@ class ModelRegistry:
                 speed_glrt_factor=spec.speed_detection.speed_glrt_factor,
                 speed_weighting=spec.speed_detection.speed_weighting,
                 speed_positive_glrt_only=spec.speed_detection.speed_positive_glrt_only,
+                alignment_method=spec.speed_detection.alignment_method,
             )
 
             logger.info(f"Loaded speed estimator: {model_hint}")

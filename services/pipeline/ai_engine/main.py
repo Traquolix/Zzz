@@ -382,10 +382,23 @@ class AIEngineService(RollingBufferedTransformer):
         min_vehicle_duration_s = self._model_spec.speed_detection.min_vehicle_duration_s
         classify_threshold_factor = self._model_spec.counting.truck_ratio_for_split
 
-        # Use process_batch for batched GPU pass (exclusive GPU access)
+        # Preprocess on CPU (no GPU needed), then lock only for inference
         t_gpu = time.time()
+        prepared, valid_indices, fwd_combined, rev_combined, window_counts = (
+            speed_processor._preprocess_batch(section_inputs)
+        )
+        if fwd_combined is None:
+            return []
+
         with gpu_lock():
-            batch_results = speed_processor.process_batch(section_inputs)
+            batch_results = speed_processor._run_inference_and_postprocess(
+                section_inputs,
+                prepared,
+                valid_indices,
+                fwd_combined,
+                rev_combined,
+                window_counts,
+            )
         t_gpu = (time.time() - t_gpu) * 1000
 
         t_post = time.time()
