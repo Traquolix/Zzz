@@ -17,7 +17,7 @@ services:
     container_name: platform-backend
     restart: unless-stopped
     ports:
-      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:8001:8001"
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:${BACKEND_PORT:-8001}:8001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]
       interval: 10s
