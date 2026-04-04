@@ -318,28 +318,8 @@ class AIEngineService(RollingBufferedTransformer):
                     total_outputs += len(output_messages)
                     self._analyses_completed += 1
 
-                    # Per-window summary metrics (not per-detection)
-                    fwd_dets = [d for d in detections if d["direction"] == 0]
-                    rev_dets = [d for d in detections if d["direction"] == 1]
-                    fwd_peak = max((d["glrt_max"] for d in fwd_dets), default=0)
-                    rev_peak = max((d["glrt_max"] for d in rev_dets), default=0)
-
-                    if fwd_dets or not rev_dets:
-                        self.ai_metrics.record_window(
-                            fiber_id=meta["fiber_id"],
-                            section=meta["section"],
-                            num_detections=len(fwd_dets),
-                            glrt_peak=fwd_peak,
-                            direction=0,
-                        )
-                    if rev_dets:
-                        self.ai_metrics.record_window(
-                            fiber_id=meta["fiber_id"],
-                            section=meta["section"],
-                            num_detections=len(rev_dets),
-                            glrt_peak=rev_peak,
-                            direction=1,
-                        )
+                    self._record_window_metrics(detections, meta["fiber_id"], meta["section"])
+                    self._log_detections(detections, meta["fiber_id"], meta["section"])
 
                 t_send = processing_time - t_deser - t_infer
                 self.logger.info(
@@ -369,6 +349,7 @@ class AIEngineService(RollingBufferedTransformer):
             except Exception as e:
                 self.logger.error(f"Error in batched AI analysis: {e}", exc_info=True)
                 self.metrics.record_error("batch_processing")
+                self.ai_metrics.record_error("batch_processing")
 
     def _sync_batch_inference(
         self,
@@ -380,38 +361,44 @@ class AIEngineService(RollingBufferedTransformer):
         min_vehicle_duration_s = self._model_spec.speed_detection.min_vehicle_duration_s
         classify_threshold_factor = self._model_spec.counting.truck_ratio_for_split
 
-        # Preprocess on CPU (no GPU needed), then lock only for inference
+        # Preprocess on CPU (no GPU needed), then lock only for inference.
+        # Stage timings cover the entire fiber batch (all sections concatenated),
+        # so they are attributed to fiber_id only, not a specific section.
         fiber_id = section_meta[0]["fiber_id"] if section_meta else ""
-        section_name = section_meta[0]["section"] if section_meta else ""
 
         t_pre = time.time()
         prepared, valid_indices, fwd_combined, rev_combined, window_counts = (
             speed_processor._preprocess_batch(section_inputs)
         )
         t_pre = time.time() - t_pre
-        self.ai_metrics.record_stage("preprocess", t_pre, fiber_id, section_name)
+        self.ai_metrics.record_stage("preprocess", t_pre, fiber_id, "")
 
         if fwd_combined is None:
             return []
 
-        with gpu_lock() as lock_timing:
-            batch_results, stage_times = speed_processor._run_inference_and_postprocess(
-                section_inputs,
-                prepared,
-                valid_indices,
-                fwd_combined,
-                rev_combined,
-                window_counts,
-            )
+        try:
+            with gpu_lock() as lock_timing:
+                batch_results, stage_times = speed_processor._run_inference_and_postprocess(
+                    section_inputs,
+                    prepared,
+                    valid_indices,
+                    fwd_combined,
+                    rev_combined,
+                    window_counts,
+                )
+        except TimeoutError:
+            self.ai_metrics.record_error("gpu_lock_timeout", fiber_id)
+            raise
         self.ai_metrics.record_gpu_lock(
             lock_timing.wait_seconds,
             lock_timing.held_seconds,
             fiber_id,
         )
         for stage, duration in stage_times.items():
-            self.ai_metrics.record_stage(stage, duration, fiber_id, section_name)
+            self.ai_metrics.record_stage(stage, duration, fiber_id, "")
 
         t_post = time.time()
+        t_counting_total = 0.0
         results = []
         for _i, (section_results, meta) in enumerate(
             zip(batch_results, section_meta, strict=False)
@@ -438,6 +425,7 @@ class AIEngineService(RollingBufferedTransformer):
                 meta["model_hint"], meta["buffer_key"]
             )
             if self._model_spec.counting.enabled and count_processor is not None:
+                t_count = time.time()
                 for result in section_results:
                     try:
                         # Aggregate 164 sub-windows → 1 section (matches notebook pattern)
@@ -462,16 +450,17 @@ class AIEngineService(RollingBufferedTransformer):
                             aligned_data=agg_data,
                             timestamp_ns=chunk_start_ns,
                         ):
-                            # Apply CNN counts to detections whose timestamps fall
-                            # within counting intervals. The counter's intervals are
-                            # in sample indices relative to the 360s window; we match
-                            # detections by checking if they overlap the last batch
-                            # slice of the counting window.
                             self._apply_cnn_counts(
                                 all_detections, counts, intervals, count_processor
                             )
                     except Exception as e:
                         logger.error(f"Error in vehicle counting: {e}")
+                        self.ai_metrics.record_error(
+                            "counting_failure", meta["fiber_id"], meta["section"]
+                        )
+                t_count = time.time() - t_count
+                t_counting_total += t_count
+                self.ai_metrics.record_stage("counting", t_count, meta["fiber_id"], meta["section"])
 
             output_messages = self._create_detection_messages(
                 meta["fiber_id"],
@@ -479,8 +468,9 @@ class AIEngineService(RollingBufferedTransformer):
                 ctx,
             )
             results.append((all_detections, output_messages))
-        t_post = time.time() - t_post
-        self.ai_metrics.record_stage("postprocess", t_post, fiber_id, section_name)
+        # Postprocess time excludes counting (counted separately above)
+        t_post = max(0.0, time.time() - t_post - t_counting_total)
+        self.ai_metrics.record_stage("postprocess", t_post, fiber_id, "")
 
         self.logger.info(
             f"Inference breakdown: "
@@ -490,6 +480,70 @@ class AIEngineService(RollingBufferedTransformer):
         )
 
         return results
+
+    @staticmethod
+    def _median_speed(dets: list[dict]) -> float:
+        """Median speed_kmh from a detection list. Returns NaN if empty."""
+        if not dets:
+            return float("nan")
+        speeds = [abs(d["speed_kmh"]) for d in dets if "speed_kmh" in d]
+        if not speeds:
+            return float("nan")
+        speeds.sort()
+        mid = len(speeds) // 2
+        if len(speeds) % 2 == 0:
+            return float((speeds[mid - 1] + speeds[mid]) / 2)
+        return float(speeds[mid])
+
+    def _record_window_metrics(self, detections: list[dict], fiber_id: str, section: str) -> None:
+        """Record per-window summary metrics for both directions.
+
+        Always records forward direction (even with 0 detections) so that
+        windows_processed increments consistently. Reverse direction is only
+        recorded when bidirectional detection produced results.
+        """
+        fwd_dets = [d for d in detections if d["direction"] == 0]
+        rev_dets = [d for d in detections if d["direction"] == 1]
+
+        self.ai_metrics.record_window(
+            fiber_id=fiber_id,
+            section=section,
+            num_detections=len(fwd_dets),
+            glrt_peak=max((d["glrt_max"] for d in fwd_dets), default=0),
+            speed_median_kmh=self._median_speed(fwd_dets),
+            direction=0,
+        )
+        if rev_dets:
+            self.ai_metrics.record_window(
+                fiber_id=fiber_id,
+                section=section,
+                num_detections=len(rev_dets),
+                glrt_peak=max((d["glrt_max"] for d in rev_dets), default=0),
+                speed_median_kmh=self._median_speed(rev_dets),
+                direction=1,
+            )
+
+    def _log_detections(self, detections: list[dict], fiber_id: str, section: str) -> None:
+        """Log individual detections at DEBUG level for recovery/diagnosis.
+
+        Zero cost at INFO level (production default). Provides a secondary
+        record of detections outside ClickHouse if CH ingestion breaks.
+        """
+        if not self.logger.isEnabledFor(logging.DEBUG):
+            return
+        for i, det in enumerate(detections):
+            self.logger.debug(
+                "detection",
+                extra={
+                    "fiber_id": fiber_id,
+                    "section": section,
+                    "det_index": i,
+                    "direction": det.get("direction"),
+                    "speed_kmh": round(det.get("speed_kmh", 0), 1),
+                    "glrt_max": round(det.get("glrt_max", 0), 1),
+                    "channel": det.get("channel"),
+                },
+            )
 
     def _apply_cnn_counts(
         self,
@@ -608,6 +662,7 @@ class AIEngineService(RollingBufferedTransformer):
                         buffer_key,
                         ctx,
                         speed_processor=speed_processor,
+                        model_hint=model_hint,
                     )
                 except RuntimeError as e:
                     # Catch PyTorch dimension mismatches (e.g., "input.size(-1) must be equal to input_size")
@@ -637,24 +692,8 @@ class AIEngineService(RollingBufferedTransformer):
                 span.set_attribute("processing.time_ms", processing_time)
 
                 # Per-window summary metrics
-                fwd_dets = [d for d in detections if d["direction"] == 0]
-                rev_dets = [d for d in detections if d["direction"] == 1]
-                if fwd_dets or not rev_dets:
-                    self.ai_metrics.record_window(
-                        fiber_id=fiber_id,
-                        section=section,
-                        num_detections=len(fwd_dets),
-                        glrt_peak=max((d["glrt_max"] for d in fwd_dets), default=0),
-                        direction=0,
-                    )
-                if rev_dets:
-                    self.ai_metrics.record_window(
-                        fiber_id=fiber_id,
-                        section=section,
-                        num_detections=len(rev_dets),
-                        glrt_peak=max((d["glrt_max"] for d in rev_dets), default=0),
-                        direction=1,
-                    )
+                self._record_window_metrics(detections, fiber_id, section)
+                self._log_detections(detections, fiber_id, section)
 
                 self.logger.info(
                     f"Analysis complete for {buffer_key} (model={model_hint}): "
@@ -668,7 +707,8 @@ class AIEngineService(RollingBufferedTransformer):
 
             except Exception as e:
                 span.record_exception(e)
-                self.logger.error(f"Error in AI analysis: {e}")
+                self.logger.error(f"Error in AI analysis: {e}", exc_info=True)
+                self.ai_metrics.record_error("inference_error", fiber_id, section)
                 raise
 
     def _extract_channel_metadata(self, payload: dict) -> tuple[int, int]:
@@ -707,6 +747,7 @@ class AIEngineService(RollingBufferedTransformer):
         buffer_key: str,
         ctx: ProcessingContext,
         speed_processor: VehicleSpeedEstimator | None = None,
+        model_hint: str = "default",
     ) -> list[dict]:
         """Run AI inference and return unified detections.
 
@@ -721,6 +762,7 @@ class AIEngineService(RollingBufferedTransformer):
             buffer_key,
             ctx,
             speed_processor or self.speed_processor,
+            model_hint,
         )
 
     def _sync_ai_inference(
@@ -731,45 +773,42 @@ class AIEngineService(RollingBufferedTransformer):
         buffer_key: str,
         ctx: ProcessingContext,
         speed_processor: VehicleSpeedEstimator,
+        model_hint: str = "default",
     ) -> list[dict]:
+        """Run inference for a single buffer via the batch path.
+
+        Delegates to _sync_batch_inference with a single-element input list
+        so that all inference goes through the same instrumented code path.
+        """
         timestamps = np.array(timestamp_list)
         timestamps_ns_array = np.array(timestamps_ns)
 
-        all_detections = []
-        min_vehicle_duration_s = self._model_spec.speed_detection.min_vehicle_duration_s
-        classify_threshold_factor = self._model_spec.counting.truck_ratio_for_split
-        yield_count = 0
+        fiber_id = buffer_key.split(":")[0] if ":" in buffer_key else buffer_key
+        section = buffer_key.split(":")[1] if ":" in buffer_key else "default"
 
-        with gpu_lock():
-            inference_results = list(
-                speed_processor.process_file(data, timestamps, timestamps_ns_array)
-            )
+        section_inputs = [(data, timestamps, timestamps_ns_array)]
+        section_meta = [
+            {
+                "buffer_key": buffer_key,
+                "fiber_id": fiber_id,
+                "section": section,
+                "model_hint": model_hint,
+                "messages": [],  # not needed for detection extraction
+                "ctx": ctx,
+            }
+        ]
 
-        for result in inference_results:
-            yield_count += 1
+        batch_results = self._sync_batch_inference(section_inputs, section_meta, speed_processor)
 
-            direction = int(result.direction_mask[0, 0])
-
-            detections = speed_processor.extract_detections(
-                glrt_summed=result.glrt_summed,
-                aligned_speed_pairs=result.aligned_speed_per_pair,
-                direction=direction,
-                timestamps_ns=result.timestamps_ns,
-                min_vehicle_duration_s=min_vehicle_duration_s,
-                classify_threshold_factor=classify_threshold_factor,
-                aligned_data=result.aligned_data,
-            )
-            all_detections.extend(detections)
-
-        if yield_count == 0:
+        if not batch_results:
             raise RuntimeError(f"AI model did not yield results for {buffer_key}")
+
+        all_detections: list[dict] = batch_results[0][0]
 
         # Generate notebook-style waterfall visualization at configured interval
         if speed_processor.visualizer is not None and self._should_visualize(buffer_key):
             try:
-                # Use actual fiber_id from buffer_key (e.g. "carros:default" -> "carros")
-                # instead of model_hint which may be "dtan_unified"
-                actual_fiber_id = buffer_key.split(":")[0] if ":" in buffer_key else buffer_key
+                actual_fiber_id = fiber_id
                 if actual_fiber_id != speed_processor.visualizer.fiber_id:
                     speed_processor.visualizer.fiber_id = actual_fiber_id
                     speed_processor.visualizer.output_dir = (
@@ -777,7 +816,6 @@ class AIEngineService(RollingBufferedTransformer):
                     )
                     speed_processor.visualizer.output_dir.mkdir(parents=True, exist_ok=True)
 
-                # Offset _t_mid_sample from trimmed window to full window
                 edge_trim = speed_processor.edge_trim
                 for d in all_detections:
                     if d.get("_t_mid_sample") is not None:

@@ -160,13 +160,24 @@ class TestAIMetrics:
         m = AIMetrics(service_name="test-engine")
         assert m.service_name == "test-engine"
 
-    def test_record_stage(self):
+    def test_record_stage_all_valid(self):
         """record_stage should not raise for all valid stages."""
         from shared.ai_metrics import AIMetrics
 
         m = AIMetrics(service_name="test-engine")
-        for stage in ["preprocess", "predict_theta", "align", "glrt", "postprocess"]:
+        for stage in ["preprocess", "predict_theta", "align", "glrt", "postprocess", "counting"]:
             m.record_stage(stage, 0.5, fiber_id="carros", section="default")
+
+    def test_record_stage_unknown_warns(self, caplog):
+        """record_stage with unknown stage name should log a warning."""
+        import logging
+
+        from shared.ai_metrics import AIMetrics
+
+        m = AIMetrics(service_name="test-engine")
+        with caplog.at_level(logging.WARNING, logger="shared.ai_metrics"):
+            m.record_stage("typo_stage", 0.5, fiber_id="carros", section="default")
+        assert "unknown stage" in caplog.text
 
     def test_record_gpu_lock(self):
         """record_gpu_lock should not raise."""
@@ -175,8 +186,8 @@ class TestAIMetrics:
         m = AIMetrics(service_name="test-engine")
         m.record_gpu_lock(wait_seconds=0.1, held_seconds=2.5, fiber_id="carros")
 
-    def test_record_window(self):
-        """record_window should not raise."""
+    def test_record_window_with_speed(self):
+        """record_window should accept speed_median_kmh."""
         from shared.ai_metrics import AIMetrics
 
         m = AIMetrics(service_name="test-engine")
@@ -185,6 +196,7 @@ class TestAIMetrics:
             section="default",
             num_detections=15,
             glrt_peak=5000.0,
+            speed_median_kmh=72.5,
             direction=0,
         )
         m.record_window(
@@ -192,7 +204,38 @@ class TestAIMetrics:
             section="default",
             num_detections=12,
             glrt_peak=4200.0,
+            speed_median_kmh=65.0,
             direction=1,
+        )
+
+    def test_record_window_zero_glrt_not_suppressed(self):
+        """record_window with glrt_peak=0 should still record (not suppress)."""
+        from shared.ai_metrics import AIMetrics
+
+        m = AIMetrics(service_name="test-engine")
+        # Should not raise — 0 is a valid histogram value
+        m.record_window(
+            fiber_id="carros",
+            section="default",
+            num_detections=0,
+            glrt_peak=0.0,
+            speed_median_kmh=float("nan"),
+            direction=0,
+        )
+
+    def test_record_window_nan_speed_skipped(self):
+        """record_window with NaN speed should not record speed histogram."""
+        from shared.ai_metrics import AIMetrics
+
+        m = AIMetrics(service_name="test-engine")
+        # NaN speed should be silently skipped (fast NaN check: x != x)
+        m.record_window(
+            fiber_id="carros",
+            section="default",
+            num_detections=0,
+            glrt_peak=0.0,
+            speed_median_kmh=float("nan"),
+            direction=0,
         )
 
     def test_record_error(self):
@@ -201,3 +244,34 @@ class TestAIMetrics:
 
         m = AIMetrics(service_name="test-engine")
         m.record_error("batch_processing", fiber_id="carros", section="default")
+
+    def test_record_error_gpu_timeout(self):
+        """record_error with gpu_lock_timeout type should not raise."""
+        from shared.ai_metrics import AIMetrics
+
+        m = AIMetrics(service_name="test-engine")
+        m.record_error("gpu_lock_timeout", fiber_id="carros")
+
+    def test_record_error_counting_failure(self):
+        """record_error with counting_failure type should not raise."""
+        from shared.ai_metrics import AIMetrics
+
+        m = AIMetrics(service_name="test-engine")
+        m.record_error("counting_failure", fiber_id="carros", section="202Bis")
+
+    def test_record_model_fallback(self):
+        """record_model_fallback should not raise."""
+        from shared.ai_metrics import AIMetrics
+
+        m = AIMetrics(service_name="test-engine")
+        m.record_model_fallback("dtan_custom", fiber_id="mathis")
+
+    def test_attrs_no_service_name(self):
+        """_attrs should not include service_name (it's in OTEL Resource)."""
+        from shared.ai_metrics import AIMetrics
+
+        m = AIMetrics(service_name="test-engine")
+        attrs = m._attrs("carros", "default")
+        assert "service_name" not in attrs
+        assert attrs["fiber_id"] == "carros"
+        assert attrs["section"] == "default"

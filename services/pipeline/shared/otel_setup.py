@@ -26,16 +26,21 @@ import os
 import time
 
 from opentelemetry import metrics, trace
+from opentelemetry._logs import set_logger_provider
 from opentelemetry.baggage import get_baggage, set_baggage
 from opentelemetry.baggage.propagation import W3CBaggagePropagator
+from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
 from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.logging import LoggingInstrumentor
 from opentelemetry.propagate import set_global_textmap
 from opentelemetry.propagators.b3 import B3MultiFormat
 from opentelemetry.propagators.composite import CompositePropagator
+from opentelemetry.sdk._logs import LoggerProvider
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.metrics.view import ExplicitBucketHistogramAggregation, View
 from opentelemetry.sdk.resources import (
     DEPLOYMENT_ENVIRONMENT,
     SERVICE_NAME,
@@ -124,8 +129,64 @@ def setup_otel(service_name: str, service_version: str = "1.0.0") -> None:
         export_interval_millis=10000,  # Export every 10 seconds
     )
 
-    meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
+    # Histogram bucket boundaries tuned to actual value distributions.
+    # The OTEL SDK defaults (0, 5, 10, 25, ...) are for millisecond HTTP latency
+    # and produce meaningless quantiles for our second-scale AI stage timings.
+    views = [
+        # AI stage durations: 1ms to 10s (preprocess ~50ms, DTAN ~200-500ms)
+        View(
+            instrument_name="ai.stage.*",
+            aggregation=ExplicitBucketHistogramAggregation(
+                boundaries=[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
+            ),
+        ),
+        # GPU lock times: 0 to 30s (wait can spike under contention)
+        View(
+            instrument_name="ai.gpu_lock.*",
+            aggregation=ExplicitBucketHistogramAggregation(
+                boundaries=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0]
+            ),
+        ),
+        # Message processing: 10ms to 60s (total batch wall-clock)
+        View(
+            instrument_name="message.processing.duration",
+            aggregation=ExplicitBucketHistogramAggregation(
+                boundaries=[0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0, 30.0, 60.0]
+            ),
+        ),
+        # Detection count per window: 0 to 100
+        View(
+            instrument_name="ai.window.detections",
+            aggregation=ExplicitBucketHistogramAggregation(
+                boundaries=[0, 1, 2, 5, 10, 20, 50, 100]
+            ),
+        ),
+        # GLRT peak per window: 0 to 50000
+        View(
+            instrument_name="ai.window.glrt_peak",
+            aggregation=ExplicitBucketHistogramAggregation(
+                boundaries=[0, 100, 500, 1000, 2000, 5000, 10000, 20000, 50000]
+            ),
+        ),
+        # Speed median per window: 0 to 200 km/h
+        View(
+            instrument_name="ai.window.speed_median",
+            aggregation=ExplicitBucketHistogramAggregation(
+                boundaries=[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 120, 150, 200]
+            ),
+        ),
+    ]
+
+    meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader], views=views)
     metrics.set_meter_provider(meter_provider)
+
+    # Setup log export to Loki via OTLP (same endpoint as traces/metrics).
+    # Resource attributes (service_name, environment) become Loki labels,
+    # enabling queries like {service_name="ai-engine"}.
+    log_exporter = OTLPLogExporter(endpoint=otlp_endpoint, insecure=otlp_insecure)
+    log_provider = LoggerProvider(resource=resource)
+    log_provider.add_log_record_processor(BatchLogRecordProcessor(log_exporter))
+    set_logger_provider(log_provider)
 
     # Setup context propagation (trace context + baggage for correlation IDs)
     set_global_textmap(
@@ -142,8 +203,14 @@ def setup_otel(service_name: str, service_version: str = "1.0.0") -> None:
     log_level = os.getenv("LOG_LEVEL", "INFO").upper()
     logging.getLogger().setLevel(getattr(logging, log_level, logging.INFO))
 
-    # Setup logging instrumentation (adds trace_id, span_id to logs)
-    LoggingInstrumentor().instrument(set_logging_format=True)
+    # Setup logging instrumentation — bridges Python logging to OTLP.
+    # Adds trace_id + span_id to log records and exports them via the
+    # LoggerProvider above. set_logging_format=True rewrites the log
+    # format to include trace context.
+    LoggingInstrumentor().instrument(
+        set_logging_format=True,
+        log_level=getattr(logging, log_level, logging.INFO),
+    )
 
     # Add correlation ID filter to all log handlers
     correlation_filter = CorrelationFilter()
