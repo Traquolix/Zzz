@@ -165,7 +165,7 @@ def setup_otel(service_name: str, service_version: str = "1.0.0") -> None:
         View(
             instrument_name="ai.window.glrt_peak",
             aggregation=ExplicitBucketHistogramAggregation(
-                boundaries=[0, 100, 500, 1000, 2000, 5000, 10000, 20000, 50000]
+                boundaries=[0, 100, 500, 1000, 2000, 5000, 10000, 25000, 50000, 100000, 250000]
             ),
         ),
         # Speed median per window: 0 to 200 km/h

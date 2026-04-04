@@ -460,7 +460,6 @@ class AIEngineService(RollingBufferedTransformer):
                         )
                 t_count = time.time() - t_count
                 t_counting_total += t_count
-                self.ai_metrics.record_stage("counting", t_count, meta["fiber_id"], meta["section"])
 
             output_messages = self._create_detection_messages(
                 meta["fiber_id"],
@@ -468,6 +467,9 @@ class AIEngineService(RollingBufferedTransformer):
                 ctx,
             )
             results.append((all_detections, output_messages))
+        # Record counting total once per fiber batch (not per section)
+        if t_counting_total > 0:
+            self.ai_metrics.record_stage("counting", t_counting_total, fiber_id, "")
         # Postprocess time excludes counting (counted separately above)
         t_post = max(0.0, time.time() - t_post - t_counting_total)
         self.ai_metrics.record_stage("postprocess", t_post, fiber_id, "")
