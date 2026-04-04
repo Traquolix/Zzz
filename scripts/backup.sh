@@ -79,7 +79,7 @@ die() {
     exit 1
 }
 
-COMPOSE="docker compose -f ${SEQUOIA_DIR}/docker-compose.yml"
+COMPOSE="docker compose -f ${SEQUOIA_DIR}/docker-compose.infra.yml"
 
 # Verify containers are running
 ${COMPOSE} ps --status running --format '{{.Name}}' | grep -q postgres \

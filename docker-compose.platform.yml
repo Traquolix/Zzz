@@ -1,0 +1,80 @@
+# Platform backend (Django).
+# Start with: docker compose -f docker-compose.platform.yml up -d
+# Or via Makefile: make up-platform
+# Requires: make up-infra (PostgreSQL, ClickHouse, Redis must be reachable on sequoia-internal)
+
+services:
+
+  platform-backend:
+    build:
+      context: services/platform/backend
+      dockerfile: Dockerfile
+      args:
+        HTTP_PROXY: ${HTTP_PROXY:-}
+        HTTPS_PROXY: ${HTTPS_PROXY:-}
+        NO_PROXY: ${NO_PROXY:-}
+        GIT_SHA: ${GIT_SHA:-dev}
+    container_name: platform-backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:8001:8001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    environment:
+      DJANGO_SETTINGS_MODULE: sequoia.settings.prod
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+      # PostgreSQL
+      POSTGRES_DB: ${POSTGRES_DB:-sequoia}
+      POSTGRES_USER: ${POSTGRES_USER:-sequoia}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      # ClickHouse
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_HTTP_PORT: 8123
+      CLICKHOUSE_DATABASE: sequoia
+      CLICKHOUSE_USER: sequoia
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      # Kafka
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      # Redis / Channels
+      REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
+      # Frontend URL (for CORS)
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      # JWT keys (file-based for Docker Secrets compatibility)
+      JWT_SIGNING_KEY_FILE: ${JWT_SIGNING_KEY_FILE:-}
+      JWT_VERIFYING_KEY_FILE: ${JWT_VERIFYING_KEY_FILE:-}
+      # CORS
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost}
+      # SSL settings
+      SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-true}
+      # Data directory for fiber cables, infrastructure config
+      SEQUOIA_DATA_DIR: /infrastructure
+      # Schema Registry for Kafka Avro deserialization
+      SCHEMA_REGISTRY_URL: http://schema-registry:8081
+      no_proxy: localhost,127.0.0.1,kafka,schema-registry,postgres,clickhouse,redis,otel-lgtm
+      NO_PROXY: localhost,127.0.0.1,kafka,schema-registry,postgres,clickhouse,redis,otel-lgtm
+    volumes:
+      - ./infrastructure:/infrastructure:ro
+      - ./services/pipeline/config/fibers.yaml:/app/pipeline_config/fibers.yaml:ro
+      - ./services/platform/backend/data/shm:/app/data/shm:ro
+      - ./services/platform/backend/media:/app/media:ro
+      - ./secrets:/app/secrets:ro
+    networks:
+      - internal
+      - default
+
+networks:
+  internal:
+    external: true
+    name: sequoia-internal
+  default:
+    external: true
+    name: sequoia-default

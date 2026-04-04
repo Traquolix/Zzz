@@ -52,33 +52,32 @@ jobs:
       - name: Ensure infrastructure is running
         run: |
           cd ${{ env.DEPLOY_DIR }}
-          docker compose up -d kafka postgres redis clickhouse otel-lgtm
-          docker compose up -d kafka-setup schema-registry kafka-ui
+          docker compose -f docker-compose.infra.yml up -d
 
-      - name: Rebuild and restart application services
+      - name: Rebuild and restart pipeline services
         run: |
           cd ${{ env.DEPLOY_DIR }}
-          APP_SERVICES="platform-backend processor ai-engine"
-          docker compose build --parallel $APP_SERVICES
-          docker compose up -d --no-deps --force-recreate $APP_SERVICES
+          docker compose -f docker-compose.pipeline.yml build --parallel
+          docker compose -f docker-compose.pipeline.yml up -d --force-recreate
+
+      - name: Rebuild and restart platform backend
+        run: |
+          cd ${{ env.DEPLOY_DIR }}
+          docker compose -f docker-compose.platform.yml build
+          docker compose -f docker-compose.platform.yml up -d --force-recreate
 
       - name: Run migrations
         run: |
           cd ${{ env.DEPLOY_DIR }}
-          docker compose exec -T platform-backend python manage.py migrate --noinput
+          docker compose -f docker-compose.platform.yml exec -T platform-backend python manage.py migrate --noinput
 
       - name: Health check
         id: health
         run: |
           cd ${{ env.DEPLOY_DIR }}
 
-          # Discover services that define a healthcheck
-          SERVICES=$(docker compose ps --format json | jq -r 'select(.Health != "") | .Name')
-          if [ -z "$SERVICES" ]; then
-            echo "WARNING: No services with healthchecks found"
-            echo "healthy=true" >> $GITHUB_OUTPUT
-            exit 0
-          fi
+          # Check containers with healthchecks by name (services span multiple compose files)
+          SERVICES="kafka schema-registry postgres redis clickhouse platform-backend processor ai-engine"
 
           echo "Waiting for services to become healthy (timeout 120s)..."
           TIMEOUT=120
@@ -118,9 +117,10 @@ jobs:
           cd ${{ env.DEPLOY_DIR }}
           echo "ROLLING BACK to ${{ steps.pre_deploy.outputs.sha_before }}"
           git reset --hard ${{ steps.pre_deploy.outputs.sha_before }}
-          APP_SERVICES="platform-backend processor ai-engine"
-          docker compose build --parallel $APP_SERVICES
-          docker compose up -d --no-deps --force-recreate $APP_SERVICES
+          docker compose -f docker-compose.pipeline.yml build --parallel
+          docker compose -f docker-compose.pipeline.yml up -d --force-recreate
+          docker compose -f docker-compose.platform.yml build
+          docker compose -f docker-compose.platform.yml up -d --force-recreate
           echo "Rollback complete. Failed services were: ${{ steps.health.outputs.failed_services }}"
           exit 1
 
