@@ -27,7 +27,7 @@ except ImportError:
 from .constants import GLRT_EDGE_SAFETY_SAMPLES
 from .utils import correlation_threshold, count_peaks_in_segment, find_ind
 
-_logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 
 def _build_speed_kernel():

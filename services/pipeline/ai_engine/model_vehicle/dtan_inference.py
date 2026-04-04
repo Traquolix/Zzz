@@ -4,19 +4,14 @@ Handles the core DTAN pipeline steps:
 1. split_channel_overlap -> spatial windows
 2. per-window energy normalization
 3. predict_theta -> DTAN forward pass
-4. align_window -> aligned channels
+4. align_window / align_window_shift -> aligned channels
 5. comp_speed -> absolute speeds from grid_t
 """
 
 from __future__ import annotations
 
 import numpy as np
-
-try:
-    import torch
-    TORCH_AVAILABLE = True
-except ImportError:
-    TORCH_AVAILABLE = False
+import torch
 
 from .constants import DEFAULT_EPSILON, SPEED_CONVERSION_FACTOR
 
@@ -52,38 +47,30 @@ class DTANInference:
         Returns:
             3D array (num_windows, Nch, time_samples)
         """
-        C, _ = x.shape
+        C, T = x.shape
         step = self.Nch - self.overlap_space
+
+        if C < self.Nch:
+            return np.empty((0, self.Nch, T), dtype=x.dtype)
 
         max_complete_windows = (C - self.Nch) // step + 1
         usable_channels = min(C, (max_complete_windows - 1) * step + self.Nch)
+        x = x[:usable_channels, :]
 
-        if usable_channels < C:
-            x = x[:usable_channels, :]
-            C = usable_channels
+        # Sliding window view: strided view over channel axis
+        from numpy.lib.stride_tricks import sliding_window_view
 
-        start_indices = np.arange(0, C, step)
-        end_indices = start_indices + self.Nch
-
-        valid_windows = end_indices <= C
-        start_indices = start_indices[valid_windows]
-        end_indices = end_indices[valid_windows]
-
-        num_windows = len(start_indices)
-        result = np.empty((num_windows, self.Nch, x.shape[1]), dtype=x.dtype)
-
-        for i, (start, end) in enumerate(zip(start_indices, end_indices)):
-            result[i] = x[start:end, :]
-
-        return result
+        windows = sliding_window_view(x, self.Nch, axis=0)  # (C-Nch+1, T, Nch)
+        windows = windows[::step]  # subsample by step
+        # copy needed: sliding_window_view returns a read-only view
+        return windows.transpose(0, 2, 1).copy()  # (num_windows, Nch, T)
 
     def predict_theta(self, data_window: np.ndarray) -> tuple:
-        """Predicts transformation parameters from data.
+        """Predict transformation parameters via the CNN+RNN+FC head.
 
-        Uses only the CNN+RNN+FC head (no CPAB transform in the forward pass).
-        The grid transform is computed separately using the cached alignment grid,
-        eliminating a redundant CPAB integration + interpolation that the old path
-        performed just to discard the interpolated output.
+        The grid transform is computed separately using the cached alignment
+        grid, skipping the redundant CPAB integration + interpolation that
+        the old full-model forward pass performed.
 
         Args:
             data_window: Input data (num_windows, Nch, time_samples)
@@ -93,16 +80,14 @@ class DTANInference:
         """
         batch_size = self.model_args.batch_size
         device = self.model_args.device_name
+        n_pairs = self.Nch - 1
 
         data_tensor = torch.from_numpy(data_window).float().to(device, non_blocking=True)
 
-        n_pairs = self.Nch - 1
+        thetas_list = []
+        grid_t_list = []
 
         with torch.no_grad():
-
-            test_thetas_list = []
-            test_grid_t_list = []
-
             for start in range(0, len(data_tensor), batch_size):
                 batch = data_tensor[start : start + batch_size]
                 thetas = self.model.predict_thetas(batch)
@@ -113,39 +98,39 @@ class DTANInference:
                 grid_t_flat = self.T.transform_grid(self._align_grid, thetas_flat)
                 grid_t = grid_t_flat.squeeze(1).reshape(b, n_pairs, self.window_size)
 
-                test_thetas_list.append(thetas.detach().cpu())
-                test_grid_t_list.append(grid_t.detach().cpu().numpy())
+                thetas_list.append(thetas.detach().cpu())
+                grid_t_list.append(grid_t.detach().cpu().numpy())
 
-        thetas = torch.cat(test_thetas_list, dim=0)
-        grid_t = np.vstack(test_grid_t_list)
-
-        return thetas, grid_t
+        return torch.cat(thetas_list, dim=0), np.vstack(grid_t_list)
 
     def align_window(
         self,
         space_split: np.ndarray,
-        thetas_in: "torch.Tensor",
+        thetas_in: torch.Tensor,
         Nch: int,
         align_channel_idx: int,
-    ) -> "torch.Tensor":
-        """Aligns data window using CPAB transformation parameters.
+    ) -> torch.Tensor:
+        """Align data window using iterative CPAB transformation.
+
+        Iteratively warps channels outward from the reference channel using
+        CPAB ODE integration. Called with Nch=self.Nch for signal alignment
+        and Nch=self.Nch-1 for speed field alignment.
 
         Args:
             space_split: Input data (num_windows, Nch, time_samples)
             thetas_in: CPAB transformation parameters
-            Nch: Number of channels
+            Nch: Number of channels in this tensor (may differ from self.Nch)
             align_channel_idx: Reference channel index
 
         Returns:
-            Aligned data tensor
+            Aligned data tensor on GPU
         """
+        device = self.model_args.device_name
         dim = space_split.shape
         N_theta = thetas_in.shape[2]
 
-        thetas = thetas_in.to(self.model_args.device_name).to(dtype=torch.float32)
-        space_split = torch.from_numpy(space_split).to(self.model_args.device_name).to(dtype=torch.float32)
-        output = torch.clone(space_split)
-
+        thetas = thetas_in.to(device, dtype=torch.float32)
+        output = torch.from_numpy(space_split).to(device, dtype=torch.float32)
         output = torch.flatten(output, start_dim=0, end_dim=1).unsqueeze(dim=1)
 
         first_to_ref = align_channel_idx
@@ -153,8 +138,7 @@ class DTANInference:
 
         for i in range(max(first_to_ref, Nch - end_to_ref - 1)):
             nbr_zeros = end_to_ref - first_to_ref + 1
-
-            zeros = torch.zeros((dim[0], nbr_zeros, N_theta), device=self.model_args.device_name)
+            zeros = torch.zeros((dim[0], nbr_zeros, N_theta), device=device)
 
             thetas_flatten = torch.cat(
                 (
@@ -164,7 +148,6 @@ class DTANInference:
                 ),
                 dim=1,
             )
-
             thetas_flatten = torch.flatten(thetas_flatten, start_dim=0, end_dim=1)
 
             grid_t = self.T.transform_grid(self._align_grid, thetas_flatten)
@@ -180,13 +163,12 @@ class DTANInference:
         space_split: np.ndarray,
         grid_t: np.ndarray,
         align_channel_idx: int,
-    ) -> "torch.Tensor":
+    ) -> torch.Tensor:
         """Align channels using constant time-shift derived from grid_t.
 
-        Instead of iterative CPAB ODE integration, computes the median
-        per-pair time displacement from grid_t and applies a linear
-        sub-sample shift to each channel. ~40x faster than CPAB alignment
-        with 99.9% GLRT correlation on highway traffic data.
+        Computes the median per-pair time displacement from the deformed grid
+        and applies a vectorized linear sub-sample shift. Much faster than
+        CPAB alignment with >99% GLRT correlation.
 
         Args:
             space_split: Input data (num_windows, Nch, time_samples)
@@ -197,45 +179,43 @@ class DTANInference:
             Aligned data tensor (same shape as input)
         """
         n_windows, Nch, T = space_split.shape
+        device = self.model_args.device_name
 
-        # Compute per-pair median shift in samples from the grid deformation
+        # Per-pair median shift in samples: (n_windows, n_pairs)
         delta = (grid_t - self.uniform_grid) * self.window_size
-        median_shift = np.median(delta, axis=2)  # (n_windows, n_pairs)
+        median_shift = np.median(delta, axis=2)
 
-        sp_tensor = torch.from_numpy(space_split).float()
-        aligned = torch.clone(sp_tensor)
-        indices = torch.arange(T, dtype=torch.float32)
+        # Cumulative shift per channel relative to align_channel_idx.
+        # pair i connects channel i to channel i+1, so cumsum gives
+        # the shift from channel 0 to channel k. We offset by the
+        # reference channel's cumulative value so it becomes zero there.
+        cumshift = np.zeros((n_windows, Nch), dtype=np.float32)
+        cumshift[:, 1:] = np.cumsum(median_shift, axis=1)
+        ref_shift = cumshift[:, align_channel_idx : align_channel_idx + 1]
+        cumshift = -(cumshift - ref_shift)  # shift *towards* reference
 
-        for ch in range(Nch):
-            if ch == align_channel_idx:
-                continue
+        # Move everything to GPU in one shot
+        sp = torch.from_numpy(space_split).float().to(device, non_blocking=True)
+        shifts = torch.from_numpy(cumshift).to(device, non_blocking=True)
 
-            # Cumulative shift from reference channel to this channel
-            if ch < align_channel_idx:
-                shifts = np.sum(median_shift[:, ch:align_channel_idx], axis=1)
-            else:
-                shifts = -np.sum(median_shift[:, align_channel_idx:ch], axis=1)
+        # Build shifted index grid: (n_windows, Nch, T)
+        base = torch.arange(T, dtype=torch.float32, device=device)
+        shifted = base + shifts.unsqueeze(2)  # broadcast (W,C,1) + (W,C,T)
+        shifted = shifted.clamp(0, T - 1)
 
-            # Vectorized sub-sample shift via linear interpolation
-            shifts_t = torch.from_numpy(shifts).float()
-            shifted_indices = indices.unsqueeze(0) + shifts_t.unsqueeze(1)
-            shifted_indices = shifted_indices.clamp(0, T - 1)
+        # Linear interpolation — single batched gather, no Python loop
+        idx0 = shifted.long().clamp(0, T - 2)
+        idx1 = idx0 + 1
+        frac = shifted - idx0.float()
 
-            idx0 = shifted_indices.long().clamp(0, T - 2)
-            idx1 = idx0 + 1
-            frac = shifted_indices - idx0.float()
-
-            signal = sp_tensor[:, ch, :]
-            v0 = torch.gather(signal, 1, idx0)
-            v1 = torch.gather(signal, 1, idx1)
-            aligned[:, ch, :] = v0 * (1 - frac) + v1 * frac
-
-        return aligned
+        v0 = torch.gather(sp, 2, idx0)
+        v1 = torch.gather(sp, 2, idx1)
+        return v0 + frac * (v1 - v0)
 
     def comp_speed(self, grid_t: np.ndarray) -> np.ndarray:
-        """Calculates vehicle speeds from transformed grid data.
+        """Calculate vehicle speeds from transformed grid data.
 
-        Matches notebook: speed = abs(3.6 * fs * gauge / delta)
+        speed = abs(3.6 * fs * gauge / delta)
 
         Args:
             grid_t: Transformed grid data
@@ -247,7 +227,4 @@ class DTANInference:
         delta *= self.window_size
         delta += self.eps
 
-        speed_section = self.speed_scaling / delta
-        speed_section = np.abs(speed_section)
-
-        return speed_section
+        return np.abs(self.speed_scaling / delta)

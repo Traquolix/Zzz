@@ -276,9 +276,9 @@ class VehicleSpeedEstimator:
             )
             aligned_speed = self._dtan.align_window(
                 all_speed, thetas[:, :-1, :], self.Nch - 1, align_channel_idx
-            ).detach().cpu().numpy()
+            ).cpu().numpy()
 
-        glrt_per_pair = self._glrt.apply_glrt(aligned).detach().cpu().numpy()
+        glrt_per_pair = self._glrt.apply_glrt(aligned).cpu().numpy()
 
         binary_filter = correlation_threshold(glrt_per_pair, corr_threshold=self.corr_threshold)
         filtered_speed, _ = self._speed_filter.filtering_speed(aligned_speed, binary_filter)
@@ -297,7 +297,7 @@ class VehicleSpeedEstimator:
         trimmed_filtered = agg_speed[:, np.newaxis, :]
 
         trimmed_glrt = glrt_summed[:, trim_start:trim_end]
-        aligned_np = aligned.detach().cpu().numpy() if hasattr(aligned, 'detach') else aligned
+        aligned_np = aligned.cpu().numpy() if hasattr(aligned, "cpu") else aligned
         trimmed_aligned = aligned_np[..., trim_start:trim_end]
         trimmed_date = date_window[trim_start:trim_end]
         trimmed_date_ns = date_window_ns[trim_start:trim_end] if date_window_ns is not None else None
@@ -474,11 +474,11 @@ class VehicleSpeedEstimator:
             )
             aligned_speed = self._dtan.align_window(
                 all_speed, thetas[:, :-1, :], self.Nch - 1, align_channel_idx
-            ).detach().cpu().numpy()
+            ).cpu().numpy()
         t_align = _time.perf_counter() - t0
 
         t0 = _time.perf_counter()
-        glrt_per_pair = self._glrt.apply_glrt(aligned).detach().cpu().numpy()
+        glrt_per_pair = self._glrt.apply_glrt(aligned).cpu().numpy()
         t_glrt = _time.perf_counter() - t0
 
         stage_times = {
