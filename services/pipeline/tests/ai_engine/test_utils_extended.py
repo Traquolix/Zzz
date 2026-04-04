@@ -157,58 +157,47 @@ class TestAIMetrics:
         """AIMetrics should instantiate without error."""
         from shared.ai_metrics import AIMetrics
 
-        metrics = AIMetrics(service_name="test-engine")
-        assert metrics.service_name == "test-engine"
+        m = AIMetrics(service_name="test-engine")
+        assert m.service_name == "test-engine"
 
-    def test_record_inference(self):
-        """record_inference should not raise."""
+    def test_record_stage(self):
+        """record_stage should not raise for all valid stages."""
         from shared.ai_metrics import AIMetrics
 
-        metrics = AIMetrics(service_name="test-engine")
-        # Should not raise (OTel may be a no-op in test context)
-        metrics.record_inference(
-            duration_seconds=0.5,
-            fiber_id="carros",
-            section="default",
-            num_detections=3,
-        )
+        m = AIMetrics(service_name="test-engine")
+        for stage in ["preprocess", "predict_theta", "align", "glrt", "postprocess"]:
+            m.record_stage(stage, 0.5, fiber_id="carros", section="default")
 
-    def test_record_vehicle(self):
-        """record_vehicle should not raise."""
+    def test_record_gpu_lock(self):
+        """record_gpu_lock should not raise."""
         from shared.ai_metrics import AIMetrics
 
-        metrics = AIMetrics(service_name="test-engine")
-        metrics.record_vehicle(
+        m = AIMetrics(service_name="test-engine")
+        m.record_gpu_lock(wait_seconds=0.1, held_seconds=2.5, fiber_id="carros")
+
+    def test_record_window(self):
+        """record_window should not raise."""
+        from shared.ai_metrics import AIMetrics
+
+        m = AIMetrics(service_name="test-engine")
+        m.record_window(
             fiber_id="carros",
             section="default",
+            num_detections=15,
+            glrt_peak=5000.0,
             direction=0,
-            speed_kmh=65.0,
         )
-
-    def test_record_glrt_peak(self):
-        """record_glrt_peak should not raise."""
-        from shared.ai_metrics import AIMetrics
-
-        metrics = AIMetrics(service_name="test-engine")
-        metrics.record_glrt_peak(
+        m.record_window(
             fiber_id="carros",
             section="default",
-            peak_value=5000.0,
+            num_detections=12,
+            glrt_peak=4200.0,
+            direction=1,
         )
 
-    def test_cache_metrics(self):
-        """Cache hit/miss/eviction recording should not raise."""
+    def test_record_error(self):
+        """record_error should not raise."""
         from shared.ai_metrics import AIMetrics
 
-        metrics = AIMetrics(service_name="test-engine")
-        metrics.record_cache_hit("dtan_unified")
-        metrics.record_cache_miss("dtan_v2")
-        metrics.record_cache_eviction("old_model")
-
-    def test_calibration_status(self):
-        """set_calibration_status should not raise."""
-        from shared.ai_metrics import AIMetrics
-
-        metrics = AIMetrics(service_name="test-engine")
-        metrics.set_calibration_status("carros", enabled=True)
-        metrics.set_calibration_status("mathis", enabled=False)
+        m = AIMetrics(service_name="test-engine")
+        m.record_error("batch_processing", fiber_id="carros", section="default")

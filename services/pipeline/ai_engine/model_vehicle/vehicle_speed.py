@@ -292,15 +292,17 @@ class VehicleSpeedEstimator:
             List of lists of DirectionResult, one inner list per section.
         """
         with self._inference_lock:
-            return self._process_batch_unlocked(sections)
+            results, _ = self._process_batch_unlocked(sections)
+            return results
 
     def _process_batch_unlocked(self, sections):
+        """Returns (results, stage_times)."""
         prepared, valid_indices, fwd_combined, rev_combined, window_counts = (
             self._preprocess_batch(sections)
         )
 
         if fwd_combined is None:
-            return [[] for _ in sections]
+            return [[] for _ in sections], {}
 
         return self._run_inference_and_postprocess(
             sections, prepared, valid_indices,
@@ -311,15 +313,21 @@ class VehicleSpeedEstimator:
         self, sections, prepared, valid_indices,
         fwd_combined, rev_combined, window_counts,
     ):
-        """GPU inference + postprocessing. Caller holds GPU lock if needed."""
-        fwd_results = self._batched_direction(fwd_combined, window_counts)
+        """GPU inference + postprocessing. Caller holds GPU lock if needed.
+
+        Returns:
+            (batch_results, stage_times) where stage_times is from the last
+            _batched_direction call (fwd or rev).
+        """
+        fwd_results, stage_times = self._batched_direction(fwd_combined, window_counts)
         rev_results_list = None
         if self.bidirectional_detection and rev_combined is not None:
-            rev_results_list = self._batched_direction(rev_combined, window_counts)
+            rev_results_list, stage_times = self._batched_direction(rev_combined, window_counts)
 
-        return self._postprocess_batch(
+        results = self._postprocess_batch(
             sections, prepared, valid_indices, fwd_results, rev_results_list
         )
+        return results, stage_times
 
     def _preprocess_batch(self, sections):
         """CPU-only preprocessing: validate, split, normalize.
@@ -400,18 +408,25 @@ class VehicleSpeedEstimator:
         return all_results
 
     def _batched_direction(self, combined_space_split, window_counts):
-        """Run DTAN + GLRT on concatenated space_split, return per-section results."""
+        """Run DTAN + GLRT on concatenated space_split, return per-section results.
+
+        Stores per-stage timing in self._last_stage_times for the caller
+        to report to metrics.
+        """
+        import time as _time
+
         align_channel_idx = (self.Nch - 1) // 2
 
+        t0 = _time.perf_counter()
         thetas, grid_t = self._dtan.predict_theta(combined_space_split)
         all_speed = self._dtan.comp_speed(grid_t)
+        t_predict = _time.perf_counter() - t0
 
+        t0 = _time.perf_counter()
         if self.alignment_method == "shift":
             aligned = self._dtan.align_window_shift(
                 combined_space_split, grid_t, align_channel_idx
             )
-            # Shift alignment puts channels in sync; use unaligned speed
-            # (shift doesn't warp the speed array, only the data for GLRT)
             aligned_speed = all_speed
         else:
             aligned = self._dtan.align_window(
@@ -420,8 +435,17 @@ class VehicleSpeedEstimator:
             aligned_speed = self._dtan.align_window(
                 all_speed, thetas[:, :-1, :], self.Nch - 1, align_channel_idx
             ).detach().cpu().numpy()
+        t_align = _time.perf_counter() - t0
 
+        t0 = _time.perf_counter()
         glrt_per_pair = self._glrt.apply_glrt(aligned).detach().cpu().numpy()
+        t_glrt = _time.perf_counter() - t0
+
+        stage_times = {
+            "predict_theta": t_predict,
+            "align": t_align,
+            "glrt": t_glrt,
+        }
 
         # Split back per section
         results = []
@@ -438,7 +462,7 @@ class VehicleSpeedEstimator:
             results.append((glrt_summed, filtered_speed, sec_aligned))
             offset += count
 
-        return results
+        return results, stage_times
 
     def process_file(self, x: np.ndarray, d: np.ndarray, d_ns: np.ndarray | None = None):
         """Processes a single window of sensor data through the DTAN pipeline.

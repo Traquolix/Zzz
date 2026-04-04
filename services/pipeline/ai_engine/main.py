@@ -316,31 +316,29 @@ class AIEngineService(RollingBufferedTransformer):
                     for msg in output_messages:
                         await self._internal_send(msg)
                     total_outputs += len(output_messages)
-
                     self._analyses_completed += 1
-                    self.ai_metrics.record_inference(
-                        duration_seconds=processing_time / 1000.0 / len(all_batch_meta),
-                        fiber_id=meta["fiber_id"],
-                        section=meta["section"],
-                        num_detections=len(detections),
-                    )
-                    for det_idx, det in enumerate(detections):
-                        self.ai_metrics.record_vehicle(
+
+                    # Per-window summary metrics (not per-detection)
+                    fwd_dets = [d for d in detections if d["direction"] == 0]
+                    rev_dets = [d for d in detections if d["direction"] == 1]
+                    fwd_peak = max((d["glrt_max"] for d in fwd_dets), default=0)
+                    rev_peak = max((d["glrt_max"] for d in rev_dets), default=0)
+
+                    if fwd_dets or not rev_dets:
+                        self.ai_metrics.record_window(
                             fiber_id=meta["fiber_id"],
                             section=meta["section"],
-                            direction=det["direction"],
-                            speed_kmh=det["speed_kmh"],
+                            num_detections=len(fwd_dets),
+                            glrt_peak=fwd_peak,
+                            direction=0,
                         )
-                        self.logger.debug(
-                            "detection",
-                            extra={
-                                "fiber_id": meta["fiber_id"],
-                                "section": meta["section"],
-                                "det_index": det_idx,
-                                "channel": det.get("channel"),
-                                "direction": det["direction"],
-                                "speed_kmh": round(det["speed_kmh"], 1),
-                            },
+                    if rev_dets:
+                        self.ai_metrics.record_window(
+                            fiber_id=meta["fiber_id"],
+                            section=meta["section"],
+                            num_detections=len(rev_dets),
+                            glrt_peak=rev_peak,
+                            direction=1,
                         )
 
                 t_send = processing_time - t_deser - t_infer
@@ -383,15 +381,21 @@ class AIEngineService(RollingBufferedTransformer):
         classify_threshold_factor = self._model_spec.counting.truck_ratio_for_split
 
         # Preprocess on CPU (no GPU needed), then lock only for inference
-        t_gpu = time.time()
+        fiber_id = section_meta[0]["fiber_id"] if section_meta else ""
+        section_name = section_meta[0]["section"] if section_meta else ""
+
+        t_pre = time.time()
         prepared, valid_indices, fwd_combined, rev_combined, window_counts = (
             speed_processor._preprocess_batch(section_inputs)
         )
+        t_pre = time.time() - t_pre
+        self.ai_metrics.record_stage("preprocess", t_pre, fiber_id, section_name)
+
         if fwd_combined is None:
             return []
 
-        with gpu_lock():
-            batch_results = speed_processor._run_inference_and_postprocess(
+        with gpu_lock() as lock_timing:
+            batch_results, stage_times = speed_processor._run_inference_and_postprocess(
                 section_inputs,
                 prepared,
                 valid_indices,
@@ -399,7 +403,13 @@ class AIEngineService(RollingBufferedTransformer):
                 rev_combined,
                 window_counts,
             )
-        t_gpu = (time.time() - t_gpu) * 1000
+        self.ai_metrics.record_gpu_lock(
+            lock_timing.wait_seconds,
+            lock_timing.held_seconds,
+            fiber_id,
+        )
+        for stage, duration in stage_times.items():
+            self.ai_metrics.record_stage(stage, duration, fiber_id, section_name)
 
         t_post = time.time()
         results = []
@@ -469,9 +479,15 @@ class AIEngineService(RollingBufferedTransformer):
                 ctx,
             )
             results.append((all_detections, output_messages))
-        t_post = (time.time() - t_post) * 1000
+        t_post = time.time() - t_post
+        self.ai_metrics.record_stage("postprocess", t_post, fiber_id, section_name)
 
-        self.logger.info(f"Inference breakdown: gpu={t_gpu:.0f}ms, post={t_post:.0f}ms")
+        self.logger.info(
+            f"Inference breakdown: "
+            f"gpu_wait={lock_timing.wait_seconds * 1000:.0f}ms, "
+            f"gpu_held={lock_timing.held_seconds * 1000:.0f}ms, "
+            f"post={t_post * 1000:.0f}ms"
+        )
 
         return results
 
@@ -615,28 +631,29 @@ class AIEngineService(RollingBufferedTransformer):
                 )
 
                 processing_time = (time.time() - start_time) * 1000
-                processing_time_seconds = processing_time / 1000.0
                 self._analyses_completed += 1
 
                 span.set_attribute("output.message_count", len(output_messages))
                 span.set_attribute("processing.time_ms", processing_time)
 
-                # Record AI-specific metrics
-                num_detections = len(detections)
-                self.ai_metrics.record_inference(
-                    duration_seconds=processing_time_seconds,
-                    fiber_id=fiber_id,
-                    section=section,
-                    num_detections=num_detections,
-                )
-
-                # Record individual vehicle detections
-                for det in detections:
-                    self.ai_metrics.record_vehicle(
+                # Per-window summary metrics
+                fwd_dets = [d for d in detections if d["direction"] == 0]
+                rev_dets = [d for d in detections if d["direction"] == 1]
+                if fwd_dets or not rev_dets:
+                    self.ai_metrics.record_window(
                         fiber_id=fiber_id,
                         section=section,
-                        direction=det["direction"],
-                        speed_kmh=det["speed_kmh"],
+                        num_detections=len(fwd_dets),
+                        glrt_peak=max((d["glrt_max"] for d in fwd_dets), default=0),
+                        direction=0,
+                    )
+                if rev_dets:
+                    self.ai_metrics.record_window(
+                        fiber_id=fiber_id,
+                        section=section,
+                        num_detections=len(rev_dets),
+                        glrt_peak=max((d["glrt_max"] for d in rev_dets), default=0),
+                        direction=1,
                     )
 
                 self.logger.info(

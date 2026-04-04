@@ -136,7 +136,7 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: histogram_quantile(0.95, rate(ai_inference_duration_seconds_bucket{service_name=~"ai-engine.*"}[5m])) > 5
+              expr: histogram_quantile(0.95, rate(ai_gpu_lock_held_duration_seconds_bucket{service_name=~"ai-engine.*"}[5m])) > 5
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
