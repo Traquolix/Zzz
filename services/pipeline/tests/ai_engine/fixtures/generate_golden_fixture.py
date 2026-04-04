@@ -32,6 +32,12 @@ sys.path.insert(0, str(PIPELINE_ROOT))
 
 import torch  # noqa: E402
 
+# Match test execution settings for bit-identical results:
+# - Disable torch.compile (conftest.py also disables dynamo)
+# - Disable cudnn.benchmark (prevents non-deterministic algorithm selection)
+torch._dynamo.config.disable = True
+torch.backends.cudnn.benchmark = False
+
 from ai_engine.model_vehicle.model_T import Args_NN_model_all_channels  # noqa: E402
 from ai_engine.model_vehicle.utils import normalize_channel_energy  # noqa: E402
 from ai_engine.model_vehicle.vehicle_speed import VehicleSpeedEstimator  # noqa: E402
@@ -298,19 +304,43 @@ def run_inference_and_save(
 
 
 def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Generate AI engine golden test fixtures")
+    parser.add_argument(
+        "--rerun",
+        action="store_true",
+        help="Re-record reference output from existing golden_input.npz (skips HDF5 loading)",
+    )
+    args = parser.parse_args()
+
     print("=" * 70)
     print("Generating AI Engine Golden Test Fixtures")
     print("=" * 70)
 
-    print("\n[1/3] Loading and preprocessing HDF5 data...")
-    data, fs, gauge = load_and_preprocess()
-    print(f"  Loaded: {data.shape[0]} channels x {data.shape[1]} samples @ {fs:.4f} Hz")
+    golden_input_path = FIXTURE_DIR / "golden_input.npz"
 
-    print("\n[2/3] Extracting 30s golden window...")
-    data_window, timestamps, timestamps_ns = generate_golden_input(data, fs)
-    print(f"  Window: {data_window.shape}")
+    if args.rerun:
+        if not golden_input_path.exists():
+            print(f"ERROR: {golden_input_path} not found. Run without --rerun first.")
+            sys.exit(1)
+        print("\n[1/1] Re-recording from existing golden_input.npz...")
+        data = np.load(golden_input_path)
+        data_window = data["data_window"]
+        timestamps = data["timestamps"]
+        timestamps_ns = data["timestamps_ns"]
+        fs = CONFIG["original_fs"] / CONFIG["downsample_factor"]
+        gauge = CONFIG["gauge_raw"] * CONFIG["spatial_decimation"]
+    else:
+        print("\n[1/3] Loading and preprocessing HDF5 data...")
+        data, fs, gauge = load_and_preprocess()
+        print(f"  Loaded: {data.shape[0]} channels x {data.shape[1]} samples @ {fs:.4f} Hz")
 
-    print("\n[3/3] Running inference and saving fixtures...")
+        print("\n[2/3] Extracting 30s golden window...")
+        data_window, timestamps, timestamps_ns = generate_golden_input(data, fs)
+        print(f"  Window: {data_window.shape}")
+
+    print(f"\n{'[2/2]' if args.rerun else '[3/3]'} Running inference and saving fixtures...")
     run_inference_and_save(data_window, timestamps, timestamps_ns, fs, gauge)
 
     print("\n" + "=" * 70)

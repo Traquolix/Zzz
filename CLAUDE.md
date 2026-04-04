@@ -65,21 +65,40 @@ If any step fails, fix the issue and re-run. Do not report completion until all 
 ### AI Engine Tests
 
 ```bash
-make test              # Run AI engine test suite (243 tests, ~55s)
+make test              # Run AI engine test suite (234 tests)
 ```
 
-Tests run in CI on every PR. The suite includes golden snapshot tests that compare
-inference output against a saved reference from real DAS data.
+Tests run in CI on every PR **on GPU** (`CUDA_VISIBLE_DEVICES=0`, RTX 4000).
+The suite includes golden snapshot tests that compare inference output against
+a saved reference from real DAS data.
 
 **When you update the DTAN model weights, detection thresholds, or preprocessing:**
 
+Golden snapshots must be re-recorded **on the production server** (GPU) because
+CI runs tests on GPU. Snapshots recorded on CPU won't match GPU output due to
+floating-point differences. Both recording and testing run with `torch._dynamo`
+disabled (eager mode) to ensure bit-identical results across runs.
+
 ```bash
-make snapshot-confirm  # Re-record golden baselines from current model
+# 1. Push your code change to a branch
+# 2. On the server, checkout the branch and re-record:
+ssh beaujoin@192.168.99.113
+cd /home/beaujoin/actions-runner/_work/Zzz/Zzz
+git fetch origin <branch> && git checkout <branch>
+CUDA_VISIBLE_DEVICES=0 make snapshot-confirm
+
+# 3. Copy the updated snapshots back to your local machine:
+scp beaujoin@192.168.99.113:/home/beaujoin/actions-runner/_work/Zzz/Zzz/services/pipeline/tests/ai_engine/fixtures/golden_*_x86_64.npz \
+    services/pipeline/tests/ai_engine/fixtures/
+
+# 4. Commit the updated .npz files into your PR
+git add services/pipeline/tests/ai_engine/fixtures/*.npz
+git commit -m "test: update AI engine golden snapshots"
 ```
 
-This regenerates `services/pipeline/tests/ai_engine/fixtures/*.npz`. Review the
-changes (detection count, speed range), then commit the updated fixtures alongside
-your code change. If you skip this, the snapshot tests will fail in CI.
+If you skip this, the snapshot tests will fail in CI. `make snapshot-confirm`
+uses `--rerun` (re-records from existing `golden_input.npz`, no HDF5 needed).
+For full regeneration from raw HDF5 source data, use `make snapshot-regenerate`.
 
 ## Makefile — Always Use It
 

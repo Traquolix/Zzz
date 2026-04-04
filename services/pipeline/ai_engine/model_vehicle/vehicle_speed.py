@@ -9,6 +9,7 @@ Thin orchestrator that delegates to:
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from typing import NamedTuple
 
@@ -129,16 +130,48 @@ class VehicleSpeedEstimator:
         # Compile the NN head (CNN+RNN+FC) for faster theta prediction.
         # The CPAB transform is not compiled — it uses custom autograd functions
         # that cause graph breaks. Only the pure NN forward pass is compiled.
-        # Using "default" mode (TorchInductor kernel fusion) on all platforms.
-        # "reduce-overhead" (CUDA graphs) causes transient errors at startup
-        # when multiple fibers trigger concurrent graph captures on the same GPU.
+        #
+        # With CUDA streams, torch._dynamo's tracing is not thread-safe —
+        # concurrent predict_thetas calls from separate streams collide during
+        # the tracing phase. The fix: warm up the compiled function at init
+        # with each expected batch size so tracing completes before any
+        # concurrent execution. After warmup, torch.compile dispatches to
+        # cached kernels without tracing.
         import torch
+
         if hasattr(torch, "compile"):
             try:
+                # Raise cache limit to accommodate all batch sizes across fibers.
+                # Default 8 is too low — each fiber produces a different remainder
+                # batch size, and fwd + rev directions double the unique shapes.
+                torch._dynamo.config.cache_size_limit = 32
+
                 model.predict_thetas = torch.compile(
                     model.predict_thetas, mode="default"
                 )
                 logger.info("DTAN predict_thetas compiled (mode=default)")
+
+                # Warm up torch.compile with all expected batch sizes so tracing
+                # completes before concurrent CUDA streams start. After warmup,
+                # compiled dispatch is pure kernel lookup — no thread-safety issue.
+                device = model_args.device_name
+                bs = model_args.batch_size
+                input_shape = (model_args.Nch, model_args.signal_length)
+                warmup_sizes = {bs}  # full batch is always used
+                # Add typical remainder sizes for 1-6 section fibers
+                for n_sections in range(1, 7):
+                    n_windows = (model_args.N_channels - model_args.Nch + 1) * n_sections
+                    remainder = n_windows % bs
+                    if remainder > 0:
+                        warmup_sizes.add(remainder)
+
+                with torch.no_grad():
+                    for size in sorted(warmup_sizes):
+                        dummy = torch.randn(size, *input_shape, device=device)
+                        model.predict_thetas(dummy)
+                logger.info(
+                    f"torch.compile warmup complete: {sorted(warmup_sizes)} batch sizes cached"
+                )
             except Exception as e:
                 logger.warning(f"torch.compile failed (non-critical): {e}")
 

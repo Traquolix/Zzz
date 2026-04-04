@@ -61,11 +61,14 @@ setup-pipeline: _check-python ## Set up pipeline venv
 	@if [ ! -d "$(PIPELINE_DIR)/.venv" ]; then \
 		echo "==> Creating pipeline venv ($(SYSTEM_PYTHON))..."; \
 		$(SYSTEM_PYTHON) -m venv $(PIPELINE_DIR)/.venv; \
+		echo "==> Upgrading pip..."; \
+		$(PIPELINE_PY) -m pip install --upgrade pip -q; \
+		echo "==> Installing pipeline dependencies..."; \
+		$(PIPELINE_PY) -m pip install -e "$(PIPELINE_DIR)[dev]" -q; \
+	else \
+		echo "==> Pipeline venv exists, reinstalling editable package only..."; \
+		$(PIPELINE_PY) -m pip install -e "$(PIPELINE_DIR)" --no-deps -q; \
 	fi
-	@echo "==> Upgrading pip..."
-	@$(PIPELINE_PY) -m pip install --upgrade pip -q
-	@echo "==> Installing pipeline dependencies..."
-	$(PIPELINE_PY) -m pip install -e "$(PIPELINE_DIR)[dev]" -q
 
 setup-backend: _check-python ## Set up backend venv
 	@if [ ! -d "$(BACKEND_DIR)/.venv" ]; then \
@@ -140,12 +143,20 @@ test: test-ai-engine ## Run all tests
 test-ai-engine: ## Run AI engine test suite
 	cd $(PIPELINE_DIR) && .venv/bin/python -m pytest tests/ai_engine/ -v --tb=short
 
-snapshot-confirm: ## Re-generate AI engine golden test snapshots after intentional changes
-	cd $(PIPELINE_DIR) && .venv/bin/python tests/ai_engine/fixtures/generate_golden_fixture.py
+test-fast: ## Run AI engine tests excluding slow inference tests
+	cd $(PIPELINE_DIR) && .venv/bin/python -m pytest tests/ai_engine/ -v --tb=short -m "not slow"
+
+snapshot-confirm: ## Re-record golden snapshots from existing input (no HDF5 needed)
+	cd $(PIPELINE_DIR) && .venv/bin/python tests/ai_engine/fixtures/generate_golden_fixture.py --rerun
 	@echo ""
 	@echo "Snapshots updated. Review the changes, then commit:"
 	@echo "  git add services/pipeline/tests/ai_engine/fixtures/*.npz"
 	@echo "  git commit -m 'test: update AI engine golden snapshots'"
+
+snapshot-regenerate: ## Full regeneration from HDF5 source data (requires test_data/)
+	cd $(PIPELINE_DIR) && .venv/bin/python tests/ai_engine/fixtures/generate_golden_fixture.py
+	@echo ""
+	@echo "Snapshots regenerated from HDF5. Review and commit the .npz files."
 
 bench: ## Run AI engine benchmarks, compare to baseline
 	cd $(PIPELINE_DIR) && .venv/bin/python benchmarks/ai_engine/bench.py

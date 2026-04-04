@@ -99,7 +99,6 @@ class DTANInference:
         n_pairs = self.Nch - 1
 
         with torch.no_grad():
-            torch.backends.cudnn.benchmark = True
 
             test_thetas_list = []
             test_grid_t_list = []
