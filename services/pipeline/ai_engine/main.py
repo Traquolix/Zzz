@@ -410,9 +410,7 @@ class AIEngineService(RollingBufferedTransformer):
         t_post = time.time()
         t_counting_total = 0.0
         results = []
-        for _i, (section_results, meta) in enumerate(
-            zip(batch_results, section_meta, strict=False)
-        ):
+        for section_results, meta in zip(batch_results, section_meta, strict=False):
             all_detections = []
             for result in section_results:
                 direction = int(result.direction_mask[0, 0])
