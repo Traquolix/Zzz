@@ -9,7 +9,8 @@
         typecheck typecheck-pipeline typecheck-backend typecheck-frontend \
         test test-ai-engine snapshot-confirm \
         security security-pipeline security-backend security-frontend \
-        ci up down logs rebuild shell clean dev dev-deps dev-stop dev-backend dev-frontend \
+        ci up up-infra up-pipeline up-platform down down-infra down-pipeline down-platform \
+        logs rebuild shell clean dev dev-deps dev-stop dev-backend dev-frontend \
         ch-migrate backup restore _check-python
 
 SHELL := /bin/bash
@@ -186,35 +187,58 @@ security-frontend: ## Security scan frontend
 ci: lint typecheck test security ## Full CI pipeline: lint + typecheck + test + security
 
 # ---------------------------------------------------------------------------
-# Docker Compose lifecycle
+# Docker Compose lifecycle (split into infra / pipeline / platform)
 # ---------------------------------------------------------------------------
-up: ## Start all services
-	docker compose up -d
+COMPOSE_INFRA    = docker compose -f docker-compose.infra.yml
+COMPOSE_PIPELINE = docker compose -f docker-compose.pipeline.yml
+COMPOSE_PLATFORM = docker compose -f docker-compose.platform.yml
+
+up: up-infra up-pipeline up-platform ## Start all services
+
+up-infra: ## Start shared infrastructure (Kafka, ClickHouse, PG, Redis, otel)
+	$(COMPOSE_INFRA) up -d
+
+up-pipeline: ## Start DAS pipeline (processor, ai-engine)
+	$(COMPOSE_PIPELINE) up -d
+
+up-platform: ## Start platform backend
+	$(COMPOSE_PLATFORM) up -d
 
 down: ## Stop all services
-	docker compose down
+	-$(COMPOSE_PLATFORM) down
+	-$(COMPOSE_PIPELINE) down
+	$(COMPOSE_INFRA) down
+
+down-infra: ## Stop shared infrastructure only
+	$(COMPOSE_INFRA) down
+
+down-pipeline: ## Stop pipeline only
+	$(COMPOSE_PIPELINE) down
+
+down-platform: ## Stop platform only
+	$(COMPOSE_PLATFORM) down
 
 logs: ## Tail logs for a service (usage: make logs SERVICE=platform-backend)
-	docker compose logs -f $(SERVICE)
+	$(COMPOSE_INFRA) logs -f $(SERVICE) 2>/dev/null || $(COMPOSE_PIPELINE) logs -f $(SERVICE) 2>/dev/null || $(COMPOSE_PLATFORM) logs -f $(SERVICE)
 
 rebuild: ## Rebuild and restart a service (usage: make rebuild SERVICE=processor)
-	docker compose up -d --build --force-recreate $(SERVICE)
+	$(COMPOSE_PIPELINE) up -d --build --force-recreate $(SERVICE) 2>/dev/null || $(COMPOSE_PLATFORM) up -d --build --force-recreate $(SERVICE)
 
 shell: ## Open a shell in a service container (usage: make shell SERVICE=platform-backend)
-	docker compose exec $(SERVICE) /bin/sh
+	$(COMPOSE_INFRA) exec $(SERVICE) /bin/sh 2>/dev/null || $(COMPOSE_PIPELINE) exec $(SERVICE) /bin/sh 2>/dev/null || $(COMPOSE_PLATFORM) exec $(SERVICE) /bin/sh
 
 # ---------------------------------------------------------------------------
 # Local Development
 # ---------------------------------------------------------------------------
 dev: dev-deps ## Start backend + frontend for local development (auto-setup on first run)
-	@trap 'echo ""; echo "==> Shutting down..."; docker compose stop postgres clickhouse redis 2>/dev/null; kill 0' EXIT; \
+	@trap 'echo ""; echo "==> Shutting down..."; $(COMPOSE_INFRA) stop postgres clickhouse redis 2>/dev/null; kill 0' EXIT; \
 	$(MAKE) dev-backend & \
 	$(MAKE) dev-frontend & \
 	wait
 
 dev-stop: ## Stop all local dev services (Docker deps + stale processes)
 	@echo "==> Stopping Docker dependencies..."
-	@docker compose stop postgres clickhouse redis 2>/dev/null || true
+	@$(COMPOSE_INFRA) stop postgres clickhouse redis 2>/dev/null || true
 	@echo "==> Killing stale dev processes..."
 	@pkill -f "uvicorn.*sequoia.asgi" 2>/dev/null || true
 	@pkill -f "vite preview" 2>/dev/null || true
@@ -222,9 +246,9 @@ dev-stop: ## Stop all local dev services (Docker deps + stale processes)
 
 dev-deps: ## Start Docker dependencies for local dev (PostgreSQL + ClickHouse + Redis)
 	@echo "==> Ensuring PostgreSQL, ClickHouse, and Redis are running..."
-	@docker compose up -d postgres clickhouse redis
+	@$(COMPOSE_INFRA) up -d postgres clickhouse redis
 	@echo "==> Waiting for PostgreSQL to be ready..."
-	@until docker compose exec -T postgres pg_isready -U $${POSTGRES_USER:-sequoia} -d $${POSTGRES_DB:-sequoia} > /dev/null 2>&1; do sleep 1; done
+	@until $(COMPOSE_INFRA) exec -T postgres pg_isready -U $${POSTGRES_USER:-sequoia} -d $${POSTGRES_DB:-sequoia} > /dev/null 2>&1; do sleep 1; done
 
 dev-backend: ## Start backend dev server (auto-setup on first run)
 	@pkill -f "uvicorn.*sequoia.asgi" 2>/dev/null || true

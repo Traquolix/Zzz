@@ -33,7 +33,7 @@ CLICKHOUSE_USER="${CLICKHOUSE_USER:-sequoia}"
 CLICKHOUSE_PASSWORD="${CLICKHOUSE_PASSWORD:-}"
 CLICKHOUSE_DB="${CLICKHOUSE_DATABASE:-sequoia}"
 
-COMPOSE="docker compose -f ${SEQUOIA_DIR}/docker-compose.yml"
+COMPOSE="docker compose -f ${SEQUOIA_DIR}/docker-compose.infra.yml"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"

@@ -197,7 +197,9 @@ tailored to this project.
 | File | Purpose |
 |------|---------|
 | `Makefile` | All dev operations — lint, typecheck, setup, dev servers, Docker |
-| `docker-compose.yml` | Full production stack (Kafka, ClickHouse, PostgreSQL, Redis, services) |
+| `docker-compose.infra.yml` | Shared infrastructure (Kafka, ClickHouse, PostgreSQL, Redis, otel) |
+| `docker-compose.pipeline.yml` | DAS pipeline services (processor, ai-engine) |
+| `docker-compose.platform.yml` | Platform backend (Django) |
 | `docs/DAS-PRIMER.md` | DAS physics, domain concepts, data flow, deployment topology |
 | `scripts/server-setup.sh` | Bootstrap a new server (Docker, GPU toolkit, GH runner, backups, nginx) |
 | `scripts/backup.sh` | Nightly DB backup with cron self-install |

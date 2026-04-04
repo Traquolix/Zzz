@@ -63,16 +63,23 @@ ssh "${DEPLOY_BACKEND_HOST}" bash <<REMOTE
     git checkout main
     git reset --hard origin/main
 
-    echo "Rebuilding services..."
+    echo "Ensuring infrastructure is running..."
     export GIT_SHA=\$(git rev-parse --short HEAD)
-    docker compose build --parallel
-    docker compose up -d
+    docker compose -f docker-compose.infra.yml up -d
+
+    echo "Rebuilding pipeline services..."
+    docker compose -f docker-compose.pipeline.yml build --parallel
+    docker compose -f docker-compose.pipeline.yml up -d --force-recreate
+
+    echo "Rebuilding platform backend..."
+    docker compose -f docker-compose.platform.yml build
+    docker compose -f docker-compose.platform.yml up -d --force-recreate
 
     echo "Waiting for health checks..."
     sleep 10
 
     # Check all services are healthy
-    UNHEALTHY=\$(docker compose ps --format json | python3 -c "
+    UNHEALTHY=\$(docker ps --format json | python3 -c "
 import sys, json
 lines = sys.stdin.read().strip().split('\n')
 for line in lines:
