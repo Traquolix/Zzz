@@ -10,6 +10,7 @@
         test test-ai-engine snapshot-confirm \
         security security-pipeline security-backend security-frontend \
         ci up up-infra up-pipeline up-platform down down-infra down-pipeline down-platform \
+        up-preprod down-preprod logs-preprod \
         logs rebuild shell clean dev dev-deps dev-stop dev-backend dev-frontend \
         ch-migrate backup restore _check-python
 
@@ -193,6 +194,11 @@ COMPOSE_INFRA    = docker compose -f docker-compose.infra.yml
 COMPOSE_PIPELINE = docker compose -f docker-compose.pipeline.yml
 COMPOSE_PLATFORM = docker compose -f docker-compose.platform.yml
 
+# Preprod: same compose files, different env, different project name.
+# Base .env provides shared values (Kafka bootstrap, passwords), .env.preprod overrides.
+COMPOSE_PIPELINE_PP = docker compose -f docker-compose.pipeline.yml --env-file .env --env-file .env.preprod -p sequoia-pp
+COMPOSE_PLATFORM_PP = docker compose -f docker-compose.platform.yml --env-file .env --env-file .env.preprod -p sequoia-pp
+
 up: up-infra up-pipeline up-platform ## Start all services
 
 up-infra: ## Start shared infrastructure (Kafka, ClickHouse, PG, Redis, otel)
@@ -217,6 +223,17 @@ down-pipeline: ## Stop pipeline only
 
 down-platform: ## Stop platform only
 	$(COMPOSE_PLATFORM) down
+
+up-preprod: ## Start preprod pipeline + platform (requires: make up-infra)
+	$(COMPOSE_PIPELINE_PP) up -d
+	$(COMPOSE_PLATFORM_PP) up -d
+
+down-preprod: ## Stop preprod pipeline + platform
+	-$(COMPOSE_PLATFORM_PP) down
+	$(COMPOSE_PIPELINE_PP) down
+
+logs-preprod: ## Tail preprod logs (usage: make logs-preprod SERVICE=processor)
+	$(COMPOSE_PIPELINE_PP) logs -f $(SERVICE) 2>/dev/null || $(COMPOSE_PLATFORM_PP) logs -f $(SERVICE)
 
 logs: ## Tail logs for a service (usage: make logs SERVICE=platform-backend)
 	$(COMPOSE_INFRA) logs -f $(SERVICE) 2>/dev/null || $(COMPOSE_PIPELINE) logs -f $(SERVICE) 2>/dev/null || $(COMPOSE_PLATFORM) logs -f $(SERVICE)
