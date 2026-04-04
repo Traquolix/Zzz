@@ -168,22 +168,24 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
     consumer = DeserializingConsumer(
         {
             "bootstrap.servers": bootstrap_servers,
-            "group.id": "sequoia-realtime-bridge",
+            "group.id": settings.KAFKA_CONSUMER_GROUP,
             "auto.offset.reset": "latest",
             "enable.auto.commit": True,
             "session.timeout.ms": 10000,
             "value.deserializer": avro_deserializer,
         }
     )
-    consumer.subscribe(["das.detections"])
+    detections_topic = settings.KAFKA_DETECTIONS_TOPIC
+    consumer.subscribe([detections_topic])
 
     # Bounded TTL so a crashed bridge is detected within 10s.
     # Refreshed every 5s; cost is negligible for Redis.
     KAFKA_AVAILABLE_TTL = 10
     cache.set("kafka_available", True, timeout=KAFKA_AVAILABLE_TTL)
     logger.info(
-        "Kafka bridge started (time-shifted replay): %s, topic: das.detections, %d org mappings",
+        "Kafka bridge started (time-shifted replay): %s, topic: %s, %d org mappings",
         bootstrap_servers,
+        detections_topic,
         len(fiber_org_map),
     )
 
@@ -259,7 +261,7 @@ async def run_kafka_bridge_loop(infrastructure: list[dict]):
                     from apps.shared.metrics import KAFKA_MESSAGES_CONSUMED
 
                     KAFKA_MESSAGES_CONSUMED.add(1, {"topic": topic})
-                    if topic == "das.detections":
+                    if topic == detections_topic:
                         # Extract W3C trace context from Kafka headers so
                         # the detection processing span links to the pipeline trace.
                         headers = _extract_kafka_headers(msg)

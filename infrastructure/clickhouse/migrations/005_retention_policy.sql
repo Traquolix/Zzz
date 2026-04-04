@@ -6,13 +6,13 @@
 --   detection_1m:    90 days
 --   detection_1h:    forever
 
-CREATE OR REPLACE VIEW sequoia.storage_by_resolution AS
+CREATE OR REPLACE VIEW ${CH_DATABASE}.storage_by_resolution AS
 SELECT
     'detection_hires' AS data_type,
     sum(rows) AS total_rows,
     formatReadableSize(sum(bytes_on_disk)) AS disk_size
 FROM system.parts
-WHERE database = 'sequoia'
+WHERE database = '${CH_DATABASE}'
 AND table = 'detection_hires'
 AND active = 1
 
@@ -23,7 +23,7 @@ SELECT
     sum(rows) AS total_rows,
     formatReadableSize(sum(bytes_on_disk)) AS disk_size
 FROM system.parts
-WHERE database = 'sequoia'
+WHERE database = '${CH_DATABASE}'
 AND table = 'detection_1m'
 AND active = 1
 
@@ -34,6 +34,6 @@ SELECT
     sum(rows) AS total_rows,
     formatReadableSize(sum(bytes_on_disk)) AS disk_size
 FROM system.parts
-WHERE database = 'sequoia'
+WHERE database = '${CH_DATABASE}'
 AND table = 'detection_1h'
 AND active = 1;

@@ -6,7 +6,7 @@
 -- 1. Add direction columns
 -- ============================================================================
 
-ALTER TABLE sequoia.fiber_incidents
+ALTER TABLE ${CH_DATABASE}.fiber_incidents
     ADD COLUMN IF NOT EXISTS direction UInt8 DEFAULT 0 AFTER fiber_id;
 
 -- fiber_monitored_sections and fiber_danger_zones removed from ClickHouse

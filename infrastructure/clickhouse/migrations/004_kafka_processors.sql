@@ -9,30 +9,30 @@
 -- The consumer group offset is stored in Kafka, not in ClickHouse.
 
 -- Drop legacy per-fiber Kafka tables (from before unified architecture)
-DROP VIEW IF EXISTS sequoia.speed_data_processor;
-DROP VIEW IF EXISTS sequoia.speed_data_processor_segment_a;
-DROP VIEW IF EXISTS sequoia.speed_data_processor_segment_b;
-DROP VIEW IF EXISTS sequoia.vehicle_counts_processor;
-DROP VIEW IF EXISTS sequoia.vehicle_counts_processor_segment_a;
-DROP VIEW IF EXISTS sequoia.vehicle_counts_processor_segment_b;
-DROP TABLE IF EXISTS sequoia.speed_points_kafka;
-DROP TABLE IF EXISTS sequoia.speed_points_kafka_segment_a;
-DROP TABLE IF EXISTS sequoia.speed_points_kafka_segment_b;
-DROP TABLE IF EXISTS sequoia.vehicle_counts_kafka;
-DROP TABLE IF EXISTS sequoia.vehicle_counts_kafka_segment_a;
-DROP TABLE IF EXISTS sequoia.vehicle_counts_kafka_segment_b;
+DROP VIEW IF EXISTS ${CH_DATABASE}.speed_data_processor;
+DROP VIEW IF EXISTS ${CH_DATABASE}.speed_data_processor_segment_a;
+DROP VIEW IF EXISTS ${CH_DATABASE}.speed_data_processor_segment_b;
+DROP VIEW IF EXISTS ${CH_DATABASE}.vehicle_counts_processor;
+DROP VIEW IF EXISTS ${CH_DATABASE}.vehicle_counts_processor_segment_a;
+DROP VIEW IF EXISTS ${CH_DATABASE}.vehicle_counts_processor_segment_b;
+DROP TABLE IF EXISTS ${CH_DATABASE}.speed_points_kafka;
+DROP TABLE IF EXISTS ${CH_DATABASE}.speed_points_kafka_segment_a;
+DROP TABLE IF EXISTS ${CH_DATABASE}.speed_points_kafka_segment_b;
+DROP TABLE IF EXISTS ${CH_DATABASE}.vehicle_counts_kafka;
+DROP TABLE IF EXISTS ${CH_DATABASE}.vehicle_counts_kafka_segment_a;
+DROP TABLE IF EXISTS ${CH_DATABASE}.vehicle_counts_kafka_segment_b;
 
 -- Drop previous split speed/count consumers
-DROP VIEW IF EXISTS sequoia.speed_kafka_mv;
-DROP VIEW IF EXISTS sequoia.count_kafka_mv;
-DROP TABLE IF EXISTS sequoia.speed_kafka;
-DROP TABLE IF EXISTS sequoia.count_kafka;
+DROP VIEW IF EXISTS ${CH_DATABASE}.speed_kafka_mv;
+DROP VIEW IF EXISTS ${CH_DATABASE}.count_kafka_mv;
+DROP TABLE IF EXISTS ${CH_DATABASE}.speed_kafka;
+DROP TABLE IF EXISTS ${CH_DATABASE}.count_kafka;
 
 -- Recreate unified detection consumer
-DROP VIEW IF EXISTS sequoia.detection_kafka_mv;
-DROP TABLE IF EXISTS sequoia.detection_kafka;
+DROP VIEW IF EXISTS ${CH_DATABASE}.detection_kafka_mv;
+DROP TABLE IF EXISTS ${CH_DATABASE}.detection_kafka;
 
-CREATE TABLE sequoia.detection_kafka
+CREATE TABLE ${CH_DATABASE}.detection_kafka
 (
     fiber_id String,
     engine_version String,
@@ -48,14 +48,14 @@ CREATE TABLE sequoia.detection_kafka
 ENGINE = Kafka()
 SETTINGS
     kafka_broker_list = 'kafka:29092',
-    kafka_topic_list = 'das.detections',
-    kafka_group_name = 'clickhouse_detection_consumer',
+    kafka_topic_list = '${CH_KAFKA_TOPIC}',
+    kafka_group_name = '${CH_KAFKA_GROUP}',
     kafka_format = 'AvroConfluent',
     format_avro_schema_registry_url = 'http://schema-registry:8081',
     kafka_num_consumers = 3;
 
 -- MV: Kafka -> detection_hires (ARRAY JOIN flattens batched detections)
-CREATE MATERIALIZED VIEW sequoia.detection_kafka_mv TO sequoia.detection_hires AS
+CREATE MATERIALIZED VIEW ${CH_DATABASE}.detection_kafka_mv TO ${CH_DATABASE}.detection_hires AS
 SELECT
     d.fiber_id AS fiber_id,
     fromUnixTimestamp64Nano(det_ts) AS ts,
@@ -67,7 +67,7 @@ SELECT
     det_ntrucks AS n_trucks,
     CAST(arrayElement(c.channel_coordinates, det_ch + 1).1 AS Nullable(Float64)) AS lng,
     CAST(arrayElement(c.channel_coordinates, det_ch + 1).2 AS Nullable(Float64)) AS lat
-FROM sequoia.detection_kafka d
+FROM ${CH_DATABASE}.detection_kafka d
 ARRAY JOIN
     `detections.timestamp_ns` AS det_ts,
     `detections.channel` AS det_ch,
@@ -76,4 +76,4 @@ ARRAY JOIN
     `detections.vehicle_count` AS det_vcount,
     `detections.n_cars` AS det_ncars,
     `detections.n_trucks` AS det_ntrucks
-LEFT JOIN sequoia.fiber_cables c ON d.fiber_id = c.fiber_id;
+LEFT JOIN ${CH_DATABASE}.fiber_cables c ON d.fiber_id = c.fiber_id;

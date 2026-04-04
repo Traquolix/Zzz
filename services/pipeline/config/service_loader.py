@@ -22,6 +22,11 @@ def load_service_config(service_type: str) -> ServiceConfig:
     schemas = defaults.get("schemas", {}).get(service_type, {})
     producer_cfg = defaults.get("producer", {})
 
+    # Topic prefix for environment isolation (default: "das" for backwards compat).
+    # Preprod sets TOPIC_PREFIX=preprod so output topics become preprod.processed, etc.
+    # Raw input topics (das.raw.*) are always shared — preprod reads the same DAS data.
+    topic_prefix = os.getenv("TOPIC_PREFIX", "das")
+
     kafka_servers = os.getenv(
         "KAFKA_BOOTSTRAP_SERVERS", defaults.get("kafka_bootstrap_servers", "kafka:29092")
     )
@@ -29,8 +34,8 @@ def load_service_config(service_type: str) -> ServiceConfig:
         "SCHEMA_REGISTRY_URL", defaults.get("schema_registry_url", "http://schema-registry:8081")
     )
 
-    outputs = _build_outputs(service_type, topics, schemas)
-    input_topic, input_pattern = _get_input_config(service_type, topics)
+    outputs = _build_outputs(service_type, topics, schemas, topic_prefix)
+    input_topic, input_pattern = _get_input_config(service_type, topics, topic_prefix)
 
     max_concurrent = service_cfg.get(
         "max_concurrent_messages", defaults.get("max_concurrent_messages", 50)
@@ -59,7 +64,7 @@ def load_service_config(service_type: str) -> ServiceConfig:
         producer_acks=producer_cfg.get("acks", "all"),
         producer_retries=producer_cfg.get("retries", 3),
         producer_enable_idempotence=producer_cfg.get("enable_idempotence", True),
-        dlq_topic=topics.get("dlq", "das.dlq"),
+        dlq_topic=_prefixed_topic(topics.get("dlq", "das.dlq"), topic_prefix),
     )
 
     logger.info(
@@ -72,12 +77,26 @@ def load_service_config(service_type: str) -> ServiceConfig:
     return config
 
 
-def _build_outputs(service_type: str, topics: dict, schemas: dict) -> dict[str, OutputConfig]:
+def _prefixed_topic(default_topic: str, prefix: str) -> str:
+    """Apply topic prefix for environment isolation.
+
+    Replaces the ``das.`` prefix in topic names with the given prefix.
+    If the topic doesn't start with ``das.`` or the prefix is already ``das``,
+    returns the topic unchanged.
+    """
+    if prefix == "das" or not default_topic.startswith("das."):
+        return default_topic
+    return prefix + default_topic[3:]  # "das.processed" -> "preprod.processed"
+
+
+def _build_outputs(
+    service_type: str, topics: dict, schemas: dict, topic_prefix: str
+) -> dict[str, OutputConfig]:
     """Build output configuration based on service type."""
     if service_type == "processor":
         return {
             "default": OutputConfig(
-                topic=topics.get("processed", "das.processed"),
+                topic=_prefixed_topic(topics.get("processed", "das.processed"), topic_prefix),
                 key_schema_file=schemas.get("output_key"),
                 value_schema_file=schemas.get("output_value"),
             )
@@ -85,7 +104,7 @@ def _build_outputs(service_type: str, topics: dict, schemas: dict) -> dict[str, 
     elif service_type == "ai_engine":
         return {
             "default": OutputConfig(
-                topic=topics.get("detections", "das.detections"),
+                topic=_prefixed_topic(topics.get("detections", "das.detections"), topic_prefix),
                 key_schema_file=schemas.get("detection_key"),
                 value_schema_file=schemas.get("detection_value"),
             ),
@@ -94,20 +113,26 @@ def _build_outputs(service_type: str, topics: dict, schemas: dict) -> dict[str, 
         raise ValueError(f"Unknown service type: {service_type}")
 
 
-def _get_input_config(service_type: str, topics: dict) -> tuple[str | None, str | None]:
+def _get_input_config(
+    service_type: str, topics: dict, topic_prefix: str
+) -> tuple[str | None, str | None]:
     """Get input topic or pattern for service type.
 
     For the processor, subscribes to a regex pattern matching all fiber
-    topics (das.raw.*). If FIBER_ID env var is set (legacy), subscribes
-    to a single topic instead.
+    topics (das.raw.*). Raw topics are always shared across environments
+    — the DAS interrogator writes to das.raw.*, and both prod and preprod
+    read from the same topics (with different consumer groups).
+
+    For the AI engine, the input topic is prefixed (e.g. preprod.processed).
     """
     if service_type == "processor":
         fiber_id = os.getenv("FIBER_ID")
         if fiber_id:
             return f"das.raw.{fiber_id}", None
+        # Raw input is always das.raw.* regardless of TOPIC_PREFIX
         return None, topics.get("raw_pattern", "^das\\.raw\\..+$")
     elif service_type == "ai_engine":
-        return topics.get("processed", "das.processed"), None
+        return _prefixed_topic(topics.get("processed", "das.processed"), topic_prefix), None
     else:
         raise ValueError(f"Unknown service type: {service_type}")
 
@@ -120,9 +145,9 @@ def get_ai_engine_fiber_id() -> str | None:
 def get_service_name(service_type: str) -> str:
     """Get service name from config.
 
-    Single instance per service type handles all fibers. If FIBER_ID is
-    set (legacy), it is appended to the service name for backwards
-    compatibility with per-fiber deployments.
+    Single instance per service type handles all fibers. The topic prefix
+    is appended when non-default (e.g. ``ai-engine-preprod``) so that each
+    environment gets a unique consumer group ID.
     """
     manager = FiberConfigManager()
     raw = manager.get_raw_config()
@@ -139,5 +164,10 @@ def get_service_name(service_type: str) -> str:
         fiber_id = os.getenv("FIBER_ID")
         if fiber_id:
             name = f"{name}-{fiber_id}"
+
+    # Append topic prefix for environment isolation (e.g. "ai-engine-preprod")
+    topic_prefix = os.getenv("TOPIC_PREFIX", "das")
+    if topic_prefix != "das":
+        name = f"{name}-{topic_prefix}"
 
     return name

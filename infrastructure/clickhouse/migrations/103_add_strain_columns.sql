@@ -7,10 +7,10 @@
 -- 1. Add strain columns to detection_hires
 -- ============================================================================
 
-ALTER TABLE sequoia.detection_hires
+ALTER TABLE ${CH_DATABASE}.detection_hires
     ADD COLUMN IF NOT EXISTS strain_peak Float32 DEFAULT 0 CODEC(Gorilla);
 
-ALTER TABLE sequoia.detection_hires
+ALTER TABLE ${CH_DATABASE}.detection_hires
     ADD COLUMN IF NOT EXISTS strain_rms Float32 DEFAULT 0 CODEC(Gorilla);
 
 -- ============================================================================
@@ -19,10 +19,10 @@ ALTER TABLE sequoia.detection_hires
 -- Kafka engine tables are stateless (consumer offsets live in Kafka).
 -- DROP + CREATE is the standard approach for schema changes.
 
-DROP VIEW IF EXISTS sequoia.detection_kafka_mv;
-DROP TABLE IF EXISTS sequoia.detection_kafka;
+DROP VIEW IF EXISTS ${CH_DATABASE}.detection_kafka_mv;
+DROP TABLE IF EXISTS ${CH_DATABASE}.detection_kafka;
 
-CREATE TABLE sequoia.detection_kafka
+CREATE TABLE ${CH_DATABASE}.detection_kafka
 (
     fiber_id String,
     engine_version String,
@@ -40,13 +40,13 @@ CREATE TABLE sequoia.detection_kafka
 ENGINE = Kafka()
 SETTINGS
     kafka_broker_list = 'kafka:29092',
-    kafka_topic_list = 'das.detections',
-    kafka_group_name = 'clickhouse_detection_consumer',
+    kafka_topic_list = '${CH_KAFKA_TOPIC}',
+    kafka_group_name = '${CH_KAFKA_GROUP}',
     kafka_format = 'AvroConfluent',
     format_avro_schema_registry_url = 'http://schema-registry:8081',
     kafka_num_consumers = 3;
 
-CREATE MATERIALIZED VIEW sequoia.detection_kafka_mv TO sequoia.detection_hires AS
+CREATE MATERIALIZED VIEW ${CH_DATABASE}.detection_kafka_mv TO ${CH_DATABASE}.detection_hires AS
 SELECT
     d.fiber_id AS fiber_id,
     fromUnixTimestamp64Nano(det_ts) AS ts,
@@ -60,7 +60,7 @@ SELECT
     CAST(arrayElement(c.channel_coordinates, det_ch + 1).2 AS Nullable(Float64)) AS lat,
     det_strain_peak AS strain_peak,
     det_strain_rms AS strain_rms
-FROM sequoia.detection_kafka d
+FROM ${CH_DATABASE}.detection_kafka d
 ARRAY JOIN
     `detections.timestamp_ns` AS det_ts,
     `detections.channel` AS det_ch,
@@ -71,4 +71,4 @@ ARRAY JOIN
     `detections.n_trucks` AS det_ntrucks,
     `detections.strain_peak` AS det_strain_peak,
     `detections.strain_rms` AS det_strain_rms
-LEFT JOIN sequoia.fiber_cables c ON d.fiber_id = c.fiber_id;
+LEFT JOIN ${CH_DATABASE}.fiber_cables c ON d.fiber_id = c.fiber_id;
