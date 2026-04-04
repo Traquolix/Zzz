@@ -70,7 +70,7 @@ jobs:
       - name: Run AI engine tests
         run: make test-ai-engine
         env:
-          CUDA_VISIBLE_DEVICES: ""
+          CUDA_VISIBLE_DEVICES: "0"  # RTX 4000 (CUDA index 0, nvidia-smi index 1)
 
   # ---------- SECURITY (weekly only) ----------
   security:

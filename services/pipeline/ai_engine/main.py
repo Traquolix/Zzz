@@ -83,6 +83,12 @@ class AIEngineService(RollingBufferedTransformer):
 
         super().__init__(service_name, service_config)
 
+        # Enable cuDNN benchmark for production — selects fastest kernel per
+        # input shape. Not set in model code so tests can disable it for
+        # deterministic golden snapshots.
+        if torch is not None and torch.cuda.is_available():
+            torch.backends.cudnn.benchmark = True
+
         setup_otel(service_name, "1.0.0")
         self.tracer = trace.get_tracer(__name__)
 
