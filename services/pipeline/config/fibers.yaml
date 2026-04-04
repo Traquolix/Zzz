@@ -165,7 +165,7 @@ model_defaults:
     speed_glrt_factor: 1.0
     speed_weighting: median
     speed_positive_glrt_only: false
-    alignment_method: cpab         # "cpab" (diffeomorphic, accurate) or "shift" (linear, 40x faster)
+    alignment_method: shift        # "cpab" (diffeomorphic, accurate) or "shift" (linear, 40x faster)
     nstepsolver: 10                # CPAB ODE solver steps (10 converges; increase for difficult sections)
     speed_sampling: midpoint       # "midpoint" (fast) or "median" (accurate for slow traffic sections)
 
