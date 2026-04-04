@@ -357,8 +357,8 @@
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.95, rate(ai_gpu_lock_held_duration_seconds_bucket{service_name=~\"ai-engine.*\"}[5m])) * 1000",
-          "legendFormat": "AI inference p95",
+          "expr": "histogram_quantile(0.95, rate(message_processing_duration_seconds_bucket{service_name=~\"ai-engine.*\"}[5m])) * 1000",
+          "legendFormat": "AI batch p95",
           "refId": "C"
         }
       ],

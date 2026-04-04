@@ -169,6 +169,8 @@ class ModelRegistry:
                 # Default model itself failed — cannot fall back, must crash
                 raise
             logger.error(f"Failed to load model '{model_hint}': {e}. Using default.")
+            if self._ai_metrics:
+                self._ai_metrics.record_model_fallback(model_hint)
             return self._default_model
 
     def _load_counter(self, model_hint: str) -> VehicleCounter | None:
