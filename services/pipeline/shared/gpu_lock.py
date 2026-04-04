@@ -31,8 +31,8 @@ logger = logging.getLogger(__name__)
 _LOCK_MODE = os.environ.get("GPU_LOCK_MODE", "stream")
 _LOCK_PATH = os.environ.get("GPU_LOCK_PATH", "/app/visualizations/.gpu_lock")
 
-# CUDA stream pool — one per concurrent fiber, reused across calls.
-# Populated lazily on first use if CUDA is available.
+# CUDA stream pool — fixed-size, round-robin reuse across calls.
+_MAX_CUDA_STREAMS = 8  # More than enough for 3-5 concurrent fibers
 _cuda_streams: list = []
 _stream_idx = 0
 
@@ -45,24 +45,22 @@ except ImportError:
 
 
 def _get_cuda_stream():
-    """Get the next CUDA stream from a round-robin pool.
+    """Get the next CUDA stream from a fixed-size round-robin pool.
 
-    Creates streams lazily on first use. Pool size matches the number of
-    concurrent fibers (typically 3-5). Streams are lightweight — each is
-    just a command queue on the GPU.
+    Creates streams lazily up to _MAX_CUDA_STREAMS, then reuses.
     """
     global _stream_idx
 
     if not _TORCH_AVAILABLE or not torch.cuda.is_available():
         return None
 
-    # Grow pool on demand (each new concurrent caller gets a stream)
-    if _stream_idx >= len(_cuda_streams):
+    if len(_cuda_streams) < _MAX_CUDA_STREAMS:
         stream = torch.cuda.Stream()
         _cuda_streams.append(stream)
-        logger.info(f"Created CUDA stream {len(_cuda_streams)} for concurrent inference")
+        logger.info(f"Created CUDA stream {len(_cuda_streams)}/{_MAX_CUDA_STREAMS}")
+        return stream
 
-    stream = _cuda_streams[_stream_idx % len(_cuda_streams)]
+    stream = _cuda_streams[_stream_idx % _MAX_CUDA_STREAMS]
     _stream_idx += 1
     return stream
 
