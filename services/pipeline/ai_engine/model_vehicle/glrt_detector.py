@@ -108,45 +108,50 @@ class GLRTDetector:
         binary_mask = correlation_threshold(glrt_summed, corr_threshold=summed_threshold)
         intervals_per_section = find_ind(binary_mask)
 
+        # Precompute masked speed array once: invalid speeds (NaN, <=0) → NaN.
+        # Eliminates repeated boolean indexing inside the per-detection loop.
+        masked_speeds = aligned_speed_pairs.copy()
+        masked_speeds[np.isnan(masked_speeds) | (masked_speeds <= 0)] = np.nan
+
         detections = []
         for section_idx, (starts, ends) in enumerate(intervals_per_section):
+            sec_speeds = masked_speeds[section_idx]  # (Nch-1, time)
+            sec_glrt = glrt_summed[section_idx]
+            sec_aligned = aligned_data[section_idx] if aligned_data is not None else None
+
             for v_start, v_end in zip(starts, ends):
                 if v_end - v_start < min_vehicle_samples:
                     continue
 
-                interval_speeds = []
-                for ch_pair in range(aligned_speed_pairs.shape[1]):
-                    spd = aligned_speed_pairs[section_idx, ch_pair, v_start:v_end]
-                    valid = spd[~np.isnan(spd) & (spd > 0)]
-                    if len(valid) > 0:
-                        interval_speeds.append(float(np.median(valid)))
-                if not interval_speeds:
+                # Per-pair median over interval, then median across pairs.
+                # nanmedian returns NaN only if ALL values in a pair are NaN.
+                pair_medians = np.nanmedian(sec_speeds[:, v_start:v_end], axis=1)
+                valid_medians = pair_medians[~np.isnan(pair_medians)]
+                if len(valid_medians) == 0:
                     continue
 
-                vehicle_speed = float(np.median(interval_speeds))
+                vehicle_speed = float(np.median(valid_medians))
                 if vehicle_speed < self.min_speed or vehicle_speed > self.max_speed:
                     continue
 
                 t_mid = (v_start + v_end) // 2
-                if timestamps_ns is not None and t_mid < len(timestamps_ns):
-                    ts_ns = int(timestamps_ns[t_mid])
-                else:
-                    ts_ns = None
+                ts_ns = (
+                    int(timestamps_ns[t_mid])
+                    if timestamps_ns is not None and t_mid < len(timestamps_ns)
+                    else None
+                )
 
-                seg = glrt_summed[section_idx, v_start:v_end]
+                seg = sec_glrt[v_start:v_end]
                 glrt_max = float(np.max(seg))
                 n_vehicles, n_cars, n_trucks = count_peaks_in_segment(
                     seg, detect_thr, classify_thr, self.fs,
                 )
-                n_vehicles = float(max(1, n_vehicles))
-                n_cars = float(n_cars)
-                n_trucks = float(n_trucks)
 
                 # Strain metrics from aligned sensor data
                 strain_peak = 0.0
                 strain_rms = 0.0
-                if aligned_data is not None:
-                    interval_data = aligned_data[section_idx, :, v_start:v_end]
+                if sec_aligned is not None:
+                    interval_data = sec_aligned[:, v_start:v_end]
                     strain_peak = float(np.mean(np.max(np.abs(interval_data), axis=1)))
                     strain_rms = float(np.mean(np.sqrt(np.mean(interval_data ** 2, axis=1))))
 
@@ -156,9 +161,9 @@ class GLRTDetector:
                     "direction": direction,
                     "timestamp_ns": ts_ns,
                     "glrt_max": glrt_max,
-                    "vehicle_count": n_vehicles,
-                    "n_cars": n_cars,
-                    "n_trucks": n_trucks,
+                    "vehicle_count": float(max(1, n_vehicles)),
+                    "n_cars": float(n_cars),
+                    "n_trucks": float(n_trucks),
                     "strain_peak": strain_peak,
                     "strain_rms": strain_rms,
                     "_t_mid_sample": t_mid,
