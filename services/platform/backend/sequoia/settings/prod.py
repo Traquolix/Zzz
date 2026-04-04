@@ -135,12 +135,17 @@ if _USE_SSL:
 _REDIS_PASSWORD_PROD = get_secret("REDIS_PASSWORD", default="")
 _REDIS_AUTH_PROD = f":{_REDIS_PASSWORD_PROD}@" if _REDIS_PASSWORD_PROD else ""
 _REDIS_HOST_PROD = os.environ.get("REDIS_HOST", "localhost")
+_REDIS_PORT_PROD = os.environ.get("REDIS_PORT", "6379")
+_REDIS_CHANNEL_DB_PROD = os.environ.get("REDIS_CHANNEL_DB", "0")
+_REDIS_CACHE_DB_PROD = os.environ.get("REDIS_CACHE_DB", "1")
 
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [f"redis://{_REDIS_AUTH_PROD}{_REDIS_HOST_PROD}:6379/0"],
+            "hosts": [
+                f"redis://{_REDIS_AUTH_PROD}{_REDIS_HOST_PROD}:{_REDIS_PORT_PROD}/{_REDIS_CHANNEL_DB_PROD}"
+            ],
             "capacity": 500,
         },
     },
@@ -149,12 +154,14 @@ CHANNEL_LAYERS = {
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": f"redis://{_REDIS_AUTH_PROD}{_REDIS_HOST_PROD}:6379/1",
+        "LOCATION": f"redis://{_REDIS_AUTH_PROD}{_REDIS_HOST_PROD}:{_REDIS_PORT_PROD}/{_REDIS_CACHE_DB_PROD}",
     }
 }
 
 # Redis pub/sub for high-frequency realtime broadcasts (detections, SHM)
-REDIS_PUBSUB_URL = f"redis://{_REDIS_AUTH_PROD}{_REDIS_HOST_PROD}:6379/0"
+REDIS_PUBSUB_URL = (
+    f"redis://{_REDIS_AUTH_PROD}{_REDIS_HOST_PROD}:{_REDIS_PORT_PROD}/{_REDIS_CHANNEL_DB_PROD}"
+)
 
 # ---------------------------------------------------------------------------
 # Sentry

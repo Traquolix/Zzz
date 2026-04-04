@@ -1,31 +1,33 @@
-# Plan: Dev / Preprod / Prod Environment Isolation
+# Plan: Preprod / Prod Environment Isolation
 
 ## Goal
 
-Run three isolated environments (dev, preprod, prod) so that changes can be tested
-end-to-end — including frontend UI/UX — against real DAS data with a real user session
-before rolling to production.
+Run two isolated environments (preprod, prod) on the same server so that changes
+can be tested end-to-end — including frontend UI/UX — against real DAS data with
+a real user session before rolling to production. A third "dev" environment runs
+locally on your machine (separate effort, #7).
 
-- **Dev**: local machine, for development. Uses simulation mode or replayed data.
-- **Preprod**: deployed on the servers, reachable by a tester (or yourself) at a
-  separate URL. Processes real DAS data. Frontend is deployed so UI/UX changes are
-  testable in a real browser, not just localhost.
+- **Preprod**: deployed on the servers, reachable by a tester at a separate URL.
+  Processes real DAS data. Frontend is deployed so UI/UX changes are testable in
+  a real browser.
 - **Prod**: current production, untouched until preprod is validated.
 
 ## Constraints
 
-- 2 physical servers: backend (GPU, 900GB RAM) and frontend (nginx)
-- 1 GPU (RTX 4000 Ada) — can't run 3 AI Engines at full load simultaneously, but
-  preprod traffic is minimal so GPU time-sharing is fine
+- 2 physical servers: backend (GPU, 900 GB RAM) and frontend (nginx → NPM)
+- 1 GPU (RTX 4000 Ada, 20 GB VRAM) — current prod uses ~3.2 GB VRAM, ~3-4s of
+  GPU per 22.5s cycle. Doubling for preprod is fine without MPS; stagger startup
+  by ~11s for cleaner scheduling.
 - 1 DAS interrogator producing real data to Kafka
-- Preprod must be reachable from the public internet (testers are external to the
-  university network)
-- Prod frontend is publicly accessible at `dashboardsequoia.univ-cotedazur.fr`
+- Preprod must be reachable from the public internet (testers are external)
+- Prod frontend moving to `app.sequoia-analytics.tech` (#323-325)
+- Nginx Proxy Manager with wildcard TLS for `*.sequoia-analytics.tech` (#323)
 
 ## Architecture: Namespace Isolation on Shared Infra
 
-Share the heavy stateful services (Kafka, ClickHouse, GPU) but isolate at the
-application layer using topic prefixes, separate databases, and separate ports/URLs.
+Share the heavy stateful services (Kafka, ClickHouse, PostgreSQL, Redis, GPU) but
+isolate at the application layer using topic prefixes, separate databases, separate
+Redis DB indices, and separate URLs.
 
 ```
                  SHARED (single instance)
@@ -33,14 +35,16 @@ application layer using topic prefixes, separate databases, and separate ports/U
     │  Kafka         (topic prefix per env)    │
     │  Schema Registry                         │
     │  ClickHouse    (database per env)        │
-    │  otel-lgtm     (label per env)           │
-    │  GPU           (time-shared)             │
+    │  PostgreSQL    (database per env)        │
+    │  Redis         (DB index per env)        │
+    │  otel-lgtm     (ENVIRONMENT label)       │
+    │  GPU           (time-shared, staggered)  │
     └──────┬──────────────┬────────────────────┘
            │              │
     ┌──────┴──────┐ ┌─────┴───────┐
     │   PREPROD   │ │    PROD     │
     │             │ │             │
-    │ Kafka pfx:  │ │ Kafka pfx:  │
+    │ Topics:     │ │ Topics:     │
     │  preprod.*  │ │  das.*      │
     │             │ │             │
     │ PG database:│ │ PG database:│
@@ -49,26 +53,27 @@ application layer using topic prefixes, separate databases, and separate ports/U
     │ CH database:│ │ CH database:│
     │  sequoia_pp │ │  sequoia    │
     │             │ │             │
-    │ Redis DB: 1 │ │ Redis DB: 0 │
+    │ Redis:      │ │ Redis:      │
+    │  DB 2 + 3   │ │  DB 0 + 1   │
     │             │ │             │
     │ Backend:    │ │ Backend:    │
     │  :8002      │ │  :8001      │
     │             │ │             │
     │ Frontend:   │ │ Frontend:   │
-    │  /preprod/  │ │  /          │
+    │  preprod.   │ │  app.       │
+    │  sequoia-   │ │  sequoia-   │
+    │  analytics  │ │  analytics  │
+    │  .tech      │ │  .tech      │
     └─────────────┘ └─────────────┘
 ```
-
-Dev runs locally on your machine with `docker compose --profile dev up` (simulation
-mode, its own DB, no server deployment needed).
 
 ## How Preprod Gets Real DAS Data
 
 The DAS interrogator pushes to `das.raw.carros`. The preprod processor **also**
-subscribes to `das.raw.carros` (same topic, different consumer group) but writes its
-output to `preprod.processed` instead of `das.processed`. The preprod AI Engine reads
-`preprod.processed` and writes to `preprod.detections` + the `sequoia_pp` ClickHouse
-database.
+subscribes to `das.raw.carros` (same topic, different consumer group) but writes
+its output to `preprod.processed` instead of `das.processed`. The preprod AI
+Engine reads `preprod.processed` and writes to `preprod.detections` + the
+`sequoia_pp` ClickHouse database.
 
 This means preprod sees the exact same raw fiber data as prod, processes it
 independently, and stores results separately. Zero interference with prod.
@@ -79,220 +84,197 @@ DAS Interrogator
       v
  das.raw.carros (shared Kafka topic)
       │
-      ├──> processor-carros      (prod)    → das.processed     → ai-engine (prod)
-      │    consumer group: proc-carros
+      ├──> processor         (prod)    → das.processed     → ai-engine     (prod)
+      │    group: das-processor-group
       │
-      └──> processor-carros-pp   (preprod) → preprod.processed → ai-engine (preprod)
-           consumer group: proc-carros-pp
+      └──> processor-pp      (preprod) → preprod.processed → ai-engine-pp  (preprod)
+           group: das-processor-preprod-group
 ```
+
+## GPU Sharing Strategy
+
+Measured production GPU profile (2026-04-04):
+- RTX 4000: 3.2 GB / 20 GB VRAM. SM utilization: bursty 35-47% for ~3-4s every
+  22.5s cycle, idle between cycles.
+- Two AI engines double VRAM to ~6.4 GB (plenty of headroom) and double compute
+  bursts.
+- With 11-second startup stagger (half the 22.5s cycle), prod and preprod bursts
+  alternate — peak SM stays at 35-47% instead of doubling.
+- Even without stagger, worst case is ~80% SM for 3-4s with 15s idle. Both keep
+  up with real time.
+
+Decision: **No MPS needed.** Plain CUDA time-sharing with optional startup stagger.
+Close #356 as won't-do. Revisit only if a third GPU consumer is added.
 
 ## How Preprod is Reachable (Frontend + Backend)
 
 ### Backend server
 
-Preprod backend runs on **port 8002** (prod stays on 8001). Both bind to the server's
-internal IP. No extra reverse proxy needed — the port difference is the isolation.
+Preprod backend runs on **port 8002** (prod stays on 8001). Both bind to the
+server's internal IP.
 
-### Frontend server (nginx)
+### Frontend server (NPM)
 
-Preprod frontend is served at a **separate path prefix** (`/preprod/`) or a
-**subdomain** (`preprod.sequoia.imredd.fr` if DNS is available).
+With Nginx Proxy Manager (#323) and wildcard TLS for `*.sequoia-analytics.tech`:
 
-**Option A — Path prefix (simpler, no DNS needed):**
+- `app.sequoia-analytics.tech` → prod frontend (static) + reverse proxy to
+  backend :8001 for `/api/` and `/ws/`
+- `preprod.sequoia-analytics.tech` → preprod frontend (static) + reverse proxy
+  to backend :8002 for `/api/` and `/ws/`
 
-```nginx
-# /etc/nginx/sites-available/sequoia
-
-# Prod
-location / {
-    root /var/www/sequoia/prod;
-    try_files $uri $uri/ /index.html;
-}
-
-# Preprod
-location /preprod/ {
-    alias /var/www/sequoia/preprod/;
-    try_files $uri $uri/ /preprod/index.html;
-}
-```
-
-Frontend build needs `VITE_BASE_URL=/preprod/` so Vite generates correct asset paths.
-The preprod build points `VITE_API_URL` at the backend server port 8002.
-
-**Option B — Subdomain (cleaner, needs DNS):**
-
-```nginx
-server {
-    server_name preprod.sequoia.imredd.fr;
-    root /var/www/sequoia/preprod;
-    # ...
-}
-```
-
-**Recommendation:** Start with Option A (path prefix). It works immediately without
-touching DNS. Switch to subdomain later if desired.
+Each is a separate NPM proxy host. The frontend is built with `VITE_API_URL=""`
+(same-origin mode) for both environments — NPM handles routing API/WS requests
+to the correct backend port. No `VITE_BASE_PATH` needed since each env has its
+own subdomain.
 
 ### Access control
 
-Both prod and preprod are publicly reachable on the internet (via the university's
-reverse proxy / DNS for `dashboardsequoia.univ-cotedazur.fr`). Testers are external
-to the university network.
+Both subdomains are publicly reachable. The Django backend requires JWT
+authentication for all API access and WebSocket connections. An unauthenticated
+visitor sees the login page and nothing else.
 
-No extra nginx-level auth is needed for preprod. The Django backend already requires
-JWT authentication for all API access and WebSocket connections. An unauthenticated
-visitor to `/preprod/` sees the login page and nothing else — no data is accessible
-without a valid preprod user account.
+Tester onboarding: create a user account in the preprod PostgreSQL database
+(`sequoia_pp`) via Django admin or `manage.py createsuperuser`.
 
-The preprod frontend bundle itself (JS/HTML/CSS) is visible without auth, but this
-is a university research tool, not a commercial product — exposing unreleased UI
-chrome to someone who guesses the URL is not a meaningful risk. The URL is not
-indexed or linked from anywhere.
+## Docker Compose Split
 
-**Tester onboarding:** create a user account in the preprod PostgreSQL database
-(`sequoia_pp`) via Django admin or `manage.py createsuperuser`. One login, one
-password. Same flow as prod.
+The compose topology follows the split planned in #322:
 
-## Implementation Steps
-
-### Phase 1: Topic Prefix Support in Pipeline
-
-The pipeline services currently hardcode topic names (`das.raw.{fiber}`,
-`das.processed`, `das.detections`, `das.dlq`). Add a `TOPIC_PREFIX` env var to
-`ServiceBase` / config so topics become `{TOPIC_PREFIX}.raw.{fiber}`, etc.
-
-- [ ] Add `TOPIC_PREFIX` env var (default: `das` for backwards compat)
-- [ ] Update `shared/service_base.py` to read prefix and apply to all topic names
-- [ ] Update `config/fibers.yaml` topic references if any are hardcoded there
-- [ ] Update `kafka-setup` init script to also create `preprod.*` topics
-- [ ] Test: processor with `TOPIC_PREFIX=test` writes to `test.processed`
-
-### Phase 2: Separate Databases
-
-- [ ] Add ClickHouse init script for `sequoia_pp` database (same schema as `sequoia`)
-- [ ] Add PostgreSQL init for `sequoia_pp` database
-- [ ] Add `CLICKHOUSE_DATABASE` env var to AI Engine (currently hardcoded or from .env)
-- [ ] Backend already reads `CLICKHOUSE_DATABASE` and `POSTGRES_DB` from env — just
-      needs different values per environment
-
-### Phase 3: Docker Compose Profiles
-
-Add preprod service definitions to `docker-compose.yml` using profiles:
-
-```yaml
-# Existing prod services stay as-is (no profile = always started)
-
-processor-carros-pp:
-  profiles: [preprod]
-  build: { context: services/pipeline, dockerfile: processor/Dockerfile }
-  container_name: processor-carros-pp
-  environment:
-    FIBER_ID: carros
-    TOPIC_PREFIX: preprod
-  env_file: .env.preprod
-  networks: [internal]
-
-ai-engine-carros-pp:
-  profiles: [preprod]
-  # ... same pattern, TOPIC_PREFIX=preprod, CLICKHOUSE_DATABASE=sequoia_pp
-
-platform-backend-pp:
-  profiles: [preprod]
-  build: { context: services/platform/backend, dockerfile: Dockerfile }
-  container_name: platform-backend-pp
-  ports:
-    - "${BACKEND_BIND_ADDRESS:-127.0.0.1}:8002:8001"
-  environment:
-    DJANGO_SETTINGS_MODULE: sequoia.settings.preprod
-    POSTGRES_DB: sequoia_pp
-    CLICKHOUSE_DATABASE: sequoia_pp
-    REDIS_DB: 1
-    TOPIC_PREFIX: preprod
-    ENVIRONMENT: preprod
-  env_file: .env.preprod
-  networks: [internal, default]
+```
+docker-compose.infra.yml       # Kafka, Schema Registry, ClickHouse, PG, Redis, otel-lgtm
+docker-compose.pipeline.yml    # processor, ai-engine
+docker-compose.platform.yml    # platform-backend
 ```
 
-Commands:
+Preprod uses the **same pipeline and platform compose files** with a different
+`--env-file` and `-p` (project name):
+
 ```bash
-make up                              # prod only (current behavior)
-make up-preprod                      # prod + preprod
-docker compose --profile preprod up -d   # explicit
+# Shared infra (once)
+docker compose -f docker-compose.infra.yml up -d
+
+# Prod
+docker compose -f docker-compose.pipeline.yml --env-file .env up -d
+docker compose -f docker-compose.platform.yml --env-file .env up -d
+
+# Preprod
+docker compose -f docker-compose.pipeline.yml --env-file .env.preprod -p sequoia-pp up -d
+docker compose -f docker-compose.platform.yml --env-file .env.preprod -p sequoia-pp up -d
 ```
 
-- [ ] Create `.env.preprod` — Docker Compose supports multiple `env_file:` entries;
-      preprod services list `[.env, .env.preprod]` so `.env` provides base values
-      (Kafka bootstrap, shared passwords) and `.env.preprod` overrides env-specific
-      ones (DB names, ports, topic prefix). Later entries win on conflicts.
-- [ ] Add preprod service definitions to `docker-compose.yml`
-- [ ] Add `settings/preprod.py` Django settings (inherits `prod.py`, different DB)
-- [ ] Add Makefile targets: `up-preprod`, `down-preprod`, `logs-preprod`
-- [ ] Add migration step to deploy workflow — run
-      `docker compose exec platform-backend-pp python manage.py migrate` after
-      preprod backend starts, so schema changes are applied to `sequoia_pp`
+No profiles, no duplicated service definitions. Same compose file, different env.
 
-### Phase 4: Frontend Preprod Deploy
+## Implementation Phases
 
-- [ ] Configure Vite build for preprod: `VITE_API_URL=http://<backend-ip>:8002`,
-      `VITE_BASE_URL=/preprod/`
-- [ ] Add nginx config for `/preprod/` location
-- [ ] Update `deploy.yml` to build and deploy preprod frontend to
-      `/var/www/sequoia/preprod/`
-- [ ] Add deploy workflow trigger on `preprod` branch (or manual dispatch with
-      environment selector)
-- [ ] **Resolve HTTPS/mixed-content** — prod frontend is served over HTTPS via the
-      university reverse proxy (`dashboardsequoia.univ-cotedazur.fr`). If the preprod
-      frontend is also HTTPS but the preprod backend is plain HTTP on port 8002,
-      browsers will block mixed-content requests. Options: (a) route preprod API
-      through the university reverse proxy at a `/preprod/api/` path, or (b) add TLS
-      termination on the backend server for port 8002. Decision needed before Phase 4.
+### Phase 1: Topic Prefix in Pipeline + Backend
 
-### Phase 5: CI / Deploy Workflow
+Add `TOPIC_PREFIX` env var (default: `das`) to pipeline and backend so topics
+become `{prefix}.processed`, `{prefix}.detections`, `{prefix}.dlq`.
 
-- [ ] Add `preprod` branch to CI triggers
-- [ ] Add `deploy-preprod` jobs to `deploy.yml` (triggered by `preprod` branch push
-      or manual dispatch with `environment: preprod` selector)
-- [ ] Deploy flow becomes:
-      ```
-      feature branch → PR → merge to preprod → CI → deploy to preprod
-                                                        ↓
-                                              test with real user/data
-                                                        ↓
-                                              merge preprod → main → deploy to prod
-      ```
+Code changes:
+- `config/service_loader.py` — prefix output topics, DLQ topic
+- `config/fiber_config.py` — prefix bootstrap consumer group
+- `shared/kafka_setup.py` — prefix consumer group ID
+- Backend `kafka_bridge.py` — read topic and consumer group from Django settings
+- Backend `settings/base.py` — add `KAFKA_DETECTIONS_TOPIC`, `KAFKA_CONSUMER_GROUP`
 
-### Phase 6: Grafana / Observability
+Note: the processor raw input pattern stays `^das\.raw\.[^.]+$` — preprod reads
+the same raw data from the DAS interrogator, just with a different consumer group.
 
-- [ ] Add `environment` label to OTel metrics and logs (from `ENVIRONMENT` env var)
-- [ ] Update Grafana dashboards to add `$environment` template variable filter
-- [ ] Preprod services appear in same dashboards, filterable
+### Phase 2: Redis DB Isolation in Backend
 
-## Dev Environment (Local)
+Parameterize Redis port and DB indices in Django settings.
 
-See [`TODO/plans/dev-environment.md`](dev-environment.md) for the full local dev plan
-(`make dev` for simulation, `make dev-full` for recorded replay).
+Code changes:
+- `settings/base.py` — add `REDIS_PORT`, `REDIS_CHANNEL_DB`, `REDIS_CACHE_DB`
+- `settings/prod.py` — use the new vars in CHANNEL_LAYERS, CACHES, REDIS_PUBSUB_URL
+- Preprod uses `REDIS_CHANNEL_DB=2`, `REDIS_CACHE_DB=3`
+
+### Phase 3: ClickHouse Database Isolation
+
+Template ClickHouse SQL files so the database name, Kafka topic, and consumer
+group are parameterizable.
+
+Changes:
+- Rename `init/*.sql` → `init/*.sql.tmpl` with `${CH_DATABASE}`,
+  `${CH_KAFKA_TOPIC}`, `${CH_KAFKA_GROUP}` placeholders
+- Add entrypoint wrapper: `envsubst` renders templates before `clickhouse-client`
+- Same for `migrations/*.sql` — update `apply_clickhouse_migrations` command
+- Create `sequoia_pp` database for preprod
+
+### Phase 4: Compose Split + Preprod Env File
+
+Split `docker-compose.yml` into `infra`, `pipeline`, `platform`. Create
+`.env.preprod` with all environment-specific overrides.
+
+Changes:
+- Split compose file (may already be done under #322)
+- Create `.env.preprod`
+- Create preprod Kafka topics (`preprod.processed`, `preprod.detections`,
+  `preprod.dlq`) in `kafka-setup` or separate init script
+- Add Makefile targets: `up-infra`, `up-prod`, `up-preprod`, `down-preprod`
+
+### Phase 5: CI/CD Promotion Pipeline
+
+Restructure deployment: merge to main → deploy preprod → manual gate → deploy prod.
+
+Changes:
+- Add `develop` branch as integration branch
+- Update `deploy.yml`: preprod deploys on push to `develop`, prod deploys on
+  push to `main` with GitHub Environment protection (manual approval)
+- Branch protection on `main`: require PR from `develop`, require
+  "preprod-healthy" status check
+- Both deploy jobs use the same steps but different `DEPLOY_DIR` and env vars
+  (via GitHub Environment variables)
+
+### Phase 6: Frontend Preprod Deploy
+
+Deploy preprod frontend to `preprod.sequoia-analytics.tech`.
+
+Changes:
+- Add NPM proxy host for `preprod.sequoia-analytics.tech`
+- Build preprod frontend: `VITE_API_URL="" npm run build`
+- Deploy to `/var/www/sequoia-preprod/` on frontend server
+- Add `deploy-preprod-frontend` job to `deploy.yml`
+
+### Phase 7: Observability Isolation
+
+Tag all telemetry with `ENVIRONMENT`, add dashboard filters.
+
+Changes:
+- Verify `ENVIRONMENT` resource attribute in all services (already exists)
+- Add `$environment` template variable to Grafana dashboard JSON files
+- Filter alerting notification policies: `environment != preprod`
 
 ## Resource Impact on Backend Server
 
-| Component | Extra RAM | Extra CPU | Notes |
-|-----------|-----------|-----------|-------|
-| processor-carros-pp | ~2 GB | 1 core | Same binary, different topics |
-| ai-engine-carros-pp | ~4 GB | 2 cores | GPU shared, minimal extra VRAM |
-| platform-backend-pp | ~512 MB | 0.5 core | Django + Daphne |
-| PostgreSQL (sequoia_pp) | ~100 MB | negligible | Same server, extra DB |
-| ClickHouse (sequoia_pp) | ~200 MB | negligible | Same server, extra DB |
-| Redis DB 1 | ~50 MB | negligible | Same server, extra DB number |
-| **Total** | **~7 GB** | **~3.5 cores** | |
+| Component | Extra RAM | Extra CPU | Extra VRAM | Notes |
+|-----------|-----------|-----------|------------|-------|
+| processor-pp | ~2 GB | 1 core | 0 | Same binary, different topics |
+| ai-engine-pp | ~4 GB | 2 cores | ~3.2 GB | Time-shared GPU |
+| platform-backend-pp | ~512 MB | 0.5 core | 0 | Django + Daphne |
+| PostgreSQL (sequoia_pp) | ~100 MB | negligible | 0 | Same server, extra DB |
+| ClickHouse (sequoia_pp) | ~200 MB | negligible | 0 | Same server, extra DB |
+| Redis DB 2+3 | ~50 MB | negligible | 0 | Same server, extra DB number |
+| **Total** | **~7 GB** | **~3.5 cores** | **~3.2 GB** | |
 
-The server has 900 GB RAM. This is nothing.
+The server has 900 GB RAM, 20 GB VRAM. This is nothing.
+
+## Dependencies
+
+- #322 (compose split) — Phase 4 depends on this
+- #323 (NPM + wildcard TLS) — Phase 6 depends on this
+- #325 (backend reverse proxy) — Phase 6 depends on this
 
 ## Order of Work
 
-1. **Topic prefix** (Phase 1) — the only code change, everything else is config
-2. **Databases** (Phase 2) — init scripts, trivial
-3. **Compose profiles** (Phase 3) — the bulk of the infra work
-4. **Frontend deploy** (Phase 4) — nginx + Vite config
-5. **CI/CD** (Phase 5) — workflow updates
-6. **Observability** (Phase 6) — nice-to-have, can come later
+1. **Topic prefix** (Phase 1) — the core code change, unblocks everything
+2. **Redis isolation** (Phase 2) — small, can be in same PR as Phase 1
+3. **ClickHouse isolation** (Phase 3) — SQL templating
+4. **Compose split + env file** (Phase 4) — infra config
+5. **CI/CD promotion** (Phase 5) — workflow restructure
+6. **Frontend preprod** (Phase 6) — after NPM is deployed
+7. **Observability** (Phase 7) — nice-to-have, can come later
 
-Phases 1-3 can be done in a single PR. Phase 4 can follow immediately. Phase 5
-depends on having GitHub Actions runners installed (see TODO.md).
+Phases 1-2 can be one PR. Phase 3 is a separate PR. Phase 4 depends on #322.
+Phases 5-7 can proceed independently once Phase 4 is done.

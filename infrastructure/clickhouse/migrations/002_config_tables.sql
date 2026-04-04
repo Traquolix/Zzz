@@ -4,7 +4,7 @@
 -- ============================================================================
 -- FIBER CABLES CONFIGURATION
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS sequoia.fiber_cables
+CREATE TABLE IF NOT EXISTS ${CH_DATABASE}.fiber_cables
 (
     fiber_id String CODEC(ZSTD(1)),
     fiber_name String CODEC(ZSTD(1)),
@@ -20,7 +20,7 @@ COMMENT 'Geographic configuration of fiber optic cables';
 -- ============================================================================
 -- INCIDENTS
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS sequoia.fiber_incidents
+CREATE TABLE IF NOT EXISTS ${CH_DATABASE}.fiber_incidents
 (
     incident_id String CODEC(ZSTD(1)),
     fiber_id String CODEC(ZSTD(1)),
@@ -45,8 +45,8 @@ SETTINGS index_granularity = 8192
 COMMENT 'Incident detection events';
 
 -- Incident indexes
-ALTER TABLE sequoia.fiber_incidents ADD INDEX IF NOT EXISTS idx_incident_id (incident_id) TYPE bloom_filter GRANULARITY 1;
-ALTER TABLE sequoia.fiber_incidents ADD INDEX IF NOT EXISTS idx_location (channel_start, channel_end) TYPE minmax GRANULARITY 4;
-ALTER TABLE sequoia.fiber_incidents ADD INDEX IF NOT EXISTS idx_status (status) TYPE set(10) GRANULARITY 1;
-ALTER TABLE sequoia.fiber_incidents ADD INDEX IF NOT EXISTS idx_type (incident_type) TYPE set(10) GRANULARITY 1;
-ALTER TABLE sequoia.fiber_incidents ADD INDEX IF NOT EXISTS idx_severity (severity) TYPE set(10) GRANULARITY 1;
+ALTER TABLE ${CH_DATABASE}.fiber_incidents ADD INDEX IF NOT EXISTS idx_incident_id (incident_id) TYPE bloom_filter GRANULARITY 1;
+ALTER TABLE ${CH_DATABASE}.fiber_incidents ADD INDEX IF NOT EXISTS idx_location (channel_start, channel_end) TYPE minmax GRANULARITY 4;
+ALTER TABLE ${CH_DATABASE}.fiber_incidents ADD INDEX IF NOT EXISTS idx_status (status) TYPE set(10) GRANULARITY 1;
+ALTER TABLE ${CH_DATABASE}.fiber_incidents ADD INDEX IF NOT EXISTS idx_type (incident_type) TYPE set(10) GRANULARITY 1;
+ALTER TABLE ${CH_DATABASE}.fiber_incidents ADD INDEX IF NOT EXISTS idx_severity (severity) TYPE set(10) GRANULARITY 1;

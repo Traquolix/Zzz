@@ -197,6 +197,8 @@ CLICKHOUSE_PASSWORD = os.environ.get("CLICKHOUSE_PASSWORD", "")
 
 # Kafka
 KAFKA_BOOTSTRAP_SERVERS = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "")
+KAFKA_DETECTIONS_TOPIC = os.environ.get("KAFKA_DETECTIONS_TOPIC", "das.detections")
+KAFKA_CONSUMER_GROUP = os.environ.get("KAFKA_CONSUMER_GROUP", "sequoia-realtime-bridge")
 
 # Realtime data source: 'auto' | 'simulation' | 'kafka'
 # auto: tries Kafka if KAFKA_BOOTSTRAP_SERVERS is set, falls back to simulation
@@ -209,14 +211,17 @@ REALTIME_AUTO_START_SIMULATION = os.environ.get("AUTO_START_SIMULATION", "true")
 
 # Redis / Channels
 _REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
+_REDIS_PORT = os.environ.get("REDIS_PORT", "6379")
 _REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD", "")
 _REDIS_AUTH = f":{_REDIS_PASSWORD}@" if _REDIS_PASSWORD else ""
+_REDIS_CHANNEL_DB = os.environ.get("REDIS_CHANNEL_DB", "0")
+_REDIS_CACHE_DB = os.environ.get("REDIS_CACHE_DB", "1")
 
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [f"redis://{_REDIS_AUTH}{_REDIS_HOST}:6379/0"],
+            "hosts": [f"redis://{_REDIS_AUTH}{_REDIS_HOST}:{_REDIS_PORT}/{_REDIS_CHANNEL_DB}"],
             # Only incidents + fibers use the channel layer now (low-frequency).
             # 500 buffers burst deliveries without excessive memory. Default is 100.
             "capacity": 500,
@@ -225,13 +230,13 @@ CHANNEL_LAYERS = {
 }
 
 # Redis pub/sub for high-frequency realtime broadcasts (detections, SHM)
-# Uses the same Redis instance as the channel layer (DB 0)
-REDIS_PUBSUB_URL = f"redis://{_REDIS_AUTH}{_REDIS_HOST}:6379/0"
+# Uses the same Redis instance and DB as the channel layer
+REDIS_PUBSUB_URL = f"redis://{_REDIS_AUTH}{_REDIS_HOST}:{_REDIS_PORT}/{_REDIS_CHANNEL_DB}"
 
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": f"redis://{_REDIS_AUTH}{_REDIS_HOST}:6379/1",
+        "LOCATION": f"redis://{_REDIS_AUTH}{_REDIS_HOST}:{_REDIS_PORT}/{_REDIS_CACHE_DB}",
     }
 }
 

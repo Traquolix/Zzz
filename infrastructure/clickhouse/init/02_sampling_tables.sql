@@ -27,7 +27,7 @@
 -- ORDER BY includes direction to prevent forward/reverse collisions in
 -- ReplacingMergeTree — two vehicles at the same (ts, ch) but different
 -- directions are distinct detections.
-CREATE TABLE IF NOT EXISTS sequoia.detection_hires
+CREATE TABLE IF NOT EXISTS ${CH_DATABASE}.detection_hires
 (
     fiber_id LowCardinality(String) CODEC(ZSTD(1)),
     ts DateTime64(1) CODEC(DoubleDelta),
@@ -50,7 +50,7 @@ SETTINGS index_granularity = 4096
 COMMENT 'High-resolution detection data (interval detections). TTL: 48 hours';
 
 -- Add indexes for common query patterns
-ALTER TABLE sequoia.detection_hires ADD INDEX IF NOT EXISTS idx_speed (speed) TYPE minmax GRANULARITY 4;
+ALTER TABLE ${CH_DATABASE}.detection_hires ADD INDEX IF NOT EXISTS idx_speed (speed) TYPE minmax GRANULARITY 4;
 
 -- Tier 2: 1-minute aggregated detection data
 -- Uses AggregatingMergeTree so partial-batch inserts from the MV merge correctly.
@@ -66,7 +66,7 @@ ALTER TABLE sequoia.detection_hires ADD INDEX IF NOT EXISTS idx_speed (speed) TY
 --          sumMerge(samples_state)   AS samples
 --   FROM detection_1m
 --   GROUP BY fiber_id, ts, ch, direction
-CREATE TABLE IF NOT EXISTS sequoia.detection_1m
+CREATE TABLE IF NOT EXISTS ${CH_DATABASE}.detection_1m
 (
     fiber_id LowCardinality(String) CODEC(ZSTD(1)),
     ts DateTime CODEC(DoubleDelta),
@@ -87,7 +87,7 @@ TTL ts + INTERVAL 90 DAY
 COMMENT '1-minute aggregated detection data (AggregatingMergeTree). TTL: 90 days';
 
 -- Tier 3: 1-hour aggregated detection data (forever)
-CREATE TABLE IF NOT EXISTS sequoia.detection_1h
+CREATE TABLE IF NOT EXISTS ${CH_DATABASE}.detection_1h
 (
     fiber_id LowCardinality(String) CODEC(ZSTD(1)),
     ts DateTime CODEC(DoubleDelta),
@@ -108,7 +108,7 @@ COMMENT '1-hour aggregated detection data (AggregatingMergeTree). Permanent stor
 
 -- MV: detection_hires → detection_1m
 -- Uses -State combinators to produce intermediate aggregate states
-CREATE MATERIALIZED VIEW IF NOT EXISTS sequoia.detection_1m_mv TO sequoia.detection_1m AS
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${CH_DATABASE}.detection_1m_mv TO ${CH_DATABASE}.detection_1m AS
 SELECT
     src.fiber_id AS fiber_id,
     toStartOfMinute(src.ts) AS ts,
@@ -121,12 +121,12 @@ SELECT
     sumState(src.n_cars) AS cars_sum_state,
     sumState(src.n_trucks) AS trucks_sum_state,
     sumState(toUInt64(1)) AS samples_state
-FROM sequoia.detection_hires AS src
+FROM ${CH_DATABASE}.detection_hires AS src
 GROUP BY src.fiber_id, toStartOfMinute(src.ts), src.ch, src.direction;
 
 -- MV: detection_1m → detection_1h
 -- Merges 1m states into 1h states using -Merge + -State round-trip
-CREATE MATERIALIZED VIEW IF NOT EXISTS sequoia.detection_1h_mv TO sequoia.detection_1h AS
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${CH_DATABASE}.detection_1h_mv TO ${CH_DATABASE}.detection_1h AS
 SELECT
     src.fiber_id AS fiber_id,
     toStartOfHour(src.ts) AS ts,
@@ -139,7 +139,7 @@ SELECT
     sumMergeState(src.cars_sum_state) AS cars_sum_state,
     sumMergeState(src.trucks_sum_state) AS trucks_sum_state,
     sumMergeState(src.samples_state) AS samples_state
-FROM sequoia.detection_1m AS src
+FROM ${CH_DATABASE}.detection_1m AS src
 GROUP BY src.fiber_id, toStartOfHour(src.ts), src.ch, src.direction;
 
 -- ============================================================================

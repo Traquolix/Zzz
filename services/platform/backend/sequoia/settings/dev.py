@@ -59,27 +59,34 @@ AUTH_PASSWORD_VALIDATORS = []
 
 # Channels — Redis (Docker container started by `make dev-deps`)
 _DEV_REDIS_HOST = os.environ.get("REDIS_HOST", "localhost")
+_DEV_REDIS_PORT = os.environ.get("REDIS_PORT", "6379")
 _DEV_REDIS_PASSWORD = os.environ.get("REDIS_PASSWORD", "CHANGE_ME")
 _DEV_REDIS_AUTH = f":{_DEV_REDIS_PASSWORD}@" if _DEV_REDIS_PASSWORD else ""
+_DEV_REDIS_CHANNEL_DB = os.environ.get("REDIS_CHANNEL_DB", "0")
+_DEV_REDIS_CACHE_DB = os.environ.get("REDIS_CACHE_DB", "1")
 
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
         "CONFIG": {
-            "hosts": [f"redis://{_DEV_REDIS_AUTH}{_DEV_REDIS_HOST}:6379/0"],
+            "hosts": [
+                f"redis://{_DEV_REDIS_AUTH}{_DEV_REDIS_HOST}:{_DEV_REDIS_PORT}/{_DEV_REDIS_CHANNEL_DB}"
+            ],
             "capacity": 500,
         },
     },
 }
 
 # Redis pub/sub for high-frequency realtime broadcasts (detections, SHM)
-REDIS_PUBSUB_URL = f"redis://{_DEV_REDIS_AUTH}{_DEV_REDIS_HOST}:6379/0"
+REDIS_PUBSUB_URL = (
+    f"redis://{_DEV_REDIS_AUTH}{_DEV_REDIS_HOST}:{_DEV_REDIS_PORT}/{_DEV_REDIS_CHANNEL_DB}"
+)
 
 # Cache — Redis
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": f"redis://{_DEV_REDIS_AUTH}{_DEV_REDIS_HOST}:6379/1",
+        "LOCATION": f"redis://{_DEV_REDIS_AUTH}{_DEV_REDIS_HOST}:{_DEV_REDIS_PORT}/{_DEV_REDIS_CACHE_DB}",
     }
 }
 

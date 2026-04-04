@@ -4,11 +4,17 @@ Management command to apply ClickHouse SQL migrations.
 Reads .sql files from infrastructure/clickhouse/migrations/ in sorted order,
 strips comments, splits on ';', and executes each statement.
 
+SQL files use ${CH_DATABASE}, ${CH_KAFKA_TOPIC}, ${CH_KAFKA_GROUP} placeholders
+for environment isolation. These are expanded from environment variables (with
+backwards-compatible defaults) before execution.
+
 All operations are idempotent — safe to re-run on every deploy.
 """
 
 import argparse
+import os
 import re
+import string
 from pathlib import Path
 
 from django.conf import settings
@@ -16,6 +22,19 @@ from django.core.management.base import BaseCommand
 
 from apps.shared.clickhouse import command as ch_command
 from apps.shared.exceptions import ClickHouseUnavailableError
+
+# ClickHouse SQL template variables with backwards-compatible defaults.
+_CH_TEMPLATE_VARS = {
+    "CH_DATABASE": os.environ.get("CH_DATABASE", "sequoia"),
+    "CH_KAFKA_TOPIC": os.environ.get("CH_KAFKA_TOPIC", "das.detections"),
+    "CH_KAFKA_GROUP": os.environ.get("CH_KAFKA_GROUP", "clickhouse_detection_consumer"),
+}
+
+
+def _render_template(sql: str) -> str:
+    """Expand ${CH_DATABASE}, ${CH_KAFKA_TOPIC}, ${CH_KAFKA_GROUP} in SQL."""
+    template = string.Template(sql)
+    return template.safe_substitute(_CH_TEMPLATE_VARS)
 
 
 def _strip_comments(sql: str) -> str:
@@ -55,7 +74,8 @@ class Command(BaseCommand):
         for sql_file in sql_files:
             name = sql_file.name
             raw_sql = sql_file.read_text()
-            clean_sql = _strip_comments(raw_sql)
+            rendered_sql = _render_template(raw_sql)
+            clean_sql = _strip_comments(rendered_sql)
 
             statements = [s.strip() for s in clean_sql.split(";") if s.strip()]
             if not statements:

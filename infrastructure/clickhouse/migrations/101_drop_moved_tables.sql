@@ -6,6 +6,6 @@
 --
 -- Run with: clickhouse-client --multiquery < 002_drop_moved_tables.sql
 
-DROP TABLE IF EXISTS sequoia.fiber_monitored_sections;
-DROP TABLE IF EXISTS sequoia.fiber_danger_zones;
-DROP TABLE IF EXISTS sequoia.actors;
+DROP TABLE IF EXISTS ${CH_DATABASE}.fiber_monitored_sections;
+DROP TABLE IF EXISTS ${CH_DATABASE}.fiber_danger_zones;
+DROP TABLE IF EXISTS ${CH_DATABASE}.actors;

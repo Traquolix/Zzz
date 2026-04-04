@@ -7,7 +7,7 @@ datasources:
     access: proxy
     url: http://clickhouse:8123
     jsonData:
-      defaultDatabase: sequoia
+      defaultDatabase: ${CH_DATABASE:-sequoia}
       port: 9000
       server: clickhouse
       username: grafana_readonly

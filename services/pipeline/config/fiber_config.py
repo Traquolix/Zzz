@@ -524,7 +524,8 @@ class FiberConfigManager:
         sr_client = SchemaRegistryClient({"url": schema_registry_url})
         deserializer = AvroDeserializer(sr_client)
 
-        group_id = "das-params-bootstrap"
+        topic_prefix = os.getenv("TOPIC_PREFIX", "das")
+        group_id = f"{topic_prefix}-params-bootstrap"
         topics = [f"das.raw.{fid}.params" for fid in fibers]
         consumer = Consumer(
             {

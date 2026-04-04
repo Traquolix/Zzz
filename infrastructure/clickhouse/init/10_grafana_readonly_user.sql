@@ -14,7 +14,7 @@ CREATE USER IF NOT EXISTS grafana_readonly
     IDENTIFIED WITH sha256_password BY 'CHANGE_ME_GRAFANA'
     DEFAULT DATABASE sequoia;
 
-GRANT SELECT ON sequoia.* TO grafana_readonly;
+GRANT SELECT ON ${CH_DATABASE}.* TO grafana_readonly;
 GRANT SELECT ON system.parts TO grafana_readonly;
 
 SELECT 'Schema 09: Read-only Grafana user created' as status;
