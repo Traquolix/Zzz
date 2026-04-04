@@ -92,6 +92,7 @@ class VehicleSpeedEstimator:
         speed_weighting: str = "median",
         speed_positive_glrt_only: bool = False,
         alignment_method: str = "cpab",
+        nstepsolver: int = 10,
     ):
         if model_args is None:
             raise ValueError("model_args is required to initialize VehicleSpeedEstimator")
@@ -117,12 +118,12 @@ class VehicleSpeedEstimator:
         model = model.to(device)
         model.eval()
 
-        # Reduce CPAB ODE solver steps from default 50 to 10.
-        # The 1D piecewise-affine transforms converge well before 50 steps;
-        # 10 steps gives ~5x faster alignment with <0.05 km/h mean speed diff
-        # (validated on carros:202Bis golden fixture, 2858 detections matched).
-        # If marginal detections are lost on weak fiber sections, increase to 15.
-        T.set_solver_params(nstepsolver=10)
+        # CPAB ODE solver steps — configurable per model for sections that
+        # need higher accuracy. Default 10 converges for 1D piecewise-affine
+        # transforms (<0.05 km/h mean speed diff vs 50 steps on carros:202Bis).
+        # Increase for difficult fiber sections where marginal detections are lost.
+        T.set_solver_params(nstepsolver=nstepsolver)
+        logger.info(f"CPAB solver: nstepsolver={nstepsolver}")
 
         # Compile the NN head (CNN+RNN+FC) for faster theta prediction.
         # The CPAB transform is not compiled — it uses custom autograd functions

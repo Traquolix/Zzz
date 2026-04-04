@@ -166,6 +166,7 @@ model_defaults:
     speed_weighting: median
     speed_positive_glrt_only: false
     alignment_method: cpab         # "cpab" (diffeomorphic, accurate) or "shift" (linear, 40x faster)
+    nstepsolver: 10                # CPAB ODE solver steps (10 converges; increase for difficult sections)
 
   counting:
     enabled: true
@@ -192,3 +193,10 @@ model_defaults:
 models:
   dtan_unified:
     fiber_id: null  # Works for all fibers
+
+  # Higher-accuracy variant for difficult sections with weak signal.
+  # Assign to a section with: model: dtan_precise
+  dtan_precise:
+    fiber_id: null
+    speed_detection:
+      nstepsolver: 50
