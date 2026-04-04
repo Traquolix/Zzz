@@ -29,6 +29,7 @@ warnings.filterwarnings("ignore")
 _PIPELINE_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(_PIPELINE_ROOT))
 
+from ai_engine.message_utils import ProcessingContext, create_detection_messages  # noqa: E402
 from ai_engine.model_vehicle.model_T import Args_NN_model_all_channels  # noqa: E402
 from ai_engine.model_vehicle.utils import (  # noqa: E402
     correlation_threshold,
@@ -196,7 +197,59 @@ def run_benchmarks() -> dict:
     times = _time_fn(lambda: speed_filter.filtering_speed(glrt_per_pair, binary_filter))
     results["filtering_speed"] = {"median_ms": _median(times), "p95_ms": _p95(times)}
 
-    # 9. process_file (end-to-end, single section)
+    # --- Postprocess benchmarks ---
+    # Run process_file once to get DirectionResult tuples for postprocess timing
+    torch.manual_seed(42)
+    direction_results = list(estimator.process_file(data_window, timestamps, timestamps_ns))
+
+    min_vehicle_duration_s = 0.3
+    classify_threshold_factor = 2.0
+
+    # 9. extract_detections (all directions)
+    def _bench_extract():
+        dets = []
+        for result in direction_results:
+            direction = int(result.direction_mask[0, 0])
+            dets.extend(
+                estimator.extract_detections(
+                    glrt_summed=result.glrt_summed,
+                    aligned_speed_pairs=result.aligned_speed_per_pair,
+                    direction=direction,
+                    timestamps_ns=result.timestamps_ns,
+                    min_vehicle_duration_s=min_vehicle_duration_s,
+                    classify_threshold_factor=classify_threshold_factor,
+                    aligned_data=result.aligned_data,
+                )
+            )
+        return dets
+
+    times = _time_fn(_bench_extract)
+    results["extract_detections"] = {"median_ms": _median(times), "p95_ms": _p95(times)}
+
+    # Get detections for message creation benchmark
+    sample_detections = _bench_extract()
+    ctx = ProcessingContext()
+
+    # 10. create_detection_messages
+    times = _time_fn(
+        lambda: create_detection_messages(
+            fiber_id="bench",
+            detections=sample_detections,
+            ctx=ctx,
+            service_name="bench",
+        )
+    )
+    results["create_messages"] = {"median_ms": _median(times), "p95_ms": _p95(times)}
+
+    n_dets = len(sample_detections)
+    fwd = sum(1 for d in sample_detections if d["direction"] == 0)
+    rev = sum(1 for d in sample_detections if d["direction"] == 1)
+    print(f"  Detections: {n_dets} ({fwd} fwd, {rev} rev)")
+    print()
+
+    # --- End-to-end benchmarks ---
+
+    # 11. process_file (end-to-end, single section)
     def _bench_process_file():
         torch.manual_seed(42)
         list(estimator.process_file(data_window, timestamps, timestamps_ns))
@@ -204,7 +257,7 @@ def run_benchmarks() -> dict:
     times = _time_fn(_bench_process_file)
     results["process_file_e2e"] = {"median_ms": _median(times), "p95_ms": _p95(times)}
 
-    # 10. process_batch (end-to-end, 3 sections simulating multi-section fiber)
+    # 12. process_batch (end-to-end, 3 sections simulating multi-section fiber)
     def _bench_process_batch():
         torch.manual_seed(42)
         estimator.process_batch(

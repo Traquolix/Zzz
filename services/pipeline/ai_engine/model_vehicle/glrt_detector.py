@@ -7,6 +7,8 @@ Handles:
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 
 try:
@@ -16,8 +18,78 @@ try:
 except ImportError:
     TORCH_AVAILABLE = False
 
+try:
+    import numba
+    NUMBA_AVAILABLE = True
+except ImportError:
+    NUMBA_AVAILABLE = False
+
 from .constants import GLRT_EDGE_SAFETY_SAMPLES
 from .utils import correlation_threshold, count_peaks_in_segment, find_ind
+
+_logger = logging.getLogger(__name__)
+
+
+def _build_speed_kernel():
+    """Build numba-JIT kernel for per-detection speed computation.
+
+    Returns a pure-Python fallback if numba is not available.
+    """
+
+    def _speed_for_detection_py(sec_speeds, v_start, v_end):
+        """Pure-Python: per-pair median over interval, median across pairs."""
+        n_pairs = sec_speeds.shape[0]
+        pair_medians = []
+        for ch in range(n_pairs):
+            spd = sec_speeds[ch, v_start:v_end]
+            valid = spd[~np.isnan(spd) & (spd > 0)]
+            if len(valid) > 0:
+                pair_medians.append(float(np.median(valid)))
+        if not pair_medians:
+            return np.nan
+        return float(np.median(pair_medians))
+
+    if not NUMBA_AVAILABLE:
+        return _speed_for_detection_py
+
+    @numba.njit(cache=True)
+    def _speed_for_detection_nb(sec_speeds, v_start, v_end):
+        """Numba-JIT: per-pair median over interval, median across pairs."""
+        n_pairs = sec_speeds.shape[0]
+        pair_medians = np.empty(n_pairs, dtype=np.float64)
+        n_valid_pairs = 0
+
+        for ch in range(n_pairs):
+            # Collect valid (non-NaN, positive) speeds for this pair
+            count = 0
+            for t in range(v_start, v_end):
+                v = sec_speeds[ch, t]
+                if v == v and v > 0:  # NaN check: v != v when NaN
+                    count += 1
+
+            if count == 0:
+                continue
+
+            valid = np.empty(count, dtype=np.float64)
+            idx = 0
+            for t in range(v_start, v_end):
+                v = sec_speeds[ch, t]
+                if v == v and v > 0:
+                    valid[idx] = v
+                    idx += 1
+
+            pair_medians[n_valid_pairs] = np.median(valid)
+            n_valid_pairs += 1
+
+        if n_valid_pairs == 0:
+            return np.nan
+        return np.median(pair_medians[:n_valid_pairs])
+
+    return _speed_for_detection_nb
+
+
+# Module-level singleton — JIT compiles on first call, cached thereafter
+_speed_for_detection = _build_speed_kernel()
 
 
 class GLRTDetector:
@@ -108,30 +180,24 @@ class GLRTDetector:
         binary_mask = correlation_threshold(glrt_summed, corr_threshold=summed_threshold)
         intervals_per_section = find_ind(binary_mask)
 
-        # Precompute masked speed array once: invalid speeds (NaN, <=0) → NaN.
-        # Eliminates repeated boolean indexing inside the per-detection loop.
-        masked_speeds = aligned_speed_pairs.copy()
-        masked_speeds[np.isnan(masked_speeds) | (masked_speeds <= 0)] = np.nan
-
         detections = []
+        speed_fn = _speed_for_detection
+
         for section_idx, (starts, ends) in enumerate(intervals_per_section):
-            sec_speeds = masked_speeds[section_idx]  # (Nch-1, time)
+            sec_speeds = aligned_speed_pairs[section_idx]  # (Nch-1, time)
             sec_glrt = glrt_summed[section_idx]
             sec_aligned = aligned_data[section_idx] if aligned_data is not None else None
+            min_spd = self.min_speed
+            max_spd = self.max_speed
 
             for v_start, v_end in zip(starts, ends):
                 if v_end - v_start < min_vehicle_samples:
                     continue
 
-                # Per-pair median over interval, then median across pairs.
-                # nanmedian returns NaN only if ALL values in a pair are NaN.
-                pair_medians = np.nanmedian(sec_speeds[:, v_start:v_end], axis=1)
-                valid_medians = pair_medians[~np.isnan(pair_medians)]
-                if len(valid_medians) == 0:
+                vehicle_speed = speed_fn(sec_speeds, v_start, v_end)
+                if vehicle_speed != vehicle_speed:  # NaN
                     continue
-
-                vehicle_speed = float(np.median(valid_medians))
-                if vehicle_speed < self.min_speed or vehicle_speed > self.max_speed:
+                if vehicle_speed < min_spd or vehicle_speed > max_spd:
                     continue
 
                 t_mid = (v_start + v_end) // 2
