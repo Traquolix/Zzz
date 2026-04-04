@@ -159,6 +159,10 @@ class AIEngineService(RollingBufferedTransformer):
         carros:seg2, mathis:seg1, ...). We group pending sections by fiber_id
         and dispatch each fiber's batch independently when all its sections
         are ready.
+
+        Fibers run concurrently on separate CUDA streams (no GPU lock
+        contention). Each fiber may use a different model, so they must
+        be dispatched independently for correct model routing.
         """
         try:
             buffer_key = self.get_buffer_key(message)
