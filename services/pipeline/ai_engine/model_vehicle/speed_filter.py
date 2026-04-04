@@ -15,9 +15,10 @@ from .utils import find_ind
 class SpeedFilter:
     """Filters unrealistic vehicle speeds based on interval analysis."""
 
-    def __init__(self, min_speed: float, max_speed: float):
+    def __init__(self, min_speed: float, max_speed: float, speed_sampling: str = "midpoint"):
         self.min_speed = min_speed
         self.max_speed = max_speed
+        self.speed_sampling = speed_sampling  # "midpoint" (fast) or "median" (accurate)
 
     def filtering_speed_per_channel(
         self, speed: np.ndarray, binary_filter: np.ndarray, intervals: list
@@ -43,12 +44,18 @@ class SpeedFilter:
             starts_arr = np.asarray(starts, dtype=np.intp)
             ends_arr = np.asarray(ends, dtype=np.intp)
 
-            # Sample speed at interval midpoints instead of computing nanmedian
-            # over each variable-length slice. For smooth speed fields (typical
-            # DTAN output), the midpoint value equals the median. This replaces
-            # ~40k np.nanmedian calls with a single vectorized index operation.
-            mids = (starts_arr + ends_arr) // 2
-            vehicle_speeds = filtered_data[ch_idx, mids]
+            if self.speed_sampling == "median":
+                # Full-interval median: more accurate for slow vehicles where
+                # detection intervals are long and speed may vary within them.
+                vehicle_speeds = np.array([
+                    np.nanmedian(filtered_data[ch_idx, s:e])
+                    for s, e in zip(starts_arr, ends_arr)
+                ])
+            else:
+                # Midpoint sampling: fast path for typical highway speeds.
+                # Single index operation replaces ~40k np.nanmedian calls.
+                mids = (starts_arr + ends_arr) // 2
+                vehicle_speeds = filtered_data[ch_idx, mids]
 
             invalid = (vehicle_speeds > self.max_speed) | (vehicle_speeds < self.min_speed)
             invalid_idx = np.where(invalid)[0]

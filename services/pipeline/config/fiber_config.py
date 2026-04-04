@@ -158,6 +158,7 @@ class SpeedDetectionConfig:
     min_vehicle_duration_s: float = 0.3
     alignment_method: str = "cpab"  # "cpab" (diffeomorphic ODE) or "shift" (linear delay)
     nstepsolver: int = 10  # CPAB ODE solver steps (10 converges for 1D piecewise-affine)
+    speed_sampling: str = "midpoint"  # "midpoint" (fast) or "median" (accurate for slow traffic)
 
     @classmethod
     def from_dict(cls, data: dict) -> SpeedDetectionConfig:
@@ -175,6 +176,7 @@ class SpeedDetectionConfig:
             min_vehicle_duration_s=data.get("min_vehicle_duration_s", 0.3),
             alignment_method=data.get("alignment_method", "cpab"),
             nstepsolver=data.get("nstepsolver", 10),
+            speed_sampling=data.get("speed_sampling", "midpoint"),
         )
 
 
