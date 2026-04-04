@@ -369,7 +369,7 @@ class AIEngineService(RollingBufferedTransformer):
                     self._show_stats()
 
             except Exception as e:
-                self.logger.error(f"Error in batched AI analysis: {e}")
+                self.logger.error(f"Error in batched AI analysis: {e}", exc_info=True)
                 self.metrics.record_error("batch_processing")
 
     def _sync_batch_inference(
