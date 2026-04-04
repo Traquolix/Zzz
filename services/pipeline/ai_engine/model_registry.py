@@ -160,6 +160,7 @@ class ModelRegistry:
                 speed_positive_glrt_only=spec.speed_detection.speed_positive_glrt_only,
                 alignment_method=spec.speed_detection.alignment_method,
                 nstepsolver=spec.speed_detection.nstepsolver,
+                speed_sampling=spec.speed_detection.speed_sampling,
             )
 
             logger.info(f"Loaded speed estimator: {model_hint}")

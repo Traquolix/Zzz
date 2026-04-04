@@ -99,3 +99,86 @@ class TestFilteringSpeedPerChannel:
         result = speed_filter.filtering_speed_per_channel(speed, binary, intervals)
         # Invalid interval should be NaN
         assert np.all(np.isnan(result[:, 20:50]))
+
+
+class TestSpeedSampling:
+    """Tests for midpoint vs median speed sampling modes."""
+
+    def test_midpoint_and_median_agree_on_constant_speed(self):
+        """Both modes should produce identical results when speed is constant."""
+        speed = np.zeros((3, 100))
+        speed[:, 20:50] = 60.0
+        binary = np.zeros_like(speed)
+        binary[:, 20:50] = 1.0
+        intervals = find_ind(binary)
+
+        midpoint_filter = SpeedFilter(
+            min_speed=MIN_SPEED, max_speed=MAX_SPEED, speed_sampling="midpoint"
+        )
+        median_filter = SpeedFilter(
+            min_speed=MIN_SPEED, max_speed=MAX_SPEED, speed_sampling="median"
+        )
+
+        r_mid = midpoint_filter.filtering_speed_per_channel(speed.copy(), binary, intervals)
+        r_med = median_filter.filtering_speed_per_channel(speed.copy(), binary, intervals)
+
+        np.testing.assert_array_equal(r_mid, r_med)
+
+    def test_median_uses_full_interval(self):
+        """Median mode should use all values in the interval, not just midpoint."""
+        speed = np.zeros((1, 100))
+        # Ramp from 30 to 90 across the interval — midpoint is 60, median is ~60
+        speed[0, 20:50] = np.linspace(30, 90, 30)
+        binary = np.zeros_like(speed)
+        binary[0, 20:50] = 1.0
+        intervals = find_ind(binary)
+
+        median_filter = SpeedFilter(
+            min_speed=MIN_SPEED, max_speed=MAX_SPEED, speed_sampling="median"
+        )
+        result = median_filter.filtering_speed_per_channel(speed.copy(), binary, intervals)
+
+        # Median of linspace(30,90,30) = 60, which is valid — interval should be preserved
+        assert not np.all(np.isnan(result[0, 20:50]))
+
+    def test_midpoint_samples_center(self):
+        """Midpoint mode should use only the center value of the interval."""
+        speed = np.zeros((1, 100))
+        # Most of interval is valid (60), but midpoint is invalid (200)
+        speed[0, 20:50] = 60.0
+        mid = (20 + 50) // 2  # = 35
+        speed[0, mid] = 200.0  # only midpoint is invalid
+        binary = np.zeros_like(speed)
+        binary[0, 20:50] = 1.0
+        intervals = find_ind(binary)
+
+        midpoint_filter = SpeedFilter(
+            min_speed=MIN_SPEED, max_speed=MAX_SPEED, speed_sampling="midpoint"
+        )
+        result = midpoint_filter.filtering_speed_per_channel(speed.copy(), binary, intervals)
+
+        # Midpoint sees 200 → invalid → NaN the whole interval
+        assert np.all(np.isnan(result[0, 20:50]))
+
+    def test_median_survives_bad_midpoint(self):
+        """Median mode should survive a bad midpoint if most values are valid."""
+        speed = np.zeros((1, 100))
+        speed[0, 20:50] = 60.0
+        mid = (20 + 50) // 2
+        speed[0, mid] = 200.0  # one bad sample at midpoint
+        binary = np.zeros_like(speed)
+        binary[0, 20:50] = 1.0
+        intervals = find_ind(binary)
+
+        median_filter = SpeedFilter(
+            min_speed=MIN_SPEED, max_speed=MAX_SPEED, speed_sampling="median"
+        )
+        result = median_filter.filtering_speed_per_channel(speed.copy(), binary, intervals)
+
+        # Median of 29 values of 60 + 1 value of 200 = 60 → valid → preserved
+        assert not np.all(np.isnan(result[0, 20:50]))
+
+    def test_default_is_midpoint(self):
+        """Default speed_sampling should be midpoint."""
+        sf = SpeedFilter(min_speed=20, max_speed=120)
+        assert sf.speed_sampling == "midpoint"

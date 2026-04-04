@@ -93,6 +93,7 @@ class VehicleSpeedEstimator:
         speed_positive_glrt_only: bool = False,
         alignment_method: str = "cpab",
         nstepsolver: int = 10,
+        speed_sampling: str = "midpoint",
     ):
         if model_args is None:
             raise ValueError("model_args is required to initialize VehicleSpeedEstimator")
@@ -158,7 +159,9 @@ class VehicleSpeedEstimator:
         )
 
         # Initialize speed filter
-        self._speed_filter = SpeedFilter(min_speed=min_speed, max_speed=max_speed)
+        self._speed_filter = SpeedFilter(
+            min_speed=min_speed, max_speed=max_speed, speed_sampling=speed_sampling
+        )
 
         # Initialize visualizer if enabled
         self.visualizer = None
