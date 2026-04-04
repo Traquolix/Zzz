@@ -62,7 +62,9 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: rate(errors_total{service_name=~"das-processor.*|ai-engine.*"}[5m]) > 0.1
+              # AI engine errors are covered by the dedicated ai-error-rate rule
+              # with typed error_type labels. This rule only watches the processor.
+              expr: rate(errors_total{service_name=~"das-processor.*"}[5m]) > 0.1
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -146,6 +148,17 @@ groups:
         annotations:
           summary: High AI inference latency
           description: "p95 DTAN inference is {{ printf \"%.1f\" $value }}s"
+          runbook: |
+            1. Open AI Engine dashboard → Pipeline Latency → Inference Latency Waterfall.
+               Identify which stage is the bottleneck (tallest bar).
+            2. DTAN Forward or Alignment slow → GPU issue.
+               Check nvidia-smi for GPU utilization, temperature throttling, ECC errors.
+               Check GPU Lock panel — high wait time means fibers are queuing.
+            3. GLRT slow → CPU bound. Check system load on server.
+            4. Preprocess slow → data deserialization issue. Check message sizes.
+            5. If all stages are slow → check if a new fiber was enabled that
+               increased total batch size beyond GPU memory. Check consumer lag
+               to see if the engine is falling behind.
         labels:
           severity: warning
 
@@ -220,5 +233,218 @@ groups:
         annotations:
           summary: No output from AI engine
           description: "AI engine has not processed windows in 10 minutes"
+          runbook: |
+            The AI engine has completely stopped producing output.
+
+            1. Check if the container is running: docker ps | grep ai-engine
+               If not running: docker compose up -d ai-engine, check logs for crash.
+            2. If running, check if it's receiving data:
+               docker logs ai-engine --tail 50
+               Look for "Processed" or "Dispatching batch" messages.
+            3. No input messages → check upstream:
+               Is the processor running? (check das-no-data-flow alert)
+               Is Kafka healthy? docker exec kafka kafka-topics.sh --list
+            4. Receiving input but no output → likely crash loop or GPU failure.
+               Check: nvidia-smi (GPU accessible?)
+               Check: docker logs ai-engine 2>&1 | grep -i error
+            5. Check consumer lag — if lag is growing, the engine is alive but stuck.
+               Possible GPU lock deadlock: restart with docker compose restart ai-engine
         labels:
           severity: critical
+
+  - orgId: 1
+    name: AI Engine Quality
+    folder: DAS Pipeline
+    interval: 2m
+    rules:
+      - uid: ai-glrt-degradation
+        title: GLRT Quality Degradation
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 7200
+              to: 0
+            datasourceUid: prometheus
+            model:
+              # Self-calibrating: fires when current GLRT p50 drops below 20% of
+              # its own 24h-ago value. No hardcoded threshold — adapts per fiber.
+              # The > 0 guards prevent firing on absent data or nighttime zero-traffic.
+              expr: >
+                (
+                  histogram_quantile(0.50, rate(ai_window_glrt_peak_bucket{service_name=~"ai-engine.*"}[1h]))
+                  /
+                  histogram_quantile(0.50, rate(ai_window_glrt_peak_bucket{service_name=~"ai-engine.*"}[1h] offset 24h))
+                ) < 0.2
+                and
+                histogram_quantile(0.50, rate(ai_window_glrt_peak_bucket{service_name=~"ai-engine.*"}[1h])) > 0
+                and
+                histogram_quantile(0.50, rate(ai_window_glrt_peak_bucket{service_name=~"ai-engine.*"}[1h] offset 24h)) > 0
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+        noDataState: OK
+        execErrState: Error
+        for: 30m
+        annotations:
+          summary: "GLRT quality degradation on {{ $labels.fiber_id }}"
+          description: "Median GLRT peak has dropped to less than 20% of its 24h-ago baseline for 30 minutes. This indicates fiber coupling degradation, sensor damage, or a shift in input data characteristics."
+          runbook: |
+            1. Open AI Engine dashboard → Detection Quality → GLRT Peak Trend.
+               Is the drop sudden (minutes) or gradual (hours/days)?
+            2. SUDDEN drop → likely DAS instrument restart or config change.
+               SSH to DAS: ssh operator@192.168.99.110
+               Check instrument status and recent parameter changes.
+            3. GRADUAL decline → fiber coupling degradation (physical).
+               Check if the affected fiber has recent construction or cable work.
+               Compare GLRT peaks across sections — if only one section is affected,
+               the degradation is localized.
+            4. If all fibers are affected simultaneously → check preprocessing.
+               Verify fibers.yaml hasn't changed: git log --oneline -5 config/fibers.yaml
+               Check instrument params topic for dataScale changes.
+            5. This alert is self-calibrating (20% of 24h-ago value). It will not
+               fire during normal traffic variation. If it fires, the signal has
+               genuinely collapsed.
+        labels:
+          severity: warning
+
+      - uid: ai-error-rate
+        title: AI Engine Error Rate
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: rate(errors_ai_total{service_name=~"ai-engine.*"}[5m]) > 0.05
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+        noDataState: OK
+        execErrState: Error
+        for: 2m
+        annotations:
+          summary: "AI engine errors elevated: {{ $labels.error_type }}"
+          description: "AI error rate is {{ printf \"%.2f\" $value }}/sec (type={{ $labels.error_type }}, fiber={{ $labels.fiber_id }})"
+          runbook: |
+            Check error_type label to determine cause:
+
+            gpu_lock_timeout:
+              GPU lock acquisition exceeded 120s. Another process is holding the GPU.
+              1. SSH to server: ssh beaujoin@192.168.99.113
+              2. Check GPU usage: nvidia-smi
+              3. Look for competing processes (training jobs, other containers).
+              4. Check docker logs ai-engine for "GPU lock acquired after" messages.
+              5. If only one fiber is affected, the batch dispatch may be starved.
+
+            batch_processing:
+              General inference failure. Check docker logs ai-engine --tail 100
+              for the full traceback (exc_info=True is enabled).
+              Common causes: CUDA OOM, tensor shape mismatch, NaN in input data.
+
+            counting_failure:
+              CNN counting sub-pipeline failed. Detections still work but vehicle
+              counts may be wrong. Check if the counting model file exists and
+              is not corrupted: ls -la /app/model_vehicle/vehicle_counting_model.pt
+        labels:
+          severity: warning
+
+      - uid: ai-speed-anomaly
+        title: AI Speed Distribution Anomaly
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 7200
+              to: 0
+            datasourceUid: prometheus
+            model:
+              # Rate-of-change detection: fires when the 15-minute median speed
+              # diverges from the 2-hour median speed by more than 15 km/h.
+              # This catches abrupt model/preprocessing shifts while ignoring
+              # gradual diurnal traffic changes (rush hour ramps slowly).
+              # Both sides must be > 10 km/h to exclude startup and low-traffic
+              # transitions (nighttime → morning rush would otherwise false-fire).
+              expr: >
+                abs(
+                  histogram_quantile(0.50, rate(ai_window_speed_median_bucket{service_name=~"ai-engine.*"}[15m]))
+                  -
+                  histogram_quantile(0.50, rate(ai_window_speed_median_bucket{service_name=~"ai-engine.*"}[2h]))
+                ) > 15
+                and
+                histogram_quantile(0.50, rate(ai_window_speed_median_bucket{service_name=~"ai-engine.*"}[15m])) > 10
+                and
+                histogram_quantile(0.50, rate(ai_window_speed_median_bucket{service_name=~"ai-engine.*"}[2h])) > 10
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+        noDataState: OK
+        execErrState: Error
+        for: 15m
+        annotations:
+          summary: "Speed distribution anomaly on {{ $labels.fiber_id }}"
+          description: "Median detected speed shifted abruptly — the 15-minute median diverges from the 2-hour median by more than 15 km/h. This pattern indicates a model or preprocessing change, not traffic."
+          runbook: |
+            This alert detects abrupt speed shifts (15-min vs 2-hour median).
+            Gradual traffic changes (rush hour) will not trigger it.
+
+            1. Open AI Engine dashboard → Speed Distribution panel.
+               Check if the shift is on one fiber or all fibers.
+            2. ALL fibers shifted → preprocessing or model issue.
+               Check fibers.yaml for recent changes: git log -5 config/fibers.yaml
+               Check DAS instrument params: has dataScale or gaugeLength changed?
+               Verify the model weights haven't been swapped: make test (snapshot tests
+               will fail if model output has changed).
+            3. ONE fiber shifted → fiber-specific issue.
+               Check if the fiber's section boundaries changed.
+               Check calibration data: ls -la /app/calibration/<fiber_id>/
+            4. If the shift coincides with a deployment → check the diff:
+               git log --oneline -5 on the server
+            5. Validate in ClickHouse:
+               SELECT fiber_id, quantile(0.5)(speed_kmh)
+               FROM detection_hires
+               WHERE timestamp > now() - INTERVAL 3 HOUR
+               GROUP BY fiber_id, toStartOfFifteenMinutes(timestamp)
+               ORDER BY fiber_id, toStartOfFifteenMinutes(timestamp)
+        labels:
+          severity: warning
+
+      - uid: ai-model-fallback
+        title: AI Model Fallback Active
+        condition: A
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 600
+              to: 0
+            datasourceUid: prometheus
+            model:
+              expr: increase(ai_model_fallback_total{service_name=~"ai-engine.*"}[10m]) > 0
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: "AI model {{ $labels.model_hint }} failed to load, using default"
+          description: "Model load failure with fallback to default model. The default model may have wrong parameters for this fiber. Check model path and configuration."
+          runbook: |
+            A fiber is running on the default model because its configured model
+            failed to load. Detections will still appear but may have wrong speeds
+            (different gauge_meters, channel count, or calibration).
+
+            1. Check which model failed: look at model_hint label in the alert.
+            2. Check AI engine logs for the load error:
+               docker logs ai-engine 2>&1 | grep "Failed to load model"
+            3. Common causes:
+               - Model file missing or path wrong in fibers.yaml
+               - Model weight file corrupted (re-download or restore from backup)
+               - PyTorch version mismatch (check Dockerfile base image)
+            4. Fix the model config and restart: docker compose restart ai-engine
+            5. Verify by checking the dashboard — the Model Fallbacks stat should
+               return to 0 within 10 minutes.
+        labels:
+          severity: warning

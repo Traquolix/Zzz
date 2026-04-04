@@ -322,7 +322,10 @@ class VehicleSpeedEstimator:
         fwd_results, stage_times = self._batched_direction(fwd_combined, window_counts)
         rev_results_list = None
         if self.bidirectional_detection and rev_combined is not None:
-            rev_results_list, stage_times = self._batched_direction(rev_combined, window_counts)
+            rev_results_list, rev_times = self._batched_direction(rev_combined, window_counts)
+            # Sum both directions — operator cares about total GPU time per window
+            for k, v in rev_times.items():
+                stage_times[k] = stage_times.get(k, 0.0) + v
 
         results = self._postprocess_batch(
             sections, prepared, valid_indices, fwd_results, rev_results_list
