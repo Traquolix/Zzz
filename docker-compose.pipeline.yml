@@ -14,7 +14,7 @@ services:
         HTTP_PROXY: ${HTTP_PROXY:-}
         HTTPS_PROXY: ${HTTPS_PROXY:-}
         NO_PROXY: ${NO_PROXY:-}
-    container_name: processor
+    container_name: ${CONTAINER_PREFIX:-}processor
     restart: unless-stopped
     deploy:
       resources:
@@ -38,7 +38,7 @@ services:
         HTTP_PROXY: ${HTTP_PROXY:-}
         HTTPS_PROXY: ${HTTPS_PROXY:-}
         NO_PROXY: ${NO_PROXY:-}
-    container_name: ai-engine
+    container_name: ${CONTAINER_PREFIX:-}ai-engine
     restart: unless-stopped
     deploy:
       resources:
