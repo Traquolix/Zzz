@@ -508,9 +508,8 @@ class FiberConfigManager:
         truth — values from fibers.yaml are only used as fallback when the
         params topic is unavailable.
         """
-        import uuid
-
         from confluent_kafka import Consumer
+        from confluent_kafka.admin import AdminClient
         from confluent_kafka.error import SerializationError
         from confluent_kafka.schema_registry import SchemaRegistryClient
         from confluent_kafka.schema_registry.avro import AvroDeserializer
@@ -525,11 +524,12 @@ class FiberConfigManager:
         sr_client = SchemaRegistryClient({"url": schema_registry_url})
         deserializer = AvroDeserializer(sr_client)
 
+        group_id = "das-params-bootstrap"
         topics = [f"das.raw.{fid}.params" for fid in fibers]
         consumer = Consumer(
             {
                 "bootstrap.servers": kafka_bootstrap_servers,
-                "group.id": f"params-bootstrap-{uuid.uuid4()}",
+                "group.id": group_id,
                 "auto.offset.reset": "earliest",
                 "enable.auto.commit": False,
             }
@@ -584,6 +584,15 @@ class FiberConfigManager:
                 )
         finally:
             consumer.close()
+            # Delete the ephemeral consumer group so it doesn't linger in Kafka
+            try:
+                admin = AdminClient({"bootstrap.servers": kafka_bootstrap_servers})
+                futures = admin.delete_consumer_groups([group_id])
+                for _gid, future in futures.items():
+                    future.result(timeout=5)
+                logger.debug(f"Deleted consumer group '{group_id}'")
+            except Exception as e:
+                logger.debug(f"Could not delete consumer group '{group_id}': {e}")
 
         if pending:
             for fid in pending:
