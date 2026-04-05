@@ -2,7 +2,7 @@
 set -e
 
 # Block startup if placeholder passwords are still set in production
-if [ "${ENVIRONMENT}" = "production" ]; then
+if [ "${ENVIRONMENT}" = "prod" ]; then
     FAIL=0
     for VAR_NAME in POSTGRES_PASSWORD CLICKHOUSE_PASSWORD REDIS_PASSWORD DJANGO_SECRET_KEY; do
         VAL=$(eval echo "\$$VAR_NAME")
