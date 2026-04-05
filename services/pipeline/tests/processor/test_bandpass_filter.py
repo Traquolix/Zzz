@@ -222,11 +222,11 @@ class TestBandpassFilterValidation:
             BandpassFilter(low_freq=2.0, high_freq=2.0, sampling_rate=125.0)
 
 
-class TestBandpassFilterNaNContamination:
-    """NaN propagation through filter state — critical safety test."""
+class TestBandpassFilterNaNSanitization:
+    """NaN/Inf sanitization prevents filter state contamination."""
 
-    async def test_nan_in_one_batch_contaminates_state(self):
-        """A single NaN sample corrupts filter state for that fiber."""
+    async def test_nan_sanitized_output_is_finite(self):
+        """NaN values are replaced with 0.0 before filtering."""
         step = BandpassFilter(low_freq=0.3, high_freq=2.0, sampling_rate=125.0)
         rng = np.random.default_rng(42)
 
@@ -234,40 +234,72 @@ class TestBandpassFilterNaNContamination:
         clean = rng.standard_normal((100, 5))
         await step.process(make_measurement(clean, fiber_id="f1"))
 
-        # Inject NaN
+        # Inject NaN — should be sanitized, not propagated
         dirty = rng.standard_normal((10, 5))
         dirty[5, 2] = np.nan
         result_dirty = await step.process(make_measurement(dirty, fiber_id="f1"))
 
-        # NaN should propagate to output
-        assert np.any(np.isnan(result_dirty["values"]))
+        assert np.all(np.isfinite(result_dirty["values"])), (
+            "NaN should be sanitized to 0.0 before filtering"
+        )
 
-        # Subsequent clean batch: state is contaminated → NaN persists
+    async def test_nan_does_not_contaminate_subsequent_batches(self):
+        """After a NaN batch, subsequent clean batches produce finite output."""
+        step = BandpassFilter(low_freq=0.3, high_freq=2.0, sampling_rate=125.0)
+        rng = np.random.default_rng(42)
+
+        clean = rng.standard_normal((100, 5))
+        await step.process(make_measurement(clean, fiber_id="f1"))
+
+        dirty = rng.standard_normal((10, 5))
+        dirty[5, 2] = np.nan
+        await step.process(make_measurement(dirty, fiber_id="f1"))
+
+        # Subsequent clean batch must be NaN-free
         clean2 = rng.standard_normal((10, 5))
         result_after = await step.process(make_measurement(clean2, fiber_id="f1"))
 
-        has_nan = np.any(np.isnan(result_after["values"]))
-        assert has_nan, (
-            "Filter state should be contaminated by NaN. "
-            "This test documents that NaN is NOT self-healing — "
-            "the filter state must be explicitly reset after NaN input."
+        assert np.all(np.isfinite(result_after["values"])), (
+            "Filter state should not be contaminated after NaN sanitization"
         )
+
+    async def test_inf_sanitized(self):
+        """Inf values are also replaced with 0.0."""
+        step = BandpassFilter(low_freq=0.3, high_freq=2.0, sampling_rate=125.0)
+
+        values = np.ones((10, 5))
+        values[3, 1] = np.inf
+        values[7, 4] = -np.inf
+        result = await step.process(make_measurement(values, fiber_id="f1"))
+
+        assert np.all(np.isfinite(result["values"]))
 
     async def test_nan_does_not_contaminate_other_fibers(self):
         """NaN in fiber A should not affect fiber B."""
         step = BandpassFilter(low_freq=0.3, high_freq=2.0, sampling_rate=125.0)
         rng = np.random.default_rng(42)
 
-        # Fiber A: inject NaN
         dirty = rng.standard_normal((10, 5))
         dirty[5, 2] = np.nan
         await step.process(make_measurement(dirty, fiber_id="fiber_a"))
 
-        # Fiber B: clean data
         clean = rng.standard_normal((10, 5))
         result_b = await step.process(make_measurement(clean, fiber_id="fiber_b"))
 
         assert not np.any(np.isnan(result_b["values"]))
+
+    async def test_nan_input_not_modified(self):
+        """Sanitization should not modify the original input array."""
+        step = BandpassFilter(low_freq=0.3, high_freq=2.0, sampling_rate=125.0)
+        values = np.ones((5, 3))
+        values[2, 1] = np.nan
+        original = values.copy()
+
+        await step.process(make_measurement(values))
+
+        # Original array should still have NaN
+        assert np.isnan(original[2, 1])
+        assert np.isnan(values[2, 1])
 
 
 class TestBandpassFilterDeterminism:

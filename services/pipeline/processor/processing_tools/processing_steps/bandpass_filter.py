@@ -1,9 +1,12 @@
+import logging
 from typing import Any
 
 import numpy as np
 
 from processor.processing_tools.math import VectorizedBiquadFilter
 from processor.processing_tools.processing_steps.base_step import ProcessingStep
+
+logger = logging.getLogger(__name__)
 
 
 class BandpassFilter(ProcessingStep):
@@ -44,6 +47,21 @@ class BandpassFilter(ProcessingStep):
 
         if channel_count == 0:
             return measurement_data
+
+        # Sanitize non-finite values to prevent permanent filter state contamination.
+        # A single NaN/Inf sample would corrupt the IIR filter state for this fiber
+        # permanently (sosfilt propagates NaN through its internal delay elements).
+        # Replace with 0.0 — neutral for a bandpass filter (DC is rejected).
+        non_finite_mask = ~np.isfinite(values)
+        if np.any(non_finite_mask):
+            n_bad = int(np.sum(non_finite_mask))
+            logger.warning(
+                "Bandpass filter: %d non-finite values in fiber '%s', replacing with 0.0",
+                n_bad,
+                fiber_id,
+            )
+            values = values.copy()
+            values[non_finite_mask] = 0.0
 
         if fiber_id not in self._fiber_states:
             self._fiber_states[fiber_id] = {

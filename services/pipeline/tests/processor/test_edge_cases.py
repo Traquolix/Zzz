@@ -58,7 +58,7 @@ class TestAllZerosInput:
 
 
 class TestNaNInput:
-    """NaN propagation behavior — documents known contamination risk."""
+    """NaN propagation behavior. Bandpass sanitizes NaN; other steps propagate it."""
 
     async def test_scale_propagates_nan(self):
         step = Scale(factor=213.05)
