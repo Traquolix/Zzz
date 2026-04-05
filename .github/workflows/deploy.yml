@@ -7,7 +7,7 @@ name: Deploy
 # Promotion flow:
 #   CI passes → deploy to preprod (automatic) → deploy to prod (requires approval)
 #
-# The "production" GitHub Environment must have a required reviewer configured
+# The "prod" GitHub Environment must have a required reviewer configured
 # in repo Settings → Environments. This makes it structurally impossible to
 # deploy to prod without preprod passing first.
 # Cancel previous in-flight deploys — only the latest commit matters.
@@ -178,7 +178,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' && github.event.inputs.target != 'preprod') ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     runs-on: [self-hosted, backend]
-    environment: production
+    environment: prod
     env:
       DEPLOY_DIR: /opt/Sequoia
     steps:
@@ -276,7 +276,7 @@ jobs:
       ((github.event_name == 'workflow_dispatch' && github.event.inputs.target != 'preprod') ||
        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'))
     runs-on: [self-hosted, frontend]
-    environment: production
+    environment: prod
     env:
       FRONTEND_DIR: /var/www/sequoia
     steps:
