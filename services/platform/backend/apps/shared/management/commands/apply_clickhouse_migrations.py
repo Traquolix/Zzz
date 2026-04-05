@@ -26,7 +26,7 @@ from apps.shared.exceptions import ClickHouseUnavailableError
 # ClickHouse SQL template variables with backwards-compatible defaults.
 _CH_TEMPLATE_VARS = {
     "CH_DATABASE": os.environ.get("CH_DATABASE", "sequoia"),
-    "CH_KAFKA_TOPIC": os.environ.get("CH_KAFKA_TOPIC", "das.detections"),
+    "CH_KAFKA_TOPIC": os.environ.get("CH_KAFKA_TOPIC", "prod.detections"),
     "CH_KAFKA_GROUP": os.environ.get("CH_KAFKA_GROUP", "clickhouse_detection_consumer"),
 }
 

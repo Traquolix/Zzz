@@ -30,9 +30,9 @@ service_defaults:
   # Topic naming
   topics:
     raw_pattern: "^das\\.raw\\.[^.]+$"    # Input pattern for processor (excludes .params)
-    processed: das.processed           # Output from processor, input to ai_engine
-    detections: das.detections           # Unified detection output (speed + count + vehicle type)
-    dlq: das.dlq                       # Dead letter queue
+    processed: processed                  # Output from processor, input to ai_engine
+    detections: detections                # Unified detection output (speed + count + vehicle type)
+    dlq: dlq                              # Dead letter queue
 
   # Schema paths (relative to pipeline root / PYTHONPATH).
   schemas:

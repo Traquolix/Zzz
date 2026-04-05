@@ -53,7 +53,7 @@ class ServiceConfig:
 
     # Dead letter queue settings (Kafka-backed)
     enable_dlq: bool = True
-    dlq_topic: str = "das.dlq"
+    dlq_topic: str = "prod.dlq"
 
     # Performance settings
     max_concurrent_messages: int = 100

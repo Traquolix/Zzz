@@ -40,11 +40,11 @@ services:
       CLICKHOUSE_USER: ${CLICKHOUSE_USER:-sequoia}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
       CH_DATABASE: ${CH_DATABASE:-sequoia}
-      CH_KAFKA_TOPIC: ${CH_KAFKA_TOPIC:-das.detections}
+      CH_KAFKA_TOPIC: ${CH_KAFKA_TOPIC:-prod.detections}
       CH_KAFKA_GROUP: ${CH_KAFKA_GROUP:-clickhouse_detection_consumer}
       # Kafka
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      KAFKA_DETECTIONS_TOPIC: ${KAFKA_DETECTIONS_TOPIC:-das.detections}
+      KAFKA_DETECTIONS_TOPIC: ${KAFKA_DETECTIONS_TOPIC:-prod.detections}
       KAFKA_CONSUMER_GROUP: ${KAFKA_CONSUMER_GROUP:-sequoia-realtime-bridge}
       # Redis / Channels
       REDIS_HOST: redis

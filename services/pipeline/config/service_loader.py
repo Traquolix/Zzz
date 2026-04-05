@@ -64,7 +64,7 @@ def load_service_config(service_type: str) -> ServiceConfig:
         producer_acks=producer_cfg.get("acks", "all"),
         producer_retries=producer_cfg.get("retries", 3),
         producer_enable_idempotence=producer_cfg.get("enable_idempotence", True),
-        dlq_topic=_prefixed_topic(topics.get("dlq", "das.dlq"), topic_prefix),
+        dlq_topic=_prefixed_topic(topics.get("dlq", "dlq"), topic_prefix),
     )
 
     logger.info(
@@ -77,16 +77,9 @@ def load_service_config(service_type: str) -> ServiceConfig:
     return config
 
 
-def _prefixed_topic(default_topic: str, prefix: str) -> str:
-    """Apply topic prefix for environment isolation.
-
-    Replaces the ``das.`` prefix in topic names with the given prefix.
-    If the topic doesn't start with ``das.`` or the prefix is already ``das``,
-    returns the topic unchanged.
-    """
-    if prefix == "das" or not default_topic.startswith("das."):
-        return default_topic
-    return prefix + default_topic[3:]  # "das.processed" -> "preprod.processed"
+def _prefixed_topic(base_name: str, prefix: str) -> str:
+    """Apply topic prefix: e.g. _prefixed_topic("processed", "prod") -> "prod.processed"."""
+    return f"{prefix}.{base_name}"
 
 
 def _build_outputs(
@@ -96,7 +89,7 @@ def _build_outputs(
     if service_type == "processor":
         return {
             "default": OutputConfig(
-                topic=_prefixed_topic(topics.get("processed", "das.processed"), topic_prefix),
+                topic=_prefixed_topic(topics.get("processed", "processed"), topic_prefix),
                 key_schema_file=schemas.get("output_key"),
                 value_schema_file=schemas.get("output_value"),
             )
@@ -104,7 +97,7 @@ def _build_outputs(
     elif service_type == "ai_engine":
         return {
             "default": OutputConfig(
-                topic=_prefixed_topic(topics.get("detections", "das.detections"), topic_prefix),
+                topic=_prefixed_topic(topics.get("detections", "detections"), topic_prefix),
                 key_schema_file=schemas.get("detection_key"),
                 value_schema_file=schemas.get("detection_value"),
             ),
@@ -132,7 +125,7 @@ def _get_input_config(
         # Raw input is always das.raw.* regardless of TOPIC_PREFIX
         return None, topics.get("raw_pattern", "^das\\.raw\\..+$")
     elif service_type == "ai_engine":
-        return _prefixed_topic(topics.get("processed", "das.processed"), topic_prefix), None
+        return _prefixed_topic(topics.get("processed", "processed"), topic_prefix), None
     else:
         raise ValueError(f"Unknown service type: {service_type}")
 

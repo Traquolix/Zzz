@@ -6,7 +6,7 @@
 set -euo pipefail
 
 : "${CH_DATABASE:=sequoia}"
-: "${CH_KAFKA_TOPIC:=das.detections}"
+: "${CH_KAFKA_TOPIC:=prod.detections}"
 : "${CH_KAFKA_GROUP:=clickhouse_detection_consumer}"
 export CH_DATABASE CH_KAFKA_TOPIC CH_KAFKA_GROUP
 
