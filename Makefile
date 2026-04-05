@@ -10,7 +10,7 @@
         test test-ai-engine snapshot-confirm \
         security security-pipeline security-backend security-frontend \
         ci up up-infra up-pipeline up-platform down down-infra down-pipeline down-platform \
-        up-preprod down-preprod logs-preprod \
+        up-preprod down-preprod logs-preprod up-authentik down-authentik \
         logs rebuild shell clean dev dev-deps dev-stop dev-backend dev-frontend \
         ch-migrate backup restore _check-python
 
@@ -199,6 +199,9 @@ COMPOSE_PLATFORM = docker compose -f docker-compose.platform.yml
 COMPOSE_PIPELINE_PP = docker compose -f docker-compose.pipeline.yml --env-file .env --env-file .env.preprod -p sequoia-pp
 COMPOSE_PLATFORM_PP = docker compose -f docker-compose.platform.yml --env-file .env --env-file .env.preprod -p sequoia-pp
 
+# Authentik: SSO identity provider, shares PostgreSQL from infra.
+COMPOSE_AUTHENTIK = docker compose -f docker-compose.authentik.yml --env-file .env --env-file .env.authentik
+
 up: up-infra up-pipeline up-platform ## Start all services
 
 up-infra: ## Start shared infrastructure (Kafka, ClickHouse, PG, Redis, otel)
@@ -231,6 +234,12 @@ up-preprod: ## Start preprod pipeline + platform (requires: make up-infra)
 down-preprod: ## Stop preprod pipeline + platform
 	-$(COMPOSE_PLATFORM_PP) down
 	$(COMPOSE_PIPELINE_PP) down
+
+up-authentik: ## Start Authentik SSO (requires: make up-infra)
+	$(COMPOSE_AUTHENTIK) up -d
+
+down-authentik: ## Stop Authentik SSO
+	$(COMPOSE_AUTHENTIK) down
 
 logs-preprod: ## Tail preprod logs (usage: make logs-preprod SERVICE=processor)
 	$(COMPOSE_PIPELINE_PP) logs -f $(SERVICE) 2>/dev/null || $(COMPOSE_PLATFORM_PP) logs -f $(SERVICE)
