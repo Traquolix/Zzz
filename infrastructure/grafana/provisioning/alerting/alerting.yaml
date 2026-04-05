@@ -39,7 +39,7 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: absent_over_time(messages_processed_total{service_name=~"das-processor.*"}[5m]) or absent_over_time(ai_windows_processed_total{service_name=~"ai-engine.*"}[5m])
+              expr: absent_over_time(messages_processed_total{service_name=~"das-processor.*",deployment_environment!="preprod"}[5m]) or absent_over_time(ai_windows_processed_total{service_name=~"ai-engine.*",deployment_environment!="preprod"}[5m])
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -64,7 +64,7 @@ groups:
             model:
               # AI engine errors are covered by the dedicated ai-error-rate rule
               # with typed error_type labels. This rule only watches the processor.
-              expr: rate(errors_total{service_name=~"das-processor.*"}[5m]) > 0.1
+              expr: rate(errors_total{service_name=~"das-processor.*",deployment_environment!="preprod"}[5m]) > 0.1
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -87,7 +87,7 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: circuit_breaker_state{service_name=~"das-processor.*|ai-engine.*"} == 2
+              expr: circuit_breaker_state{service_name=~"das-processor.*|ai-engine.*",deployment_environment!="preprod"} == 2
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -115,7 +115,7 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: kafka_consumer_lag_messages{service_name=~"das-processor.*|ai-engine.*"} > 10000
+              expr: kafka_consumer_lag_messages{service_name=~"das-processor.*|ai-engine.*",deployment_environment!="preprod"} > 10000
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -138,7 +138,7 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: histogram_quantile(0.95, rate(ai_gpu_lock_held_duration_seconds_bucket{service_name=~"ai-engine.*"}[5m])) > 5
+              expr: histogram_quantile(0.95, rate(ai_gpu_lock_held_duration_seconds_bucket{service_name=~"ai-engine.*",deployment_environment!="preprod"}[5m])) > 5
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -172,7 +172,7 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: dlq_depth_messages{service_name=~"das-processor.*|ai-engine.*"} > 50
+              expr: dlq_depth_messages{service_name=~"das-processor.*|ai-engine.*",deployment_environment!="preprod"} > 50
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -200,7 +200,7 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: rate(messages_processed_total{service_name=~"das-processor.*"}[10m]) == 0
+              expr: rate(messages_processed_total{service_name=~"das-processor.*",deployment_environment!="preprod"}[10m]) == 0
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -223,7 +223,7 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: rate(ai_windows_processed_total{service_name=~"ai-engine.*"}[10m]) == 0
+              expr: rate(ai_windows_processed_total{service_name=~"ai-engine.*",deployment_environment!="preprod"}[10m]) == 0
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -272,14 +272,14 @@ groups:
               # The > 0 guards prevent firing on absent data or nighttime zero-traffic.
               expr: >
                 (
-                  histogram_quantile(0.50, rate(ai_window_glrt_peak_bucket{service_name=~"ai-engine.*"}[1h]))
+                  histogram_quantile(0.50, rate(ai_window_glrt_peak_bucket{service_name=~"ai-engine.*",deployment_environment!="preprod"}[1h]))
                   /
-                  histogram_quantile(0.50, rate(ai_window_glrt_peak_bucket{service_name=~"ai-engine.*"}[1h] offset 24h))
+                  histogram_quantile(0.50, rate(ai_window_glrt_peak_bucket{service_name=~"ai-engine.*",deployment_environment!="preprod"}[1h] offset 24h))
                 ) < 0.2
                 and
-                histogram_quantile(0.50, rate(ai_window_glrt_peak_bucket{service_name=~"ai-engine.*"}[1h])) > 0
+                histogram_quantile(0.50, rate(ai_window_glrt_peak_bucket{service_name=~"ai-engine.*",deployment_environment!="preprod"}[1h])) > 0
                 and
-                histogram_quantile(0.50, rate(ai_window_glrt_peak_bucket{service_name=~"ai-engine.*"}[1h] offset 24h)) > 0
+                histogram_quantile(0.50, rate(ai_window_glrt_peak_bucket{service_name=~"ai-engine.*",deployment_environment!="preprod"}[1h] offset 24h)) > 0
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -318,7 +318,7 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: rate(errors_ai_total{service_name=~"ai-engine.*"}[5m]) > 0.05
+              expr: rate(errors_ai_total{service_name=~"ai-engine.*",deployment_environment!="preprod"}[5m]) > 0.05
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -369,14 +369,14 @@ groups:
               # transitions (nighttime → morning rush would otherwise false-fire).
               expr: >
                 abs(
-                  histogram_quantile(0.50, rate(ai_window_speed_median_bucket{service_name=~"ai-engine.*"}[15m]))
+                  histogram_quantile(0.50, rate(ai_window_speed_median_bucket{service_name=~"ai-engine.*",deployment_environment!="preprod"}[15m]))
                   -
-                  histogram_quantile(0.50, rate(ai_window_speed_median_bucket{service_name=~"ai-engine.*"}[2h]))
+                  histogram_quantile(0.50, rate(ai_window_speed_median_bucket{service_name=~"ai-engine.*",deployment_environment!="preprod"}[2h]))
                 ) > 15
                 and
-                histogram_quantile(0.50, rate(ai_window_speed_median_bucket{service_name=~"ai-engine.*"}[15m])) > 10
+                histogram_quantile(0.50, rate(ai_window_speed_median_bucket{service_name=~"ai-engine.*",deployment_environment!="preprod"}[15m])) > 10
                 and
-                histogram_quantile(0.50, rate(ai_window_speed_median_bucket{service_name=~"ai-engine.*"}[2h])) > 10
+                histogram_quantile(0.50, rate(ai_window_speed_median_bucket{service_name=~"ai-engine.*",deployment_environment!="preprod"}[2h])) > 10
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
@@ -421,7 +421,7 @@ groups:
               to: 0
             datasourceUid: prometheus
             model:
-              expr: increase(ai_model_fallback_total{service_name=~"ai-engine.*"}[10m]) > 0
+              expr: increase(ai_model_fallback_total{service_name=~"ai-engine.*",deployment_environment!="preprod"}[10m]) > 0
               intervalMs: 1000
               maxDataPoints: 43200
               refId: A
