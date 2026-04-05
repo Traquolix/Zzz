@@ -1,4 +1,5 @@
-import { apiRequest, getAuthToken } from './client'
+import { apiRequest } from './client'
+import { getAccessToken } from '@/auth/oidc'
 import { API_URL } from '@/constants/api'
 
 export type ExportEstimate = {
@@ -68,12 +69,11 @@ export async function downloadExport(params: ExportParams): Promise<void> {
     query.set('channel_end', String(params.channelEnd))
   }
 
-  const token = getAuthToken()
+  const token = await getAccessToken()
   const resp = await fetch(`${API_URL}${endpoint}?${query}`, {
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
-    credentials: 'include',
   })
 
   if (resp.status === 429) {

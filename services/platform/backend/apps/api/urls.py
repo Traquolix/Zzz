@@ -22,10 +22,8 @@ urlpatterns = [
     path("health/ready", shared_views.ReadinessCheckView.as_view(), name="readiness"),
     # Metrics exported via OTel collector (no /metrics endpoint needed)
     # Auth endpoints
-    path("auth/login", auth_views.LoginView.as_view(), name="login"),
     path("auth/verify", auth_views.VerifyView.as_view(), name="verify"),
-    path("auth/refresh", auth_views.CookieTokenRefreshView.as_view(), name="token-refresh"),
-    path("auth/logout", auth_views.LogoutView.as_view(), name="logout"),
+    path("auth/oidc/config", auth_views.OIDCConfigView.as_view(), name="oidc-config"),
     # Data endpoints
     path("fibers", fiber_views.FiberListView.as_view(), name="fibers"),
     path("incidents", monitoring_views.IncidentListView.as_view(), name="incidents"),

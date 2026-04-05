@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode, useCallback } from 'react'
-import { getAuthToken } from '@/api/client'
+import { getAccessToken } from '@/auth/oidc'
 import { logger } from '@/lib/logger'
 import { RealtimeContext, type RealtimeContextType, type DataFlow } from './RealtimeContext'
 import { showToast } from '@/lib/toast'
@@ -92,15 +92,15 @@ export function RealtimeProvider({ children, url }: { children: ReactNode; url: 
 
     let tokenPollTimer: ReturnType<typeof setTimeout> | null = null
 
-    const connect = () => {
-      const token = getAuthToken()
+    const connect = async () => {
+      const token = await getAccessToken()
       if (!token) {
         // Token not yet available — poll until auth completes
         let attempts = 0
-        const poll = () => {
+        const poll = async () => {
           if (cancelledRef.current) return
           attempts++
-          const t = getAuthToken()
+          const t = await getAccessToken()
           if (t) {
             tokenPollTimer = null
             connect()

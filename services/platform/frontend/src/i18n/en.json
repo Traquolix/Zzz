@@ -22,7 +22,9 @@
     "signingIn": "Signing in...",
     "welcomeBack": "Welcome back, {{username}}",
     "tooManyAttempts": "Too many attempts. Try again later.",
-    "connectionFailed": "Connection failed"
+    "connectionFailed": "Connection failed",
+    "authenticating": "Authenticating...",
+    "backToLogin": "Back to login"
   },
   "incidents": {
     "title": "Incident History",

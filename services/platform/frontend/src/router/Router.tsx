@@ -3,6 +3,7 @@ import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary'
 import { Login } from '@/pages/Login'
+import { AuthCallback } from '@/pages/AuthCallback'
 
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
 
@@ -10,6 +11,10 @@ export const router = createBrowserRouter([
   {
     path: '/login',
     element: <Login />,
+  },
+  {
+    path: '/auth/callback',
+    element: <AuthCallback />,
   },
   {
     element: <ProtectedRoute />,

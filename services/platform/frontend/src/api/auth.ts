@@ -1,4 +1,4 @@
-import { apiRequest, getAuthToken, setAuthToken, clearAuthToken, attemptTokenRefresh } from './client'
+import { apiRequest } from './client'
 
 export type AuthData = {
   username: string
@@ -10,27 +10,15 @@ export type AuthData = {
   isSuperuser: boolean
 }
 
-type LoginResponse = AuthData & {
-  token: string
-}
-
 type VerifyResponse = AuthData & {
   valid: boolean
 }
 
 /**
- * Verify the current session. If the in-memory token is missing
- * (e.g. after page reload), tries to refresh via httpOnly cookie first.
+ * Verify the current session by calling the backend verify endpoint.
+ * The access token is attached automatically by apiRequest via oidc-client-ts.
  */
 export async function verifyToken(): Promise<{ valid: boolean; data?: AuthData }> {
-  // If no in-memory token, try to restore via refresh cookie.
-  // Skip if no session hint cookie — avoids a blind POST that always 401s.
-  if (!getAuthToken()) {
-    if (!document.cookie.includes('has_session=')) return { valid: false }
-    const refreshed = await attemptTokenRefresh()
-    if (!refreshed) return { valid: false }
-  }
-
   try {
     const response = await apiRequest<VerifyResponse>('/api/auth/verify', {
       method: 'GET',
@@ -54,34 +42,3 @@ export async function verifyToken(): Promise<{ valid: boolean; data?: AuthData }
     return { valid: false }
   }
 }
-
-/**
- * Login with username and password
- */
-export async function login(username: string, password: string): Promise<LoginResponse> {
-  const data = await apiRequest<LoginResponse>('/api/auth/login', {
-    method: 'POST',
-    body: { username, password },
-    requiresAuth: false,
-  })
-
-  setAuthToken(data.token)
-  return data
-}
-
-/**
- * Logout and clear token
- */
-export async function logout(): Promise<void> {
-  try {
-    await apiRequest('/api/auth/logout', { method: 'POST' })
-  } catch {
-    // Ignore errors - we'll clear token anyway
-  } finally {
-    clearAuthToken()
-    document.cookie = 'has_session=; path=/; max-age=0'
-  }
-}
-
-// Re-export token utilities for direct access
-export { getAuthToken, setAuthToken, clearAuthToken, attemptTokenRefresh }
