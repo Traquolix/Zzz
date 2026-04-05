@@ -10,6 +10,12 @@ name: Deploy
 # The "production" GitHub Environment must have a required reviewer configured
 # in repo Settings → Environments. This makes it structurally impossible to
 # deploy to prod without preprod passing first.
+# Cancel previous in-flight deploys — only the latest commit matters.
+# Preprod always gets the newest code; stale prod approvals are cancelled.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   workflow_run:
     workflows: ["CI"]
