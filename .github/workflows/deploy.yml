@@ -3,6 +3,13 @@ name: Deploy
 # Triggers:
 # 1. Automatically after CI passes on main (push = merged PR)
 # 2. Manual trigger from GitHub UI (workflow_dispatch)
+#
+# Promotion flow:
+#   CI passes → deploy to preprod (automatic) → deploy to prod (requires approval)
+#
+# The "production" GitHub Environment must have a required reviewer configured
+# in repo Settings → Environments. This makes it structurally impossible to
+# deploy to prod without preprod passing first.
 on:
   workflow_run:
     workflows: ["CI"]
@@ -10,26 +17,132 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
+      target:
+        description: "Deploy target"
+        type: choice
+        options: [preprod, production, both]
+        default: both
       skip_frontend:
         description: "Skip frontend deployment"
         type: boolean
         default: false
-      skip_backend:
-        description: "Skip backend deployment"
-        type: boolean
-        default: false
 
 jobs:
-  # -------------------------------------------------------------------------
-  # Backend: runs on the backend server (self-hosted runner labeled "backend")
-  # -------------------------------------------------------------------------
-  deploy-backend:
-    # Only run from this repo (never from forks) to protect self-hosted runners
+  # =========================================================================
+  # PREPROD — deploys automatically after CI passes
+  # =========================================================================
+  deploy-preprod-backend:
     if: >
       github.repository == 'Traquolix/Zzz' &&
-      (github.event.inputs.skip_backend != 'true') &&
-      (github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.target != 'production') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
+    runs-on: [self-hosted, backend]
+    environment: preprod
+    env:
+      DEPLOY_DIR: /opt/Sequoia
+    steps:
+      - name: Pull latest code
+        run: |
+          cd ${{ env.DEPLOY_DIR }}
+          git fetch origin main
+          git checkout main
+          git reset --hard origin/main
+
+      - name: Rebuild and restart preprod services
+        run: |
+          cd ${{ env.DEPLOY_DIR }}
+          docker compose -f docker-compose.pipeline.yml --env-file .env --env-file .env.preprod -p sequoia-pp build --parallel
+          docker compose -f docker-compose.pipeline.yml --env-file .env --env-file .env.preprod -p sequoia-pp up -d --force-recreate
+          docker compose -f docker-compose.platform.yml --env-file .env --env-file .env.preprod -p sequoia-pp build
+          docker compose -f docker-compose.platform.yml --env-file .env --env-file .env.preprod -p sequoia-pp up -d --force-recreate
+
+      - name: Run preprod migrations
+        run: |
+          cd ${{ env.DEPLOY_DIR }}
+          docker compose -f docker-compose.platform.yml --env-file .env --env-file .env.preprod -p sequoia-pp \
+            exec -T platform-backend python manage.py migrate --noinput
+
+      - name: Preprod health check
+        id: health
+        run: |
+          cd ${{ env.DEPLOY_DIR }}
+          SERVICES="pp-processor pp-ai-engine pp-platform-backend"
+
+          echo "Waiting for preprod services to become healthy (timeout 180s)..."
+          TIMEOUT=180
+          INTERVAL=5
+          ELAPSED=0
+
+          while [ $ELAPSED -lt $TIMEOUT ]; do
+            FAILED=""
+            ALL_HEALTHY=true
+            for SERVICE in $SERVICES; do
+              HEALTH=$(docker inspect --format='{{.State.Health.Status}}' "$SERVICE" 2>/dev/null || echo "not_found")
+              if [ "$HEALTH" != "healthy" ]; then
+                ALL_HEALTHY=false
+                FAILED="$FAILED $SERVICE"
+              fi
+            done
+
+            if [ "$ALL_HEALTHY" = true ]; then
+              echo "All preprod services healthy after ${ELAPSED}s"
+              echo "healthy=true" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+
+            echo "Waiting... (${ELAPSED}s elapsed, unhealthy:$FAILED)"
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+
+          echo "TIMEOUT: preprod unhealthy after ${TIMEOUT}s:$FAILED"
+          echo "healthy=false" >> $GITHUB_OUTPUT
+          echo "failed_services=$FAILED" >> $GITHUB_OUTPUT
+          exit 1
+
+  deploy-preprod-frontend:
+    if: >
+      github.repository == 'Traquolix/Zzz' &&
+      github.event.inputs.skip_frontend != 'true' &&
+      ((github.event_name == 'workflow_dispatch' && github.event.inputs.target != 'production') ||
        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'))
+    runs-on: [self-hosted, frontend]
+    environment: preprod
+    env:
+      FRONTEND_DIR: /var/www/sequoia-preprod
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: services/platform/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: cd services/platform/frontend && npm ci
+
+      - name: Build
+        run: cd services/platform/frontend && npm run build
+        env:
+          VITE_API_URL: ""
+          VITE_MAPBOX_TOKEN: ${{ secrets.VITE_MAPBOX_TOKEN }}
+
+      - name: Deploy to preprod
+        run: |
+          mkdir -p ${{ env.FRONTEND_DIR }}
+          rm -rf ${{ env.FRONTEND_DIR }}/*
+          cp -r services/platform/frontend/dist/* ${{ env.FRONTEND_DIR }}/
+
+  # =========================================================================
+  # PRODUCTION — requires approval via GitHub Environment protection rules
+  # =========================================================================
+  deploy-prod-backend:
+    needs: deploy-preprod-backend
+    if: >
+      github.repository == 'Traquolix/Zzz' &&
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.target != 'preprod') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     runs-on: [self-hosted, backend]
     environment: production
     env:
@@ -75,8 +188,6 @@ jobs:
         id: health
         run: |
           cd ${{ env.DEPLOY_DIR }}
-
-          # Check containers with healthchecks by name (services span multiple compose files)
           SERVICES="kafka schema-registry postgres redis clickhouse platform-backend processor ai-engine"
 
           echo "Waiting for services to become healthy (timeout 120s)..."
@@ -106,7 +217,6 @@ jobs:
             ELAPSED=$((ELAPSED + INTERVAL))
           done
 
-          # Timeout reached — report failures
           echo "TIMEOUT: unhealthy after ${TIMEOUT}s:$FAILED"
           echo "healthy=false" >> $GITHUB_OUTPUT
           echo "failed_services=$FAILED" >> $GITHUB_OUTPUT
@@ -124,16 +234,12 @@ jobs:
           echo "Rollback complete. Failed services were: ${{ steps.health.outputs.failed_services }}"
           exit 1
 
-  # -------------------------------------------------------------------------
-  # Frontend: runs on the frontend server (self-hosted runner labeled "frontend")
-  # Builds locally and copies to nginx document root.
-  # -------------------------------------------------------------------------
-  deploy-frontend:
-    # Only run from this repo (never from forks) to protect self-hosted runners
+  deploy-prod-frontend:
+    needs: deploy-preprod-frontend
     if: >
       github.repository == 'Traquolix/Zzz' &&
-      (github.event.inputs.skip_frontend != 'true') &&
-      (github.event_name == 'workflow_dispatch' ||
+      github.event.inputs.skip_frontend != 'true' &&
+      ((github.event_name == 'workflow_dispatch' && github.event.inputs.target != 'preprod') ||
        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'))
     runs-on: [self-hosted, frontend]
     environment: production
