@@ -70,14 +70,17 @@ class TestNaNInput:
         assert np.isfinite(result["values"][0, 0])
 
     async def test_cmr_with_nan_in_one_channel(self):
-        """NaN in one channel makes median of that row NaN → all channels NaN."""
+        """NaN in one channel should not wipe the entire row (nanmedian)."""
         step = CommonModeRemoval(warmup_seconds=0.0, method="median")
         values = np.ones((3, 5))
         values[1, 2] = np.nan  # row 1, col 2
         result = await step.process(make_measurement(values))
 
-        # np.median with NaN → NaN (unless nanmedian used, which it isn't)
-        assert np.all(np.isnan(result["values"][1]))
+        # nanmedian ignores NaN: median of [1, 1, NaN, 1, 1] = 1.0
+        # So non-NaN channels in row 1 should be finite (1.0 - 1.0 = 0.0)
+        assert np.isfinite(result["values"][1, 0])
+        # The NaN channel itself stays NaN (NaN - 1.0 = NaN)
+        assert np.isnan(result["values"][1, 2])
         # Row 0 should be unaffected
         assert np.all(np.isfinite(result["values"][0]))
 

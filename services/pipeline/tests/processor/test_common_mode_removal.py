@@ -196,6 +196,64 @@ class TestCMREdgeCases:
         assert result["sampling_rate_hz"] == 125.0
 
 
+class TestCMRNaNResilience:
+    """NaN handling — nanmedian prevents single-channel NaN from wiping rows."""
+
+    async def test_nan_channel_does_not_corrupt_other_channels(self):
+        step = CommonModeRemoval(warmup_seconds=0.0, method="median")
+        values = np.array(
+            [
+                [1.0, 2.0, np.nan, 4.0, 5.0],
+            ]
+        )
+        result = await step.process(make_measurement(values))
+
+        # nanmedian of [1, 2, NaN, 4, 5] = 3.0
+        # Non-NaN channels: [1-3, 2-3, ?, 4-3, 5-3] = [-2, -1, NaN, 1, 2]
+        np.testing.assert_allclose(result["values"][0, 0], -2.0)
+        np.testing.assert_allclose(result["values"][0, 1], -1.0)
+        assert np.isnan(result["values"][0, 2])  # NaN stays NaN
+        np.testing.assert_allclose(result["values"][0, 3], 1.0)
+        np.testing.assert_allclose(result["values"][0, 4], 2.0)
+
+    async def test_nan_channel_mean_method(self):
+        step = CommonModeRemoval(warmup_seconds=0.0, method="mean")
+        values = np.array(
+            [
+                [1.0, 2.0, np.nan, 4.0, 5.0],
+            ]
+        )
+        result = await step.process(make_measurement(values))
+
+        # nanmean of [1, 2, NaN, 4, 5] = 3.0
+        np.testing.assert_allclose(result["values"][0, 0], -2.0)
+        assert np.isnan(result["values"][0, 2])
+
+    async def test_all_nan_row_produces_nan(self):
+        step = CommonModeRemoval(warmup_seconds=0.0, method="median")
+        values = np.array(
+            [
+                [1.0, 2.0, 3.0],
+                [np.nan, np.nan, np.nan],
+            ]
+        )
+        result = await step.process(make_measurement(values))
+
+        # Row 0 normal
+        assert np.all(np.isfinite(result["values"][0]))
+        # Row 1: nanmedian of all-NaN = NaN (expected, no valid data)
+        assert np.all(np.isnan(result["values"][1]))
+
+    async def test_clean_data_unaffected_by_nanmedian(self, small_batch):
+        """nanmedian on clean data produces identical results to median."""
+        step_nan = CommonModeRemoval(warmup_seconds=0.0, method="median")
+        result = await step_nan.process(make_measurement(small_batch.copy()))
+
+        # Verify against manual median computation
+        expected = small_batch - np.median(small_batch, axis=1, keepdims=True)
+        np.testing.assert_allclose(result["values"], expected, rtol=1e-12)
+
+
 class TestCMRDeterminism:
     """Deterministic output."""
 
