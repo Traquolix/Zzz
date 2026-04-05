@@ -8,10 +8,10 @@ drf-spectacular==0.29.0
 # Database
 psycopg2-binary==2.9.11
 
-# Cryptography (required for RS256 JWT)
+# Cryptography (RS256 token validation — used by SimpleJWT and PyJWT)
 cryptography==46.0.4
 
-# OIDC token validation (Authentik)
+# OIDC token validation (Authentik JWKS)
 PyJWT[crypto]==2.10.1
 
 # ClickHouse

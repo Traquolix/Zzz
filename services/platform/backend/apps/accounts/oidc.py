@@ -6,6 +6,7 @@ Creates or updates local User records from token claims on each request.
 """
 
 import logging
+import threading
 from typing import Any
 
 import jwt
@@ -16,22 +17,34 @@ from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.request import Request
 
-logger = logging.getLogger("sequoia.accounts.oidc")
+logger = logging.getLogger(__name__)
 User = get_user_model()
 
-# Module-level JWKS client — reused across requests, caches keys internally.
+# Thread-safe JWKS client singleton.
 _jwks_client: PyJWKClient | None = None
+_jwks_lock = threading.Lock()
 
 
 def _get_jwks_client() -> PyJWKClient:
-    """Get or create the JWKS client singleton."""
+    """Get or create the JWKS client singleton (thread-safe)."""
     global _jwks_client
-    if _jwks_client is None:
-        jwks_url = settings.OIDC_JWKS_URL
-        if not jwks_url:
-            raise AuthenticationFailed("OIDC_JWKS_URL not configured")
-        _jwks_client = PyJWKClient(jwks_url, cache_keys=True, lifespan=3600)
-    return _jwks_client
+    if _jwks_client is not None:
+        return _jwks_client
+    with _jwks_lock:
+        if _jwks_client is None:
+            jwks_url = settings.OIDC_JWKS_URL
+            if not jwks_url:
+                raise AuthenticationFailed("OIDC_JWKS_URL not configured")
+            _jwks_client = PyJWKClient(jwks_url, cache_keys=True, lifespan=3600)
+        return _jwks_client
+
+
+class _OIDCTokenError(Exception):
+    """Token is not an Authentik OIDC JWT (e.g. wrong key/format).
+
+    Distinguished from tokens that ARE Authentik JWTs but are invalid
+    (expired, wrong audience, etc.), which raise AuthenticationFailed.
+    """
 
 
 def decode_oidc_token(token: str) -> dict[str, Any]:
@@ -40,14 +53,19 @@ def decode_oidc_token(token: str) -> dict[str, Any]:
     Verifies: signature (RS256 via JWKS), issuer, audience, expiry.
     Returns the decoded token payload.
 
-    Raises AuthenticationFailed on any validation failure.
+    Raises:
+        _OIDCTokenError: token is not an Authentik JWT (wrong key, bad format).
+            Callers should fall through to the next authenticator.
+        AuthenticationFailed: token IS an Authentik JWT but is invalid
+            (expired, wrong audience, wrong issuer). Should be a hard 401.
     """
     client = _get_jwks_client()
 
     try:
         signing_key = client.get_signing_key_from_jwt(token)
-    except jwt.exceptions.PyJWKClientError as e:
-        raise AuthenticationFailed(f"Could not fetch signing key: {e}") from e
+    except (jwt.exceptions.PyJWKClientError, jwt.exceptions.DecodeError) as e:
+        # Token doesn't match any key in Authentik's JWKS — not an Authentik token.
+        raise _OIDCTokenError(str(e)) from e
 
     try:
         payload = jwt.decode(
@@ -80,12 +98,15 @@ def get_or_create_user_from_oidc(payload: dict[str, Any]) -> Any:
     """Look up or create a local Django User from OIDC token claims.
 
     Claim mapping:
-        sub               → looked up first, used as fallback username
-        preferred_username → username (if present)
+        sub               → username (stable Authentik identity, used as lookup key)
+        preferred_username → stored but not used for lookup (mutable in Authentik)
         email             → email
         given_name        → first_name
-        name              → last_name (family name, or full name as fallback)
+        family_name       → last_name
         groups            → first matching Organization
+
+    The lookup is always by `sub` to avoid creating duplicate users when
+    `preferred_username` changes in Authentik.
     """
     from apps.organizations.models import Organization
 
@@ -93,55 +114,67 @@ def get_or_create_user_from_oidc(payload: dict[str, Any]) -> Any:
     if not sub:
         raise AuthenticationFailed("Token missing 'sub' claim")
 
-    username = payload.get("preferred_username") or sub
     email = payload.get("email", "")
     first_name = payload.get("given_name", "")
-    last_name = payload.get("family_name", payload.get("name", ""))
+    last_name = payload.get("family_name", "")
     groups = payload.get("groups", [])
 
+    # Resolve organization from groups BEFORE creating the user,
+    # because User.save() calls full_clean() which requires organization
+    # for non-superuser accounts.
+    org = None
+    if groups:
+        for group_name in groups:
+            org = Organization.objects.filter(name__iexact=group_name).first()
+            if org:
+                break
+
+    if org is None:
+        raise AuthenticationFailed(
+            f"No matching organization for OIDC groups: {groups}. "
+            f"Create a matching Organization in Django first."
+        )
+
     user, created = User.objects.get_or_create(
-        username=username,
+        username=sub,
         defaults={
             "email": email,
             "first_name": first_name,
             "last_name": last_name,
+            "organization": org,
         },
     )
 
     if created:
         user.set_unusable_password()
+        # save() already called by get_or_create, but set_unusable_password
+        # needs a save — use update_fields to avoid full_clean.
+        user.save(update_fields=["password"])
 
-    # Update user fields from token claims on every login
-    changed = False
+    # Update user fields from token claims on every request.
+    # Use update_fields to avoid triggering full_clean() on unrelated fields.
+    update_fields: list[str] = []
     if user.email != email and email:
         user.email = email
-        changed = True
+        update_fields.append("email")
     if user.first_name != first_name and first_name:
         user.first_name = first_name
-        changed = True
+        update_fields.append("first_name")
     if user.last_name != last_name and last_name:
         user.last_name = last_name
-        changed = True
+        update_fields.append("last_name")
+    if user.organization_id != org.id:
+        user.organization = org
+        update_fields.append("organization_id")
 
-    # Map first matching group to Organization
-    if groups:
-        org = None
-        for group_name in groups:
-            org = Organization.objects.filter(name__iexact=group_name).first()
-            if org:
-                break
-        if org and user.organization_id != org.id:
-            user.organization = org
-            changed = True
-
-    if changed or created:
-        user.save()
+    if update_fields:
+        user.save(update_fields=update_fields)
 
     if created:
         logger.info(
             "Created user '%s' from OIDC (org=%s)",
-            username,
-            user.organization.name if user.organization else "none",
+            sub,
+            org.name,
         )
 
     return user
@@ -153,9 +186,10 @@ class AuthentikOIDCAuthentication(BaseAuthentication):
     Validates Bearer tokens against Authentik's JWKS endpoint and
     creates/updates local User records from token claims.
 
-    Sits alongside existing authentication classes — if the token
-    is not a valid Authentik JWT, returns None to let the next
-    authenticator try (e.g. SimpleJWT, API key).
+    Behavior with multiple auth backends:
+    - Token doesn't match Authentik JWKS → returns None (next backend tries)
+    - Token matches Authentik but is invalid (expired, wrong aud) → raises 401
+    - Token valid → returns (user, payload)
     """
 
     def authenticate(self, request: Request) -> tuple[Any, dict] | None:
@@ -167,16 +201,18 @@ class AuthentikOIDCAuthentication(BaseAuthentication):
         if not token:
             return None
 
-        # Only attempt OIDC validation if configured
+        # Only attempt OIDC validation if fully configured
         if not getattr(settings, "OIDC_JWKS_URL", ""):
+            return None
+        if not getattr(settings, "OIDC_AUDIENCE", ""):
             return None
 
         try:
             payload = decode_oidc_token(token)
-        except AuthenticationFailed:
-            # Not a valid Authentik token — let next authenticator try.
-            # This allows SimpleJWT tokens to pass through during migration.
+        except _OIDCTokenError:
+            # Not an Authentik token (wrong key/format) — let next authenticator try.
             return None
+        # AuthenticationFailed propagates as 401 (token IS Authentik but invalid).
 
         user = get_or_create_user_from_oidc(payload)
 
