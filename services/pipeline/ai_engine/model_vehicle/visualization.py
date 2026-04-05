@@ -108,21 +108,19 @@ class VehicleVisualizer:
         min_speed_kmh: float = 20.0,
         max_speed_kmh: float = 120.0,
     ) -> str:
-        """Generate notebook-style 3-panel waterfall with raw DAS background.
+        """Generate waterfall with detection overlay matching notebook style.
 
-        Produces the same visualization as notebook cell 38:
-        - Viridis raw DAS data as background (imshow)
-        - Detection scatter overlay colored by direction or speed
-        - 3 panels: Forward (lime), Reverse (red), All (speed-colored)
+        Single large panel with viridis DAS background, forward detections as
+        circles and reverse as triangles, all colored by speed (jet colormap).
 
         Args:
             raw_data: Raw sensor data (channels, time_samples) before splitting
-            fwd_detections: Forward detection dicts with section_idx, speed_kmh, timestamp_ns
+            fwd_detections: Forward detection dicts with section_idx, speed_kmh
             rev_detections: Reverse detection dicts (same format)
             date_window: Timestamps for each time sample
             fs: Sampling rate in Hz
             channel_start: First channel index in the raw fiber
-            channel_step: Channel step for section_idx -> actual channel mapping
+            channel_step: Channel step (unused, kept for API compat)
             gauge: Sensor gauge distance in meters
             min_speed_kmh: Minimum speed for colorbar
             max_speed_kmh: Maximum speed for colorbar
@@ -134,10 +132,12 @@ class VehicleVisualizer:
             n_channels, n_samples = raw_data.shape
             duration_s = n_samples / fs
 
+            # Center data for display (remove DC per channel)
+            display_data = raw_data - np.mean(raw_data, axis=1, keepdims=True)
+
             # Distance axis: channel index -> km
             dist_km = np.arange(n_channels) * gauge / 1000
-
-            vmax_data = 2 * raw_data.std()
+            vmax_data = 2 * display_data.std()
 
             # Build detection arrays
             def _build_det_arrays(detections):
@@ -147,26 +147,12 @@ class VehicleVisualizer:
                 t_s = []
                 speeds = []
                 for det in detections:
-                    # section_idx maps 1:1 to spatial position (Nch with overlap=Nch-1)
-                    # No need to multiply by channel_step — that's for Kafka channel mapping
                     section_idx = det["section_idx"]
                     if section_idx >= n_channels:
                         continue
                     d_km.append(section_idx * gauge / 1000)
-                    # Time: use the detection's interval midpoint within the window
-                    # timestamp_ns points into the trimmed window; convert to seconds
                     if det.get("_t_mid_sample") is not None:
                         t_s.append(det["_t_mid_sample"] / fs)
-                    elif det.get("timestamp_ns") is not None and len(date_window) > 0:
-                        # Find closest time index
-                        ts_ns = det["timestamp_ns"]
-                        if hasattr(date_window[0], 'timestamp'):
-                            # datetime objects
-                            window_start_ns = int(date_window[0].timestamp() * 1e9)
-                        else:
-                            window_start_ns = int(date_window[0] * 1e9) if date_window[0] > 1e15 else int(date_window[0])
-                        offset_s = (ts_ns - window_start_ns) / 1e9
-                        t_s.append(max(0, min(offset_s, duration_s)))
                     else:
                         t_s.append(duration_s / 2)
                     speeds.append(abs(det["speed_kmh"]))
@@ -174,68 +160,81 @@ class VehicleVisualizer:
 
             fwd_d, fwd_t, fwd_spd = _build_det_arrays(fwd_detections)
             rev_d, rev_t, rev_spd = _build_det_arrays(rev_detections)
-
             n_fwd = len(fwd_spd)
             n_rev = len(rev_spd)
 
-            has_bidir = n_rev > 0
-            n_panels = 3 if has_bidir else 1
-            fig, axes = plt.subplots(1, n_panels, figsize=(7 * n_panels, 10), squeeze=False)
-            axes = axes[0]
+            # Single large figure
+            fig, ax = plt.subplots(figsize=(18, 10))
 
-            def _plot_panel(ax, title, d_km_arr, t_s_arr, spd_arr, color_mode='speed', marker_color=None):
-                """Plot one waterfall panel with raw DAS background + detection scatter."""
-                ax.imshow(
-                    raw_data.T, aspect='auto', cmap='viridis',
-                    vmin=-vmax_data, vmax=vmax_data,
-                    extent=[dist_km[0], dist_km[-1], duration_s, 0],
-                )
-                if len(spd_arr) > 0:
-                    if color_mode == 'speed':
-                        speed_min = max(min_speed_kmh, spd_arr.min()) if len(spd_arr) > 0 else min_speed_kmh
-                        speed_max = min(max_speed_kmh, spd_arr.max()) if len(spd_arr) > 0 else max_speed_kmh
-                        if speed_min >= speed_max:
-                            speed_min, speed_max = min_speed_kmh, max_speed_kmh
-                        sc = ax.scatter(
-                            d_km_arr, t_s_arr, c=spd_arr, cmap='jet',
-                            vmin=speed_min, vmax=speed_max,
-                            s=8, edgecolors='none', zorder=5,
-                        )
-                        plt.colorbar(sc, ax=ax, label='Speed (km/h)', shrink=0.5, pad=0.02)
-                    else:
-                        ax.scatter(
-                            d_km_arr, t_s_arr, c=marker_color,
-                            s=8, edgecolors='none', zorder=5,
-                        )
-                ax.set_xlabel('Distance (km)', fontsize=11)
-                ax.set_ylabel('Time (s)', fontsize=11)
-                ax.set_title(f'{title} ({len(spd_arr)} det)', fontsize=12)
+            ax.imshow(
+                display_data.T,
+                aspect="auto",
+                cmap="viridis",
+                vmin=-vmax_data,
+                vmax=vmax_data,
+                extent=[dist_km[0], dist_km[-1], duration_s, 0],
+            )
 
-            if has_bidir:
-                _plot_panel(axes[0], 'Forward', fwd_d, fwd_t, fwd_spd,
-                            color_mode='fixed', marker_color='lime')
-                _plot_panel(axes[1], 'Reverse', rev_d, rev_t, rev_spd,
-                            color_mode='fixed', marker_color='red')
-                all_d = np.concatenate([fwd_d, rev_d]) if n_fwd + n_rev > 0 else np.array([])
-                all_t = np.concatenate([fwd_t, rev_t]) if n_fwd + n_rev > 0 else np.array([])
-                all_spd = np.concatenate([fwd_spd, rev_spd]) if n_fwd + n_rev > 0 else np.array([])
-                _plot_panel(axes[2], 'All detections', all_d, all_t, all_spd,
-                            color_mode='speed')
+            # Speed colorbar range
+            all_speeds = np.concatenate([fwd_spd, rev_spd]) if n_fwd + n_rev > 0 else np.array([])
+            if len(all_speeds) > 0:
+                speed_vmin = max(min_speed_kmh, np.percentile(all_speeds, 2))
+                speed_vmax = min(max_speed_kmh, np.percentile(all_speeds, 98))
+                if speed_vmin >= speed_vmax:
+                    speed_vmin, speed_vmax = min_speed_kmh, max_speed_kmh
             else:
-                _plot_panel(axes[0], 'Detections', fwd_d, fwd_t, fwd_spd,
-                            color_mode='speed')
+                speed_vmin, speed_vmax = min_speed_kmh, max_speed_kmh
 
-            # Timestamp annotation
+            sc = None
+            if n_fwd > 0:
+                sc = ax.scatter(
+                    fwd_d,
+                    fwd_t,
+                    c=fwd_spd,
+                    cmap="jet",
+                    s=10,
+                    vmin=speed_vmin,
+                    vmax=speed_vmax,
+                    edgecolors="none",
+                    marker="o",
+                    zorder=5,
+                    label=f"{n_fwd} forward",
+                )
+            if n_rev > 0:
+                sc = ax.scatter(
+                    rev_d,
+                    rev_t,
+                    c=rev_spd,
+                    cmap="jet",
+                    s=10,
+                    vmin=speed_vmin,
+                    vmax=speed_vmax,
+                    edgecolors="none",
+                    marker="v",
+                    zorder=5,
+                    label=f"{n_rev} reverse",
+                )
+            if sc is not None:
+                plt.colorbar(sc, ax=ax, label="Speed (km/h)", shrink=0.6, pad=0.01)
+
+            ax.set_xlabel("Distance (km)", fontsize=12)
+            ax.set_ylabel("Time (s)", fontsize=12)
+            ax.legend(fontsize=11, loc="upper left")
+
+            # Timestamp
             if hasattr(date_window[0], "strftime"):
                 timestamp_str = date_window[0].strftime("%Y-%m-%d %H:%M:%S")
             else:
-                timestamp_str = datetime.fromtimestamp(date_window[0]).strftime("%Y-%m-%d %H:%M:%S")
+                timestamp_str = datetime.fromtimestamp(date_window[0]).strftime(
+                    "%Y-%m-%d %H:%M:%S"
+                )
 
-            fig.suptitle(
-                f"DAS Vehicle Detection — {self.fiber_id} — {timestamp_str}",
-                fontsize=14, y=0.98,
+            ax.set_title(
+                f"DAS Vehicle Detection - {self.fiber_id}:{self.section} - "
+                f"{timestamp_str} ({n_fwd + n_rev} det)",
+                fontsize=14,
             )
-            plt.tight_layout(rect=[0, 0, 1, 0.96])
+            plt.tight_layout()
 
             # Save
             ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -249,14 +248,35 @@ class VehicleVisualizer:
             except Exception as e:
                 logger.warning(f"Could not set permissions on {filepath}: {e}")
 
-            logger.info(f"Saved notebook-style waterfall: {filepath} (fwd={n_fwd}, rev={n_rev})")
+            # Clean up old visualizations (keep last 24h)
+            self._cleanup_old_visualizations()
+
+            logger.info(
+                f"Saved waterfall: {filepath} (fwd={n_fwd}, rev={n_rev})"
+            )
             return str(filepath)
 
         except Exception as e:
-            logger.error(f"Failed to generate notebook waterfall: {e}", exc_info=True)
+            logger.error(f"Failed to generate waterfall: {e}", exc_info=True)
             if "fig" in locals():
                 plt.close(fig)
             raise
+
+    def _cleanup_old_visualizations(self, max_age_hours: float = 24.0) -> None:
+        """Remove visualization PNGs older than max_age_hours."""
+        import time as _time
+
+        cutoff = _time.time() - max_age_hours * 3600
+        removed = 0
+        try:
+            for png in self.output_dir.glob("waterfall_*.png"):
+                if png.stat().st_mtime < cutoff:
+                    png.unlink()
+                    removed += 1
+            if removed > 0:
+                logger.info(f"Cleaned up {removed} old visualizations from {self.output_dir}")
+        except Exception as e:
+            logger.warning(f"Visualization cleanup failed: {e}")
 
     def generate_waterfall(
         self,

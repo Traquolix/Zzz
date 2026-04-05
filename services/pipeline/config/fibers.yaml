@@ -85,6 +85,10 @@ defaults:
     - step: scale
       params:
         factor: 213.05   # 1/dataScale — convert physical units (rad/(s*m)) to ADC counts
+    - step: common_mode_removal
+      params:
+        warmup_seconds: 5.0
+        method: median
     - step: bandpass_filter
       params:
         low_freq_hz: 0.3

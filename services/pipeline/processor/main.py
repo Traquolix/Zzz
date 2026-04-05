@@ -26,6 +26,7 @@ from processor.processing_tools import (
 from shared import MultiTransformer
 from shared.message import Message
 from shared.otel_setup import get_correlation_id, setup_otel
+from shared.processor_metrics import ProcessorMetrics
 
 
 class DASProcessor(MultiTransformer):
@@ -68,6 +69,7 @@ class DASProcessor(MultiTransformer):
 
         setup_otel(service_name, "1.0.0")
         self.tracer = trace.get_tracer(__name__)
+        self.processor_metrics = ProcessorMetrics(service_name)
 
         if self._skip_messages > 0:
             self.logger.info(f"Message stagger: skipping first {self._skip_messages} messages")
@@ -142,6 +144,7 @@ class DASProcessor(MultiTransformer):
                 pipeline_config,
                 fiber_sampling_rate_hz=fiber_cfg.sampling_rate_hz,
                 section_channels=(section.channel_start, section.channel_stop),
+                processor_metrics=self.processor_metrics,
             )
 
             self.logger.debug(
@@ -169,6 +172,7 @@ class DASProcessor(MultiTransformer):
                             )
                         return []
 
+                t_total = time.perf_counter()
                 start_time = time.time()
                 correlation_id = get_correlation_id() or str(uuid.uuid4())
                 span.set_attribute("correlation_id", correlation_id)
@@ -201,11 +205,15 @@ class DASProcessor(MultiTransformer):
                 span.set_attribute("fiber_id", fiber_id)
 
                 # Parse raw DAS batch into 2D array (samples, channels) + timestamps
+                t_parse = time.perf_counter()
                 batch_data, timestamps_ns = self._parse_raw_batch(
                     message.payload, fiber_id, sampling_rate_hz, fiber_cfg.total_channels
                 )
                 if batch_data is None:
                     return []
+                self.processor_metrics.record_phase(
+                    "parse", time.perf_counter() - t_parse, fiber_id
+                )
 
                 n_samples = batch_data.shape[0]
                 n_channels = batch_data.shape[1]
@@ -231,10 +239,17 @@ class DASProcessor(MultiTransformer):
                         "channel_start": 0,
                         "sampling_rate_hz": sampling_rate_hz,
                     }
-                    processed = await pipelines[section_id].process(batch_measurement)
+                    t_pipeline = time.perf_counter()
+                    processed = await pipelines[section_id].process(
+                        batch_measurement, fiber_id=fiber_id, section=section_id
+                    )
+                    self.processor_metrics.record_phase(
+                        "pipeline", time.perf_counter() - t_pipeline, fiber_id
+                    )
                     if processed is None:
                         continue
 
+                    t_send = time.perf_counter()
                     output = self._build_batch_output(
                         processed, correlation_id, start_time, fiber_cfg, section
                     )
@@ -257,13 +272,23 @@ class DASProcessor(MultiTransformer):
                             output_id="default",
                         )
                     )
+                    self.processor_metrics.record_phase(
+                        "send", time.perf_counter() - t_send, fiber_id
+                    )
                     span.set_attribute(f"section.{section_id}", True)
 
+                self.processor_metrics.record_phase(
+                    "total", time.perf_counter() - t_total, fiber_id
+                )
+                self.processor_metrics.sections_produced.record(
+                    len(output_messages), {"fiber_id": fiber_id}
+                )
                 span.set_attribute("sections_produced", len(output_messages))
                 return output_messages
 
             except Exception as e:
                 span.record_exception(e)
+                self.processor_metrics.record_error("transform_error", fiber_id)
                 self.logger.error(f"Error processing message {message.id}: {e}")
                 raise
 

@@ -51,7 +51,7 @@ class CommonModeRemoval(ProcessingStep):
         Args:
             measurement_data: Dict containing:
                 - fiber_id: Fiber identifier
-                - values: List of channel values
+                - values: numpy array or list of channel values
                 - sampling_rate_hz: Sampling rate
                 - ... (other metadata preserved)
 
@@ -64,7 +64,10 @@ class CommonModeRemoval(ProcessingStep):
         fiber_id = measurement_data.get("fiber_id", "unknown")
         values = measurement_data.get("values", [])
 
-        if len(values) == 0:
+        if not isinstance(values, np.ndarray):
+            values = np.asarray(values, dtype=np.float64)
+
+        if values.size == 0:
             return measurement_data
 
         # Initialize fiber state if first time seeing this fiber
@@ -81,31 +84,38 @@ class CommonModeRemoval(ProcessingStep):
 
         fiber_state = self._fiber_states[fiber_id]
 
+        # Count actual samples, not messages (batch mode sends multiple samples)
+        n_samples = values.shape[0] if values.ndim == 2 else 1
+
         # During warmup period, drop messages
         if fiber_state["count"] < fiber_state["warmup_samples"]:
-            fiber_state["count"] += 1
+            fiber_state["count"] += n_samples
             return None
 
         # Warmup complete - log once at transition
-        if fiber_state["count"] == fiber_state["warmup_samples"]:
+        if fiber_state["count"] < fiber_state["warmup_samples"] + n_samples:
             logger.info(
-                f"CMR warmup complete for fiber '{fiber_id}' after "
-                f"{fiber_state['warmup_samples']} samples"
+                f"CMR warmup complete for fiber '{fiber_id}' after {fiber_state['count']} samples"
             )
 
         # Apply common mode removal
-        values_array = np.array(values, dtype=np.float64)
+        is_batch = values.ndim == 2
+        if is_batch:
+            # 2D (samples, channels): compute median across channels per sample
+            if self.method == "median":
+                common_mode = np.median(values, axis=1, keepdims=True)
+            else:
+                common_mode = np.mean(values, axis=1, keepdims=True)
+        else:
+            # 1D (channels,): compute median across all channels
+            common_mode = np.median(values) if self.method == "median" else np.mean(values)
 
-        common_mode = np.median(values_array) if self.method == "median" else np.mean(values_array)
+        corrected_values = values - common_mode
 
-        corrected_values = values_array - common_mode
+        fiber_state["count"] += n_samples
 
-        fiber_state["count"] += 1
-
-        # Create result with corrected values
         result = measurement_data.copy()
-        result["values"] = corrected_values.tolist()
-
+        result["values"] = corrected_values
         return result
 
     def estimate_memory_usage(self, num_channels: int = 0, buffer_size: int = 0) -> float:
