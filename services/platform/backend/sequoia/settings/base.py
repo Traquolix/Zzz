@@ -197,7 +197,7 @@ CLICKHOUSE_PASSWORD = os.environ.get("CLICKHOUSE_PASSWORD", "")
 
 # Kafka
 KAFKA_BOOTSTRAP_SERVERS = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "")
-KAFKA_DETECTIONS_TOPIC = os.environ.get("KAFKA_DETECTIONS_TOPIC", "das.detections")
+KAFKA_DETECTIONS_TOPIC = os.environ.get("KAFKA_DETECTIONS_TOPIC", "prod.detections")
 KAFKA_CONSUMER_GROUP = os.environ.get("KAFKA_CONSUMER_GROUP", "sequoia-realtime-bridge")
 
 # Realtime data source: 'auto' | 'simulation' | 'kafka'
