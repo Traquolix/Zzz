@@ -319,6 +319,14 @@ class ServiceBase(ABC, KafkaSetupMixin, HealthMixin, MessageOpsMixin):
         await self._start_health_server()
         self.logger.info("Health check server ready on port 8080")
 
+        # Optional startup delay for GPU staggering across environments.
+        # Preprod sets STARTUP_DELAY_SECONDS=11 to offset inference bursts
+        # by half a cycle (~22.5s / 2), avoiding GPU contention with prod.
+        startup_delay = float(os.environ.get("STARTUP_DELAY_SECONDS", "0"))
+        if startup_delay > 0:
+            self.logger.info(f"Startup delay: waiting {startup_delay:.0f}s before consuming...")
+            await asyncio.sleep(startup_delay)
+
         self._tasks.append(asyncio.create_task(self._health_check_loop()))
 
         if self.service_type in _NEEDS_CONSUMER:
