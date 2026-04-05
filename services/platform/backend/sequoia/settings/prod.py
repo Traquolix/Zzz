@@ -172,7 +172,7 @@ if sentry_dsn:
         dsn=sentry_dsn,
         traces_sample_rate=0.1,
         send_default_pii=False,
-        environment=os.environ.get("ENVIRONMENT", "production"),
+        environment=os.environ.get("ENVIRONMENT", "prod"),
         release=os.environ.get("VERSION", "unknown"),
     )
 

@@ -186,7 +186,7 @@ CORS_ALLOWED_ORIGINS=http://localhost:3000
 DJANGO_ALLOWED_HOSTS=localhost
 
 # Environment
-ENVIRONMENT=production
+ENVIRONMENT=prod
 ENV
         chmod 600 "${SEQUOIA_DIR}/.env"
         log ".env generated at ${SEQUOIA_DIR}/.env"

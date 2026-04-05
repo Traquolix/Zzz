@@ -23,7 +23,7 @@ services:
           cpus: '4.0'
     environment:
       TOPIC_PREFIX: ${TOPIC_PREFIX:-prod}
-      ENVIRONMENT: ${ENVIRONMENT:-production}
+      ENVIRONMENT: ${ENVIRONMENT:-prod}
       STARTUP_SKIP_MESSAGES: ${STARTUP_SKIP_MESSAGES:-0}
       no_proxy: localhost,127.0.0.1,kafka,schema-registry,otel-lgtm
       NO_PROXY: localhost,127.0.0.1,kafka,schema-registry,otel-lgtm
@@ -56,7 +56,7 @@ services:
     env_file: .env
     environment:
       TOPIC_PREFIX: ${TOPIC_PREFIX:-prod}
-      ENVIRONMENT: ${ENVIRONMENT:-production}
+      ENVIRONMENT: ${ENVIRONMENT:-prod}
       AI_MODEL_BASE_PATH: /app/ai_engine/model_vehicle/models_parameters
       CALIBRATION_PATH: /app/calibration
       VISUALIZATION_OUTPUT: /app/visualizations

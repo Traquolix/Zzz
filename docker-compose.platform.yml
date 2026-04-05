@@ -53,7 +53,7 @@ services:
       REDIS_CACHE_DB: ${REDIS_CACHE_DB:-1}
       # Frontend URL (for CORS)
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
-      ENVIRONMENT: ${ENVIRONMENT:-production}
+      ENVIRONMENT: ${ENVIRONMENT:-prod}
       # JWT keys (file-based for Docker Secrets compatibility)
       JWT_SIGNING_KEY_FILE: ${JWT_SIGNING_KEY_FILE:-}
       JWT_VERIFYING_KEY_FILE: ${JWT_VERIFYING_KEY_FILE:-}

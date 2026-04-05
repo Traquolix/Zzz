@@ -36,7 +36,7 @@ def init_otel() -> None:
 
     otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otel-lgtm:4317")
     otlp_insecure = os.getenv("OTEL_EXPORTER_OTLP_INSECURE", "true").lower() == "true"
-    environment = os.getenv("ENVIRONMENT", "production")
+    environment = os.getenv("ENVIRONMENT", "prod")
 
     resource = Resource.create(
         {
