@@ -1,0 +1,64 @@
+# Authentik — SSO / centralized identity provider.
+# Runs on the backend server (192.168.99.113).
+# Start with: docker compose -f docker-compose.authentik.yml --env-file .env --env-file .env.authentik up -d
+#
+# Requires: PostgreSQL from docker-compose.infra.yml (sequoia-internal network).
+# Create the authentik database first:
+#   docker exec postgres psql -U sequoia -c "CREATE DATABASE authentik;"
+#
+# After first start:
+#   - Local access: http://localhost:9000/if/flow/initial-setup/
+#   - Via NPM:      https://auth.sequoia-analytics.tech/if/flow/initial-setup/
+#
+# The initial-setup flow creates the admin account on first visit.
+
+services:
+
+  authentik-server:
+    image: ghcr.io/goauthentik/server:2026.2
+    container_name: authentik-server
+    restart: unless-stopped
+    command: server
+    ports:
+      - "127.0.0.1:9000:9000"    # HTTP — localhost only (NPM proxies externally)
+    environment:
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?Set AUTHENTIK_SECRET_KEY in .env.authentik}
+      AUTHENTIK_POSTGRESQL__HOST: postgres
+      AUTHENTIK_POSTGRESQL__PORT: 5432
+      AUTHENTIK_POSTGRESQL__USER: ${POSTGRES_USER:-sequoia}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      # Outbound proxy for email verification, GeoIP, etc.
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: localhost,127.0.0.1,postgres,redis
+    volumes:
+      - authentik_media:/media
+      - authentik_templates:/templates
+    networks: [ internal ]
+
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:2026.2
+    container_name: authentik-worker
+    restart: unless-stopped
+    command: worker
+    environment:
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?Set AUTHENTIK_SECRET_KEY in .env.authentik}
+      AUTHENTIK_POSTGRESQL__HOST: postgres
+      AUTHENTIK_POSTGRESQL__PORT: 5432
+      AUTHENTIK_POSTGRESQL__USER: ${POSTGRES_USER:-sequoia}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+    volumes:
+      - authentik_media:/media
+      - authentik_templates:/templates
+    networks: [ internal ]
+
+networks:
+  internal:
+    external: true
+    name: sequoia-internal
+
+volumes:
+  authentik_media:
+  authentik_templates:
