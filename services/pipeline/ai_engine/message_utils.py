@@ -72,8 +72,8 @@ def messages_to_arrays(
 
     for message in messages:
         payload = message.payload
-        values = payload.get("values", [])
-        if not values:
+        values = payload.get("values")
+        if values is None or (isinstance(values, list | bytes | bytearray) and len(values) == 0):
             continue
 
         msg_channel_start = payload.get("channel_start")
@@ -90,7 +90,11 @@ def messages_to_arrays(
                 raise ValueError("Multi-sample message missing required 'channel_count' field")
 
             # Multi-sample message: reshape flat values to (samples, channels)
-            values_arr = np.asarray(values, dtype=np.float64)
+            # Values may be raw float32 bytes (new schema) or a Python list (legacy).
+            if isinstance(values, bytes | bytearray):
+                values_arr = np.frombuffer(values, dtype=np.float32).astype(np.float64)
+            else:
+                values_arr = np.asarray(values, dtype=np.float64)
             samples_2d = values_arr.reshape(sample_count, channel_count)
 
             if expected_channels is not None and channel_count != expected_channels:
@@ -113,6 +117,9 @@ def messages_to_arrays(
                 timestamp_ns_list.append(base_ts + i * sample_duration)
         else:
             # Single-sample message
+            # Values may be raw float32 bytes (new schema) or a Python list (legacy).
+            if isinstance(values, bytes | bytearray):
+                values = np.frombuffer(values, dtype=np.float32).astype(np.float64)
             n_values = len(values)
             if expected_channels is not None and n_values != expected_channels:
                 raise ValueError(
