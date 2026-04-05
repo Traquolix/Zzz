@@ -53,6 +53,10 @@ services:
       REDIS_CACHE_DB: ${REDIS_CACHE_DB:-1}
       # Frontend URL (for CORS)
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      # Authentik OIDC
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:-}
+      OIDC_JWKS_URL: ${OIDC_JWKS_URL:-}
       ENVIRONMENT: ${ENVIRONMENT:-prod}
       # JWT keys (file-based for Docker Secrets compatibility)
       JWT_SIGNING_KEY_FILE: ${JWT_SIGNING_KEY_FILE:-}

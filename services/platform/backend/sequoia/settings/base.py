@@ -120,6 +120,7 @@ AUTH_USER_MODEL = "accounts.User"
 # REST Framework configuration
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
+        "apps.accounts.oidc.AuthentikOIDCAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
         "apps.api_keys.authentication.APIKeyAuthentication",
     ),
@@ -184,6 +185,12 @@ REFRESH_TOKEN_COOKIE_PATH = "/api/auth/"
 # attempt a token refresh on startup (avoids a blind POST that always 401s
 # when no session exists).
 SESSION_HINT_COOKIE_NAME = "has_session"
+
+# Authentik OIDC settings
+# These are optional during migration — if unset, OIDC auth is silently skipped.
+OIDC_ISSUER_URL = os.environ.get("OIDC_ISSUER_URL", "")
+OIDC_AUDIENCE = os.environ.get("OIDC_AUDIENCE", "")  # = Authentik Client ID
+OIDC_JWKS_URL = os.environ.get("OIDC_JWKS_URL", "")
 
 # Frontend URL
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")

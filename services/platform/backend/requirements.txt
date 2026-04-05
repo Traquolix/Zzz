@@ -11,6 +11,9 @@ psycopg2-binary==2.9.11
 # Cryptography (required for RS256 JWT)
 cryptography==46.0.4
 
+# OIDC token validation (Authentik)
+PyJWT[crypto]==2.10.1
+
 # ClickHouse
 clickhouse-connect==0.8.14
 
