@@ -24,6 +24,7 @@ services:
     environment:
       TOPIC_PREFIX: ${TOPIC_PREFIX:-das}
       ENVIRONMENT: ${ENVIRONMENT:-production}
+      STARTUP_DELAY_SECONDS: ${STARTUP_DELAY_SECONDS:-0}
       no_proxy: localhost,127.0.0.1,kafka,schema-registry,otel-lgtm
       NO_PROXY: localhost,127.0.0.1,kafka,schema-registry,otel-lgtm
     env_file: .env
@@ -56,6 +57,7 @@ services:
     environment:
       TOPIC_PREFIX: ${TOPIC_PREFIX:-das}
       ENVIRONMENT: ${ENVIRONMENT:-production}
+      STARTUP_DELAY_SECONDS: ${STARTUP_DELAY_SECONDS:-0}
       AI_MODEL_BASE_PATH: /app/ai_engine/model_vehicle/models_parameters
       CALIBRATION_PATH: /app/calibration
       VISUALIZATION_OUTPUT: /app/visualizations
