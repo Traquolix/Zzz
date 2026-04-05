@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import time
 import uuid
 
@@ -43,11 +44,13 @@ class DASProcessor(MultiTransformer):
         service_name = get_service_name("processor")
         service_config = load_service_config("processor")
 
-        # Bootstrap instrument params from Kafka before subscribing to data topics
-        manager = FiberConfigManager()
-        manager.bootstrap_instrument_params(
-            kafka_bootstrap_servers=service_config.kafka_bootstrap_servers,
-            schema_registry_url=service_config.schema_registry_url,
+        # Try initial bootstrap (may succeed if DAS is already running)
+        self._manager = FiberConfigManager()
+        self._kafka_servers = service_config.kafka_bootstrap_servers
+        self._schema_registry = service_config.schema_registry_url
+        self._manager.bootstrap_instrument_params(
+            kafka_bootstrap_servers=self._kafka_servers,
+            schema_registry_url=self._schema_registry,
         )
 
         # Pipelines built per-fiber dynamically from fibers.yaml
@@ -55,16 +58,44 @@ class DASProcessor(MultiTransformer):
         self._fiber_config_hashes: dict[str, str] = {}
         self._fiber_configs: dict[str, FiberConfig] = {}
 
+        # Message-based stagger: skip the first N messages before producing
+        # output. This offsets preprod's data flow so AI engine inference
+        # bursts don't overlap with prod on the GPU.
+        self._skip_messages = int(os.environ.get("STARTUP_SKIP_MESSAGES", "0"))
+        self._messages_consumed = 0
+
         super().__init__(service_name, service_config)
 
         setup_otel(service_name, "1.0.0")
         self.tracer = trace.get_tracer(__name__)
+
+        if self._skip_messages > 0:
+            self.logger.info(f"Message stagger: skipping first {self._skip_messages} messages")
 
         self.logger.info(
             f"Processor initialized | "
             f"Pattern: {service_config.input_topic_pattern} | "
             f"Outputs: {list(service_config.outputs.keys())}"
         )
+
+    async def _retry_params_bootstrap(self) -> None:
+        """Background task: retry instrument params bootstrap until all fibers are ready."""
+        while self._running:
+            pending = self._manager.pending_fibers()
+            if not pending:
+                return
+            self.logger.info(f"Waiting for instrument params: {pending}. Retrying in 5s...")
+            await asyncio.sleep(5)
+            self._manager.bootstrap_instrument_params(
+                kafka_bootstrap_servers=self._kafka_servers,
+                schema_registry_url=self._schema_registry,
+                timeout_s=5.0,
+            )
+
+    async def _start_service_loops(self):
+        await super()._start_service_loops()
+        if self._manager.pending_fibers():
+            self._tasks.append(asyncio.create_task(self._retry_params_bootstrap()))
 
     def _get_fiber_pipelines(self, fiber_id: str) -> dict[str, ProcessingChain]:
         """Get or build pipelines for a fiber.
@@ -127,6 +158,17 @@ class DASProcessor(MultiTransformer):
     async def transform(self, message: Message) -> list[Message]:
         with self.tracer.start_as_current_span("transform_measurement") as span:
             try:
+                # Message-based stagger: consume but don't produce for the first N messages
+                if self._skip_messages > 0:
+                    self._messages_consumed += 1
+                    if self._messages_consumed <= self._skip_messages:
+                        if self._messages_consumed == self._skip_messages:
+                            self.logger.info(
+                                f"Stagger complete: skipped {self._skip_messages} messages, "
+                                f"now producing output"
+                            )
+                        return []
+
                 start_time = time.time()
                 correlation_id = get_correlation_id() or str(uuid.uuid4())
                 span.set_attribute("correlation_id", correlation_id)
@@ -146,9 +188,6 @@ class DASProcessor(MultiTransformer):
                     return []
 
                 if not fiber_cfg.is_ready:
-                    self.logger.warning(
-                        f"Fiber '{fiber_id}' not ready (no instrument params). Skipping."
-                    )
                     return []
 
                 sampling_rate_hz = fiber_cfg.sampling_rate_hz

@@ -24,7 +24,7 @@ services:
     environment:
       TOPIC_PREFIX: ${TOPIC_PREFIX:-prod}
       ENVIRONMENT: ${ENVIRONMENT:-production}
-      STARTUP_DELAY_SECONDS: ${STARTUP_DELAY_SECONDS:-0}
+      STARTUP_SKIP_MESSAGES: ${STARTUP_SKIP_MESSAGES:-0}
       no_proxy: localhost,127.0.0.1,kafka,schema-registry,otel-lgtm
       NO_PROXY: localhost,127.0.0.1,kafka,schema-registry,otel-lgtm
     env_file: .env

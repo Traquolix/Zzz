@@ -494,12 +494,19 @@ class FiberConfigManager:
         self._check_reload()
         return dict(self._raw_config)
 
+    def pending_fibers(self) -> list[str]:
+        """Return fiber IDs that don't have instrument params yet."""
+        self._check_reload()
+        if self._config is None:
+            return []
+        return [fid for fid, cfg in self._config.fibers.items() if not cfg.is_ready]
+
     def bootstrap_instrument_params(
         self,
         kafka_bootstrap_servers: str,
         schema_registry_url: str,
         timeout_s: float = 10.0,
-    ) -> None:
+    ) -> list[str]:
         """Read instrument params from das.raw.<fiber_id>.params topics.
 
         Creates an ephemeral Kafka consumer, reads the single compacted message
@@ -507,6 +514,8 @@ class FiberConfigManager:
         sampling_rate_hz on the FiberConfig. The instrument is the source of
         truth — values from fibers.yaml are only used as fallback when the
         params topic is unavailable.
+
+        Returns the list of fiber IDs that were successfully bootstrapped.
         """
         from confluent_kafka import Consumer
         from confluent_kafka.admin import AdminClient
@@ -519,7 +528,7 @@ class FiberConfigManager:
 
         fibers = self._config.fibers
         if not fibers:
-            return
+            return []
 
         sr_client = SchemaRegistryClient({"url": schema_registry_url})
         deserializer = AvroDeserializer(sr_client)
@@ -605,16 +614,14 @@ class FiberConfigManager:
                         f"total_channels={fiber.total_channels}, "
                         f"sampling_rate_hz={fiber.sampling_rate_hz}"
                     )
-                else:
-                    logger.error(
-                        f"No params topic for fiber '{fid}' and no fibers.yaml fallback. "
-                        f"Fiber will not process until params are available."
-                    )
 
-        logger.info(
-            f"Instrument params bootstrap complete: "
-            f"{len(bootstrapped)} bootstrapped, {len(pending)} pending"
-        )
+        if bootstrapped or pending:
+            logger.info(
+                f"Instrument params bootstrap: "
+                f"{len(bootstrapped)} bootstrapped, {len(pending)} pending"
+            )
+
+        return bootstrapped
 
     def get_default_model_name(self) -> str:
         """Get the default model name from config defaults."""
