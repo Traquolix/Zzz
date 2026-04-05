@@ -36,17 +36,24 @@ services:
       # ClickHouse
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_HTTP_PORT: 8123
-      CLICKHOUSE_DATABASE: sequoia
-      CLICKHOUSE_USER: sequoia
+      CLICKHOUSE_DATABASE: ${CLICKHOUSE_DATABASE:-sequoia}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-sequoia}
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CH_DATABASE: ${CH_DATABASE:-sequoia}
+      CH_KAFKA_TOPIC: ${CH_KAFKA_TOPIC:-das.detections}
+      CH_KAFKA_GROUP: ${CH_KAFKA_GROUP:-clickhouse_detection_consumer}
       # Kafka
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      KAFKA_DETECTIONS_TOPIC: ${KAFKA_DETECTIONS_TOPIC:-das.detections}
+      KAFKA_CONSUMER_GROUP: ${KAFKA_CONSUMER_GROUP:-sequoia-realtime-bridge}
       # Redis / Channels
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}
+      REDIS_CHANNEL_DB: ${REDIS_CHANNEL_DB:-0}
+      REDIS_CACHE_DB: ${REDIS_CACHE_DB:-1}
       # Frontend URL (for CORS)
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
-      ENVIRONMENT: ${ENVIRONMENT:-development}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
       # JWT keys (file-based for Docker Secrets compatibility)
       JWT_SIGNING_KEY_FILE: ${JWT_SIGNING_KEY_FILE:-}
       JWT_VERIFYING_KEY_FILE: ${JWT_VERIFYING_KEY_FILE:-}
