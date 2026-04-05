@@ -9,6 +9,7 @@ This is more secure than URL-based tokens which appear in server logs,
 browser history, and proxy logs.
 
 The get_user_from_token() function is used by the consumer for message-based auth.
+It validates Authentik OIDC access tokens via JWKS.
 """
 
 import logging
@@ -16,25 +17,25 @@ from typing import Any
 
 from channels.db import database_sync_to_async
 from channels.middleware import BaseMiddleware
-from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
-from django.core.exceptions import ObjectDoesNotExist
-from rest_framework_simplejwt.exceptions import TokenError
-from rest_framework_simplejwt.tokens import AccessToken
+from rest_framework.exceptions import AuthenticationFailed
 
-logger = logging.getLogger("sequoia.realtime.middleware")
-User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 @database_sync_to_async
 def get_user_from_token(token_str: str) -> Any:
-    """Validate JWT access token and return the user, or AnonymousUser."""
+    """Validate an OIDC access token and return the user, or AnonymousUser.
+
+    Uses the same OIDC validation as the REST API (AuthentikOIDCAuthentication):
+    verifies signature via JWKS, checks issuer/audience/expiry, then looks up
+    or creates the local User from token claims.
+    """
+    from apps.accounts.oidc import decode_oidc_token, get_or_create_user_from_oidc
+
     try:
-        token = AccessToken(token_str)  # type: ignore[arg-type]  # simplejwt stubs expect UntypedToken
-        user_id = token.payload.get("user_id")
-        if user_id is None:
-            return AnonymousUser()
-        user = User.objects.select_related("organization").get(id=user_id)
+        payload = decode_oidc_token(token_str)
+        user = get_or_create_user_from_oidc(payload)
         if not user.is_active:
             return AnonymousUser()
         # Check org is active (mirrors IsActiveUser permission)
@@ -43,16 +44,16 @@ def get_user_from_token(token_str: str) -> Any:
             if org is None or not org.is_active:
                 return AnonymousUser()
         return user
-    except (TokenError, ObjectDoesNotExist):
+    except (AuthenticationFailed, Exception):
         return AnonymousUser()
 
 
 class JWTAuthMiddleware(BaseMiddleware):
     """
-    WebSocket JWT authentication middleware.
+    WebSocket authentication middleware.
 
     All connections start unauthenticated. The consumer accepts the connection
-    and waits for an 'authenticate' message with a valid JWT token.
+    and waits for an 'authenticate' message with a valid OIDC token.
     """
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> Any:
