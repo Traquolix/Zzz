@@ -30,21 +30,27 @@ export async function getUserManager(): Promise<UserManager> {
 
   if (!_initPromise) {
     _initPromise = (async () => {
-      const config = await fetchOIDCConfig()
+      try {
+        const config = await fetchOIDCConfig()
 
-      const settings: UserManagerSettings = {
-        authority: config.authority,
-        client_id: config.client_id,
-        redirect_uri: `${window.location.origin}/auth/callback`,
-        post_logout_redirect_uri: `${window.location.origin}/login`,
-        response_type: 'code',
-        scope: 'openid profile email',
-        automaticSilentRenew: true,
-        userStore: new WebStorageStateStore({ store: sessionStorage }),
+        const settings: UserManagerSettings = {
+          authority: config.authority,
+          client_id: config.client_id,
+          redirect_uri: `${window.location.origin}/auth/callback`,
+          post_logout_redirect_uri: `${window.location.origin}/login`,
+          response_type: 'code',
+          scope: 'openid profile email',
+          automaticSilentRenew: true,
+          userStore: new WebStorageStateStore({ store: sessionStorage }),
+        }
+
+        _userManager = new UserManager(settings)
+        return _userManager
+      } catch (e) {
+        // Clear so the next call can retry instead of returning a rejected promise forever
+        _initPromise = null
+        throw e
       }
-
-      _userManager = new UserManager(settings)
-      return _userManager
     })()
   }
 

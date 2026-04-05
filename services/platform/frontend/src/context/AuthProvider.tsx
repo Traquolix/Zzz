@@ -25,6 +25,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setRole(result.data.role)
       setIsSuperuser(result.data.isSuperuser)
       setOrganizationName(result.data.organizationName)
+    } else {
+      // Backend rejected the token (e.g. org deactivated, user disabled)
+      setIsAuthenticated(false)
+      setUsername(null)
+      setRole(null)
+      setIsSuperuser(false)
+      setOrganizationName(null)
     }
   }, [])
 

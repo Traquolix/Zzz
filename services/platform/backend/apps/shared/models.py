@@ -20,7 +20,7 @@ class AuditLog(models.Model):
         # Authentication
         LOGIN_SUCCESS = "auth.login", "Login success"
         LOGIN_FAILED = "auth.login_failed", "Login failed"
-        OIDC_LOGIN = "auth.oidc_login", "OIDC login"
+        OIDC_USER_PROVISIONED = "auth.oidc_provisioned", "OIDC user provisioned"
 
         # User management
         USER_CREATED = "user.created", "User created"

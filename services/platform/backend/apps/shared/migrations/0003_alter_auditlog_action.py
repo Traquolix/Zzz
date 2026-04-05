@@ -17,7 +17,7 @@ class Migration(migrations.Migration):
                 choices=[
                     ("auth.login", "Login success"),
                     ("auth.login_failed", "Login failed"),
-                    ("auth.oidc_login", "OIDC login"),
+                    ("auth.oidc_provisioned", "OIDC user provisioned"),
                     ("user.created", "User created"),
                     ("user.updated", "User updated"),
                     ("user.deleted", "User deleted"),

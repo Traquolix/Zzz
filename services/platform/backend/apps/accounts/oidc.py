@@ -170,7 +170,7 @@ def get_or_create_user_from_oidc(payload: dict[str, Any]) -> Any:
         update_fields.append("last_name")
     if user.organization_id != org.id:
         user.organization = org
-        update_fields.append("organization_id")
+        update_fields.append("organization")
 
     if update_fields:
         user.save(update_fields=update_fields)
@@ -226,14 +226,14 @@ class AuthentikOIDCAuthentication(BaseAuthentication):
         if not user.is_active:
             raise AuthenticationFailed("User account is disabled")
 
-        # Audit log for first OIDC login (user creation)
+        # Audit log when a new user is provisioned via OIDC
         if getattr(user, "_oidc_just_created", False):
             from apps.shared.audit import AuditService
             from apps.shared.models import AuditLog
 
             AuditService.log(
                 request=request,
-                action=str(AuditLog.Action.OIDC_LOGIN),
+                action=str(AuditLog.Action.OIDC_USER_PROVISIONED),
                 object_type="User",
                 object_id=str(user.id),
                 changes={"username": user.username},
