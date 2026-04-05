@@ -61,10 +61,6 @@ class DASProcessor(MultiTransformer):
         self._fiber_config_hashes: dict[str, str] = {}
         self._fiber_configs: dict[str, FiberConfig] = {}
 
-        # Per-fiber locks: concurrent across fibers, sequential within each
-        # fiber to preserve message ordering for the AI engine's buffers.
-        self._fiber_locks: dict[str, asyncio.Lock] = {}
-
         # Message-based stagger: skip the first N messages before producing
         # output. This offsets preprod's data flow so AI engine inference
         # bursts don't overlap with prod on the GPU.
@@ -166,32 +162,6 @@ class DASProcessor(MultiTransformer):
     def _extract_fiber_id(self, topic: str) -> str:
         """Extract fiber_id from topic name: das.raw.carros -> carros"""
         return topic.split(".")[-1]
-
-    def _get_fiber_lock(self, fiber_id: str) -> asyncio.Lock:
-        """Get or create a per-fiber async lock for ordering guarantees."""
-        if fiber_id not in self._fiber_locks:
-            self._fiber_locks[fiber_id] = asyncio.Lock()
-        return self._fiber_locks[fiber_id]
-
-    async def _dispatch(self, message: Message) -> None:
-        """Override MultiTransformer dispatch to add per-fiber ordering.
-
-        Messages from different fibers process concurrently. Messages from
-        the same fiber are serialized by a per-fiber lock, ensuring the AI
-        engine receives section outputs in temporal order.
-        """
-        # Extract fiber_id before acquiring lock
-        fiber_id = "unknown"
-        if hasattr(message, "_kafka_message") and message._kafka_message:
-            fiber_id = self._extract_fiber_id(message._kafka_message.topic())
-        elif message.payload:
-            fiber_id = message.payload.get("fiber_id", "unknown")
-
-        async with self._get_fiber_lock(fiber_id):
-            results = await self._execute_with_protection(self.transform, message, message)
-            if results is not None:
-                for result in results:
-                    await self._internal_send(result)
 
     # --- Batch polling (replaces MultiTransformer's single-message poll loop) ---
 
