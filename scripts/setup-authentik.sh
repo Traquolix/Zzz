@@ -71,8 +71,8 @@ Authentik is running.
 ========================================================================
 
 1. Complete initial setup:
-   http://localhost:9000/if/flow/initial-setup/
-   (or via SSH tunnel: ssh -L 9000:localhost:9000 beaujoin@192.168.99.113)
+   http://localhost:9090/if/flow/initial-setup/
+   (or via SSH tunnel: ssh -L 9090:localhost:9090 beaujoin@192.168.99.113)
 
    This creates the admin account. Do this immediately.
 
@@ -93,7 +93,7 @@ Authentik is running.
 4. When NPM is live, add proxy host:
    Domain: auth.sequoia-analytics.tech
    Forward Host: 192.168.99.113
-   Forward Port: 9000
+   Forward Port: 9090
    Force SSL, Websocket support
 
 ========================================================================
