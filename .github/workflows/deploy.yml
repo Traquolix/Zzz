@@ -54,11 +54,27 @@ jobs:
           git checkout main
           git reset --hard origin/main
 
-      - name: Rebuild and restart preprod services
+      - name: Record pre-deploy state
+        id: pre_deploy
+        run: |
+          cd ${{ env.DEPLOY_DIR }}
+          echo "sha_before=$(git rev-parse HEAD~1)" >> $GITHUB_OUTPUT
+          echo "sha_after=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Ensure infrastructure is running
+        run: |
+          cd ${{ env.DEPLOY_DIR }}
+          docker compose -f docker-compose.infra.yml up -d
+
+      - name: Rebuild and restart preprod pipeline
         run: |
           cd ${{ env.DEPLOY_DIR }}
           docker compose -f docker-compose.pipeline.yml --env-file .env --env-file .env.preprod -p sequoia-pp build --parallel
           docker compose -f docker-compose.pipeline.yml --env-file .env --env-file .env.preprod -p sequoia-pp up -d --force-recreate
+
+      - name: Rebuild and restart preprod platform
+        run: |
+          cd ${{ env.DEPLOY_DIR }}
           docker compose -f docker-compose.platform.yml --env-file .env --env-file .env.preprod -p sequoia-pp build
           docker compose -f docker-compose.platform.yml --env-file .env --env-file .env.preprod -p sequoia-pp up -d --force-recreate
 
@@ -104,6 +120,18 @@ jobs:
           echo "TIMEOUT: preprod unhealthy after ${TIMEOUT}s:$FAILED"
           echo "healthy=false" >> $GITHUB_OUTPUT
           echo "failed_services=$FAILED" >> $GITHUB_OUTPUT
+
+      - name: Rollback preprod on failure
+        if: steps.health.outputs.healthy == 'false'
+        run: |
+          cd ${{ env.DEPLOY_DIR }}
+          echo "ROLLING BACK preprod to ${{ steps.pre_deploy.outputs.sha_before }}"
+          git reset --hard ${{ steps.pre_deploy.outputs.sha_before }}
+          docker compose -f docker-compose.pipeline.yml --env-file .env --env-file .env.preprod -p sequoia-pp build --parallel
+          docker compose -f docker-compose.pipeline.yml --env-file .env --env-file .env.preprod -p sequoia-pp up -d --force-recreate
+          docker compose -f docker-compose.platform.yml --env-file .env --env-file .env.preprod -p sequoia-pp build
+          docker compose -f docker-compose.platform.yml --env-file .env --env-file .env.preprod -p sequoia-pp up -d --force-recreate
+          echo "Preprod rollback complete. Failed services were: ${{ steps.health.outputs.failed_services }}"
           exit 1
 
   deploy-preprod-frontend:
