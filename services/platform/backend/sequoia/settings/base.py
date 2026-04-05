@@ -120,6 +120,7 @@ AUTH_USER_MODEL = "accounts.User"
 # REST Framework configuration
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
+        "apps.accounts.oidc.AuthentikOIDCAuthentication",
         "rest_framework_simplejwt.authentication.JWTAuthentication",
         "apps.api_keys.authentication.APIKeyAuthentication",
     ),
@@ -150,10 +151,8 @@ SPECTACULAR_SETTINGS = {
     "DESCRIPTION": (
         "API for the SequoIA DAS traffic monitoring platform.\n\n"
         "## Authentication\n\n"
-        "Uses JWT (JSON Web Tokens) with RS256.\n"
-        "1. Login via `POST /api/auth/login`\n"
-        "2. Include token in header: `Authorization: Bearer <token>`\n"
-        "3. Refresh via `POST /api/auth/refresh` (httpOnly cookie)\n"
+        "Uses Authentik OIDC (primary) or JWT with RS256 (legacy).\n"
+        "Include token in header: `Authorization: Bearer <token>`\n"
     ),
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
@@ -184,6 +183,27 @@ REFRESH_TOKEN_COOKIE_PATH = "/api/auth/"
 # attempt a token refresh on startup (avoids a blind POST that always 401s
 # when no session exists).
 SESSION_HINT_COOKIE_NAME = "has_session"
+
+# Authentik OIDC settings
+# All three must be set for OIDC auth to activate. If any is missing, OIDC is skipped.
+OIDC_ISSUER_URL = os.environ.get("OIDC_ISSUER_URL", "")
+OIDC_AUDIENCE = os.environ.get("OIDC_AUDIENCE", "")  # = Authentik Client ID
+OIDC_JWKS_URL = os.environ.get("OIDC_JWKS_URL", "")
+
+_oidc_vars = {
+    "OIDC_ISSUER_URL": OIDC_ISSUER_URL,
+    "OIDC_AUDIENCE": OIDC_AUDIENCE,
+    "OIDC_JWKS_URL": OIDC_JWKS_URL,
+}
+_oidc_set = {k for k, v in _oidc_vars.items() if v}
+if _oidc_set and _oidc_set != set(_oidc_vars):
+    import logging as _oidc_logging
+
+    _oidc_logging.getLogger(__name__).warning(
+        "OIDC partially configured: %s set, %s missing. OIDC auth will NOT activate.",
+        ", ".join(sorted(_oidc_set)),
+        ", ".join(sorted(set(_oidc_vars) - _oidc_set)),
+    )
 
 # Frontend URL
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
