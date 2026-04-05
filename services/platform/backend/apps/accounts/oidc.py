@@ -233,7 +233,7 @@ class AuthentikOIDCAuthentication(BaseAuthentication):
 
             AuditService.log(
                 request=request,
-                action=str(AuditLog.Action.OIDC_USER_PROVISIONED),
+                action=AuditLog.Action.OIDC_USER_PROVISIONED,  # type: ignore[arg-type]
                 object_type="User",
                 object_id=str(user.id),
                 changes={"username": user.username},
