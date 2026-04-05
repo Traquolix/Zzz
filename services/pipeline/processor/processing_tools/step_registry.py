@@ -151,6 +151,7 @@ def build_pipeline_from_config(
     pipeline_config: list[dict[str, Any]],
     fiber_sampling_rate_hz: float = 50.0,
     section_channels: tuple | None = None,
+    processor_metrics: Any | None = None,
 ) -> ProcessingChain:
     """Build a ProcessingChain from pipeline config.
 
@@ -158,6 +159,7 @@ def build_pipeline_from_config(
         pipeline_config: List of step configs from fibers.yaml
         fiber_sampling_rate_hz: Fiber's sampling rate
         section_channels: (start, stop) channel range for this section
+        processor_metrics: Optional ProcessorMetrics for per-step timing
 
     Returns:
         Configured ProcessingChain
@@ -172,8 +174,8 @@ def build_pipeline_from_config(
     steps = []
 
     # Optimization: move spatial_decimation before signal processing steps
-    # (scale, bandpass) so they operate on the section's channels only
-    # (e.g., 70 channels) instead of the full fiber (e.g., 5427 channels).
+    # (scale, CMR, bandpass) so they operate on the section's channels only
+    # (e.g., 516 channels) instead of the full fiber (e.g., 5427 channels).
     # This is safe because spatial_decimation is a pure channel selection/slice
     # with no dependency on the signal processing steps.
     spatial_first = []
@@ -204,7 +206,7 @@ def build_pipeline_from_config(
 
     logger.info(f"Built pipeline with {len(steps)} steps: {[s.name for s in steps]}")
 
-    return ProcessingChain(steps)
+    return ProcessingChain(steps, processor_metrics=processor_metrics)
 
 
 def register_step(

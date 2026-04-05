@@ -49,11 +49,8 @@
     },
     {
       "name": "values",
-      "type": {
-        "type": "array",
-        "items": "float"
-      },
-      "doc": "Processed channel values. Contains channel_count * sample_count floats, row-major by time sample"
+      "type": "bytes",
+      "doc": "Processed channel values as raw float32 bytes (little-endian). Contains channel_count * sample_count * 4 bytes, row-major by time sample. Decode with np.frombuffer(values, dtype=np.float32)."
     },
     {
       "name": "processing_metadata",

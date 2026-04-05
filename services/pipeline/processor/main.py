@@ -8,6 +8,8 @@ import time
 import uuid
 
 import numpy as np
+from confluent_kafka import KafkaError
+from confluent_kafka.serialization import MessageField, SerializationContext
 from opentelemetry import trace
 
 # Unified config loader
@@ -24,8 +26,9 @@ from processor.processing_tools import (
     build_pipeline_from_config,
 )
 from shared import MultiTransformer
-from shared.message import Message
+from shared.message import KafkaMessage, Message
 from shared.otel_setup import get_correlation_id, setup_otel
+from shared.processor_metrics import ProcessorMetrics
 
 
 class DASProcessor(MultiTransformer):
@@ -68,6 +71,7 @@ class DASProcessor(MultiTransformer):
 
         setup_otel(service_name, "1.0.0")
         self.tracer = trace.get_tracer(__name__)
+        self.processor_metrics = ProcessorMetrics(service_name)
 
         if self._skip_messages > 0:
             self.logger.info(f"Message stagger: skipping first {self._skip_messages} messages")
@@ -93,7 +97,10 @@ class DASProcessor(MultiTransformer):
             )
 
     async def _start_service_loops(self):
-        await super()._start_service_loops()
+        # Override MultiTransformer's default _poll_loop with batch polling.
+        # Don't call super() — MultiTransformer would start the single-message
+        # poll loop which we're replacing. ServiceBase's version is a no-op.
+        self._tasks.append(asyncio.create_task(self._batch_poll_loop()))
         if self._manager.pending_fibers():
             self._tasks.append(asyncio.create_task(self._retry_params_bootstrap()))
 
@@ -142,6 +149,7 @@ class DASProcessor(MultiTransformer):
                 pipeline_config,
                 fiber_sampling_rate_hz=fiber_cfg.sampling_rate_hz,
                 section_channels=(section.channel_start, section.channel_stop),
+                processor_metrics=self.processor_metrics,
             )
 
             self.logger.debug(
@@ -155,8 +163,100 @@ class DASProcessor(MultiTransformer):
         """Extract fiber_id from topic name: das.raw.carros -> carros"""
         return topic.split(".")[-1]
 
+    # --- Batch polling (replaces MultiTransformer's single-message poll loop) ---
+
+    _POLL_BATCH_SIZE = 50
+    _POLL_TIMEOUT = 0.1  # seconds
+
+    def _poll_batch(self) -> list[KafkaMessage]:
+        """Poll + deserialize a batch of messages in one thread-pool call.
+
+        Runs entirely in the Kafka executor thread. Returns deserialized
+        messages ready for dispatch. Errors on individual messages are
+        logged and skipped — one bad message doesn't kill the batch.
+        """
+        raw_messages = self.consumer.consume(self._POLL_BATCH_SIZE, self._POLL_TIMEOUT)
+        results: list[KafkaMessage] = []
+
+        for raw in raw_messages:
+            if raw.error():
+                if raw.error().code() == KafkaError._PARTITION_EOF:
+                    continue
+                self.logger.error(f"Consumer error: {raw.error()}")
+                continue
+            try:
+                topic = raw.topic() or ""
+                key_ctx = SerializationContext(topic, MessageField.KEY)
+                val_ctx = SerializationContext(topic, MessageField.VALUE)
+
+                key = (
+                    self.key_deserializer(raw.key(), key_ctx)
+                    if raw.key() and hasattr(self, "key_deserializer")
+                    else None
+                )
+                value = (
+                    self.value_deserializer(raw.value(), val_ctx)
+                    if raw.value() and hasattr(self, "value_deserializer")
+                    else None
+                )
+
+                results.append(
+                    KafkaMessage(
+                        id=key if key is not None else "",
+                        payload=value,
+                        headers=dict(raw.headers()) if raw.headers() else None,
+                        _kafka_message=raw,
+                    )
+                )
+            except Exception as e:
+                self.logger.error(f"Deserialization failed for message on {raw.topic()}: {e}")
+                self.metrics.record_error("deserialization_error")
+
+        return results
+
+    async def _batch_poll_loop(self) -> None:
+        """Poll Kafka in batches and dispatch concurrently.
+
+        Replaces the base class _poll_loop for the processor. One thread-pool
+        hop fetches and deserializes up to _POLL_BATCH_SIZE messages. Each
+        message is dispatched as a concurrent task. Back-pressure is applied
+        per message via the semaphore.
+        """
+        dispatch_tasks: set[asyncio.Task] = set()
+        loop = asyncio.get_running_loop()
+        self.logger.info(
+            f"Batch poll loop starting (batch_size={self._POLL_BATCH_SIZE}, "
+            f"timeout={self._POLL_TIMEOUT}s)"
+        )
+
+        while self._running:
+            try:
+                messages = await loop.run_in_executor(self._kafka_executor, self._poll_batch)
+
+                if not messages:
+                    continue
+
+                for message in messages:
+                    # Back-pressure: if at concurrency limit, wait for a slot
+                    while self._semaphore.locked():
+                        await asyncio.sleep(0.001)
+
+                    task = asyncio.create_task(self._safe_dispatch(message, "batch_processor"))
+                    dispatch_tasks.add(task)
+                    task.add_done_callback(dispatch_tasks.discard)
+
+            except Exception as e:
+                self.logger.error(f"Error in batch poll loop: {e}")
+                self.metrics.record_error("batch_poll_loop")
+                await asyncio.sleep(self.config.error_backoff_delay)
+
+        # Drain in-flight tasks on shutdown
+        if dispatch_tasks:
+            await asyncio.gather(*dispatch_tasks, return_exceptions=True)
+
     async def transform(self, message: Message) -> list[Message]:
         with self.tracer.start_as_current_span("transform_measurement") as span:
+            fiber_id = "unknown"
             try:
                 # Message-based stagger: consume but don't produce for the first N messages
                 if self._skip_messages > 0:
@@ -169,6 +269,7 @@ class DASProcessor(MultiTransformer):
                             )
                         return []
 
+                t_total = time.perf_counter()
                 start_time = time.time()
                 correlation_id = get_correlation_id() or str(uuid.uuid4())
                 span.set_attribute("correlation_id", correlation_id)
@@ -201,11 +302,15 @@ class DASProcessor(MultiTransformer):
                 span.set_attribute("fiber_id", fiber_id)
 
                 # Parse raw DAS batch into 2D array (samples, channels) + timestamps
+                t_parse = time.perf_counter()
                 batch_data, timestamps_ns = self._parse_raw_batch(
                     message.payload, fiber_id, sampling_rate_hz, fiber_cfg.total_channels
                 )
                 if batch_data is None:
                     return []
+                self.processor_metrics.record_phase(
+                    "parse", time.perf_counter() - t_parse, fiber_id
+                )
 
                 n_samples = batch_data.shape[0]
                 n_channels = batch_data.shape[1]
@@ -231,10 +336,17 @@ class DASProcessor(MultiTransformer):
                         "channel_start": 0,
                         "sampling_rate_hz": sampling_rate_hz,
                     }
-                    processed = await pipelines[section_id].process(batch_measurement)
+                    t_pipeline = time.perf_counter()
+                    processed = await pipelines[section_id].process(
+                        batch_measurement, fiber_id=fiber_id, section=section_id
+                    )
+                    self.processor_metrics.record_phase(
+                        "pipeline", time.perf_counter() - t_pipeline, fiber_id
+                    )
                     if processed is None:
                         continue
 
+                    t_send = time.perf_counter()
                     output = self._build_batch_output(
                         processed, correlation_id, start_time, fiber_cfg, section
                     )
@@ -257,13 +369,23 @@ class DASProcessor(MultiTransformer):
                             output_id="default",
                         )
                     )
+                    self.processor_metrics.record_phase(
+                        "send", time.perf_counter() - t_send, fiber_id
+                    )
                     span.set_attribute(f"section.{section_id}", True)
 
+                self.processor_metrics.record_phase(
+                    "total", time.perf_counter() - t_total, fiber_id
+                )
+                self.processor_metrics.sections_produced.add(
+                    len(output_messages), {"fiber_id": fiber_id}
+                )
                 span.set_attribute("sections_produced", len(output_messages))
                 return output_messages
 
             except Exception as e:
                 span.record_exception(e)
+                self.processor_metrics.record_error("transform_error", fiber_id)
                 self.logger.error(f"Error processing message {message.id}: {e}")
                 raise
 
@@ -346,8 +468,10 @@ class DASProcessor(MultiTransformer):
         if n_channels == 0 or n_samples == 0:
             return None
 
-        # Flatten to (samples * channels,) for Avro serialization
-        flat_values = values.flatten()
+        # Flatten to (samples * channels,) and serialize as raw float32 bytes.
+        # Using float32 (not float64) halves message size and matches the Avro
+        # schema. The AI engine decodes with np.frombuffer(v, dtype=np.float32).
+        flat_values = values.flatten().astype(np.float32)
 
         stats = {
             "min_value": float(flat_values.min()),
@@ -372,7 +496,7 @@ class DASProcessor(MultiTransformer):
             "channel_start": processed.get("channel_start", section.channel_start),
             "channel_count": n_channels,
             "sample_count": n_samples,
-            "values": flat_values.tolist(),
+            "values": flat_values.tobytes(),
             "section": section.name,
             "model_hint": section.model,
             "processing_metadata": {

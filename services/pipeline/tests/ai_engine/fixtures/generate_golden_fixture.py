@@ -77,11 +77,20 @@ CONFIG = {
     "max_speed": 120,
     "time_overlap_ratio": 0.25,
     "bidirectional": True,
+    "scale_factor": 213.05,
 }
 
 
 def load_and_preprocess() -> tuple[np.ndarray, float, float]:
-    """Load HDF5 data and preprocess exactly as the production processor does."""
+    """Load HDF5 data and preprocess exactly as the production processor does.
+
+    Pipeline matches fibers.yaml defaults (reordered: spatial first):
+    1. Spatial decimation (channel selection + stride)
+    2. Scale (x 213.05)
+    3. Common mode removal (spatial median subtraction)
+    4. Bandpass filter (0.3-2.0 Hz, order 4)
+    5. Temporal decimation (x 12)
+    """
     import h5py
 
     data_path = Path(CONFIG["hdf5_data_path"])
@@ -98,14 +107,19 @@ def load_and_preprocess() -> tuple[np.ndarray, float, float]:
     section_ch_end = CONFIG["section_channel_end"]
     ds_factor = CONFIG["downsample_factor"]
     spatial_stride = int(CONFIG["spatial_decimation"])
-    n_section_raw = section_ch_end - section_ch_start
+    scale_factor = CONFIG["scale_factor"]
 
+    # After spatial decimation, this many channels remain
+    n_section_raw = section_ch_end - section_ch_start
+    n_decimated_channels = len(range(0, n_section_raw, spatial_stride))
+
+    # Bandpass filter operates on spatially-decimated channels
     bp_filter = VectorizedBiquadFilter(
         low_freq=CONFIG["filter_freqs"][0],
         high_freq=CONFIG["filter_freqs"][1],
         sampling_rate=CONFIG["original_fs"],
     )
-    filter_state = bp_filter.create_state(n_section_raw)
+    filter_state = bp_filter.create_state(n_decimated_channels)
     decim_counter = 0
     collected = []
 
@@ -114,13 +128,24 @@ def load_and_preprocess() -> tuple[np.ndarray, float, float]:
             raw = f["data"][:]
         n_time = min(raw.shape[0], 1250)
         for t in range(n_time):
+            # 1. Spatial decimation (channel selection + stride)
             sample = raw[t, section_ch_start:section_ch_end].astype(np.float64)
+            sample = sample[::spatial_stride]
+
+            # 2. Scale
+            sample = sample * scale_factor
+
+            # 3. Common mode removal (spatial median subtraction)
+            sample = sample - np.median(sample)
+
+            # 4. Bandpass filter
             filtered = bp_filter.filter(sample, filter_state)
+
+            # 5. Temporal decimation
             decim_counter += 1
             if decim_counter % ds_factor != 0:
                 continue
-            decimated = filtered[::spatial_stride]
-            collected.append(decimated)
+            collected.append(filtered)
 
     data = np.array(collected, dtype=np.float32).T
     fs = CONFIG["original_fs"] / ds_factor
