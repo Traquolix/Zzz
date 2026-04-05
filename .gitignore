@@ -84,6 +84,7 @@ tests/test_env/
 .env.*
 !.env.example
 !.env.preprod
+!.env.authentik
 
 # Docker (dockerignore files should be tracked)
 # .dockerignore
