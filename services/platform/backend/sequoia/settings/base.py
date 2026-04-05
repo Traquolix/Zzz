@@ -62,7 +62,7 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "sequoia.urls"
 
-# Frontend calls /api/auth/login (no trailing slash)
+# API endpoints use no trailing slash
 APPEND_SLASH = False
 
 TEMPLATES = [

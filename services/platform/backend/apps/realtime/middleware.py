@@ -18,6 +18,7 @@ from typing import Any
 from channels.db import database_sync_to_async
 from channels.middleware import BaseMiddleware
 from django.contrib.auth.models import AnonymousUser
+from django.core.exceptions import ObjectDoesNotExist
 from rest_framework.exceptions import AuthenticationFailed
 
 logger = logging.getLogger(__name__)
@@ -31,7 +32,7 @@ def get_user_from_token(token_str: str) -> Any:
     verifies signature via JWKS, checks issuer/audience/expiry, then looks up
     or creates the local User from token claims.
     """
-    from apps.accounts.oidc import decode_oidc_token, get_or_create_user_from_oidc
+    from apps.accounts.oidc import _OIDCTokenError, decode_oidc_token, get_or_create_user_from_oidc
 
     try:
         payload = decode_oidc_token(token_str)
@@ -44,7 +45,7 @@ def get_user_from_token(token_str: str) -> Any:
             if org is None or not org.is_active:
                 return AnonymousUser()
         return user
-    except (AuthenticationFailed, Exception):
+    except (AuthenticationFailed, _OIDCTokenError, ObjectDoesNotExist):
         return AnonymousUser()
 
 

@@ -2,7 +2,7 @@
 Authentication views.
 
 VerifyView: returns current user info for any authenticated user (OIDC or API key).
-OIDCConfigView: returns Authentik OIDC endpoints for the frontend.
+OIDCConfigView: returns Authentik OIDC configuration for the frontend.
 """
 
 import logging
@@ -10,6 +10,7 @@ import logging
 from django.conf import settings
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import serializers as s
+from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -60,8 +61,10 @@ class OIDCConfigView(APIView):
     """
     Return OIDC provider configuration for the frontend.
 
-    The frontend uses these endpoints to configure oidc-client-ts.
-    This avoids hardcoding Authentik URLs in the frontend build.
+    The frontend uses this to configure oidc-client-ts at runtime,
+    avoiding hardcoded Authentik URLs in the frontend build.
+
+    Returns 503 if OIDC is not configured on the server.
     """
 
     permission_classes = [AllowAny]
@@ -74,17 +77,22 @@ class OIDCConfigView(APIView):
                 fields={
                     "authority": s.CharField(),
                     "client_id": s.CharField(),
-                    "issuer": s.CharField(),
                 },
             )
         },
         tags=["auth"],
     )
     def get(self, request: Request) -> Response:
+        issuer = settings.OIDC_ISSUER_URL
+        audience = settings.OIDC_AUDIENCE
+        if not issuer or not audience:
+            return Response(
+                {"detail": "OIDC not configured on this server."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         return Response(
             {
-                "authority": settings.OIDC_ISSUER_URL.rstrip("/"),
-                "client_id": settings.OIDC_AUDIENCE,
-                "issuer": settings.OIDC_ISSUER_URL,
+                "authority": issuer.rstrip("/"),
+                "client_id": audience,
             }
         )

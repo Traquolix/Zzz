@@ -68,7 +68,7 @@ backend/
 
 All routes under `/api/`. Full OpenAPI docs at `/api/docs/` (dev mode).
 
-**Auth:** `/auth/login`, `/auth/verify`, `/auth/refresh`, `/auth/logout`
+**Auth:** `/auth/verify`, `/auth/oidc/config`
 **Data:** `/fibers`, `/incidents`, `/sections`, `/stats`, `/user/preferences`
 **Reports:** `/reports`, `/reports/generate`, `/reports/schedules`
 **Export:** `/export/incidents`, `/export/detections` (CSV)

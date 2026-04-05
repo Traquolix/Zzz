@@ -146,6 +146,9 @@ def get_or_create_user_from_oidc(payload: dict[str, Any]) -> Any:
         },
     )
 
+    # Flag for the caller (AuthentikOIDCAuthentication.authenticate) to log audit
+    user._oidc_just_created = created  # type: ignore[attr-defined]
+
     if created:
         user.set_unusable_password()
         # get_or_create already called save(), but set_unusable_password
@@ -222,6 +225,21 @@ class AuthentikOIDCAuthentication(BaseAuthentication):
 
         if not user.is_active:
             raise AuthenticationFailed("User account is disabled")
+
+        # Audit log for first OIDC login (user creation)
+        if getattr(user, "_oidc_just_created", False):
+            from apps.shared.audit import AuditService
+            from apps.shared.models import AuditLog
+
+            AuditService.log(
+                request=request,
+                action=str(AuditLog.Action.OIDC_LOGIN),
+                object_type="User",
+                object_id=str(user.id),
+                changes={"username": user.username},
+                user=user,
+                organization=user.organization,
+            )
 
         return (user, payload)
 

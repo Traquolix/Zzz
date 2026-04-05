@@ -22,7 +22,9 @@
     "signingIn": "Connexion en cours...",
     "welcomeBack": "Bon retour, {{username}}",
     "tooManyAttempts": "Trop de tentatives. Reessayez plus tard.",
-    "connectionFailed": "Echec de connexion"
+    "connectionFailed": "Echec de connexion",
+    "authenticating": "Authentification en cours...",
+    "backToLogin": "Retour a la connexion"
   },
   "incidents": {
     "title": "Historique des incidents",
