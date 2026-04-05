@@ -1,0 +1,61 @@
+# Nginx Proxy Manager — reverse proxy with automatic TLS.
+# Runs on the frontend server (134.59.98.100).
+# Start with: docker compose -f docker-compose.proxy.yml up -d
+#
+# After first start, access the admin UI at http://localhost:81
+# Default credentials: admin@example.com / changeme
+#
+# Proxy hosts to configure in the UI:
+#   app.sequoia-analytics.tech  → http://frontend-prod:80
+#   test.sequoia-analytics.tech → http://frontend-preprod:80
+#
+# Each proxy host also needs custom locations for API/WS:
+#   /api/* → http://192.168.99.113:8001 (prod) or :8002 (preprod)
+#   /ws/*  → http://192.168.99.113:8001 (prod) or :8002 (preprod)
+
+services:
+  npm:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: npm
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "127.0.0.1:81:81"   # Admin UI — localhost only
+    environment:
+      # Use the university proxy for outbound HTTPS (Let's Encrypt API)
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: localhost,127.0.0.1,192.168.99.113,134.59.98.100
+    volumes:
+      - npm_data:/data
+      - npm_letsencrypt:/etc/letsencrypt
+    networks: [ proxy ]
+
+  # Prod frontend — serves static files (internal only, NPM proxies to it)
+  frontend-prod:
+    image: nginx:alpine
+    container_name: frontend-prod
+    restart: unless-stopped
+    volumes:
+      - /var/www/sequoia:/usr/share/nginx/html:ro
+      - ./infrastructure/nginx/frontend-spa.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: [ proxy ]
+
+  # Preprod frontend — serves static files (internal only, NPM proxies to it)
+  frontend-preprod:
+    image: nginx:alpine
+    container_name: frontend-preprod
+    restart: unless-stopped
+    volumes:
+      - /var/www/sequoia-preprod:/usr/share/nginx/html:ro
+      - ./infrastructure/nginx/frontend-spa.conf:/etc/nginx/conf.d/default.conf:ro
+    networks: [ proxy ]
+
+networks:
+  proxy:
+    name: sequoia-proxy
+
+volumes:
+  npm_data:
+  npm_letsencrypt:
