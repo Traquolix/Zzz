@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 User = get_user_model()
 
 # Thread-safe JWKS client singleton.
+# Double-checked locking relies on CPython's GIL for the fast-path read.
 _jwks_client: PyJWKClient | None = None
 _jwks_lock = threading.Lock()
 
@@ -147,12 +148,13 @@ def get_or_create_user_from_oidc(payload: dict[str, Any]) -> Any:
 
     if created:
         user.set_unusable_password()
-        # save() already called by get_or_create, but set_unusable_password
-        # needs a save — use update_fields to avoid full_clean.
+        # get_or_create already called save(), but set_unusable_password
+        # modifies the in-memory object — need another save to persist it.
         user.save(update_fields=["password"])
 
     # Update user fields from token claims on every request.
-    # Use update_fields to avoid triggering full_clean() on unrelated fields.
+    # Note: User.save() always calls full_clean() regardless of update_fields.
+    # update_fields limits the SQL UPDATE, not the validation.
     update_fields: list[str] = []
     if user.email != email and email:
         user.email = email
@@ -205,6 +207,8 @@ class AuthentikOIDCAuthentication(BaseAuthentication):
         if not getattr(settings, "OIDC_JWKS_URL", ""):
             return None
         if not getattr(settings, "OIDC_AUDIENCE", ""):
+            return None
+        if not getattr(settings, "OIDC_ISSUER_URL", ""):
             return None
 
         try:
