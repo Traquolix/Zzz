@@ -67,6 +67,9 @@ jobs:
             services/pipeline/.venv/bin/pip install -e "services/pipeline[ai,dev]" -q
           }
 
+      - name: Run processor tests
+        run: make test-processor
+
       - name: Run AI engine tests
         run: make test-ai-engine
         env:

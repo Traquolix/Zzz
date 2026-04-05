@@ -7,7 +7,7 @@
         lint lint-pipeline lint-backend lint-frontend \
         format format-pipeline format-backend format-frontend \
         typecheck typecheck-pipeline typecheck-backend typecheck-frontend \
-        test test-ai-engine snapshot-confirm \
+        test test-processor test-ai-engine snapshot-confirm \
         security security-pipeline security-backend security-frontend \
         ci up up-infra up-pipeline up-platform down down-infra down-pipeline down-platform \
         up-preprod down-preprod logs-preprod up-authentik down-authentik \
@@ -140,7 +140,10 @@ typecheck-frontend: ## Type-check frontend
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
-test: test-ai-engine ## Run all tests
+test: test-processor test-ai-engine ## Run all tests
+
+test-processor: ## Run processor preprocessing tests
+	cd $(PIPELINE_DIR) && .venv/bin/python -m pytest tests/processor/ -v --tb=short
 
 test-ai-engine: ## Run AI engine test suite
 	cd $(PIPELINE_DIR) && .venv/bin/python -m pytest tests/ai_engine/ -v --tb=short
