@@ -77,6 +77,7 @@ class CommonModeRemoval(ProcessingStep):
             self._fiber_states[fiber_id] = {
                 "count": 0,
                 "warmup_samples": warmup_samples,
+                "warmup_logged": False,
             }
             logger.info(
                 f"Initialized CMR state for fiber '{fiber_id}': warmup_samples={warmup_samples}"
@@ -93,7 +94,8 @@ class CommonModeRemoval(ProcessingStep):
             return None
 
         # Warmup complete - log once at transition
-        if fiber_state["count"] < fiber_state["warmup_samples"] + n_samples:
+        if not fiber_state["warmup_logged"]:
+            fiber_state["warmup_logged"] = True
             logger.info(
                 f"CMR warmup complete for fiber '{fiber_id}' after {fiber_state['count']} samples"
             )

@@ -2,6 +2,7 @@
 
 import logging
 import os
+import time as _time
 from pathlib import Path
 from typing import Optional, List, Tuple, Callable
 import numpy as np
@@ -264,8 +265,6 @@ class VehicleVisualizer:
 
     def _cleanup_old_visualizations(self, max_age_hours: float = 24.0) -> None:
         """Remove visualization PNGs older than max_age_hours."""
-        import time as _time
-
         cutoff = _time.time() - max_age_hours * 3600
         removed = 0
         try:
@@ -275,7 +274,7 @@ class VehicleVisualizer:
                     removed += 1
             if removed > 0:
                 logger.info(f"Cleaned up {removed} old visualizations from {self.output_dir}")
-        except Exception as e:
+        except OSError as e:
             logger.warning(f"Visualization cleanup failed: {e}")
 
     def generate_waterfall(

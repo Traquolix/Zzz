@@ -77,6 +77,7 @@ CONFIG = {
     "max_speed": 120,
     "time_overlap_ratio": 0.25,
     "bidirectional": True,
+    "scale_factor": 213.05,
 }
 
 
@@ -106,7 +107,7 @@ def load_and_preprocess() -> tuple[np.ndarray, float, float]:
     section_ch_end = CONFIG["section_channel_end"]
     ds_factor = CONFIG["downsample_factor"]
     spatial_stride = int(CONFIG["spatial_decimation"])
-    scale_factor = CONFIG.get("scale_factor", 213.05)
+    scale_factor = CONFIG["scale_factor"]
 
     # After spatial decimation, this many channels remain
     n_section_raw = section_ch_end - section_ch_start

@@ -160,6 +160,7 @@ class DASProcessor(MultiTransformer):
 
     async def transform(self, message: Message) -> list[Message]:
         with self.tracer.start_as_current_span("transform_measurement") as span:
+            fiber_id = "unknown"
             try:
                 # Message-based stagger: consume but don't produce for the first N messages
                 if self._skip_messages > 0:
@@ -280,7 +281,7 @@ class DASProcessor(MultiTransformer):
                 self.processor_metrics.record_phase(
                     "total", time.perf_counter() - t_total, fiber_id
                 )
-                self.processor_metrics.sections_produced.record(
+                self.processor_metrics.sections_produced.add(
                     len(output_messages), {"fiber_id": fiber_id}
                 )
                 span.set_attribute("sections_produced", len(output_messages))

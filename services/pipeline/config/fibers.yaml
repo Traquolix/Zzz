@@ -76,7 +76,8 @@ services:
 # Defaults
 # =============================================================================
 # Applied to all sections unless overridden per-section.
-# Processing pipeline order: scale → bandpass → temporal decimation → spatial decimation
+# Processing pipeline order (runtime, after step_registry reordering):
+# spatial decimation → scale → common mode removal → bandpass → temporal decimation
 
 defaults:
   model: dtan_unified

@@ -11,9 +11,9 @@ Metrics exported:
 - processor.step.temporal_decimation.duration
 - processor.phase.parse.duration        — raw message parsing + reshape
 - processor.phase.pipeline.duration     — all processing steps for one section
-- processor.phase.send.duration         — output serialization + produce
+- processor.phase.send.duration         — output message construction (not Kafka produce)
 - processor.phase.total.duration        — full transform() wall time
-- processor.sections.produced           — sections produced per message
+- processor.sections.produced           — cumulative section outputs produced (counter)
 - errors.processor.total                — processor-specific error counter
 
 Query examples:
@@ -101,7 +101,7 @@ class ProcessorMetrics:
 
         self.send_duration = meter.create_histogram(
             name="processor.phase.send.duration",
-            description="Output message construction + serialization",
+            description="Output message construction (excludes Kafka produce)",
             unit="s",
         )
 
@@ -113,9 +113,9 @@ class ProcessorMetrics:
 
         # --- Counters ---
 
-        self.sections_produced = meter.create_histogram(
+        self.sections_produced = meter.create_counter(
             name="processor.sections.produced",
-            description="Number of section outputs per raw message",
+            description="Cumulative section outputs produced",
             unit="1",
         )
 
@@ -125,8 +125,8 @@ class ProcessorMetrics:
             unit="1",
         )
 
-        # Step name → histogram lookup
-        self._step_histograms: dict = {
+        # Step name -> histogram lookup
+        self._step_histograms: dict[str, metrics.Histogram] = {
             "spatial_decimation": self.spatial_decimation_duration,
             "scale": self.scale_duration,
             "common_mode_removal": self.common_mode_removal_duration,
@@ -134,7 +134,7 @@ class ProcessorMetrics:
             "temporal_decimation": self.temporal_decimation_duration,
         }
 
-    def _attrs(self, fiber_id: str, section: str, **extra) -> dict:
+    def _attrs(self, fiber_id: str, section: str, **extra: str) -> dict[str, str]:
         attrs = {
             "fiber_id": fiber_id,
             "section": section,
@@ -148,7 +148,7 @@ class ProcessorMetrics:
         duration_seconds: float,
         fiber_id: str,
         section: str,
-    ):
+    ) -> None:
         """Record duration for a named processing step."""
         histogram = self._step_histograms.get(step_name)
         if histogram is not None:
@@ -161,12 +161,12 @@ class ProcessorMetrics:
         phase: str,
         duration_seconds: float,
         fiber_id: str,
-    ):
+    ) -> None:
         """Record duration for a processing phase (parse, pipeline, send, total)."""
         histogram = getattr(self, f"{phase}_duration", None)
         if histogram is not None:
             histogram.record(duration_seconds, {"fiber_id": fiber_id})
 
-    def record_error(self, error_type: str, fiber_id: str = ""):
+    def record_error(self, error_type: str, fiber_id: str = "") -> None:
         """Record a processor error."""
         self.errors.add(1, {"error_type": error_type, "fiber_id": fiber_id})
