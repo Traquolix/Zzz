@@ -48,6 +48,50 @@ jobs:
       - name: Typecheck frontend
         run: cd services/platform/frontend && npx tsc -p tsconfig.app.json --noEmit
 
+  # ---------- CONFIG & SCHEMA VALIDATION ----------
+  validate:
+    if: >
+      github.event_name != 'schedule' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Full history needed for schema diff against main
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Validate fibers.yaml config
+        run: python scripts/validate_config.py
+
+      - name: Check Avro schema compatibility
+        run: python scripts/check_schema_compat.py
+
+  # ---------- DOCKER BUILD VERIFICATION ----------
+  docker-build:
+    if: >
+      github.event_name != 'schedule' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: [self-hosted, backend]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build pipeline images
+        run: docker compose -f docker-compose.pipeline.yml build
+        env:
+          DOCKER_BUILDKIT: "1"
+
+      - name: Build platform images
+        run: docker compose -f docker-compose.platform.yml build
+        env:
+          DOCKER_BUILDKIT: "1"
+
   # ---------- UNIT TESTS (self-hosted — requires PyTorch + model weights) ----------
   test:
     if: >
@@ -67,10 +111,12 @@ jobs:
             services/pipeline/.venv/bin/pip install -e "services/pipeline[ai,dev]" -q
           }
 
-      - name: Run AI engine tests
-        run: make test-ai-engine
+      - name: Run AI engine tests with coverage
+        run: |
+          cd services/pipeline && .venv/bin/python -m pytest tests/ai_engine/ -v --tb=short \
+            --cov=ai_engine --cov=shared --cov-report=term-missing --cov-fail-under=40
         env:
-          CUDA_VISIBLE_DEVICES: "0"  # RTX 4000 (CUDA index 0, nvidia-smi index 1)
+          CUDA_VISIBLE_DEVICES: "0"
 
   # ---------- SECURITY (weekly only) ----------
   security:
