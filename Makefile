@@ -8,6 +8,7 @@
         format format-pipeline format-backend format-frontend \
         typecheck typecheck-pipeline typecheck-backend typecheck-frontend \
         test test-ai-engine snapshot-confirm \
+        validate-config check-schemas \
         security security-pipeline security-backend security-frontend \
         ci up up-infra up-pipeline up-platform down down-infra down-pipeline down-platform \
         up-preprod down-preprod logs-preprod up-authentik down-authentik \
@@ -165,6 +166,15 @@ bench: ## Run AI engine benchmarks, compare to baseline
 
 bench-save: ## Save current benchmark results as new baseline
 	cd $(PIPELINE_DIR) && .venv/bin/python benchmarks/ai_engine/bench.py --save
+
+# ---------------------------------------------------------------------------
+# Validation
+# ---------------------------------------------------------------------------
+validate-config: ## Validate fibers.yaml config (physics, step names, model files)
+	$(PIPELINE_PY) scripts/validate_config.py
+
+check-schemas: ## Check Avro schema backwards compatibility against main
+	$(PIPELINE_PY) scripts/check_schema_compat.py
 
 # ---------------------------------------------------------------------------
 # Security
