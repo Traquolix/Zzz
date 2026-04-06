@@ -7,7 +7,7 @@
         lint lint-pipeline lint-backend lint-frontend \
         format format-pipeline format-backend format-frontend \
         typecheck typecheck-pipeline typecheck-backend typecheck-frontend \
-        test test-processor test-ai-engine snapshot-confirm \
+        test test-processor test-ai-engine snapshot-confirm snapshot-processor \
         security security-pipeline security-backend security-frontend \
         ci up up-infra up-pipeline up-platform down down-infra down-pipeline down-platform \
         up-preprod down-preprod logs-preprod up-authentik down-authentik \
@@ -157,6 +157,13 @@ snapshot-confirm: ## Re-record golden snapshots from existing input (no HDF5 nee
 	@echo "Snapshots updated. Review the changes, then commit:"
 	@echo "  git add services/pipeline/tests/ai_engine/fixtures/*.npz"
 	@echo "  git commit -m 'test: update AI engine golden snapshots'"
+
+snapshot-processor: ## Re-record processor preprocessing golden snapshot (requires test_data/)
+	cd $(PIPELINE_DIR) && .venv/bin/python tests/processor/fixtures/generate_golden_processor.py
+	@echo ""
+	@echo "Processor snapshot updated. Review and commit:"
+	@echo "  git add services/pipeline/tests/processor/fixtures/golden_processor_*.npz"
+	@echo "  git commit -m 'test: update processor golden snapshots'"
 
 snapshot-regenerate: ## Full regeneration from HDF5 source data (requires test_data/)
 	cd $(PIPELINE_DIR) && .venv/bin/python tests/ai_engine/fixtures/generate_golden_fixture.py
