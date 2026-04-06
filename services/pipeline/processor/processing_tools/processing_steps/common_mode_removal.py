@@ -101,16 +101,19 @@ class CommonModeRemoval(ProcessingStep):
             )
 
         # Apply common mode removal
+        # Use nanmedian/nanmean to prevent a single NaN channel from wiping
+        # the entire time sample. With plain median, one NaN makes the median
+        # NaN, which then subtracts NaN from all channels in that row.
         is_batch = values.ndim == 2
         if is_batch:
             # 2D (samples, channels): compute median across channels per sample
             if self.method == "median":
-                common_mode = np.median(values, axis=1, keepdims=True)
+                common_mode = np.nanmedian(values, axis=1, keepdims=True)
             else:
-                common_mode = np.mean(values, axis=1, keepdims=True)
+                common_mode = np.nanmean(values, axis=1, keepdims=True)
         else:
             # 1D (channels,): compute median across all channels
-            common_mode = np.median(values) if self.method == "median" else np.mean(values)
+            common_mode = np.nanmedian(values) if self.method == "median" else np.nanmean(values)
 
         corrected_values = values - common_mode
 
